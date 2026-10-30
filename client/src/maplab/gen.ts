@@ -1,8 +1,8 @@
-// maplab field synth — browser port of _tools/mapbake/genmap.js. Same
+// maplab field synth - browser port of _tools/mapbake/genmap.js. Same
 // periodic lattice + fBm/ridged/warp/features so generated fields are
 // tileable by construction (the clipmap RepeatWrapping never seams).
 // Adds what genmap doesn't have: droplet hydraulic erosion + thermal
-// talus — the carving pass that turns noise into drainage valleys.
+// talus - the carving pass that turns noise into drainage valleys.
 export interface GenParams {
   size: number;        // grid N (field is N×N, world wraps)
   seed: number;
@@ -17,11 +17,11 @@ export interface GenParams {
   // Seeded fault scarp: the field offsets across a line through center.
   fault: number;       // signed offset share (-1..1 of the field's range)
   faultAngle: number;  // degrees
-  // Glacial-lite: polish parabolic U-troughs along the D8 spine — the
+  // Glacial-lite: polish parabolic U-troughs along the D8 spine - the
   // ski-line generator. 0 = off.
   glacier: number;
-  smoothIters: number; // diffusion creep — laplacian softening passes
-  // Base pads — genmap's --flats: N seeded spots level to their own
+  smoothIters: number; // diffusion creep - laplacian softening passes
+  // Base pads - genmap's --flats: N seeded spots level to their own
   // center inside padR meters, AFTER all carving, so stands sit flat.
   flats: number; padR: number;
   bowlR: number; bowlDepth: number;      // center-anchored crater (m)
@@ -32,7 +32,7 @@ export interface GenParams {
   droplets: number; inertia: number; erodeRate: number;
   depositRate: number; evap: number; capacity: number;
   // Stream-power incision (D8 drainage network): K * acc^0.5 * slope,
-  // iterated — carves a coherent valley network, not droplet scars.
+  // iterated - carves a coherent valley network, not droplet scars.
   stream: number; streamIters: number;
   talus: number;       // thermal smoothing iterations
   talusAngle: number;  // slope threshold in 0..1 field units / cell
@@ -81,14 +81,14 @@ function mulberry(seed: number): () => number {
   };
 }
 
-/** Raw synth field in 0..1 — no erosion. */
+/** Raw synth field in 0..1 - no erosion. */
 export function synthField(p: GenParams): Float32Array {
   const N = p.size;
   const OCT = [4, 9, 20, 44, 88].map((c) => Math.max(1, Math.round(c * p.freq)));
   const AMP = [1, 0.62, 0.38, 0.22, 0.12].map((a, i) => a * (i === 0 ? 1 : p.detail));
-  // Noise archetypes — same octave ladder, different per-octave shaping.
+  // Noise archetypes - same octave ladder, different per-octave shaping.
   // billow: |n| rounded hills (no creases). swiss: ridge-amplified detail.
-  // jordan: squared creases — sharp spine ridges.
+  // jordan: squared creases - sharp spine ridges.
   const shape = (n: number): number => {
     switch (p.noiseType) {
       case 1: { return Math.abs(n * 2 - 1); }                    // billow
@@ -119,7 +119,7 @@ export function synthField(p: GenParams): Float32Array {
       const u = x / N, v = z / N;
       let wu = u, wv = v;
       if (p.warp > 0) {
-        // Offset warp (genmap's) blended toward curl-of-potential warp —
+        // Offset warp (genmap's) blended toward curl-of-potential warp -
         // the curl field is divergence-free, so features bend instead of
         // folding back over themselves.
         const e = 0.02;
@@ -164,7 +164,7 @@ export function synthField(p: GenParams): Float32Array {
 
 /** Droplet hydraulic erosion (Beyer-style): each droplet follows the
  *  gradient, picks up sediment while it's steep+fast, drops it when it
- *  slows or ponds — carves drainage channels + deposits fans. Positions
+ *  slows or ponds - carves drainage channels + deposits fans. Positions
  *  wrap toroidally so the eroded field stays tileable. */
 export function erode(h: Float32Array, N: number, p: GenParams): void {
   const rand = mulberry(p.seed * 265_536_491);
@@ -217,14 +217,14 @@ export function erode(h: Float32Array, N: number, p: GenParams): void {
 // --- D8 drainage ---
 // Priority-flood + steepest-descent receivers + upstream accumulation.
 // The D8 network is the coherent version of droplet scars: every cell
-// routes downhill, so the accumulation field IS the river map — and a
+// routes downhill, so the accumulation field IS the river map - and a
 // rough proxy for where a capper's lines converge.
 
 /** Priority-flood depression fill (Barnes): raise closed basins to their
  *  lowest outlet so every cell drains to the field's lowest point. The
- *  field is toroidal — seeding the tile border as ocean made every
+ *  field is toroidal - seeding the tile border as ocean made every
  *  channel terminate at a fake edge wall, which read as seams. Returns
- *  a filled copy — the caller keeps eroding the real field, flood is
+ *  a filled copy - the caller keeps eroding the real field, flood is
  *  only for routing. */
 function priorityFlood(h: Float32Array, N: number): Float32Array {
   const f = h.slice();
@@ -252,7 +252,7 @@ function priorityFlood(h: Float32Array, N: number): Float32Array {
     }
     return top;
   };
-  // On a torus the only true outlet is the global minimum — the lowest
+  // On a torus the only true outlet is the global minimum - the lowest
   // cell is the ocean every basin eventually spills toward.
   let lo = 0;
   for (let i = 1; i < N * N; i += 1) { if (f[i]! < f[lo]!) { lo = i; } }
@@ -295,14 +295,14 @@ export function drainage(h: Float32Array, N: number): Drainage {
     }
   }
   // Accumulate upstream→downstream: process cells by descending filled
-  // height — a cell always resolves before its receiver.
+  // height - a cell always resolves before its receiver.
   const order = [...Array(N * N).keys()].sort((a, b) => f[b]! - f[a]!);
   for (const i of order) { const r = rec[i]; if (r >= 0) { acc[r] = acc[r]! + acc[i]!; } }
   return { acc, rec };
 }
 
 /** Stream-power incision: each step cuts `stream · acc^0.5 · slope` along
- *  the D8 network — where drainage converges the channel deepens, so a
+ *  the D8 network - where drainage converges the channel deepens, so a
  *  coherent valley system appears instead of noise gullies. Cutting is
  *  floor-limited at the receiver so channels never carve closed pits. */
 export function streamPower(h: Float32Array, N: number, p: GenParams): void {
@@ -313,7 +313,7 @@ export function streamPower(h: Float32Array, N: number, p: GenParams): void {
     for (let i = 0; i < N * N; i += 1) {
       const r = rec[i];
       if (r < 0) { continue; }
-      // Toroidal step — a receiver across the seam is one cell away, not N.
+      // Toroidal step - a receiver across the seam is one cell away, not N.
       let dx = (i % N) - (r % N), dz = ((i / N) | 0) - ((r / N) | 0);
       if (dx > N / 2) { dx -= N; } else if (dx < -N / 2) { dx += N; }
       if (dz > N / 2) { dz -= N; } else if (dz < -N / 2) { dz += N; }
@@ -325,7 +325,7 @@ export function streamPower(h: Float32Array, N: number, p: GenParams): void {
   }
 }
 
-/** Thermal talus pass — material on slopes steeper than the angle slides
+/** Thermal talus pass - material on slopes steeper than the angle slides
  *  to the downhill neighbor. Builds the repose aprons under cliffs. */
 export function talusPass(h: Float32Array, N: number, p: GenParams): void {
   for (let it = 0; it < p.talus; it += 1) {
@@ -348,7 +348,7 @@ export function talusPass(h: Float32Array, N: number, p: GenParams): void {
   }
 }
 
-/** Seeded fault scarp — the field offsets across a line through the
+/** Seeded fault scarp - the field offsets across a line through the
  *  tile center at faultAngle. A noise wiggle on the boundary keeps it
  *  from reading as a machined seam; the offset is a fraction of the
  *  field's 0..1 range. */
@@ -368,9 +368,9 @@ export function faultPass(h: Float32Array, N: number, p: GenParams): void {
   }
 }
 
-/** Glacial-lite U-troughs — the cheap-but-true version: the D8 spine's
+/** Glacial-lite U-troughs - the cheap-but-true version: the D8 spine's
  *  high-accumulation cells get polished toward the lowest local height
- *  over a width that grows with flow — wide flat floored channels
+ *  over a width that grows with flow - wide flat floored channels
  *  (the U-valley read) without an ice sim. */
 export function glacierPass(h: Float32Array, N: number, p: GenParams): void {
   if (p.glacier <= 0) { return; }
@@ -396,11 +396,11 @@ export function glacierPass(h: Float32Array, N: number, p: GenParams): void {
   }
 }
 
-/** Playa/lakebed flats — wherever the local relief inside a ~radius
+/** Playa/lakebed flats - wherever the local relief inside a ~radius
  *  window is shallower than maxFill, pull every cell toward the
  *  neighborhood's lowest point. Shallow bowls level to their floor;
  *  the flats inherit the basin's real shape, not a pad disc. (The
- *  earlier flood-fill version only touched *closed* basins — carved
+ *  earlier flood-fill version only touched *closed* basins - carved
  *  terrain drains out, so it barely did anything.) Separable box
  *  min/max keeps it O(N²) instead of O(N²·r²). */
 export function playaPass(h: Float32Array, N: number, maxFill = 0.04, radius = 10): void {
@@ -436,7 +436,7 @@ export function playaPass(h: Float32Array, N: number, maxFill = 0.04, radius = 1
   }
 }
 
-/** Aeolian drift — sand creeps downwind off windward faces and piles
+/** Aeolian drift - sand creeps downwind off windward faces and piles
  *  on the lee side. rate = per-cell transport when downwind is lower,
  *  creep = constant flat-ground saltation. Cheap longitudinal-dune
  *  read; repeat clicks elongate the ridges along `dir`. */
@@ -456,7 +456,7 @@ export function dunesPass(h: Float32Array, N: number, iters = 30, dir = 0.8, rat
   }
 }
 
-/** Terrace — quantize heights into steps with a noise jitter on the
+/** Terrace - quantize heights into steps with a noise jitter on the
  *  risers so the benches don't read machined. Farmland/badlands look. */
 export function terracePass(h: Float32Array, N: number, steps = 9, jitter = 0.4, seed = 7): void {
   const step = 1 / steps;
@@ -471,7 +471,7 @@ export function terracePass(h: Float32Array, N: number, steps = 9, jitter = 0.4,
   }
 }
 
-/** Cliff carving — accentuate cells already steeper than threshold:
+/** Cliff carving - accentuate cells already steeper than threshold:
  *  high side lifts, low side drops. Benches and escarpments without
  *  touching flat ground. */
 export function cliffPass(h: Float32Array, N: number, thresh = 0.02, k = 0.5): void {
@@ -487,7 +487,7 @@ export function cliffPass(h: Float32Array, N: number, thresh = 0.02, k = 0.5): v
   }
 }
 
-/** Alluvial fans — cells steeper than thresh shed a share of their drop
+/** Alluvial fans - cells steeper than thresh shed a share of their drop
  *  onto the downhill neighbor. Sediment collects at slope breaks =
  *  fans at valley mouths. */
 export function fanPass(h: Float32Array, N: number, thresh = 0.012, rate = 0.35): void {
@@ -506,13 +506,13 @@ export function fanPass(h: Float32Array, N: number, thresh = 0.012, rate = 0.35)
   }
 }
 
-/** Flood — clamp everything below `level` to it: instant flat seabed
+/** Flood - clamp everything below `level` to it: instant flat seabed
  *  and a coherent coastline. */
 export function floodPass(h: Float32Array, N: number, level = 0.28): void {
   for (let i = 0; i < N * N; i += 1) { if (h[i]! < level) { h[i] = level; } }
 }
 
-/** Karst dissolve — seeded sinkholes: smooth wells with no raised rim
+/** Karst dissolve - seeded sinkholes: smooth wells with no raised rim
  *  (dolines, not craters). */
 export function sinkPass(h: Float32Array, N: number, sinks = 8, radius = 24, depth = 0.12, seed = 11): void {
   const rand = mulberry(seed * 747_796_405);
@@ -533,7 +533,7 @@ export function sinkPass(h: Float32Array, N: number, sinks = 8, radius = 24, dep
   }
 }
 
-/** Ridge sharpen — unsharp mask on local maxima only. Brings back the
+/** Ridge sharpen - unsharp mask on local maxima only. Brings back the
  *  crests that creep/erosion rounds off. */
 export function sharpenPass(h: Float32Array, N: number, k = 0.45): void {
   const src = h.slice();
@@ -548,7 +548,7 @@ export function sharpenPass(h: Float32Array, N: number, k = 0.45): void {
   }
 }
 
-/** Fold — parallel bent ridges along an axis. A triangle wave gives
+/** Fold - parallel bent ridges along an axis. A triangle wave gives
  *  sharp fold crests with linear limbs (folded strata), wiggled so the
  *  ridge lines wander like real orogeny instead of straight comb teeth. */
 export function foldPass(h: Float32Array, N: number, amp = 0.12, folds = 4, dir = 0.5, seed = 13): void {
@@ -558,19 +558,19 @@ export function foldPass(h: Float32Array, N: number, amp = 0.12, folds = 4, dir 
       const u = x / N, v = z / N;
       const wig = (noise(u, v, 3, 5, seed) - 0.5) * 0.6;
       const tr = (u * cx + v * sz) * folds + wig;
-      const t = tr - Math.floor(tr); // proper wrap — JS % keeps the sign
+      const t = tr - Math.floor(tr); // proper wrap - JS % keeps the sign
       const tri = 1 - Math.abs(t * 2 - 1); // triangle crest
       h[z * N + x] = h[z * N + x]! + amp * tri;
     }
   }
 }
 
-/** Plates — jittered voronoi regions, each with its own flat elevation
+/** Plates - jittered voronoi regions, each with its own flat elevation
  *  offset. Flat inside each plate, a step fault at boundaries. */
 export function platesPass(h: Float32Array, N: number, cells = 26, amp = 0.14, seed = 19): void {
   const rand = mulberry(seed * 7919);
   const px: number[] = [], pz: number[] = [], off: number[] = [];
-  // Fully random centers — grid-jittered seeds made every plate a
+  // Fully random centers - grid-jittered seeds made every plate a
   // square-ish block with borders hugging the grid lines (the quilt look).
   for (let p = 0; p < cells; p += 1) {
     px.push(rand()); pz.push(rand());
@@ -581,7 +581,7 @@ export function platesPass(h: Float32Array, N: number, cells = 26, amp = 0.14, s
       const u = x / N, v = z / N;
       let d1 = Infinity, d2 = Infinity, near = 0;
       for (let p = 0; p < px.length; p += 1) {
-        // Toroidal distance — plate offsets must agree across the wrap
+        // Toroidal distance - plate offsets must agree across the wrap
         // seam or the field stops tiling.
         const du = Math.min(Math.abs(u - px[p]!), 1 - Math.abs(u - px[p]!));
         const dv = Math.min(Math.abs(v - pz[p]!), 1 - Math.abs(v - pz[p]!));
@@ -595,7 +595,7 @@ export function platesPass(h: Float32Array, N: number, cells = 26, amp = 0.14, s
   }
 }
 
-/** Canyon — a wandering deep channel carved along a noise-steered walk.
+/** Canyon - a wandering deep channel carved along a noise-steered walk.
  *  Direction persists with noise wobble, so it meanders like a river
  *  canyon rather than a straight slot. */
 export function canyonPass(h: Float32Array, N: number, depth = 0.22, width = 8, seed = 23): void {
@@ -619,7 +619,7 @@ export function canyonPass(h: Float32Array, N: number, depth = 0.22, width = 8, 
   }
 }
 
-/** Snowpack — deposit on high, low-slope cells: ridges pick up cornices,
+/** Snowpack - deposit on high, low-slope cells: ridges pick up cornices,
  *  steep faces stay bare. */
 export function snowPass(h: Float32Array, N: number, line = 0.55, amt = 0.05): void {
   const src = h.slice();
@@ -636,7 +636,7 @@ export function snowPass(h: Float32Array, N: number, line = 0.55, amt = 0.05): v
   }
 }
 
-/** Lake — fill genuinely closed basins (priority-flood pits) to their
+/** Lake - fill genuinely closed basins (priority-flood pits) to their
  *  spill level. Playa's complement: real water bodies, not flats. */
 export function lakePass(h: Float32Array, N: number, minFill = 0.006): void {
   const f = priorityFlood(h, N);
@@ -646,7 +646,7 @@ export function lakePass(h: Float32Array, N: number, minFill = 0.006): void {
   }
 }
 
-/** Slump — collapse steep cells toward their neighborhood mean. Hillside
+/** Slump - collapse steep cells toward their neighborhood mean. Hillside
  *  lobes instead of sharp cliffs; flat ground untouched. */
 export function slumpPass(h: Float32Array, N: number, thresh = 0.03, k = 0.5): void {
   const src = h.slice();
@@ -661,7 +661,7 @@ export function slumpPass(h: Float32Array, N: number, thresh = 0.03, k = 0.5): v
   }
 }
 
-/** Rugged — amplify existing mid-frequency detail both ways: bumps get
+/** Rugged - amplify existing mid-frequency detail both ways: bumps get
  *  bumpier, dips get dipper, landform silhouette preserved. */
 export function ruggedPass(h: Float32Array, N: number, k = 0.9, R = 3): void {
   const src = h.slice();
@@ -677,7 +677,7 @@ export function ruggedPass(h: Float32Array, N: number, k = 0.9, R = 3): void {
   }
 }
 
-/** Canyonize — sigmoid contrast around the median: lows drop, highs
+/** Canyonize - sigmoid contrast around the median: lows drop, highs
  *  lift, flats split. s scales how hard the tails compress. */
 export function contrastPass(h: Float32Array, N: number, s = 4): void {
   for (let i = 0; i < N * N; i += 1) {
@@ -685,7 +685,7 @@ export function contrastPass(h: Float32Array, N: number, s = 4): void {
   }
 }
 
-/** Stretch — renormalize the field to fill 0..1. Verbs compress the
+/** Stretch - renormalize the field to fill 0..1. Verbs compress the
  *  range over time; this restores the full u8 export span. */
 export function stretchPass(h: Float32Array, N: number): void {
   let mn = Infinity, mx = -Infinity;
@@ -694,7 +694,7 @@ export function stretchPass(h: Float32Array, N: number): void {
   for (let i = 0; i < N * N; i += 1) { h[i] = (h[i]! - mn) * inv; }
 }
 
-/** Breach — Flow Restructure-lite: every closed basin gets ONE outlet.
+/** Breach - Flow Restructure-lite: every closed basin gets ONE outlet.
  *  priorityFlood marks the pits; each connected basin's lowest rim
  *  cell is cut to just below its spill level, then a short channel is
  *  carved downhill so the breach reads as a canyon gap, not a notch. */
@@ -704,7 +704,7 @@ export function breachPass(h: Float32Array, N: number, minFill = 0.01, margin = 
   for (let i = 0; i < N * N; i += 1) { if (f[i]! - h[i]! > minFill) { pit[i] = 1; } }
   const comp = new Int32Array(N * N).fill(-1);
   let nComp = 0;
-  // Label pit components (4-conn, non-toroidal — edge basins still label fine).
+  // Label pit components (4-conn, non-toroidal - edge basins still label fine).
   for (let s = 0; s < N * N; s += 1) {
     if (!pit[s] || comp[s] >= 0) { continue; }
     const stack = [s]; comp[s] = nComp;
@@ -736,7 +736,7 @@ export function breachPass(h: Float32Array, N: number, minFill = 0.01, margin = 
     const r = rim[c];
     if (r < 0) { continue; }
     h[r] = Math.min(h[r]!, spill[c]! - margin); // cut the saddle
-    // Carve a short downhill channel outward from the breach — each
+    // Carve a short downhill channel outward from the breach - each
     // step dips just below the previous cell so water actually flows out.
     let x = r % N, z = (r / N) | 0;
     let prevH = h[r]!;
@@ -755,7 +755,7 @@ export function breachPass(h: Float32Array, N: number, minFill = 0.01, margin = 
   }
 }
 
-/** Diffusion creep — a laplacian softening pass. The gentle sibling of
+/** Diffusion creep - a laplacian softening pass. The gentle sibling of
  *  talus (which only slides the steep cells): rounds ridge crests and
  *  kills the noise carpet without removing relief. */
 export function smoothPass(h: Float32Array, N: number, iters: number): void {
@@ -772,7 +772,7 @@ export function smoothPass(h: Float32Array, N: number, iters: number): void {
   }
 }
 
-/** Base pads — seeded spots levelled to their own centre inside padR
+/** Base pads - seeded spots levelled to their own centre inside padR
  *  meters (genmap's --flats, but positions roll off the seed). Runs
  *  dead last: a pad survives erosion and carves so a stand always has
  *  flat ground to sit on. */
@@ -799,7 +799,7 @@ export function flatsPass(h: Float32Array, N: number, p: GenParams): void {
   }
 }
 
-/** Rockfall verb — port of _tools/mapbake/simrock.js: a seeded rock drops,
+/** Rockfall verb - port of _tools/mapbake/simrock.js: a seeded rock drops,
  *  walks steepest descent until the slope is under repose, then carves a
  *  warped crater (smoothstep well + debris rim). Depths in 0..1 field. */
 export function rockPass(h: Float32Array, N: number, o: { rocks?: number; radius?: number; depth?: number; rim?: number; warp?: number; seed?: number }): void {
@@ -833,7 +833,7 @@ export function rockPass(h: Float32Array, N: number, o: { rocks?: number; radius
     const c = settle(rx, rz);
     // Real impacts aren't circular: an oblique footprint (rotated
     // ellipse), a lobate rim that breaches on some arcs, and a rough
-    // floor — a clean analytic bowl reads as machined, not struck.
+    // floor - a clean analytic bowl reads as machined, not struck.
     const rot = rand() * Math.PI * 2, cr = Math.cos(rot), sr = Math.sin(rot);
     const aspect = 0.62 + rand() * 0.7;                 // <1 = oblique hit
     const lobeSeed = rand() * 100;
@@ -857,7 +857,7 @@ export function rockPass(h: Float32Array, N: number, o: { rocks?: number; radius
         const rW = r * rimWarp;
         const wellT = Math.min(1, Math.max(0, 1 - dd / rW));
         const well = d * wellT * wellT * (3 - 2 * wellT);
-        // Rough floor — the crater isn't polished; rubble and slumps stay.
+        // Rough floor - the crater isn't polished; rubble and slumps stay.
         const rough = (noise(u * 4 + lobeSeed, v * 4, 6, 5, o.seed ?? 7) - 0.5) * d * 0.55 * wellT;
         const ringT = Math.min(1, Math.max(0, 1 - Math.abs(dd - rW) / (sigma * (0.7 + lobe))));
         const ring = rm * ringT * ringT * (3 - 2 * ringT) * (1 - breachT * 0.85);
@@ -868,14 +868,14 @@ export function rockPass(h: Float32Array, N: number, o: { rocks?: number; radius
   }
 }
 
-/** Spectral phase scramble — the "nobody can claim the source" verb.
+/** Spectral phase scramble - the "nobody can claim the source" verb.
  *  FFT the field, keep every amplitude (relief, slope distribution and
  *  feature-size energy ARE the amplitude spectrum), randomize phases
  *  above `keep` cycles/tile. Squinted, the map reads the same kind of
- *  terrain — same vitals — but the geometry's fingerprint shuffles.
+ *  terrain - same vitals - but the geometry's fingerprint shuffles.
  *  Fields are tile-periodic, so the FFT needs no window. */
 export function scramblePass(h: Float32Array, N: number, keep = 6, seed = 7): void {
-  const M = N - (N & 1); // even working size — 512 on the stock 513 grid
+  const M = N - (N & 1); // even working size - 512 on the stock 513 grid
   const re = new Float64Array(M * M);
   const im = new Float64Array(M * M);
   for (let z = 0; z < M; z += 1) {
@@ -937,7 +937,7 @@ export function scramblePass(h: Float32Array, N: number, keep = 6, seed = 7): vo
   for (let z = 0; z < M; z += 1) {
     for (let x = 0; x < M; x += 1) { h[z * N + x] = (re[z * M + x]! * inv - mn) / span; }
   }
-  // Restore the periodic seam on odd N — wrap row/col mirrors index 0.
+  // Restore the periodic seam on odd N - wrap row/col mirrors index 0.
   if (N !== M) {
     for (let x = 0; x < N; x += 1) { h[(N - 1) * N + x] = h[x]!; }
     for (let z = 0; z < N; z += 1) { h[z * N + (N - 1)] = h[z * N]!; }

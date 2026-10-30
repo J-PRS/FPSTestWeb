@@ -1,4 +1,4 @@
-// Map asset loading — heightfield swap serialization, skybox faces,
+// Map asset loading - heightfield swap serialization, skybox faces,
 
 // baked-albedo material blending, and T2 interior GLB instancing.
 
@@ -36,7 +36,7 @@ import { loadLastRoomMap, pingServer } from './lastRoom.js';
 
 // The authentic T2 faces (sky_lush_blue.dml -> desert/skies/d?2.png) are
 
-// into the live fog color — saturated-fog terrain then dissolves into
+// into the live fog color - saturated-fog terrain then dissolves into
 
 // valley-mist term is injected into their Lambert's fog chunk. hscale
 
@@ -50,7 +50,7 @@ export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z
 
 
 
-/** Mission haze — spec.fog re-tints the whole atmosphere. distance → fog
+/** Mission haze - spec.fog re-tints the whole atmosphere. distance → fog
 
  *  near, visible → fog far (T2's authored range for the terrain). Absent
 
@@ -87,24 +87,24 @@ export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
   sceneFog.far = Math.max(fog?.visible ?? FOG_END, sceneFog.near + 1);
 }
 
-/** Per-map ambient particles — weather intensity per kind. Absent = the
+/** Per-map ambient particles - weather intensity per kind. Absent = the
  *  engine default trio, so a pre-weather map renders unchanged. */
 export function applyWeather(ctx: NetCtx, weather?: WeatherSpec): void {
   ctx.deps.lazyWeather().setWeather(weather);
 }
 
-/** Gameplay water — builds/removes the sea surface and hands the level to
+/** Gameplay water - builds/removes the sea surface and hands the level to
  *  local prediction so the client floats exactly like the server shadow.
  *  Absent = dry map, plane removed. */
 export function applyWater(ctx: NetCtx, water?: WaterSpec): void {
-  // swim:false = decorative sea — surface + terrain tint still apply, but
+  // swim:false = decorative sea - surface + terrain tint still apply, but
   // the prediction sim gets no waterLevel so wading runs full speed.
   ctx.deps.lazyPlayer().movement.setWaterLevel(water?.swim === false ? undefined : water?.level);
   applyWaterSurface(ctx.deps.lazyScene(), water);
   ctx.deps.lazyTerrain().setWaterLevel(water?.level, water?.color);
 }
 
-/** Kill zone — the map's floor. The local player predicts the death on
+/** Kill zone - the map's floor. The local player predicts the death on
  *  the frame the body crosses it; the server's shadow measures the same
  *  fall and owns the kill. Absent = no zone (the field clears, so a
  *  hot-reload onto a normal map can't strand a stale kill height). */
@@ -112,7 +112,7 @@ export function applyKillZone(ctx: NetCtx, killY?: number): void {
   ctx.deps.lazyPlayer().killY = killY ?? null;
 }
 
-/** Per-map procedural-sky tuning — reaches the AtmosphericSky instance
+/** Per-map procedural-sky tuning - reaches the AtmosphericSky instance
  *  through the scene (it tags its mesh `__sky`; a baked skybox hides that
  *  mesh, making the override a no-op). No atmosphere → reset to boot sky. */
 export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void {
@@ -120,25 +120,25 @@ export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void 
     { setAtmosphere(p: AtmosphereSpec): void; resetAtmosphere(): void; getSunDirection(): THREE.Vector3 } | undefined;
   if (!sky) {return;}
   // Spec fields layer on the BOOT look, not on whatever the previous map
-  // left — without the reset, hopping rimrock-after-caldera inherits
+  // left - without the reset, hopping rimrock-after-caldera inherits
   // caldera's starIntensity:0 (the hop-inheritance bug weather.ts pins).
   sky.resetAtmosphere();
   if (atmosphere) {sky.setAtmosphere(atmosphere);}
   // The terrain bakes its own sun direction, so a sky that re-elevated the
   // sun (timeOfDay) has to re-aim it here or shading disagrees with the dome.
   try {ctx.deps.lazyTerrain().setSunDirection(sky.getSunDirection());}
-  catch { /* terrain not resident yet — it inherits the boot sun */ }
-  // Re-bake image-based lighting — the env mirrors this map's sky now.
+  catch { /* terrain not resident yet - it inherits the boot sun */ }
+  // Re-bake image-based lighting - the env mirrors this map's sky now.
   bakeSkyEnv(ctx.deps.lazyScene(), JSON.stringify(atmosphere ?? 'boot'));
 }
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
- *  Serializes concurrent loads — a mapUpdate racing a re-join can't
+ *  Serializes concurrent loads - a mapUpdate racing a re-join can't
  *  finish out of order and leave the older field resident. */
 let terrainSwap: Promise<void> = Promise.resolve();
 let terrainActive: string | null = null;
 
-/** Latest requested spec key — a queued swap that ran late (the boot's
+/** Latest requested spec key - a queued swap that ran late (the boot's
 
  *  saved-map prime trailing a reconnect) must not commit after a newer
 
@@ -146,12 +146,12 @@ let terrainActive: string | null = null;
 
 let terrainWanted: string | null = null;
 
-/** A swap is pending or in flight — the resident field is NOT the one
+/** A swap is pending or in flight - the resident field is NOT the one
  *  the next seat was chosen against. Sims that collide (local player,
  *  balls) must hold or they'll fall to boot-ground mid-window. */
 export function isTerrainSwapPending(): boolean { return terrainWanted !== null && terrainWanted !== terrainActive; }
 
-/** Heightfield currently resident — null = the boot PNG. Tracked apart
+/** Heightfield currently resident - null = the boot PNG. Tracked apart
 
  *  from terrainActive so a boot-primed saved map skips the refetch +
 
@@ -159,7 +159,7 @@ export function isTerrainSwapPending(): boolean { return terrainWanted !== null 
 
 let fieldLoaded: string | null = null;
 
-/** Resolves when the first terrain decision lands — a room's map spec
+/** Resolves when the first terrain decision lands - a room's map spec
 
  *  or confirmation that the boot field stays. Offline bot fill waits on
 
@@ -169,7 +169,7 @@ const firstTerrainGate = { resolve: undefined as unknown as () => void };
 
 export const firstTerrain = new Promise<void>((r): void => { firstTerrainGate.resolve = r; });
 
-// Rooms without a spec terrain reset to the boot field — the SAME bin
+// Rooms without a spec terrain reset to the boot field - the SAME bin
 
 // the server sims (server_bun/heightmap.bin mirrored under assets), so
 
@@ -209,7 +209,7 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
 
   try {
 
-    // Auto-detect the splat set beside the albedo — maps without mats.json
+    // Auto-detect the splat set beside the albedo - maps without mats.json
     // 404 once and keep the plain bake; no opt-in flag needed.
     const mats = await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`);
 
@@ -229,7 +229,7 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
 
 
 
-/** A missing face must not kill the terrain swap — loader rejections
+/** A missing face must not kill the terrain swap - loader rejections
 
  *  are ProgressEvents, which used to surface as "undefined" here. */
 
@@ -289,9 +289,9 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
 
       assembled = skyAssemble(faces);
 
-      if (assembled !== faces) {deps.logger.info(`Sky ${skyDir}: faces misassembled — seam solver rebuilt the cube`);}
+      if (assembled !== faces) {deps.logger.info(`Sky ${skyDir}: faces misassembled - seam solver rebuilt the cube`);}
 
-    } catch { /* canvas taint/security — keep the named assembly */ }
+    } catch { /* canvas taint/security - keep the named assembly */ }
 
     const cube = new THREE.CubeTexture(assembled);
 
@@ -344,7 +344,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
 
     try {
 
-      // Scale applies to whichever field is resident — a scale-only map
+      // Scale applies to whichever field is resident - a scale-only map
 
       // change still needs CPU samples + shader uniforms re-keyed.
 
@@ -381,7 +381,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
         performance.mark('load:terrainBin');
         deps.lazyTerrain().reloadHeightmap();
 
-        // Ball.field captured the previous heightfield OBJECT — hmData is
+        // Ball.field captured the previous heightfield OBJECT - hmData is
 
         // swapped, not mutated, so the sim would keep predicting bounces on
 
@@ -399,7 +399,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
 
       // supersede this one (reconnect gameState beats a boot-primed saved
 
-      // map). Commit only if still wanted — otherwise this task's only
+      // map). Commit only if still wanted - otherwise this task's only
 
       // footprint is the hmData the newer task's own reload overwrites.
 
@@ -447,7 +447,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
 
     } catch (error) {
 
-      // THREE loaders reject with ProgressEvent (no .message) — log
+      // THREE loaders reject with ProgressEvent (no .message) - log
 
       // whichever URL failed via the event target, plus Error message.
 
@@ -501,7 +501,7 @@ const SKY_VFLIP = new Set<string>();
 
 // slot permutations x orientations for the assembly the pixels actually
 
-// describe. A coherent cube wins over the label — port of
+// describe. A coherent cube wins over the label - port of
 
 // _tools/tershot/skysolve/skyperm.
 
@@ -639,7 +639,7 @@ interface SkyCand { s: number; assign: number[]; orient: number[] }
 
 
 
-/** Keep the best-K assemblies — the seam score can't tell a right-side-up
+/** Keep the best-K assemblies - the seam score can't tell a right-side-up
 
  *  cube from a rotated one, so near-ties get re-picked by the up-prior. */
 
@@ -661,7 +661,7 @@ function skyCandPush(list: SkyCand[], s: number, assign: number[], orient: numbe
 
  *  faces carry the horizon, so they have a strong gradient along some
 
- *  axis. capScore = max directional gradient — the two lowest-scoring
+ *  axis. capScore = max directional gradient - the two lowest-scoring
 
  *  faces are structurally ineligible for anything but py/ny, which is
 
@@ -725,7 +725,7 @@ function skyCapFaces(data: Uint8ClampedArray[]): { up: number; dn: number } {
 
 /** Pick the best-seamed assembly that is also structurally upright:
 
- *  the cap faces must sit in py/ny (brightest up) — seam score alone
+ *  the cap faces must sit in py/ny (brightest up) - seam score alone
 
  *  can't tell a sideways cube from a correct one, and luminance alone
 
@@ -745,7 +745,7 @@ function skyPickUpright(cands: SkyCand[], caps: { up: number; dn: number }): Sky
 
 
 
-/** Rotation-only pass (4^6) — cheap first try; fixes upside-down faces. */
+/** Rotation-only pass (4^6) - cheap first try; fixes upside-down faces. */
 
 function skySolveRots(E: SkyEdge[][][]): SkyCand[] {
 
@@ -775,7 +775,7 @@ function skySolveRots(E: SkyEdge[][][]): SkyCand[] {
 
  *  orientations per slot. The one to reach for when the names are just
 
- *  wrong — finds the cube the pixels describe, labels be damned. */
+ *  wrong - finds the cube the pixels describe, labels be damned. */
 
 function skySolvePerm(E: SkyEdge[][][]): SkyCand[] {
 
@@ -885,7 +885,7 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
 
   const cands = skySolveRots(E);
 
-  // Only rebuild the cube when the named assembly loses decisively —
+  // Only rebuild the cube when the named assembly loses decisively -
 
   // a near-tie means authentic T2 edge discontinuity, not misassembly.
 
@@ -989,7 +989,7 @@ function applyCubeDome(scene: THREE.Scene, cube: THREE.CubeTexture): void {
 
             vec3 dir = normalize(vWorld - cameraPosition);
 
-            // SRGBColorSpace uploads as SRGB8_ALPHA8 — the sample is
+            // SRGBColorSpace uploads as SRGB8_ALPHA8 - the sample is
 
             // already linear here, matching scene.fog.color's space.
 
@@ -999,7 +999,7 @@ function applyCubeDome(scene: THREE.Scene, cube: THREE.CubeTexture): void {
 
             // right AT the horizon, so only the few degrees straddling it
 
-            // get fog — wider bands drown the sky's own painted haze and
+            // get fog - wider bands drown the sky's own painted haze and
 
             // darken the whole low sky.
 
@@ -1079,7 +1079,7 @@ async function loadMats(dirUrl: string): Promise<{
 
   // [layer*grid² + cell]. Reading planar spreads every layer at ~0.25
 
-  // over the whole map — the tiled detail covered the entire terrain.
+  // over the whole map - the tiled detail covered the entire terrain.
 
   const pack = (offset: number): THREE.DataTexture => {
 
@@ -1107,7 +1107,7 @@ async function loadMats(dirUrl: string): Promise<{
 
   };
 
-  // Tile atlas: 4×2 cells of 256px on one canvas — atlas UVs in the
+  // Tile atlas: 4×2 cells of 256px on one canvas - atlas UVs in the
 
   // shader do the layer select, no texture arrays needed.
 
@@ -1123,7 +1123,7 @@ async function loadMats(dirUrl: string): Promise<{
 
     const img = new Image();
 
-    // Cross-origin atlas bake — without this the canvas taints and
+    // Cross-origin atlas bake - without this the canvas taints and
 
     // CanvasTexture's upload throws SecurityError (silent grey terrain).
 
@@ -1137,7 +1137,7 @@ async function loadMats(dirUrl: string): Promise<{
 
     g.drawImage(img, cx, cy, 256, 256);
 
-    // Per-tile mean luminance — the shader divides the blended detail by
+    // Per-tile mean luminance - the shader divides the blended detail by
 
     // the weighted mean so tiles modulate the albedo around their own
 
@@ -1175,7 +1175,7 @@ async function loadMats(dirUrl: string): Promise<{
 
 // The shader compares sampled (linear-decoded) luminance against each
 
-// tile's mean — compute that mean in linear space too or dark tiles
+// tile's mean - compute that mean in linear space too or dark tiles
 
 // divide by an sRGB mean ~2.4× too high and the blend reads as black grime.
 
@@ -1203,7 +1203,7 @@ function srgb2lin(c: number): number {
 
 // (u,w,-v) in T2 coords); SwapYZ maps T2 (u,v,w)→ours (u,w,v); R is the
 
-// mission rotation in T2 axes. SwapYZ is a reflection — DoubleSide on
+// mission rotation in T2 axes. SwapYZ is a reflection - DoubleSide on
 
 // every material keeps the mirrored winding renderable.
 
@@ -1223,9 +1223,9 @@ const G_GLB_TO_T2 = new THREE.Matrix4().makeRotationX(Math.PI / 2);
 
 let interiorGroup: THREE.Group | null = null;
 
-let interiorGeos: THREE.BufferGeometry[] = []; // merged geos — owned, must dispose on swap
+let interiorGeos: THREE.BufferGeometry[] = []; // merged geos - owned, must dispose on swap
 
-// Bumped every applyInteriors — consumers that cache scene queries over
+// Bumped every applyInteriors - consumers that cache scene queries over
 
 // the group (e.g. the shadow-caster gate) must re-census on change: a map
 
@@ -1241,7 +1241,7 @@ const glbLoader = mkGltfLoader();
 
 
 
-// Canonical interior materials — dedup by stripped name (per-GLB `.NNN`
+// Canonical interior materials - dedup by stripped name (per-GLB `.NNN`
 
 // suffixes removed) + the shading params that actually differ.
 
@@ -1249,7 +1249,7 @@ const _canonMats = new Map<string, { key: string; mat: THREE.Material }>();
 
 
 
-// Interiors ride the same fog model as the terrain shader — THREE.Fog
+// Interiors ride the same fog model as the terrain shader - THREE.Fog
 
 // alone leaves mesh hulls crisp inside dissolved lowlands, so the
 
@@ -1295,7 +1295,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
 
     std.color ? std.color.getHexString() : '-',
 
-    // Texture identity comes from the map's own name — two materials that
+    // Texture identity comes from the map's own name - two materials that
 
     // differ only in .name (the exporter's per-file .NNN suffixes already
 
@@ -1321,7 +1321,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
 
   if (hit) {return hit;}
 
-  // GLTFLoader gives every DIF interior MeshStandardMaterial — PBR shading
+  // GLTFLoader gives every DIF interior MeshStandardMaterial - PBR shading
 
   // on ~85k tris while the whole rest of the world runs Lambert. Downgrade
 
@@ -1335,7 +1335,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
 
     // DIF interiors ship TWO textures: baseColor (the wall albedo) and a
 
-    // zero-strength emissive on channel 1 — the interior's baked T2
+    // zero-strength emissive on channel 1 - the interior's baked T2
 
     // lightmap. Lambert can consume it as lightMap, so the hulls carry
 
@@ -1435,13 +1435,13 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
 
 // Interior parts worth a cast shadow: sized like architecture, not trim.
 
-// Radius over ~4m — towers, walls, ramps. Small greebles would cost a
+// Radius over ~4m - towers, walls, ramps. Small greebles would cost a
 
 // draw call each in the shadow pass for an unreadable sliver of shade.
 
 // Per-mesh radius is stashed on userData so the loop can distance-gate
 
-// casting (geometry is world-baked — boundingSphere.center is the mesh's
+// casting (geometry is world-baked - boundingSphere.center is the mesh's
 
 // true position).
 
@@ -1491,11 +1491,11 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
 
 
 
-/** Instance a converted T2 interior. Clone shares geometry/materials —
+/** Instance a converted T2 interior. Clone shares geometry/materials -
 
  *  these are static hulls, no skeletons. */
 
-/** Sediment-lip radius per dif class — footprint estimate for the
+/** Sediment-lip radius per dif class - footprint estimate for the
  *  accumulation apron heightmap draws at each base. Bridges skipped:
  *  a lip under midspan reads as a berm, not sediment. Scaled by
  *  spec.scale.x so blown-up variants pile proportionally more. */
@@ -1558,7 +1558,7 @@ interiorsEpoch += 1;
 
   // Static-merge buckets: every interior sub-mesh bakes its world transform
 
-  // into a cloned geometry and merges per (material × attribute layout) —
+  // into a cloned geometry and merges per (material × attribute layout) -
 
   // 33 hulls × dozens of primitives was hundreds of draw calls at idle.
 
@@ -1598,7 +1598,7 @@ interiorsEpoch += 1;
 
         // The SwapYZ reflection conjugates every mission rotation into its
 
-        // negative — negating the angle here re-applies the intended yaw.
+        // negative - negating the angle here re-applies the intended yaw.
 
         // Chained pieces (Dangerous Crossing bridge) expose the flip.
 
@@ -1632,7 +1632,7 @@ interiorsEpoch += 1;
 
         // Rare path: keep the multi-material mesh but pin the baked world
 
-        // transform — re-parenting to `group` drops the instance matrix.
+        // transform - re-parenting to `group` drops the instance matrix.
 
         const clone = mesh.clone();
 
@@ -1646,7 +1646,7 @@ interiorsEpoch += 1;
 
       const mat = mats[0]!;
 
-      // mergeGeometries refuses mismatched attribute sets — key on the
+      // mergeGeometries refuses mismatched attribute sets - key on the
 
       // layout too or one odd primitive sinks a whole material bucket.
 
@@ -1668,7 +1668,7 @@ interiorsEpoch += 1;
 
       // Material dedup: the DIF exporter emits the same Blender material
 
-      // under a new `.NNN` name per GLB (BE_EWAL01B, .001…005) — ~360
+      // under a new `.NNN` name per GLB (BE_EWAL01B, .001…005) - ~360
 
       // distinct uuids for ~60 real materials. Canonicalize on the
 
@@ -1696,13 +1696,13 @@ interiorsEpoch += 1;
 
     const merged = mergeGeometries(geos, false);
 
-    if (!merged) { // attribute/index quirk — fall back to the unmerged geos
+    if (!merged) { // attribute/index quirk - fall back to the unmerged geos
 
       for (const g of geos) {
 
         const mesh = new THREE.Mesh(g, mat);
 
-        mesh.matrixAutoUpdate = false; // baked world transform — static
+        mesh.matrixAutoUpdate = false; // baked world transform - static
 
         mesh.receiveShadow = true;
 
@@ -1720,13 +1720,13 @@ interiorsEpoch += 1;
 
     }
 
-    for (const g of geos) {g.dispose();} // baked clones — merged owns their data now
+    for (const g of geos) {g.dispose();} // baked clones - merged owns their data now
 
     mergedGeo.push(merged);
 
     const mesh = new THREE.Mesh(merged, mat);
 
-    mesh.matrixAutoUpdate = false; // baked world transform — static
+    mesh.matrixAutoUpdate = false; // baked world transform - static
 
     mesh.receiveShadow = true;
 
@@ -1734,7 +1734,7 @@ interiorsEpoch += 1;
 
     // draw calls in the shadow pass. Only chunky structures' shadows read
 
-    // at a glance — debris-scale parts don't.
+    // at a glance - debris-scale parts don't.
 
     mesh.userData.castR = interiorCastRadius(merged);
 
@@ -1746,7 +1746,7 @@ interiorsEpoch += 1;
 
   if (missing.size > 0) {deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);}
 
-  // Bake every world matrix once, then freeze the whole subtree — the
+  // Bake every world matrix once, then freeze the whole subtree - the
 
   // per-frame updateMatrixWorld walk skips it entirely instead of
 
@@ -1808,7 +1808,7 @@ export async function bootPrimeTerrain(httpUrl: string, map: MapSnapshot): Promi
 
 }
 
-/** The primed map's palette id — main seeds it onto the fresh Terrain
+/** The primed map's palette id - main seeds it onto the fresh Terrain
  *  BEFORE the tick-60 warmup compile so the boot program IS the map's
  *  preset and gameState's setPreset recompile never happens (the ~1s
  *  serial stall inside the veil). */

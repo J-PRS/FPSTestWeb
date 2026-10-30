@@ -1,7 +1,7 @@
-// Clip feed — TikTok-style fullscreen replay of the best-shots queue.
+// Clip feed - TikTok-style fullscreen replay of the best-shots queue.
 // One clip fills the screen; wheel / ↑↓ / swipe moves, space pauses.
 // Entry: the /clips route (feedMode.on) or a ?feed flag on dev hosts.
-// The world underneath is the normal offline boot — playback reuses the
+// The world underneath is the normal offline boot - playback reuses the
 // production demo-lifecycle wiring; this module is only the chrome + queue.
 
 import type { DemoManager } from '../demo/index.js';
@@ -18,21 +18,21 @@ interface FeedDeps {
   hud: HUD;
   overlay: HTMLElement;
   canvas: HTMLCanvasElement;
-  /** Same-task render — drawImage of the GL canvas reads a live buffer
+  /** Same-task render - drawImage of the GL canvas reads a live buffer
    *  only inside the task that rendered it. */
   renderNow?: () => void;
 }
 
-const SLIDE_MS = 220;        // canvas slide in/out — one clip per screen
+const SLIDE_MS = 220;        // canvas slide in/out - one clip per screen
 const NEXT_DELAY_MS = 900;   // linger on the last frame before advancing
 const WHEEL_COOLDOWN = 450;  // one notch = one clip; don't stream past
 // A clip that never reaches 'playing' (evicted server-side, 404, fetch
-// failure) emits no onPlaybackEnd, so nothing would advance — the feed
+// failure) emits no onPlaybackEnd, so nothing would advance - the feed
 // would wedge on the dead clip forever. Generous so slow fetches of
 // legit clips aren't skipped.
 const DEAD_CLIP_MS = 10_000;
 // Drag commit: either ~1/5 viewport travelled or a real flick. The drag
-// itself tracks the finger 1:1 (how TikTok/Reels pagers do it) — a
+// itself tracks the finger 1:1 (how TikTok/Reels pagers do it) - a
 // threshold-only swipe reads as a canned animation, not a gesture.
 const SWIPE_COMMIT_RATIO = 0.18;
 const FLICK_V_PX_MS = 0.5;
@@ -69,7 +69,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   const metaCard = el('div', 'feed-meta', root);
   const metaDesc = el('div', 'feed-desc', metaCard);
   const metaStats = el('div', 'feed-stats', metaCard);
-  const hint = el('div', 'feed-hint', root, 'scroll · ↑↓ · swipe — next/prev · space — pause · C — hide UI · ESC — exit');
+  const hint = el('div', 'feed-hint', root, 'scroll · ↑↓ · swipe - next/prev · space - pause · C - hide UI · ESC - exit');
   const rail = el('div', 'feed-rail', root);
   const btnUp = el('button', 'feed-btn', rail, '▲');
   const btnPause = el('button', 'feed-btn', rail, '❚❚');
@@ -86,7 +86,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     const rect = progress.getBoundingClientRect();
     dm.player.seek(((ev.clientX - rect.left) / rect.width) * dur);
   });
-  const empty = el('div', 'feed-empty', root, 'No clips yet — play a round, hit a shot, come back.');
+  const empty = el('div', 'feed-empty', root, 'No clips yet - play a round, hit a shot, come back.');
 
   btnUp.title = 'Previous (↑)';
   btnDown.title = 'Next (↓)';
@@ -104,7 +104,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   // Bumped by play() so stale auto-advance/watchdog timers aimed at the
   // previous clip can't act on the current one.
   let clipGen = 0;
-  // Finger-tracking drag state — the live canvas stays on the OUTGOING
+  // Finger-tracking drag state - the live canvas stays on the OUTGOING
   // clip the whole gesture (it keeps playing, mid-slide included); the
   // poster is the incoming pane. The ring buffer keeps the last ~120ms
   // of samples for flick velocity.
@@ -118,14 +118,14 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   // ---- Two-pane pager ----
   // A single WebGL canvas can't render two clips, so the pane roles are
   // fixed: canvas = outgoing (live, translating as it exits), poster =
-  // incoming — a meta placeholder during the drag, then the real paused
+  // incoming - a meta placeholder during the drag, then the real paused
   // frame painted on it once the commit mounts the clip.
   const poster = document.createElement('canvas');
   poster.id = 'clipfeed-poster';
   document.body.append(poster);
   const pctx = poster.getContext('2d')!;
 
-  // Placeholder card for the incoming pane — a real frame would require
+  // Placeholder card for the incoming pane - a real frame would require
   // swapping the world mid-drag, which is exactly the mount hitch the
   // deferred-mirror design avoids. Meta reads like the feed's own card.
   function paintPlaceholder(e: CoolShotEntry): void {
@@ -151,7 +151,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   }
 
   // The game canvas is centered via inline transform (left/top 50% +
-  // translate(-50%,-50%)) — every transform write here MUST keep that
+  // translate(-50%,-50%)) - every transform write here MUST keep that
   // prefix or the canvas collapses to a bottom-right quadrant on narrow
   // windows (the 16:9 overscan is wider than a portrait viewport).
   const CENTER = 'translate(-50%, -50%)';
@@ -186,7 +186,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
 
   const wrapIdx = (i: number): number => ((i % entries.length) + entries.length) % entries.length;
   // Never rejects: IDB/read failures and corrupt blobs all degrade to a
-  // plain miss — a throw inside a pager transition would strand
+  // plain miss - a throw inside a pager transition would strand
   // `advancing` with the poster frozen over the feed.
   const resolveClip = (e: CoolShotEntry): Promise<DemoFile | null> =>
     dm.coolShotMgr.resolveClipData(e).catch((): null => null);
@@ -227,7 +227,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   function updateAddress(): void {
     const e = current();
     if (!e?.filename) {return;}
-    // Deep-link follows playback — the address bar always holds the live
+    // Deep-link follows playback - the address bar always holds the live
     // clip's shareable URL.
     const want = `/clips/${e.filename}`;
     if (window.location.pathname !== want) {
@@ -245,7 +245,7 @@ clipGen += 1;
     if (preloaded && mountPlay(preloaded)) {
       // mounted above
     } else {dm.playCoolShotById(e.id);}
-    // Dead-clip watchdog — fire-and-forget playback gives no failure
+    // Dead-clip watchdog - fire-and-forget playback gives no failure
     // signal, so a clip that never starts gets skipped on a timer.
     const g = clipGen;
     setTimeout((): void => {
@@ -260,7 +260,7 @@ clipGen += 1;
   // the new clip behind the covering poster, then reveal.
   async function commitAdvance(dir: 1 | -1, ni: number, ready: Promise<DemoFile | null>): Promise<void> {
     await slidePanes(dir, true, SLIDE_MS);
-    // Canvas lands at 0 behind the placeholder poster — invisible swap.
+    // Canvas lands at 0 behind the placeholder poster - invisible swap.
     d.canvas.style.transition = 'none';
     d.canvas.style.transform = CENTER;
     const data = await ready;
@@ -271,7 +271,7 @@ clipGen += 1;
 
   async function go(dir: 1 | -1): Promise<void> {
     if (entries.length === 0 || advancing) {return;}
-    // An auto-advance/keys/wheel go() can land mid-gesture — cancel the
+    // An auto-advance/keys/wheel go() can land mid-gesture - cancel the
     // drag outright or touchend's commit path advances a second clip.
     drag = null;
     advancing = dir;
@@ -287,13 +287,13 @@ clipGen += 1;
   function scheduleNext(): void {
     // Generation-guarded: a swipe/keys into the next clip inside the
     // window would otherwise let the stale timer advance AGAIN and
-    // double-skip. Also yields to a manual seek/pause — either means
+    // double-skip. Also yields to a manual seek/pause - either means
     // the user took the wheel.
     const g = clipGen;
     setTimeout((): void => {
       if (advancing || g !== clipGen) {return;}
       // 'paused' is overloaded: manual pause (hold the feed) AND the mode
-      // natural end leaves — the lifecycle parks the clock at duration,
+      // natural end leaves - the lifecycle parks the clock at duration,
       // so end-of-clip must still advance while a mid-clip pause holds.
       const parkedAtEnd = dm.player.duration > 0 && dm.player.currentTimeValue >= dm.player.duration;
       if (dm.mode === 'playing' || (dm.mode === 'paused' && !parkedAtEnd)) {return;}
@@ -301,7 +301,7 @@ clipGen += 1;
     }, NEXT_DELAY_MS);
   }
 
-  // The lifecycle's own onPlaybackEnd only freezes the last frame — the
+  // The lifecycle's own onPlaybackEnd only freezes the last frame - the
   // feed chains the auto-advance behind it.
   const prevEnd = dm.onPlaybackEnd;
   dm.onPlaybackEnd = (): void => { prevEnd?.(); scheduleNext(); };
@@ -330,7 +330,7 @@ clipGen += 1;
   const exitTo = feedMode.auto ? '/?play' : '/';
   btnExit.addEventListener('click', (): void => { window.location.href = exitTo; });
 
-  // Wheel deltas accumulate — a mouse notch arrives as one big event,
+  // Wheel deltas accumulate - a mouse notch arrives as one big event,
   // but precision trackpads stream many small ones that never reach a
   // per-event threshold (the feed would never move on a laptop pad).
   let wheelAcc = 0;
@@ -381,7 +381,7 @@ clipGen += 1;
     drag.samples.push({ t: performance.now(), y });
     if (drag.samples.length > 8) {drag.samples.shift();}
     const dy = drag.startY - y; // + = swiping up = next clip
-    // Arm the neighbor on first meaningful travel — its placeholder card
+    // Arm the neighbor on first meaningful travel - its placeholder card
     // tracks in with the finger; the real frame lands at commit. The
     // outgoing clip never pauses (one GL canvas = only it can animate).
     if (!drag.mounted && Math.abs(dy) > 12) {
@@ -403,13 +403,13 @@ clipGen += 1;
     drag = null;
     const endY = ev.changedTouches[0]!.clientY;
     const dy = d0.startY - endY;
-    // Flick velocity from the recent sample window — a short fast fling
+    // Flick velocity from the recent sample window - a short fast fling
     // commits even when the travel was small.
     const now = performance.now();
     const s0 = d0.samples.find((s): boolean => now - s.t <= 120) ?? d0.samples[0]!;
     const v = now > s0.t ? (s0.y - endY) / (now - s0.t) : 0; // px/ms, + = up
     const dir: 1 | -1 = (Math.abs(v) > 0.01 ? v : dy) >= 0 ? 1 : -1;
-    if (!d0.mounted || advancing) {return;} // tap — nothing mounted
+    if (!d0.mounted || advancing) {return;} // tap - nothing mounted
     const commit = Math.abs(dy) > window.innerHeight * SWIPE_COMMIT_RATIO || Math.abs(v) > FLICK_V_PX_MS;
     if (commit && dir === d0.dir) {
       advancing = dir;
@@ -420,7 +420,7 @@ clipGen += 1;
         advancing = 0;
       })();
     } else {
-      // Spring back — the outgoing clip never paused, so the restore is
+      // Spring back - the outgoing clip never paused, so the restore is
       // pure CSS: both panes ease home and the poster drops.
       (async (): Promise<void> => {
         await slidePanes(d0.dir, false, SLIDE_MS);
@@ -429,7 +429,7 @@ clipGen += 1;
     }
   }, { passive: true });
 
-  // Progress bar + pause icon ride their own rAF — the demo UI's time
+  // Progress bar + pause icon ride their own rAF - the demo UI's time
   // updates target its hidden transport bar, not the feed.
   const tick = (): void => {
     const dur = dm.player.duration;
@@ -440,10 +440,10 @@ clipGen += 1;
   requestAnimationFrame(tick);
 
   await dm.fetchCoolShotsFromServer();
-  // Copy before shuffling — getCoolShots returns the manager's live
+  // Copy before shuffling - getCoolShots returns the manager's live
   // array and the panel's best-first order must survive feed playback.
   entries = [...dm.getCoolShots()];
-  // Shuffle the queue — the index is lifetime-sorted, which makes every
+  // Shuffle the queue - the index is lifetime-sorted, which makes every
   // feed session replay the same top-N run. One pass, one shuffle.
   for (let i = entries.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));

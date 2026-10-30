@@ -6,19 +6,19 @@ import type { Terrain } from '../world/terrain.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 import { GRAVITY } from '../../../shared/movement.js';
 
-// Player-deployable mortar — artillery twin of the sentry. A squat tripod
+// Player-deployable mortar - artillery twin of the sentry. A squat tripod
 // with one fat angled tube; it lobs REAL mortar shells (weapon row 4
 // speed/gravity/arming) over cover onto hostiles inside a [minRange,
-// range] band. Point-blank is a dead zone by design — the tube can't
+// range] band. Point-blank is a dead zone by design - the tube can't
 // depress, so rushing it is the counter. Cap 1 per owner.
 
 const RANGE = DEPLOY_ITEMS.mortar.range!;
 const MIN_RANGE = DEPLOY_ITEMS.mortar.minRange!;
 const FIRE_INTERVAL = DEPLOY_ITEMS.mortar.fireInterval!;
 const SHELL_SPEED = DEPLOY_ITEMS.mortar.projSpeed!;
-const TURN_RATE = 1.8;       // rad/s — artillery slews slower than a sentry
+const TURN_RATE = 1.8;       // rad/s - artillery slews slower than a sentry
 const AIM_TOL = 0.12;
-const MUZZLE_UP = 1.6;       // tube mouth height — matches server tickMortar
+const MUZZLE_UP = 1.6;       // tube mouth height - matches server tickMortar
 const G = Math.abs(GRAVITY);
 
 const _metal = new THREE.MeshLambertMaterial({ color: 0x6A_70_5C, emissive: 0x1A_1E_14 });
@@ -29,10 +29,10 @@ const _glow = new THREE.MeshBasicMaterial({ color: 0xFF_AA_55 });
 const _geoBase = new THREE.CylinderGeometry(0.9, 1.15, 0.5, 8);
 const _geoPost = new THREE.CylinderGeometry(0.24, 0.34, 0.7, 8);
 const _geoLeg = new THREE.CylinderGeometry(0.12, 0.15, 1.5, 6);
-// Cannon barrel — closed tube (open-ended renders its black interior),
+// Cannon barrel - closed tube (open-ended renders its black interior),
 // a fat breech at the butt and a glowing muzzle ring at the mouth.
 const _geoTube = new THREE.CylinderGeometry(0.22, 0.3, 2.2, 10);
-// Chunky drum breech — a fat cylinder on the bore axis, not a cube.
+// Chunky drum breech - a fat cylinder on the bore axis, not a cube.
 const _geoBreech = new THREE.CylinderGeometry(0.42, 0.5, 1, 10);
 const _geoBreechCap = new THREE.CylinderGeometry(0.42, 0.2, 0.3, 10);
 const _geoRing = new THREE.TorusGeometry(0.28, 0.06, 6, 12);
@@ -40,7 +40,7 @@ const _geoMouth = new THREE.CircleGeometry(0.24, 10);
 
 const _v = new THREE.Vector3();
 
-// All mortars share instanced part meshes — same pool pattern as
+// All mortars share instanced part meshes - same pool pattern as
 // DeployTurret: the ~9 real meshes per mount were 9 draws each; instance
 // matrices compose straight from group/head/tube locals so slew, recoil,
 // and unfold need no scene-graph walk.
@@ -53,7 +53,7 @@ const _m3 = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3(1, 1, 1);
 const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
-// Leg local offsets are static — precompute the three lean matrices.
+// Leg local offsets are static - precompute the three lean matrices.
 const _legLocals: THREE.Matrix4[] = [];
 for (let i = 0; i < 3; i += 1) {
   const a = (i / 3) * Math.PI * 2;
@@ -114,9 +114,9 @@ export class DeployMortar {
   armor = 0;
 
   readonly group = new THREE.Group();
-  /** Yaw-pivoted head — the tube tilts with the solved launch pitch. */
+  /** Yaw-pivoted head - the tube tilts with the solved launch pitch. */
   private head = new THREE.Group();
-  private tube = new THREE.Group(); // transform node — the barrel mesh is pool-owned
+  private tube = new THREE.Group(); // transform node - the barrel mesh is pool-owned
   private slot = -1;               // instanced-pool index; -1 = overflow (invisible)
   private flash: THREE.Sprite;
   private flashT = 0;
@@ -129,7 +129,7 @@ export class DeployMortar {
     this.id = nextTargetId();
     this.candId = `dep:${this.id}`;
     this.pos.copy(pos);
-    // Seat on the LOWEST ground in the footprint — a crest-edge plant
+    // Seat on the LOWEST ground in the footprint - a crest-edge plant
     // would otherwise hang its downhill side in the air.
     let bg = terrain.getHeight(pos.x, pos.z);
     for (const [ox, oz] of [[0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8]]) {
@@ -160,7 +160,7 @@ export class DeployMortar {
   }
 
   /** Write this mount's 9 instance slots from the group/head/tube
-   *  transforms — the real meshes are pool-owned; group/head/tube only
+   *  transforms - the real meshes are pool-owned; group/head/tube only
    *  carry the flash sprite and the slew state. */
   private syncMatrices(): void {
     if (this.slot < 0 || !_pool) {return;}
@@ -184,10 +184,10 @@ export class DeployMortar {
     }
   }
 
-  /** Returns {muzzle, vel} when the fire cycle lands a shell — caller
+  /** Returns {muzzle, vel} when the fire cycle lands a shell - caller
    *  spawns the real mortar Projectile (offline) or waits for the
    *  server's mortarShot arc (connected). Foes OUTSIDE the [minRange,
-   *  range] band are unreachable — no LOS gate, that's the point. */
+   *  range] band are unreachable - no LOS gate, that's the point. */
   update(dt: number, enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
       { muzzle: THREE.Vector3; vel: THREE.Vector3 } | null {
     if (this.dead) {return null;}
@@ -210,7 +210,7 @@ export class DeployMortar {
     if (!best) { this.scan(dt); this.syncMatrices(); return null; }
 
     const arc = this.solveArc(best.pos, best.vel);
-    if (!arc) { this.syncMatrices(); return null; } // in the band but unreachable — hold fire
+    if (!arc) { this.syncMatrices(); return null; } // in the band but unreachable - hold fire
     const wantYaw = Math.atan2(arc.vx, arc.vz);
     const wantTilt = Math.PI / 2 - arc.pitch; // tilt +Y barrel toward local +Z = aim dir
     this.slewTo(wantTilt, wantYaw, dt);
@@ -228,7 +228,7 @@ export class DeployMortar {
     return null;
   }
 
-  /** Low-lob ballistic solve toward the led target point — same family
+  /** Low-lob ballistic solve toward the led target point - same family
    *  as server tickMortar so the painted arc matches the real blast. */
   private solveArc(tp: THREE.Vector3, tv: THREE.Vector3):
       { vx: number; vy: number; vz: number; pitch: number } | null {
@@ -269,7 +269,7 @@ export class DeployMortar {
     this.tube.rotation.x += Math.abs(drift) <= dt * 0.5 ? drift : Math.sign(drift) * dt * 0.5;
   }
 
-  /** World-space tube tip — where shells and the muzzle flash leave. */
+  /** World-space tube tip - where shells and the muzzle flash leave. */
   muzzleWorld(out: THREE.Vector3): THREE.Vector3 {
     this.tube.updateWorldMatrix(true, false);
     return out.set(0, 1, 0).applyMatrix4(this.tube.matrixWorld);
@@ -293,6 +293,6 @@ export class DeployMortar {
       this.slot = -1;
     }
     this.flash.material.dispose(); // per-instance SpriteMaterial
-    // Shared geometries/materials intentionally not disposed — module-owned.
+    // Shared geometries/materials intentionally not disposed - module-owned.
   }
 }

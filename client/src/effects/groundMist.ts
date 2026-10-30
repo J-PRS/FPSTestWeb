@@ -4,16 +4,16 @@ import { getGlowTexture } from './glowTexture.js';
 import { markProbe } from '../core/fxDiag.js';
 import type { Terrain } from '../world/terrain.js';
 
-// Ground mist — a handful of large soft billboards pooled in terrain
+// Ground mist - a handful of large soft billboards pooled in terrain
 // valleys. The classic "rolling fog banks" trick: no volumetrics, just big
 // low-alpha glow sprites hovering a couple meters over low ground and
-// yaw-facing the camera. One InstancedMesh — 9 draws became 1; the
+// yaw-facing the camera. One InstancedMesh - 9 draws became 1; the
 // per-card opacity jitter (±0.015) was invisible noise.
 const CARD_COUNT = 9;
 const SAMPLE_RANGE = 350;   // anchors are searched within ±this of origin
 const SAMPLES = 220;        // candidate points evaluated for lowest spots
 const WANDER = 2.5;         // slow drift amplitude (m)
-const WIND_X = 1, WIND_Z = 0.1; // shared with volumetricClouds — banks flow the same direction the sky does
+const WIND_X = 1, WIND_Z = 0.1; // shared with volumetricClouds - banks flow the same direction the sky does
 const WIND_DRIFT = 3;       // m/s downwind, wraps so banks never leave their valleys
 const WIND_WRAP = 60;
 
@@ -34,7 +34,7 @@ export class GroundMist {
   private mesh: THREE.InstancedMesh;
 
   constructor(scene: THREE.Scene, terrain: Terrain) {
-    // Find the lowest local spots — mist physically pools in basins, which
+    // Find the lowest local spots - mist physically pools in basins, which
     // is exactly what makes this read as weather instead of random sprites.
     const candidates: { x: number; z: number; h: number }[] = [];
     for (let i = 0; i < SAMPLES; i += 1) {
@@ -74,7 +74,7 @@ export class GroundMist {
   private time = 0;
   private active = true;
 
-  /** Dynamic-quality switch — hides the cards and skips the billboard
+  /** Dynamic-quality switch - hides the cards and skips the billboard
    *  wander so CPU-throttled machines shed the whole cost. */
   setActive(on: boolean): void {
     this.active = on;
@@ -86,9 +86,9 @@ export class GroundMist {
     this.time += dt;
     for (let i = 0; i < this.cards.length; i += 1) {
       const c = this.cards[i]!;
-      // Cylindrical billboard — yaw toward camera only, cards stay upright
+      // Cylindrical billboard - yaw toward camera only, cards stay upright
       const yaw = Math.atan2(camPos.x - c.x, camPos.z - c.z);
-      // Slow wander — banks drift, never teleport
+      // Slow wander - banks drift, never teleport
       const windT = ((this.time * WIND_DRIFT + c.phase * 10) % WIND_WRAP) - WIND_WRAP / 2;
       c.x = c.baseX + Math.sin(this.time * 0.05 + c.phase) * WANDER + windT * WIND_X;
       c.z = c.baseZ + Math.cos(this.time * 0.04 + c.phase * 2) * WANDER + windT * WIND_Z;

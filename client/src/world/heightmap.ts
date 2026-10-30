@@ -14,15 +14,15 @@ const CPU_STEP = 5;
 
 let hmData: Uint8ClampedArray | null = null;
 let hmSize = 0;
-// Per-map vertical gain (spec.heightScale) — multiplies HSCALE in every
+// Per-map vertical gain (spec.heightScale) - multiplies HSCALE in every
 // world-height read AND the shader uniforms, so physics, prediction and
 // the mesh scale together. Server's field carries the same multiplier.
 let hmScale = 1;
-// Per-map tile span (spec.tileSize) — meters one heightmap wrap covers.
+// Per-map tile span (spec.tileSize) - meters one heightmap wrap covers.
 // T2 ports run 2048m tiles; default stays the engine's 1500.
 let hmWorldScale = DEFAULT_WORLD_SCALE;
 
-// Coarse per-cell max over the heightmap — lets a swept segment reject
+// Coarse per-cell max over the heightmap - lets a swept segment reject
 // terrain in one lookup when it flies entirely above the local ground.
 // 64×64 cells covers the world; a cell's max can never under-report, so
 // skipping on `minY > cellMax` can't hide a real hit.
@@ -55,7 +55,7 @@ function buildMaxGrid(): void {
 }
 
 /** Scaled world height of the tallest texel anywhere under the XZ rect
- *  (world coords, wrapped like sampleHeight). Returns 0 before data loads —
+ *  (world coords, wrapped like sampleHeight). Returns 0 before data loads -
  *  callers must treat 0 as "unknown", not "flat". */
 const toCell = (w: number): number => {
   const u = (((w / hmWorldScale) % 1) + 1) % 1;
@@ -68,7 +68,7 @@ const span = (a: number, b: number): number => {
 
 export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: number): number {
   if (!hmData || !hmSize) {return 0;}
-  // Walk cells from each end mod MAXGRID — a seam-crossing rect covers
+  // Walk cells from each end mod MAXGRID - a seam-crossing rect covers
   // its real cells; a rect spanning the world just scans the row (a
   // superset still can't under-report the max).
   const xa = toCell(wx0), xb = toCell(wx1);
@@ -87,13 +87,13 @@ export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: numb
 }
 
 /** Server-format heightmap: 8-byte LE header (w,h) + uint8 grid, stride 1.
- *  This is what maps/<name>.bin carries — same bytes the server's
+ *  This is what maps/<name>.bin carries - same bytes the server's
  *  BallSim/RoomMoveSim parse, so client prediction and server truth sample
  *  the identical field. */
 export function setHeightScale(mult: number): void {
   if (mult === hmScale) {return;}
   hmScale = mult;
-  _hvc.clear(); // visual cache holds scaled world heights — stale otherwise
+  _hvc.clear(); // visual cache holds scaled world heights - stale otherwise
   invalidateField();
 }
 
@@ -112,7 +112,7 @@ export function getWorldScale(): number {
   return hmWorldScale;
 }
 
-/** Push the resident field's gain/span into the render uniforms — call
+/** Push the resident field's gain/span into the render uniforms - call
  *  wherever the module state is set outside applyTerrain (boot prime,
  *  demo inject/restore) or the mesh draws at the old gain while the
  *  collider already samples the new one. */
@@ -140,7 +140,7 @@ export async function loadHeightfieldBin(url: string): Promise<void> {
   hmData = rgba;
   hmSize = w;
   buildMaxGrid();
-  rebuildVisual(); // lips reapply on the new field — sources persist across swaps
+  rebuildVisual(); // lips reapply on the new field - sources persist across swaps
   invalidateField();
 }
 
@@ -149,11 +149,11 @@ function hmSample(x: number, z: number): number {
   return hmData![idx] / TERRAIN_HEIGHTMAP_DIVISOR; // R channel 0..1
 }
 
-// Raw bilinear read — the FIELD, not the collider. Ground truth is the
-// 5m L0 chord in sampleHeight (see shared/heightfield.ts hmHeight —
+// Raw bilinear read - the FIELD, not the collider. Ground truth is the
+// 5m L0 chord in sampleHeight (see shared/heightfield.ts hmHeight -
 // physics on both ends now collides with the drawn clipmap surface).
 function sampleHeightmap(wx: number, wz: number): number {
-  // GPU texture2D + LinearFilter evaluates at texel CENTERS — texel i sits at
+  // GPU texture2D + LinearFilter evaluates at texel CENTERS - texel i sits at
   // (i + 0.5)/N in UV space. Sample identically on CPU (u shifted by -0.5) or
   // physics height is offset half a texel from the rendered mesh, which puts
   // the player/projectiles inside hills on steep slopes.
@@ -173,14 +173,14 @@ function sampleHeightmap(wx: number, wz: number): number {
   return h * HSCALE * hmScale;
 }
 
-// No quantization memo here — a cell-keyed cache returns a neighbor's
+// No quantization memo here - a cell-keyed cache returns a neighbor's
 // height (up to ~slope×cell error), and this feeds prediction ground
 // clamps: a wrong clamp reads as sim divergence → corrections. The
 // bilinear itself is ~20 ops; the callers' sweep budgets are the lever.
 export function sampleHeight(wx: number, wz: number): number {
   if (!hmData) {return 0;}
   // The L0 clipmap chord (two flat triangles per 5m cell, world-anchored
-  // lattice) — mirrors shared/heightfield.ts hmChord so prediction lands
+  // lattice) - mirrors shared/heightfield.ts hmChord so prediction lands
   // on the same surface the server sims AND the GPU draws.
   const s = 5;
   const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
@@ -207,9 +207,9 @@ export function sampleHeightVisual(wx: number, wz: number): number {
   return v;
 }
 
-/** Raw RGBA pixels for the GPU displacement texture — Terrain uploads this
+/** Raw RGBA pixels for the GPU displacement texture - Terrain uploads this
  *  verbatim; null until the field arrives via injectHeightmapBytes. When
- *  structure sediment lips are set, this returns the BUMPED visual copy —
+ *  structure sediment lips are set, this returns the BUMPED visual copy -
  *  the sim still reads raw hmData everywhere else (the lip is cosmetic:
  *  a couple of meters under a structure's own footprint, below anything
  *  gameplay would sample honestly). */
@@ -219,7 +219,7 @@ export function getHeightmapData(): { data: Uint8ClampedArray; size: number } | 
 }
 
 // --- visual-only sediment lips -------------------------------------------
-// Structure bases mound the DRAWN field — organic accumulation around the
+// Structure bases mound the DRAWN field - organic accumulation around the
 // footprint edge so hulls sit IN the ground instead of on it. Bumps merge
 // per source ('structs', 'interiors') so each replacer clears its own set
 // on map swap; reloadHeightmap re-uploads the texture afterwards.
@@ -233,7 +233,7 @@ export function setTerrainBumps(source: string, list: TerrainBump[] | null): voi
   rebuildVisual();
 }
 
-/** Wipe every bump source — full teardown (tests, demo-inject swaps whose
+/** Wipe every bump source - full teardown (tests, demo-inject swaps whose
  *  placement set never re-fires). Structure lists re-push their own lips
  *  on the next apply path; this is the escape hatch when they won't. */
 export function clearTerrainBumps(): void {
@@ -256,12 +256,12 @@ function rebuildVisual(): void {
       for (let dz = -reach; dz <= reach; dz += 1) {
         for (let dx = -reach; dx <= reach; dx += 1) {
           const d = Math.hypot(dx, dz);
-          // Angular wobble — the ring radius breathes by direction so the
+          // Angular wobble - the ring radius breathes by direction so the
           // lip reads wind-drifted, not a stamped circle.
           const ang = Math.atan2(dz, dx);
           const tw = d / (gr * (1 + 0.2 * Math.sin(3 * ang + seed) + 0.1 * Math.sin(7 * ang + seed * 1.7)));
           // Apron profile: flat under the footprint (<0.35r), peak ~0.9r,
-          // fade to zero at 2r — soil piled at the wall, not under it.
+          // fade to zero at 2r - soil piled at the wall, not under it.
           let amp = 0;
           if (tw > 0.35 && tw <= 0.9) { const t = (tw - 0.35) / 0.55; amp = t * t * (3 - 2 * t); }
           else if (tw > 0.9 && tw < 2) { const t = 1 - (tw - 0.9) / 1.1; amp = t * t * (3 - 2 * t); }
@@ -280,12 +280,12 @@ function rebuildVisual(): void {
   hmVisual = v;
 }
 
-/** The heightmap in the shared format — server-owned creatures (ballSim)
+/** The heightmap in the shared format - server-owned creatures (ballSim)
  *  replay flight against the identical field, so prediction lands on the
  *  same vertices as the server's sim. */
 let _fieldObj: Heightfield | null = null;
 export function getHeightfield(): Heightfield | null {
-  // Cached wrapper — heightfield.chordTaps keys its chord-tap cache on the
+  // Cached wrapper - heightfield.chordTaps keys its chord-tap cache on the
   // field OBJECT; minting a fresh wrapper here invalidated the cache every
   // call and rebuilt the span² tap array inside every stepBall (~9ms×N).
   if (!hmData) { _fieldObj = null; return null; }
@@ -296,7 +296,7 @@ export function getHeightfield(): Heightfield | null {
  *  stale size/scale leaks into physics sampling. */
 function invalidateField(): void { _fieldObj = null; }
 
-// Full module state, restorable — demo playback swaps in the clip's
+// Full module state, restorable - demo playback swaps in the clip's
 // embedded terrain, then hands the live map back on stop.
 export interface HeightmapSnapshot {
   data: Uint8ClampedArray | null; size: number; scale: number; worldScale: number;
@@ -317,7 +317,7 @@ export function restoreHeightmap(snap: HeightmapSnapshot): void {
 
 
 /** Replace the field with a stride-1 u8 grid (e.g. a demo's embedded
- *  HMAP). Returns a restore() that hands back the previous field —
+ *  HMAP). Returns a restore() that hands back the previous field -
  *  callers must also Terrain.reloadHeightmap() on both transitions. */
 export function injectHeightmapBytes(
   data: Uint8Array | Uint8ClampedArray, size: number, heightScale: number, worldScale: number
@@ -347,7 +347,7 @@ export function sampleNormal(wx: number, wz: number): THREE.Vector3 {
   const hD = sampleHeight(wx, wz - e);
   const hU = sampleHeight(wx, wz + e);
   const n = _normalTmp.set(hL - hR, 2 * e, hD - hU).normalize();
-  // NaN heights normalize to a NaN vector — feeding it to a quaternion
+  // NaN heights normalize to a NaN vector - feeding it to a quaternion
   // renders the mesh invisible; flat ground is the honest fallback.
   return Number.isFinite(n.x) && Number.isFinite(n.z) ? n : n.set(0, 1, 0);
 }

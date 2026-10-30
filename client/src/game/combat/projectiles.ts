@@ -1,5 +1,5 @@
 /**
- * combat/projectiles — the per-frame projectile pipeline: explosion
+ * combat/projectiles - the per-frame projectile pipeline: explosion
  * processing (blast fx, force, armor nades, AOE claims), pending-shot
  * prune, turret-bolt interceptions, sticky chain detonations, and the
  * update loop itself. combat.ts keeps deps + factory wiring.
@@ -24,44 +24,44 @@ import { handleProjectileImpact } from './impact.js';
 import type { CombatCtx, ExplosionArgs } from '../combat.js';
 
 // Turret-bolt interception: clip a lobbed shell with an explosive and it
-// cooks off mid-air — huge blast (the shell's own payload going off), so
+// cooks off mid-air - huge blast (the shell's own payload going off), so
 // shooting the bolt down NEXT to its turret is a real counterattack.
-const BOLT_MEGA_RADIUS = 13;     // bolt's land-splash is ~5m — cookoff is way bigger
+const BOLT_MEGA_RADIUS = 13;     // bolt's land-splash is ~5m - cookoff is way bigger
 const BOLT_MEGA_DAMAGE = 60;
 const BOLT_MEGA_FORCE = 55;
 const BOLT_CHAIN_RADIUS = 8;     // cookoff blast pops neighboring shells too
-const BOLT_CHAIN_PASSES = 3;       // bounded worklist — a chain can't run away
+const BOLT_CHAIN_PASSES = 3;       // bounded worklist - a chain can't run away
 
-// ?debug / menu DEBUG — show the real gameplay blast radius as a wireframe
+// ?debug / menu DEBUG - show the real gameplay blast radius as a wireframe
 // sphere on every detonation (the dome VFX is only 80% of it by design).
-// Read live per blast — the menu toggle applies without a reload.
+// Read live per blast - the menu toggle applies without a reload.
 const aoeDebug = (): boolean => urlParams.debug;
 
 const _ropeAnchor = new THREE.Vector3();
-// Remote player positions for projectile collision — rebuilt per frame into
+// Remote player positions for projectile collision - rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)
 const _remotePlayerPositions = new Map<string, THREE.Vector3>();
-// Reusable vectors keyed by playerId — remotePlayerPositions is rebuilt
+// Reusable vectors keyed by playerId - remotePlayerPositions is rebuilt
 // every frame, so pooled vec refs keep the hot path alloc-free.
 const _projVecs = new Map<string, THREE.Vector3>();
-// Parallel armor-class map — the sweep needs each body's capsule size.
+// Parallel armor-class map - the sweep needs each body's capsule size.
 const _remotePlayerClasses = new Map<string, string>();
 
 // ---- Projectile explosion processing (push or pull based on config) ----
-// VFX radius is decoupled from gameplay radius — aoeRadius intentionally
+// VFX radius is decoupled from gameplay radius - aoeRadius intentionally
 // exceeds the visual dome so damage covers the shock ring, not just the dome.
 // Blast presentation layer: explosion/implosion entity, positional audio,
 // screenshake, and the terrain scorch decal. All visuals, no gameplay.
 function blastFx(c: CombatCtx, a: ExplosionArgs): void {
   // Crumble weapons (bombard) present their shard burst via the impact path
-  // (spawnCrumbleShards) — the blast presenter draws no dome, no boom
+  // (spawnCrumbleShards) - the blast presenter draws no dome, no boom
   // voice, no screenshake and no scorch for them.
   if (a.crumbles) {return;}
   const {deps} = c;
   const { pos, radius, forceMode } = a;
   const directHit = a.directHit ?? false;
   const vfx = a.vfxRadius ?? radius;
-  // Impact VFX variant — config-driven (sprinkler splashes, doesn't burn)
+  // Impact VFX variant - config-driven (sprinkler splashes, doesn't burn)
   const vfxKind = a.vfx ?? (a.weaponType === undefined ? undefined : getProjectileConfig(a.weaponType)?.vfx);
   if (forceMode === 'push') {
     deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / EXPLOSION_VFX_RADIUS, a.explosionTint, vfxKind));
@@ -72,7 +72,7 @@ function blastFx(c: CombatCtx, a: ExplosionArgs): void {
     sfx.implosionAt(pos, directHit);
     screenShake.blast(pos, vfx * 0.5, deps.lazyPlayer().pos);
   }
-  // Scorch only when the blast is near the ground — a midair hit would
+  // Scorch only when the blast is near the ground - a midair hit would
   // otherwise paint a phantom mark on terrain far below. Water doesn't
   // scorch: splash blasts skip the decal entirely.
   if (vfxKind !== 'splash' && pos.y - deps.lazyTerrain().getHeight(pos.x, pos.z) <= vfx) {
@@ -92,7 +92,7 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
   // Record explosion for death impulse calculation
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
-  // Hook shells pull ONLY through hookConnect (contact-gated) — running
+  // Hook shells pull ONLY through hookConnect (contact-gated) - running
   // the generic pull here reels the thrower toward empty air on a whiff.
   if (a.claimLegal !== false && a.weaponType !== WeaponType.Hook) {
     c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId, air: a.air, shotId: a.shotId });
@@ -100,7 +100,7 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
 
   // Armor grenade: predict the plating the server grants so the HUD armor
   // jumps with the blast, not on the next tick. Enemy plating stays
-  // server-side — we never predict another player's armor pool.
+  // server-side - we never predict another player's armor pool.
   if (a.weaponType === WeaponType.ArmorGrenade && a.claimLegal !== false) {
     const player = deps.lazyPlayer();
     if (player.pos.distanceTo(pos) <= radius) {
@@ -115,7 +115,7 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
   }
 }
 
-// Q-skill Slam landing — the "explosion" is the player hitting terrain.
+// Q-skill Slam landing - the "explosion" is the player hitting terrain.
 // Runs through the same blast path as projectiles so prediction,
 // particles, scorch, and the server aoeShot all behave identically.
 export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): void {
@@ -126,7 +126,7 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
   // floor, 1.8 max on a huge fall. Server applies the same power factor.
   const power = Math.min(Math.max((impactSpeed - 30) / 50, 0.2), 1.8);
   const networkManager = deps.lazyNetworkManager();
-  // Connected: the slam intent replaces the aoeShot claim — the server
+  // Connected: the slam intent replaces the aoeShot claim - the server
   // derives power from its own velocity shadow and runs the blast.
   const sendAOE = networkManager.authorityShells()
     ? undefined
@@ -140,7 +140,7 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
     forceMode: stats.forceMode,
     aoeDamage: stats.aoeDamage * power,
     forceMultiplier: 1,
-    // no directHit — slam has no proxy-hit bonus layer
+    // no directHit - slam has no proxy-hit bonus layer
     sendAOE,
     explosionTint: 0xFF_CC_66,               // hot slam flash
     vfxRadius: stats.aoeRadius * power * AOE_VFX_SCALE, // VFX = 80% of damage reach
@@ -148,14 +148,14 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
 }
 
 // ---- Update projectiles ----
-// Dead shells drop their nonce index entry — the map is the only link
+// Dead shells drop their nonce index entry - the map is the only link
 // between a live shell and its wire identity; leaking it grows forever.
 function pruneShots(c: CombatCtx): void {
   const registry = c.deps.world.projectileRegistry;
   for (const [sid, p] of registry.byShotId) {
     if (p.dead) {registry.byShotId.delete(sid);}
   }
-  // byId normally evicts on the destroy echo — a lost projectileDestroyed
+  // byId normally evicts on the destroy echo - a lost projectileDestroyed
   // would keep a dead shell's server-id entry forever otherwise.
   for (const [id, p] of registry.byId) {
     if (p.dead) {registry.byId.delete(id);}
@@ -166,7 +166,7 @@ function pruneShots(c: CombatCtx): void {
 }
 
 // A cooked turret shell: its payload detonating where it was shot down.
-// No sendAOE — remote-player damage from a cookoff stays unclaimed (it's
+// No sendAOE - remote-player damage from a cookoff stays unclaimed (it's
 // environment-adjacent), but the blast still shoves/kills client-run
 // targets including the turret that lobbed it.
 function boltCookoff(c: CombatCtx, pos: THREE.Vector3, shooterId?: string): void {
@@ -181,14 +181,14 @@ function boltCookoff(c: CombatCtx, pos: THREE.Vector3, shooterId?: string): void
 
 
 
-// Mid-air interception: the projectile's sweep tagged a turret shell —
+// Mid-air interception: the projectile's sweep tagged a turret shell -
 // cook it at the exact swept contact, then ripple the mega blast through
 // neighboring shells with a bounded worklist (no infinite chain).
 function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
   const {deps} = c;
   if (!p.hitBolt || !deps.consumeBolt) {return;}
   const bolt = p.hitBolt;
-  // Consume once — an exploded projectile lives on until its trail fades,
+  // Consume once - an exploded projectile lives on until its trail fades,
   // and an uncleared hitBolt would re-fire the mega blast every frame.
   p.hitBolt = null;
   const at = p.hitPointValid ? p.hitPoint : p.pos;
@@ -202,7 +202,7 @@ function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
   }
 }
 
-// Sticky chain: one pop cooks every sibling bomb inside its blast —
+// Sticky chain: one pop cooks every sibling bomb inside its blast -
 // BFS so the detonation ripples outward through spaced bombs.
 function chainStickies(c: CombatCtx, src: Projectile): void {
   const {deps} = c;
@@ -235,15 +235,15 @@ function retireProjectile(deps: CombatCtx['deps'], p: Projectile, i: number): vo
 
 
 // Rope dart: the thrower→dart line draws every live frame, then stays up
-// through the reel — the moving end sliding along the taut rope IS the
+// through the reel - the moving end sliding along the taut rope IS the
 // pull animation (terrain anchor fixed / victim tracked on body hits).
 // Dead thrower (dropped from the positions map) = a snapped line. Chest
-// anchor, not eye — an eye-mounted rope starts inside the shooter's own
+// anchor, not eye - an eye-mounted rope starts inside the shooter's own
 // camera and reads as "not attached to anything".
 function tickHookRope(deps: CombatCtx['deps'], p: Projectile, remotePositions: Map<string, THREE.Vector3>): void {
   const from = p.shooterId ? remotePositions.get(p.shooterId) : deps.lazyPlayer().pos;
   if (!from || !p.ropeActive) { p.hideRope(); return; }
-  // Body connect: the rope end rides the victim — they're the thing
+  // Body connect: the rope end rides the victim - they're the thing
   // being reeled.
   if (p.ropeTo && p.hitPlayerId) {
     const vpos = p.hitPlayerId === 'local' ? deps.lazyPlayer().pos
@@ -284,11 +284,11 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
   let maxRenderDelayMs = 0;
   deps.world.remotePlayers.forEach((rp, playerId): void => {
     if (rp.isDead) {return;}
-    // Server adjudicates this shell against the victim's wire-fresh pos —
+    // Server adjudicates this shell against the victim's wire-fresh pos -
     // sweeping the rendered body (~150ms interp-stale) ghosts hits on
     // fast movers (the replica pops on the stale visual, server shell
     // sails past the real body = dmg-echo's offM class). Project wire
-    // pos forward by wire age — the same epoch the authority sees.
+    // pos forward by wire age - the same epoch the authority sees.
     remotePlayerPositions.set(playerId,
       rp.ghostPosition?.(_projVecs.get(playerId) ?? _projVecs.set(playerId, new THREE.Vector3()).get(playerId)!, myTransitMs) ?? rp.position);
     if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}
@@ -296,9 +296,9 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
   });
 
   // Creature ghosts: server creatureSweep rewinds ball/crawler positions
-  // by shooterTransit + renderLag (full lag — no 0.7 player advantage), so
+  // by shooterTransit + renderLag (full lag - no 0.7 player advantage), so
   // the authority judges them ~0.1-0.2s behind where the replay-live
-  // replica sits. Net-driven targets only — offline balls are local sims.
+  // replica sits. Net-driven targets only - offline balls are local sims.
   const creatureLag = Math.min(0.5, (deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2000 + maxRenderDelayMs / 1000);
   for (const k of ballGhostPos.keys()) {if (!deps.targets.includes(k) || k.dead) {ballGhostPos.delete(k);}}
   if (creatureLag > 0) {
@@ -309,31 +309,31 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
     }
   } else {ballGhostPos.clear();}
 
-  // Live turret shells + shield domes — collected once per frame, swept
+  // Live turret shells + shield domes - collected once per frame, swept
   // inside each projectile's own collision pass (no tunneling).
   const obstacles = deps.turretBolts?.() ?? [];
   const shields = deps.shieldObstacles?.();
   if (shields?.length) {obstacles.push(...shields);}
 
-  // Billboard ribbons re-side against this each frame — without it the
+  // Billboard ribbons re-side against this each frame - without it the
   // strip stays locked to its spawn-plane and level shots read edge-on.
   setRibbonCamera(deps.lazyCamera()?.position ?? null);
   // GPU-side leak reaper: any ribbon slot left lit without a live owner
   // (a path that skipped releaseSlot) gets blacked out before it can sit
-  // as a frozen streak — the count surfaces in the Alt+Q dump.
+  // as a frozen streak - the count surfaces in the Alt+Q dump.
   RibbonTrail.sweepLit();
   sweepSmear();
   // Owner-side counterpart of sweepLit: a done ribbon nobody updates any
   // more (orphan path that skipped dispose) still holds its slot + liveSet
-  // entry forever — reclaim it so the pool and census reflect reality.
+  // entry forever - reclaim it so the pool and census reflect reality.
   RibbonTrail.sweepStale();
   for (let i = deps.world.projectiles.length - 1; i >= 0; i -= 1) {
     const p = deps.world.projectiles[i];
-    // Shells clock WALL time — the server shell doesn't slow down for
+    // Shells clock WALL time - the server shell doesn't slow down for
     // our frame jank, so both replicas and own predicted shells take
     // the unclamped elapsed and catch up through the cell grid instead
     // of starving ~95% of a loafed frame (the traj-epoch / dmg-echo
-    // starvation class). The local BODY stays on the clamped dt — only
+    // starvation class). The local BODY stays on the clamped dt - only
     // shells mirror a server-side clock.
     p.update(rawDt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles, remotePlayerClasses);
 
@@ -354,9 +354,9 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
 
 // Belt-sticky combo: an airborne belt sticky inside a same-owner shell's
 // swept segment is swallowed dead-center and rides it (the Painkiller
-// stake+grenade trick — lob the bomb, shoot THROUGH it). Same-owner only:
+// stake+grenade trick - lob the bomb, shoot THROUGH it). Same-owner only:
 // stealing an enemy's bomb mid-air would be chaos, catching your own is
-// the skill shot. Server runs the identical pass — replicas unride on the
+// the skill shot. Server runs the identical pass - replicas unride on the
 // projRide edge, so prediction and authority attach on the same tick.
 const _segAB = new THREE.Vector3();
 const _segAP = new THREE.Vector3();

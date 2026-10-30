@@ -4,7 +4,7 @@ import { tickUnfold, unfoldDone, damageDeploy } from './deployBody.js';
 import type { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 
-// Tether snare — a black gooey knot on the ground with tendrils lashing
+// Tether snare - a black gooey knot on the ground with tendrils lashing
 // out. Reads as a trap, not a turret: low, dark, and always moving. The
 // snare itself is server-judged (movement drag + energy zap); this is the
 // visual contract only.
@@ -18,7 +18,7 @@ const _tendril = new THREE.CylinderGeometry(0.015, 0.09, 1.6, 5);
 _tendril.translate(0, 0.8, 0);
 const TENDRILS = 11;
 
-// Instanced like the rest of the deployable family — 13 meshes per
+// Instanced like the rest of the deployable family - 13 meshes per
 // snare was the last big un-pooled draw bucket in the bastion census.
 const POOL_CAP = 128;
 const _m = new THREE.Matrix4();
@@ -76,7 +76,7 @@ export class DeployTether {
 
   readonly group = new THREE.Group();
   private slot = -1;
-  // Per-tendril local pose state — writhe animates `lay` each frame.
+  // Per-tendril local pose state - writhe animates `lay` each frame.
   private readonly tendrilA: number[] = [];
   private readonly tendrilLen: number[] = [];
   private readonly tendrilLay: number[] = [];
@@ -91,7 +91,7 @@ export class DeployTether {
     if (Number.isFinite(bg)) {this.pos.y = bg;}
 
     this.slot = poolFor(scene).free.pop() ?? -1;
-    // Tendrils lie near-flat, crawling out across the dirt — irregular
+    // Tendrils lie near-flat, crawling out across the dirt - irregular
     // lengths, directions, and root offsets so the mass reads as spilled
     // goo, not a fan. A few rear up like feelers tasting the air.
     for (let i = 0; i < TENDRILS; i += 1) {
@@ -100,7 +100,7 @@ export class DeployTether {
       const j3 = Math.sin(i * 39.425) * 0.5 + 0.5;
       this.tendrilA.push((i / TENDRILS) * Math.PI * 2 + j1 * 1.4);
       this.tendrilLen.push(0.5 + j2 * 0.9);
-      // Most lie flat; every third rears up partway — the "searching" read.
+      // Most lie flat; every third rears up partway - the "searching" read.
       this.tendrilLay.push(i % 3 === 0 ? Math.PI / 2 - 0.7 - j3 * 0.4 : Math.PI / 2 - 0.06 - j3 * 0.3);
       this.tendrilR.push(j1 * 0.55); // roots sit anywhere on the slick
     }
@@ -110,7 +110,7 @@ export class DeployTether {
   }
 
   /** Write slick/knot/tendril instance slots from group transform +
-   *  per-tendril writhe state — meshes are pool-owned. */
+   *  per-tendril writhe state - meshes are pool-owned. */
   private syncMatrices(): void {
     if (this.slot < 0 || !_pool) {return;}
     const pool = _pool;
@@ -141,7 +141,7 @@ export class DeployTether {
   update(dt: number): void {
     if (this.dead) {return;}
     this.animT += dt;
-    // Writhe: tips breathe up and down a few cm — the "alive" read is
+    // Writhe: tips breathe up and down a few cm - the "alive" read is
     // applied on top of tendrilLay in syncMatrices.
     this.syncMatrices();
   }
@@ -171,6 +171,6 @@ export class DeployTether {
       _pool.free.push(this.slot);
       this.slot = -1;
     }
-    // Shared geometries/materials intentionally not disposed — module-owned.
+    // Shared geometries/materials intentionally not disposed - module-owned.
   }
 }

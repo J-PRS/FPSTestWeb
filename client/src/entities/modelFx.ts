@@ -12,11 +12,11 @@ const _leanA = new THREE.Vector3();
 const _leanB = new THREE.Vector3();
 
 // Jet-lean pivot: the pack thrusts from the sternum, so the body tilts
-// about that point and the legs swing — feet-pivot lean reads as a
+// about that point and the legs swing - feet-pivot lean reads as a
 // cardboard cutout tipping over.
 const LEAN_PIVOT_Y = 1.3;
 
-/** The model's view of the pieces the FX pass touches — everything it
+/** The model's view of the pieces the FX pass touches - everything it
  *  doesn't own (gun transform, muzzle sprite, shared material baselines)
  *  comes through here so PlayerModel stays the single owner. */
 export interface ModelFxHost {
@@ -31,13 +31,13 @@ export interface ModelFxHost {
   gunBaseX: number;
   gunKickZ: number;
   /** Hand-mounted guns: palm orientation in gun-parent space, rewritten
-   *  each frame — fx envelopes compose on top of it. Null = fixed mount. */
+   *  each frame - fx envelopes compose on top of it. Null = fixed mount. */
   gunBaseQuat: THREE.Quaternion | null;
   /** Aim-pinned props re-derive baseQuat from the aim each frame, so the
-   *  recoil kick is a pure delta on top — it drifts off-aim for the
+   *  recoil kick is a pure delta on top - it drifts off-aim for the
    *  ~140ms envelope and rides back as it decays. */
   gunAimPin: boolean;
-  /** setRotation's applied roll — lean rebuilds rotation.z from it, so
+  /** setRotation's applied roll - lean rebuilds rotation.z from it, so
    *  reading the euler back would double-apply. */
   lastRoll: number;
 }
@@ -63,7 +63,7 @@ export class ModelFx {
 
   constructor(private readonly h: ModelFxHost) {}
 
-  /** Build the muzzle flash sprite — called by attachGun once the prop
+  /** Build the muzzle flash sprite - called by attachGun once the prop
    *  gun group exists (kept next to it in gun-local space). */
   static buildMuzzleFlash(): THREE.Sprite {
     const flashMat = new THREE.SpriteMaterial({
@@ -75,31 +75,31 @@ export class ModelFx {
     });
     const s = new THREE.Sprite(flashMat);
     s.scale.setScalar(0); // hidden until fire()
-    s.visible = false;    // scale=0 still issues a draw call — be actually invisible
+    s.visible = false;    // scale=0 still issues a draw call - be actually invisible
     s.position.set(0, 0.05, 1); // barrel tip (gun-local)
     return s;
   }
 
-  /** Third-person weapon swap — the same lower→switch→raise the
+  /** Third-person weapon swap - the same lower→switch→raise the
    *  viewmodel plays (its timings: 0.12s down, 0.16s up). The prop gun
    *  doesn't actually change; the dip IS the swap read. */
   weaponSwap(): void {
     if (this.h.gun) { this.swapT = 0; this.throwT = -1; this.punchT = -1; }
   }
 
-  /** Belt throw — same beat as the viewmodel's THROW_DIP: gun down and
+  /** Belt throw - same beat as the viewmodel's THROW_DIP: gun down and
    *  rolled outward while the off hand releases, then back to ready. */
   weaponThrow(): void {
     if (this.h.gun) { this.throwT = 0; this.swapT = -1; this.punchT = -1; }
   }
 
-  /** Melee — butt-stroke sweep: the gun shoves forward-right with a hard
+  /** Melee - butt-stroke sweep: the gun shoves forward-right with a hard
    *  roll, mirroring the viewmodel's punch arc. */
   weaponPunch(): void {
     if (this.h.gun) { this.punchT = 0; this.swapT = -1; this.throwT = -1; }
   }
 
-  /** Landing compress — a quick forward pitch scaled by impact speed,
+  /** Landing compress - a quick forward pitch scaled by impact speed,
    *  stacked inside the lean write (jet lean keeps working on top). */
   landPulse(impactSpeed: number): void {
     if (impactSpeed < 6) {return;} // stepping off a ledge isn't a landing
@@ -107,17 +107,17 @@ export class ModelFx {
     this.landT = 0;
   }
 
-  /** Damage white-pop — creature-style hit readability on the body. */
+  /** Damage white-pop - creature-style hit readability on the body. */
   damageFlash(): void {
     this.dmgFlash = 0.15;
   }
 
-  // Procedural fire kick + muzzle flash — weaponType tints the flash so
+  // Procedural fire kick + muzzle flash - weaponType tints the flash so
   // an LG blast reads differently to a shotgun.
   fire(weaponType?: number): void {
     this.recoil = 1;
     this.flashTTL = 0.09;
-    // Reset to the default tint too — a shotgun shouldn't leave the next
+    // Reset to the default tint too - a shotgun shouldn't leave the next
     // LG shot flashing amber.
     if (this.h.muzzleFlash) {
       const glow = weaponType === undefined ? undefined : getProjectileConfig(weaponType)?.glowColor;
@@ -161,7 +161,7 @@ else if (t < up + hold) {e = 1;}
     const swapDip = this.env('swapT', dt, 0.12, 0, 0.16);
     const throwE = this.env('throwT', dt, 0.14, 0.12, 0.26);
     const punchE = this.env('punchT', dt, 0.09, 0.08, 0.32);
-    // Landing: sharp compress then a slower settle — read in tickJetLean.
+    // Landing: sharp compress then a slower settle - read in tickJetLean.
     this.landE = this.env('landT', dt, 0.07, 0, 0.32) * this.landAmp;
     if (this.recoil > 0) {this.recoil = Math.max(0, this.recoil - dt * 7);}
     const { gun } = this.h;
@@ -173,14 +173,14 @@ else if (t < up + hold) {e = 1;}
       gun.position.y = this.h.gunBaseY - (swapDip * 0.3 + throwE * 0.25 + punchE * 0.15) * this.h.gunUnit;
       gun.position.z = this.h.gunBaseZ + (swapDip * 0.1 + throwE * 0.08 + punchE * 0.3) * this.h.gunUnit;
       // Recoil kicks back along the gun's REAL barrel axis (local +Z in
-      // parent space), not raw -Z — hand-bone mounts (mannequin) have
+      // parent space), not raw -Z - hand-bone mounts (mannequin) have
       // arbitrary bone frames where -Z is lateral and the gun hopped left.
       ModelFx._kick.set(0, 0, 1).applyQuaternion(gun.quaternion);
       gun.position.addScaledVector(ModelFx._kick, -k * this.h.gunKickZ);
       const rx = this.h.gunBaseX - k * 0.45 + swapDip * 0.6 + throwE * 0.35 + punchE * 0.25;
       const rz = throwE * 0.45 + punchE * 0.5;
       if (this.h.gunBaseQuat) {
-        // Hand-mounted guns own their orientation from the palm quat —
+        // Hand-mounted guns own their orientation from the palm quat -
         // the fx deltas ride on top as a small euler instead of absolute x/z.
         ModelFx._dq.setFromEuler(ModelFx._de.set(rx, 0, rz));
         gun.quaternion.copy(this.h.gunBaseQuat).multiply(ModelFx._dq);
@@ -197,7 +197,7 @@ else if (t < up + hold) {e = 1;}
       (flash.material as THREE.SpriteMaterial).opacity = f;
       flash.visible = true;
     } else if (flash && flash.visible) {
-      // scale=0 still draws — only visible=false drops the draw call.
+      // scale=0 still draws - only visible=false drops the draw call.
       flash.scale.setScalar(0);
       flash.visible = false;
     }
@@ -205,7 +205,7 @@ else if (t < up + hold) {e = 1;}
 
   // Jet lean: ease toward the target, then write the composed tilt
   // on top of yaw/roll. setRotation may run before or after update,
-  // so rotation.z is rebuilt here from lastRoll + lean — never read
+  // so rotation.z is rebuilt here from lastRoll + lean - never read
   // the euler back, or the lean would double-apply.
   private tickJetLean(dt: number): void {
     const { model } = this.h;
@@ -215,7 +215,7 @@ else if (t < up + hold) {e = 1;}
     this.leanR += (this.leanRT - this.leanR) * k;
     if (Math.abs(this.leanP) < 1e-3 && this.leanPT === 0) {this.leanP = 0;}
     if (Math.abs(this.leanR) < 1e-3 && this.leanRT === 0) {this.leanR = 0;}
-    // Landing pitch stacks on the lean — the absorb crouch reads as the
+    // Landing pitch stacks on the lean - the absorb crouch reads as the
     // whole body tipping forward a beat, not just the knees.
     const pitch = this.leanP + this.landE * 0.18;
     model.rotation.x = pitch;

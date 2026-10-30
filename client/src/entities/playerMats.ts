@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { metalMat } from './procMetal.js';
 import { enhanceWeaponMaterial } from '../effects/vertexAO.js';
 
-// Mannequin re-skin (cached shared recipes — each PlayerModel still
+// Mannequin re-skin (cached shared recipes - each PlayerModel still
 // clones via ownMaterial so damage-flash stays per-instance).
 // mannGunMat = the prop-gun recipe (joints), mannJointMat = pickup
 // gunmetal (torso).
@@ -25,7 +25,7 @@ function mannJointMat(): THREE.MeshStandardMaterial {
  *  cached GLB material), the damage-flash mat capture, and the debug
  *  wireframe set. */
 export class PlayerMats {
-  /** Emissive materials captured at load for the damage white-pop —
+  /** Emissive materials captured at load for the damage white-pop -
    *  ModelFx reads this straight through. */
   readonly flashMats: { m: THREE.MeshStandardMaterial; e: THREE.Color; i: number }[] = [];
   private clones = new Map<THREE.Material, THREE.Material>();
@@ -39,7 +39,7 @@ export class PlayerMats {
     if (!c) {
       c = m.clone();
       // clone() drops onBeforeCompile and JSON-roundtrips userData (the
-      // wear/grime textures die in it) — re-arm the grunge shader from
+      // wear/grime textures die in it) - re-arm the grunge shader from
       // the SOURCE material's live refs on baked-gunmetal bodies.
       if (m.userData.__grunge) {
         delete c.userData.__grunge;
@@ -55,7 +55,7 @@ export class PlayerMats {
   }
 
   /** Re-arm baked-gunmetal shader on clones made BEFORE the async bake
-   *  landed — the clone exists, it just lacks the grunge hook and tex
+   *  landed - the clone exists, it just lacks the grunge hook and tex
    *  refs, which now exist on the source material. */
   rearm(child: THREE.Mesh): void {
     const arm = (m: THREE.Material): void => {
@@ -78,7 +78,7 @@ export class PlayerMats {
   prep(child: THREE.Mesh, mann: boolean, mannRev: boolean): void {
     if (mann) {
       // The orange/purple stock figure reads as a debug doll on a
-      // battlefield — re-skin: torso in the gun-prop recipe, joints in
+      // battlefield - re-skin: torso in the gun-prop recipe, joints in
       // the shared pickup gunmetal.
       const swap = (m: THREE.Material): THREE.Material => {
         if (m.name === 'M_Main') {return mannRev ? mannGunMat() : mannJointMat();}
@@ -90,7 +90,7 @@ export class PlayerMats {
     child.material = Array.isArray(child.material)
       ? child.material.map((m): THREE.Material<THREE.MaterialEventMap> => this.ownMaterial(m))
       : this.ownMaterial(child.material);
-    // Capture emissive materials for the damage flash — dedupe,
+    // Capture emissive materials for the damage flash - dedupe,
     // a GLB often shares one material across several meshes.
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     for (const m of mats) {
@@ -103,7 +103,7 @@ export class PlayerMats {
   }
 
   /** Debug (?debug / menu DEBUG): render the body as wireframe so it can be
-   *  eyeballed against the collider capsule. Gun geo swaps re-capture —
+   *  eyeballed against the collider capsule. Gun geo swaps re-capture -
    *  fresh attach geo wasn't in the load-time set. */
   captureWireframe(model: THREE.Group | null): void {
     if (!model) {return;}
@@ -128,7 +128,7 @@ export class PlayerMats {
   private baseCols = new Map<THREE.Material, THREE.Color>();
   private tint: THREE.Color | null = null;
 
-  /** Team paint — lerps the 'armor' material's captured base color
+  /** Team paint - lerps the 'armor' material's captured base color
    *  toward a muted team hue; 'dark' frame and 'accent' glow stay
    *  authored so plates read as painted armor over the same chassis.
    *  Rigs without an 'armor' material tint everything (legacy bodies).
@@ -140,7 +140,7 @@ export class PlayerMats {
       ? mats.filter((m): boolean => m.name === 'armor')
       : mats;
     for (const m of targets) {
-      if (m.userData.atlasMat) {continue;} // vertexized body — tint rides its color attr
+      if (m.userData.atlasMat) {continue;} // vertexized body - tint rides its color attr
       const sm = m as THREE.MeshStandardMaterial;
       if (!sm.isMeshStandardMaterial) {continue;}
       let base = this.baseCols.get(m);
@@ -150,8 +150,8 @@ export class PlayerMats {
     }
   }
 
-  /** Fresnel rim — emissive edge glow injected into the cloned body
-   *  materials (rim lives on the surface, not a separate shell — a
+  /** Fresnel rim - emissive edge glow injected into the cloned body
+   *  materials (rim lives on the surface, not a separate shell - a
    *  softer read than the hull outline). Uniform-driven so on/off
    *  costs nothing after the one-time program patch. */
   /** Non-body materials that want the same rim (the hand prop's own
@@ -168,7 +168,7 @@ export class PlayerMats {
         u = { value: new THREE.Color(0) };
         sm.userData.rimU = u;
         const U = u;
-        // Chain, not overwrite — a grunge bake may already own the hook.
+        // Chain, not overwrite - a grunge bake may already own the hook.
         const prev = sm.onBeforeCompile;
         sm.onBeforeCompile = (sh, r): void => {
           prev?.(sh, r);
@@ -184,7 +184,7 @@ export class PlayerMats {
   }
 
   /** Take a material built outside ownMaterial (the vertexized body
-   *  atlas) into the clone set — flash capture, rim patch, tint-skip
+   *  atlas) into the clone set - flash capture, rim patch, tint-skip
    *  via userData.atlasMat, and dispose all reach it through the same
    *  door. */
   adopt(m: THREE.MeshStandardMaterial): void {
@@ -194,7 +194,7 @@ export class PlayerMats {
     }
   }
 
-  /** Per-model material clones — frees their GPU program refs; shared
+  /** Per-model material clones - frees their GPU program refs; shared
    *  geometry/textures belong to the cached gltf and stay alive. */
   dispose(): void {
     this.clones.forEach((m): void => m.dispose());

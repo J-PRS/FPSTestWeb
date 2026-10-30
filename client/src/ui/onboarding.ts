@@ -29,7 +29,7 @@ const card = (title: string, body: string, btnText: string | null): HTMLDivEleme
       'margin-top:18px;padding:8px 26px;font:inherit;letter-spacing:0.14em;cursor:pointer;' +
       'color:#eaf4ff;background:rgba(58,167,255,0.16);border:1px solid rgba(58,167,255,0.5);border-radius:4px;';
     b.addEventListener('click', (): void => {
-      // Persist the bypass — a phone tester shouldn't re-dismiss every
+      // Persist the bypass - a phone tester shouldn't re-dismiss every
       // reload. Clear via devtools localStorage or a desktop boot.
       try { localStorage.setItem(SKIP_KEY, '1'); } catch { /* private mode */ }
       el.remove();
@@ -44,7 +44,7 @@ export function wireOnboarding(): void {
   // Coarse pointer with no fine fallback = phone/tablet. The game needs
   // a keyboard+mouse; a broken render is a worse first impression than
   // an honest gate. Checked live so a hybrid laptop with a mouse passes.
-  // ?nomobile=1 skips it entirely — real-device profiling needs to see
+  // ?nomobile=1 skips it entirely - real-device profiling needs to see
   // the game render on a phone, gate or no gate.
   const touchOnly = window.matchMedia('(pointer: coarse)').matches
     && !window.matchMedia('(pointer: fine)').matches;
@@ -53,7 +53,7 @@ export function wireOnboarding(): void {
   if (touchOnly && !skipped) {
     document.body.append(card(
       'DESKTOP REQUIRED',
-      'This game needs a keyboard and mouse.\n\nCome back on a laptop or desktop —\nphone/tablet controls are not supported yet.',
+      'This game needs a keyboard and mouse.\n\nCome back on a laptop or desktop -\nphone/tablet controls are not supported yet.',
       'VIEW ANYWAY',
     ));
   }

@@ -26,16 +26,16 @@ import { bakeVertexAO } from '../effects/vertexAO.js';
 import { WeaponType } from '../../../shared/weapons.js';
 const logger = new ChildLogger('PlayerModel');
 
-// Rig URLs whose cached template already carries the gunmetal bake —
+// Rig URLs whose cached template already carries the gunmetal bake -
 // the bake mutates shared geometry, so it must run exactly once per URL.
 const gunmetalBaked = new Set<string>();
 const gunmetalBake = new Map<string, Promise<void>>();
 
 // Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
-// playerClipSurgery.ts — extracted so the layered-anim carve-up is
+// playerClipSurgery.ts - extracted so the layered-anim carve-up is
 // testable without loading the rig.
 
-// Vertexized body material — class rigs ship 3 color/rough/metal-only
+// Vertexized body material - class rigs ship 3 color/rough/metal-only
 // materials ('armor'/'dark'/'accent') whose ONLY differences are three
 // scalar uniforms. Baking them into per-vertex attributes lets the whole
 // body merge into ONE skinned draw call (~2 draws saved per remote ×2
@@ -44,7 +44,7 @@ const gunmetalBake = new Map<string, Promise<void>>();
 // flash / rim / tint still act per player.
 function makeAtlasMat(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ name: 'atlas', vertexColors: true, roughness: 1, metalness: 1 });
-  m.userData.atlasMat = true; // PlayerMats skips tint — it rides the attr
+  m.userData.atlasMat = true; // PlayerMats skips tint - it rides the attr
   m.onBeforeCompile = (sh): void => {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aRough;\nattribute float aMetal;\nvarying float vRough;\nvarying float vMetal;')
@@ -78,15 +78,15 @@ function vertexizeGeo(g: THREE.BufferGeometry, m: THREE.MeshStandardMaterial): v
   g.userData.tintMask = mask;
 }
 
-// One mergeVertices pass per class variant — every remote of a class
+// One mergeVertices pass per class variant - every remote of a class
 // produces the byte-identical merged body, so later spawns clone the
 // buffers (~memcpy) instead of re-hashing every vertex. userData
-// authColor/tintMask are read-only inputs to setTeamTint — shared refs
+// authColor/tintMask are read-only inputs to setTeamTint - shared refs
 // are safe; the clone owns the mutable `color` attr itself.
 const _atlasGeoCache = new Map<string, THREE.BufferGeometry>();
 
 /** Culling bounds for skinned meshes without the applyBoneTransform
- *  bake (three walks every vert through every bone — ~7% of a throttled
+ *  bake (three walks every vert through every bone - ~7% of a throttled
  *  profile). Bind-pose geometry sphere + anim-travel pad is equivalent:
  *  the bake it replaced ran at load pose ≈ bind pose anyway. */
 function cheapSkinnedBounds(sm: THREE.SkinnedMesh): void {
@@ -103,23 +103,23 @@ export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldie
 
 export class PlayerModel {
   private scene: THREE.Scene;
-  model: THREE.Group | null = null; // public — ModelFx writes lean/pivot
+  model: THREE.Group | null = null; // public - ModelFx writes lean/pivot
   private modelScale = 0.5;
-  // Vertical lift for rigs whose authored origin isn't at their feet —
+  // Vertical lift for rigs whose authored origin isn't at their feet -
   // keeps the mesh's lowest point on the logical entity position.
   private feetOffsetY = 0;
   // Disposed before the GLB finishes loading (pruned remote, ?dummy reaped
   // by the roster cleanup): the async onLoad must not re-add the mesh or
-  // repopulate animations — that zombie re-add was the invisible-model bug.
+  // repopulate animations - that zombie re-add was the invisible-model bug.
   private _disposed = false;
 
   // Read-only access to the loaded object3D (debug tooling)
   get object3D(): THREE.Group | null { return this.model; }
-  /** Anim host surface — reads live so the rig fallback's pose/variant
+  /** Anim host surface - reads live so the rig fallback's pose/variant
    *  re-assignment in load() stays visible to the controller. */
   get disposed(): boolean { return this._disposed; }
   // Mixer, clip table, fades, and the anim state machine live in
-  // playerAnim.ts — this is the host it reads back through.
+  // playerAnim.ts - this is the host it reads back through.
   readonly anim = new PlayerAnim(this);
   /** PlayerVisuals reads the raw state by bracket for its own cascade. */
   get currentState(): AnimationState { return this.anim.currentState; }
@@ -131,25 +131,25 @@ export class PlayerModel {
   // class-capsule restash) lives in playerCollider.ts.
   private readonly collider = new PlayerCollider();
   // Post-mixer pose corrections (aim pitch, hip-fire hold, spine lock,
-  // IK foot snap) live in playerPose.ts — PoseControl owns the bone
+  // IK foot snap) live in playerPose.ts - PoseControl owns the bone
   // lists it writes into.
-  pose: PoseControl; // public — PlayerAnim drives it as host state
+  pose: PoseControl; // public - PlayerAnim drives it as host state
 
-  /** Live-tune the hand-bone mount rotation (posedump loop) — deg euler. */
+  /** Live-tune the hand-bone mount rotation (posedump loop) - deg euler. */
   debugSetGunRot(x: number, y: number, z: number): void {
     this.gunCtl.setRotDeg(x, y, z);
   }
 
-  /** Live-tune the hold pose (posedump iteration loop) — deg per role. */
+  /** Live-tune the hold pose (posedump iteration loop) - deg per role. */
   debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map((v): number => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
     this.pose.debugSetHold(upper, lower, hand, lUpper, lLower, lHand);
   }
-  // Weapon-swap dip — mirrors the first-person viewmodel's lower→raise:
+  // Weapon-swap dip - mirrors the first-person viewmodel's lower→raise:
   // the held gun drops toward the hip and the muzzle tips down, then the
   // "new" weapon comes back up. Purely cosmetic on the body model (the
   // prop gun doesn't change), but the motion is the readable swap tell.
   // Prop-gun transform + lean roll live on the gun controller
-  // (playerGun.ts) — the FX pass reads them through these delegates,
+  // (playerGun.ts) - the FX pass reads them through these delegates,
   // which keep the ModelFxHost surface stable.
   private readonly gunCtl = new PlayerGun();
   get gun(): THREE.Group | null { return this.gunCtl.group; }
@@ -166,10 +166,10 @@ export class PlayerModel {
   private handBone: THREE.Bone | null = null;
   private mountBone: THREE.Bone | null = null;
   private handBoneL: THREE.Bone | null = null;
-  // Damage flash — same white-pop the creatures do (flash timer × brighter
+  // Damage flash - same white-pop the creatures do (flash timer × brighter
   // surface). Skinned materials can't use instanceColor, so we lerp each
   // material's emissive toward white and back from a cached baseline.
-  /** Emissive materials captured at load for the damage white-pop —
+  /** Emissive materials captured at load for the damage white-pop -
    *  ModelFx reads this straight through the host. */
   get flashMats(): { m: THREE.MeshStandardMaterial; e: THREE.Color; i: number }[] { return this.mats.flashMats; }
   private fx = new ModelFx(this);
@@ -181,16 +181,16 @@ export class PlayerModel {
   private playingUAL = false;
 
   // ---- Gibs: real body parts for the death shatter ---------------------
-  // Grouped at load, baked posed on death — logic lives in playerGibs.ts.
+  // Grouped at load, baked posed on death - logic lives in playerGibs.ts.
   private gibParts: GibPart[] | null = null;
 
-  /** Posed body-part fragments at the corpse's current stance — recentered
+  /** Posed body-part fragments at the corpse's current stance - recentered
    *  chunk geometries + their world centroids. Null until loaded / if the
    *  model has no skinned meshes (caller falls back to generic debris). */
-  /** Re-baked every death — the pieces must match the corpse's CURRENT
+  /** Re-baked every death - the pieces must match the corpse's CURRENT
    *  stance or the hide/swap seam shows on repeat kills. ~20 fresh
    *  BufferGeometries per call (~7ms); the 250ms full-gib budget in
-   *  playerKill caps the spike in pileups. Callers flag sharedGeo —
+   *  playerKill caps the spike in pileups. Callers flag sharedGeo -
    *  the geos ride the debris's lifetime, never disposed here. */
   deathParts(): { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | null {
     if (!this.gibParts && this.model) {this.gibParts = buildGibParts(this.model);}
@@ -199,14 +199,14 @@ export class PlayerModel {
   }
 
   /** 'robot' = RobotExpressive + retargeted UAL clips (backburner path).
-   *  'mannequin' = the UAL's own rig — clips play natively, no retarget.
-   *  'knight' = Quaternius Knight_Male — the heavy-class silhouette;
+   *  'mannequin' = the UAL's own rig - clips play natively, no retarget.
+   *  'knight' = Quaternius Knight_Male - the heavy-class silhouette;
    *  native clips, armored read at distance.
-   *  'scifisoldier'/'vexa'/'polyart' = the UAS class bodies —
+   *  'scifisoldier'/'vexa'/'polyart' = the UAS class bodies -
    *  each bakes its own clip set on its own rig (vexa ships
    *  none, it stands static until a clip'd medium replaces it). */
   readonly variant: PlayerModelVariant;
-  // Two classes share the mannequin rig — the rev flag gives one of them
+  // Two classes share the mannequin rig - the rev flag gives one of them
   // the inverse material swap so they don't read identical.
   readonly mannRev: boolean;
 
@@ -215,11 +215,11 @@ export class PlayerModel {
     this.variant = variant ?? (urlParams.get('model') === 'mannequin' ? 'mannequin' : 'robot');
     this.mannRev = mannRev;
     this.pose = new PoseControl(this.variant);
-    // Native shoot clips carry a self-consistent torso stance — the bind
+    // Native shoot clips carry a self-consistent torso stance - the bind
     // slerp only helps UAL-retargeted clips whose stride roll waves the
     // muzzle (see PoseControl.wantSpineLock).
     const shootClip = CLASS_BODY_SPEC[this.variant]?.anims?.['shoot'];
-    // Mannequin never plays a shoot clip — its aimPin prop is the shot
+    // Mannequin never plays a shoot clip - its aimPin prop is the shot
     // feedback, and the bind-pose torso slerp only yanks the body off-aim.
     this.pose.wantSpineLock = this.variant !== 'mannequin' && (!shootClip || shootClip.startsWith('UAL_'));
     // The gun controller owns the mesh; a baked-geo swap invalidates the
@@ -240,7 +240,7 @@ export class PlayerModel {
       let attempts = 0;
       let fellBack = false;
       const attempt = (): void => {
-      // One parse per rig URL for the whole session — SkeletonUtils.clone
+      // One parse per rig URL for the whole session - SkeletonUtils.clone
       // hands each remote its own skeleton bound to shared geometry and
       // textures. A roomful of same-class bots used to pay a full GLB
       // decode + GPU upload apiece.
@@ -249,7 +249,7 @@ export class PlayerModel {
         (gltf): void => {
           performance.mark('load:rigParseDone');
           if (this._disposed) { resolve(); return; }
-          // Worn-gunmetal rigs: matte recipe is cheap — flatten the
+          // Worn-gunmetal rigs: matte recipe is cheap - flatten the
           // template's metalness synchronously so the clone inherits it.
           // The AO+wear+grime BAKE is expensive (~1s), so it runs on the
           // next macrotask: the model shows immediately, the grunge lands
@@ -275,7 +275,7 @@ export class PlayerModel {
               }, 0);
             }));
           }
-          // Pool first — a warmed clone is free; a live SkeletonUtils.clone
+          // Pool first - a warmed clone is free; a live SkeletonUtils.clone
           // on this frame was the w:player join spike.
           const scene = takeRig(this.variant, gltf.scene) ?? (SkeletonUtils.clone(gltf.scene) as THREE.Group);
           performance.mark('load:rigCloneDone');
@@ -283,8 +283,8 @@ export class PlayerModel {
           performance.mark('load:modelSetupDone');
           resolve();
           if (gunmetal) {
-            // Every instance waits on the shared per-URL bake — not just the
-            // one that started it — or clones made mid-bake stay matte.
+            // Every instance waits on the shared per-URL bake - not just the
+            // one that started it - or clones made mid-bake stay matte.
             gunmetalBake.get(url)!.then((): void => {
               if (!this._disposed) {this.model?.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {this.mats.rearm(o as THREE.Mesh);}});}
             });
@@ -292,7 +292,7 @@ export class PlayerModel {
         return; },
         (error): void => {
           // A dev-server restart (or any transient fetch failure) must not
-          // kill the model for the whole session — an invisible player is
+          // kill the model for the whole session - an invisible player is
           // worse than a late one. Retry with backoff before giving up.
           if (this._disposed) { resolve(); return; }
           if ((attempts += 1) <= 4) {
@@ -301,7 +301,7 @@ export class PlayerModel {
             return;
           }
           // A rig absent from the deploy bundle (clean builds strip the
-          // class_* GLBs) permanently 404s — retrying can't help, so swap
+          // class_* GLBs) permanently 404s - retrying can't help, so swap
           // the variant once for a body the bundle always ships.
           if (!fellBack && url.includes('/class_')) {
             fellBack = true;
@@ -320,7 +320,7 @@ export class PlayerModel {
       ).catch((error): void => {
         // Never silent: a throw while BUILDING a body (before any clip is
         // registered and before it joins the scene) used to be swallowed
-        // whole — the model simply never appeared and nothing was logged.
+        // whole - the model simply never appeared and nothing was logged.
         logger.error('Model load chain failed', error);
       });
       };
@@ -332,7 +332,7 @@ export class PlayerModel {
     this.model = gltf.scene;
 
     // Log model bounding box for hitbox calibration. `precise` bakes
-    // skinned vertices — quantized rigs (class_heavy's int16 attrs)
+    // skinned vertices - quantized rigs (class_heavy's int16 attrs)
     // otherwise report the normalized attribute box (~±1) instead of
     // the posed size and the fit math explodes the model ~100x. The
     // skeleton has to be posed for the bake to mean anything.
@@ -352,7 +352,7 @@ export class PlayerModel {
     this.mergeSkinnedParts();
     this.mergeAtlasParts(gltf.animations);
     this.computeDistalBones();
-    // Model may finish loading while a far-LOD swap is already armed —
+    // Model may finish loading while a far-LOD swap is already armed -
     // the freshly captured skinnedMeshes need the swap applied now.
     if (this.lodCtl.lod === 1) {this.lodCtl.apply();}
     logger.debug(`Aim bones: ${this.pose.aimBoneNames()} | hand: ${this.handBone?.name ?? 'NONE'}`);
@@ -365,11 +365,11 @@ export class PlayerModel {
     // RobotExpressive.glb origin is at feet (y=0), not center
     const classBody = CLASS_BODY_SPEC[this.variant];
     const rig = RIG_MANIFEST[this.variant];
-    const scale = rig?.fitH === undefined ? (rig?.fixedScale ?? 0.5) : rig.fitH / size.y; // class bodies fit their capsule eye height — the body IS the class silhouette
+    const scale = rig?.fitH === undefined ? (rig?.fixedScale ?? 0.5) : rig.fitH / size.y; // class bodies fit their capsule eye height - the body IS the class silhouette
     this.model.scale.setScalar(scale);
     this.model.rotation.y = rig?.yaw ?? Math.PI; // Face forward
     this.modelScale = scale;
-    // Some rigs don't author their origin at the feet — setPosition
+    // Some rigs don't author their origin at the feet - setPosition
     // re-lands the mesh's lowest point on the logical feet each frame.
     this.feetOffsetY = -min.y * this.modelScale;
     this.model.position.y = this.feetOffsetY;
@@ -378,27 +378,27 @@ export class PlayerModel {
     // rendered body (mannequin/robot), socket-mounted on class bodies
     // whose armature frames don't (cyber's bones sit ~98 units off).
     if (this.handBone || classBody?.gunLocal) {this.attachGun();}
-    else {logger.warn('GUN NOT ATTACHED — no hand bone or gun socket');}
+    else {logger.warn('GUN NOT ATTACHED - no hand bone or gun socket');}
 
-    // No Y offset needed — model origin is already at feet
+    // No Y offset needed - model origin is already at feet
 
     // Mixer + clip table live in the anim controller. Mannequin clips
-    // ARE the UAL clips natively — registerClip aliases them under the
+    // ARE the UAL clips natively - registerClip aliases them under the
     // UAL_ names the state map prefers so ANIM_NAMES resolves without a
     // retarget pass.
     this.anim.attach(this.model);
     for (const clip of gltf.animations) {this.anim.registerClip(clip, mann, knight, this.rootMotionNodes());}
     if (CLASS_BODY_SPEC[this.variant]) {this.anim.alignHipYaw();}
-    // Any variant whose clips carry Pistol_Aim_* gets the masked layer —
+    // Any variant whose clips carry Pistol_Aim_* gets the masked layer -
     // mk() no-ops when the rig ships none (polyart, vexa). Mannequin gets
     // the torso mask too: its locomotion clips yield spine/head quats at
-    // bake (same mask), so the aim pose owns the torso outright — no
+    // bake (same mask), so the aim pose owns the torso outright - no
     // residual stride roll swinging the muzzle.
     this.pose.buildAimLayer(this.anim.mixer!, this.anim.animations, mann || Boolean(RIG_MANIFEST[this.variant]?.aimMask));
 
     logger.debug('Loaded animations:', Array.from(this.anim.animations.keys()));
 
-    // Rest-pose snapshot — local TRS per bone while nothing has driven
+    // Rest-pose snapshot - local TRS per bone while nothing has driven
     // them yet. skeleton.pose() can't be trusted on rewritten skins
     // (its boneInverses live in the donor's bind frame); this restores
     // the authored T-pose in local space, frame-agnostic.
@@ -411,16 +411,16 @@ export class PlayerModel {
 
     this.anim.markLoaded();
 
-    // Retargeted UAL clips arrive async — a native clip plays until
+    // Retargeted UAL clips arrive async - a native clip plays until
     // they land, then the current state re-resolves onto the better
     // clip. Cached globally so only the first model pays the bake.
     // The mannequin binds UAL clips natively and the knight ships
-    // its own set — neither pays a retarget pass.
+    // its own set - neither pays a retarget pass.
     // Robot bakes the full UAL set; the mannequin bakes the KevDev
-    // directional locomotion only (its UAL clips ship natively — the
+    // directional locomotion only (its UAL clips ship natively - the
     // variants filter in playerUal skips the artifact-prone UAL2 pass).
     // Knight/scifisoldier/polyart are native-only (their own rigs carry
-    // their own clip sets). Cybersoldier ships zero clips — it bakes the
+    // their own clip sets). Cybersoldier ships zero clips - it bakes the
     // mannequin's state set AND the kevdev directionals; vexa bakes
     // kevdev locomotion under her native states.
     if ((RIG_MANIFEST[this.variant]?.sources.length ?? 0) > 0) {this.anim.retargetUAL();}
@@ -429,7 +429,7 @@ export class PlayerModel {
     if (this._detached) {this.scene.remove(this.model);}
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
 
-    // Collider gizmo (wireframe capsule for hitbox visualization) —
+    // Collider gizmo (wireframe capsule for hitbox visualization) -
     // playerCollider.ts builds it against the FULL visual scale so
     // setScale() can't inflate the wire past the real sim capsule.
     this.collider.attach(this.model, this.modelScale * this._visScale, this.feetOffsetY);
@@ -444,7 +444,7 @@ export class PlayerModel {
 
   private skinnedMeshes: THREE.SkinnedMesh[] = [];
   private readonly _bbMin = new THREE.Vector3();
-  /** merged-mesh i → original part indices — remapLod merges the lod1
+  /** merged-mesh i → original part indices - remapLod merges the lod1
    *  geo list into the same buckets so the swap stays aligned. */
   private lodGeoBuckets: number[][] | null = null;
   private readonly lodCtl = new PlayerModelLod(this.skinnedMeshes,
@@ -457,32 +457,32 @@ export class PlayerModel {
     }),
     (gs) => this.mergedLodGeos(gs));
 
-  /** setScale() multiplier on top of the rig fit — the collider gizmo
+  /** setScale() multiplier on top of the rig fit - the collider gizmo
    *  divides by this too so the debug wire stays at the sim capsule. */
   private _visScale = 1;
-  /** Re-size the debug gizmo to the class hit capsule — the gizmo was
+  /** Re-size the debug gizmo to the class hit capsule - the gizmo was
    *  built from the generic constants and never matched light/heavy sim
    *  capsules. */
   setColliderCapsule(cap: { height: number; half: number; radius: number }): void {
     this.collider.setCapsule(cap, this.modelScale * this._visScale, this.feetOffsetY);
   }
 
-  /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost —
+  /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost -
    *  nobody reads a 200m figure's cast shadow. */
   setCastShadow(on: boolean): void {
     for (const m of this.skinnedMeshes) {m.castShadow = on;}
   }
 
   // Progressive bone LOD (distal-bone freeze + far-clip track filtering)
-  // lives in playerDistal.ts — the bone census feeds it, the action swap
+  // lives in playerDistal.ts - the bone census feeds it, the action swap
   // on freeze comes back through setDistalFrozen.
-  readonly distal = new PlayerDistal(); // public — PlayerAnim host surface
+  readonly distal = new PlayerDistal(); // public - PlayerAnim host surface
 
   setBonesFrozen(frozen: boolean): void {
     this.distal.setBonesFrozen(frozen);
     // Do NOT touch this.model.matrixWorldAutoUpdate: freezing the root
     // strand also freezes position tracking (setPosition writes
-    // model.position, but matrixWorld never recomposes — the mesh keeps
+    // model.position, but matrixWorld never recomposes - the mesh keeps
     // rendering where it froze, and its stale bounds keep it
     // frustum-culled even after the player runs back onscreen). The
     // mixer skip upstream already removes the anim cost.
@@ -491,14 +491,14 @@ export class PlayerModel {
   /** class_heavy-style GLBs ship each body part bound to its OWN copy of
    *  the same armature (5 skins × 57 identically-named joints). The
    *  mixer's PropertyBinding resolves duplicate node names to the first
-   *  DFS match, so only one armature animates — the other parts render
+   *  DFS match, so only one armature animates - the other parts render
    *  frozen bind-pose copies stacked on the driven body (the "magenta
    *  blob" + model-offset sink). Joint order is identical across the
    *  copies, so rebind every part's Skeleton to the driven armature's
    *  bone NODES while keeping each part's own inverse bind matrices. */
   private shareDrivenSkeleton(clips: THREE.AnimationClip[]): void {
     if (!this.model || this.skinnedMeshes.length < 2) {return;}
-    // A track name's root node resolves to the first DFS match — find
+    // A track name's root node resolves to the first DFS match - find
     // that node, then the skeleton that owns it is the driven armature.
     const trackNode = clips.flatMap((c): string[] => c.tracks.map((t): string => t.name.split('.')[0]!)).find((n): boolean => Boolean(n));
     let drivenBone: THREE.Object3D | undefined;
@@ -511,24 +511,24 @@ export class PlayerModel {
     const {bones} = (donor ?? this.skinnedMeshes[0]!).skeleton;
     for (const sm of this.skinnedMeshes) {
       if (sm.skeleton.bones === bones) {continue;}
-      // Different rig (names or count differ) — not a duplicate copy.
+      // Different rig (names or count differ) - not a duplicate copy.
       if (sm.skeleton.bones.length !== bones.length
         || sm.skeleton.bones.some((b, i): boolean => b.name !== bones[i]!.name)) {continue;}
       sm.bind(new THREE.Skeleton(bones, sm.skeleton.boneInverses), sm.bindMatrix);
     }
   }
 
-  /** Every skinned PART is its own draw call sharing one skeleton —
+  /** Every skinned PART is its own draw call sharing one skeleton -
    *  5-10 parts per remote ≈ most of the scene's draw mass. Merge parts
    *  that share material + bindMatrix + parent + local transform into
    *  one SkinnedMesh per bucket; anything that doesn't match stays
-   *  unmerged rather than risk a visual diff. Same verts, same skin —
+   *  unmerged rather than risk a visual diff. Same verts, same skin -
    *  fewer submissions. */
-  /** Class GLBs ship each primitive with its own skin — N identical bone
+  /** Class GLBs ship each primitive with its own skin - N identical bone
    *  sets per body means N skeleton.update passes per render frame and
    *  parts can never merge (skeleton is a bucket key). When every part's
    *  joint array is the same names in the same order, one Skeleton serves
-   *  them all — bind matrices are per-mesh and preserved. Runs before
+   *  them all - bind matrices are per-mesh and preserved. Runs before
    *  mergeSkinnedParts so same-material parts can now collapse. */
   private unifySkeletons(): void {
     const parts = this.skinnedMeshes;
@@ -551,7 +551,7 @@ export class PlayerModel {
   private readonly atlasParts: THREE.SkinnedMesh[] = [];
 
   private vertexizeBody(): void {
-    // mannequin's lod1 swap replaces geometry wholesale — the swapped-in
+    // mannequin's lod1 swap replaces geometry wholesale - the swapped-in
     // geos wouldn't carry the extra attributes, so it stays split.
     if (this.variant === 'mannequin') {return;}
     const am = makeAtlasMat();
@@ -567,22 +567,22 @@ export class PlayerModel {
       this.atlasParts.push(sm);
       any = true;
     }
-    // Register so flash/rim/dispose reach the shared clone — tint itself
+    // Register so flash/rim/dispose reach the shared clone - tint itself
     // is attr-side (setTeamTint below), mats skips it via userData.atlasMat.
     if (any) {this.mats.adopt(am);}
   }
 
   /** Cross-parent merge for atlas parts: class rigs parent armor pieces
-   *  under named bone-empties (anklel/elbowl/mohawk) — static attachment
+   *  under named bone-empties (anklel/elbowl/mohawk) - static attachment
    *  nodes, the skeleton does the actual animating. Merge under the
    *  parts' deepest COMMON ancestor (usually the GLB root, e.g.
-   *  'brawler' — it may itself be animated; the merged mesh rides it).
+   *  'brawler' - it may itself be animated; the merged mesh rides it).
    *  Each part's transform relative to that anchor is constant and
    *  bakes into the merged geometry; binding to the anchor's world
    *  matrix reproduces the original vertex path exactly
    *  (A(t)×A(0)⁻¹×ΣboneMat×B×v with B=A₀, geo' = A₀⁻¹×T_i×v → identical).
    *  Guard: a part whose chain contains an ANIMATED node strictly
-   *  between it and the anchor stays split — its transform isn't
+   *  between it and the anchor stays split - its transform isn't
    *  constant. */
   private mergeAtlasParts(animations: THREE.AnimationClip[]): void {
     const parts = this.skinnedMeshes.filter((sm): boolean => (sm.material as THREE.Material).userData.atlasMat === true);
@@ -592,7 +592,7 @@ export class PlayerModel {
       for (const t of clip.tracks) {animated.add(t.name.split('.')[0]!);}
     }
     this.model.updateMatrixWorld(true);
-    // Deepest common ancestor — first part's chain, intersected in order.
+    // Deepest common ancestor - first part's chain, intersected in order.
     let anchor: THREE.Object3D | null = null;
     {
       const chains = parts.map((sm): THREE.Object3D[] => {
@@ -611,7 +611,7 @@ export class PlayerModel {
     const consumed = new Set<THREE.SkinnedMesh>();
     const T = new THREE.Matrix4();
     // Which parts merge is per-instance state (blocked parents), but the
-    // merged OUTPUT is identical per variant — the cache key just needs
+    // merged OUTPUT is identical per variant - the cache key just needs
     // the same bake inputs, and the consumed set is computed either way.
     for (const sm of parts) {
       let blocked = false;
@@ -667,14 +667,14 @@ export class PlayerModel {
     for (const sm of consumed) {sm.removeFromParent();}
     const rigid = this.foldRigidAccessories(animations, parts[0]!.skeleton, anchor, Ainv, A);
     const kept = this.skinnedMeshes.filter((sm): boolean => !consumed.has(sm));
-    this.skinnedMeshes.length = 0; // shared reference with PlayerModelLod — mutate in place
+    this.skinnedMeshes.length = 0; // shared reference with PlayerModelLod - mutate in place
     this.skinnedMeshes.push(...kept, mm, ...rigid);
     this.atlasParts.length = 0;
     this.atlasParts.push(mm);
   }
 
   /** Rigid accessories are non-skinned meshes parented under a skeleton
-   *  bone (mohawk, pouches — ~7 meshes/remote, the last big draw bucket
+   *  bone (mohawk, pouches - ~7 meshes/remote, the last big draw bucket
    *  in the census). A rigid child of bone B is identical to a skinned
    *  part with weight 1.0 to B: bake B.bindWorld⁻¹×meshWorld into the
    *  verts, stamp skinIndex=B, and it rides the skeleton exactly like
@@ -690,7 +690,7 @@ export class PlayerModel {
     const boneSet = new Set<THREE.Object3D>(skeleton.bones);
     const boneIndex = new Map<THREE.Object3D, number>();
     skeleton.bones.forEach((b, i): void => {boneIndex.set(b, i);});
-    // Bone lookup by name too — GLB part parents are often empty nodes
+    // Bone lookup by name too - GLB part parents are often empty nodes
     // sharing the bone's name rather than the Bone instance itself.
     const boneByName = new Map<string, { bone: THREE.Bone; idx: number }>();
     skeleton.bones.forEach((b, i): void => {if (!boneByName.has(b.name)) {boneByName.set(b.name, { bone: b, idx: i });}});
@@ -704,7 +704,7 @@ export class PlayerModel {
       if ((rm.material as THREE.Material).userData.atlasMat === true) {return;} // atlas part handled above
       // Resolve the bone ancestor: nearest ancestor that IS a skeleton
       // bone OR shares its name. Any ANIMATED node strictly between the
-      // mesh and the bone blocks the fold — its transform isn't constant.
+      // mesh and the bone blocks the fold - its transform isn't constant.
       let boneEntry: { bone: THREE.Bone; idx: number } | null = null;
       let blocked = false;
       for (let p: THREE.Object3D | null = rm.parent; p && p !== this.model; p = p.parent) {
@@ -719,7 +719,7 @@ export class PlayerModel {
       const key = `${rm.material.uuid}|${Object.keys(rm.geometry.attributes).toSorted().join(',')}|${rm.geometry.index ? 'i' : 'n'}`;
       const b = buckets.get(key) ?? { mat: rm.material, geos: [] };
       const g = rm.geometry.clone();
-      // Anchor-space bake, same convention as the atlas merge above —
+      // Anchor-space bake, same convention as the atlas merge above -
       // the skeleton does the motion: skinIndex=B makes the output
       // B_now×B_bind⁻¹×meshWorld×v = the rigid node's exact world path.
       g.applyMatrix4(T.copy(Ainv).multiply(rm.matrixWorld));
@@ -755,7 +755,7 @@ export class PlayerModel {
     const buckets = new Map<string, THREE.SkinnedMesh[]>();
     for (const sm of parts) {
       const mats = Array.isArray(sm.material) ? sm.material : [sm.material];
-      if (mats.length !== 1) {return;} // multi-material part — leave the whole model split
+      if (mats.length !== 1) {return;} // multi-material part - leave the whole model split
       const m = mats[0]!;
       const key = [
         m.name, m.type,
@@ -773,8 +773,8 @@ export class PlayerModel {
       if (!b) {buckets.set(key, b = []);}
       b.push(sm);
     }
-    if (buckets.size === parts.length) {return;} // nothing shares — merge would save nothing
-    // Plan every bucket first — a mid-merge attribute failure aborts
+    if (buckets.size === parts.length) {return;} // nothing shares - merge would save nothing
+    // Plan every bucket first - a mid-merge attribute failure aborts
     // before any part leaves the scene.
     const merged: THREE.SkinnedMesh[] = [];
     const geoBuckets: number[][] = [];
@@ -786,14 +786,14 @@ export class PlayerModel {
         continue;
       }
       const geo = mergeGeometries(grp.map((s): THREE.BufferGeometry => s.geometry), false);
-      if (!geo) {return;} // attribute mismatch — keep the whole model split
+      if (!geo) {return;} // attribute mismatch - keep the whole model split
       const mm = new THREE.SkinnedMesh(geo, grp[0]!.material);
       mm.name = `merged:${grp[0]!.name}+${grp.length - 1}`;
       mm.bind(grp[0]!.skeleton, grp[0]!.bindMatrix.clone());
       mm.castShadow = grp[0]!.castShadow;
       mm.receiveShadow = grp[0]!.receiveShadow;
       mm.frustumCulled = grp[0]!.frustumCulled;
-      // baseGeo stash must be the merged BASE geo — if lod1 was already
+      // baseGeo stash must be the merged BASE geo - if lod1 was already
       // applied, current geometry is the decimated one.
       if (grp.some((s): boolean => Boolean(s.userData.baseGeo))) {
         const base = mergeGeometries(grp.map((s): THREE.BufferGeometry => (s.userData.baseGeo as THREE.BufferGeometry) ?? s.geometry), false);
@@ -805,7 +805,7 @@ export class PlayerModel {
       detach.push(...grp);
       geoBuckets.push(grp.map((s): number => parts.indexOf(s)));
     }
-    // All buckets planned — swap the graph in one shot.
+    // All buckets planned - swap the graph in one shot.
     for (const mm of merged) {
       if (mm.name.startsWith('merged:')) {
         (mm.userData.srcParent as THREE.Object3D | null)?.add(mm);
@@ -818,7 +818,7 @@ export class PlayerModel {
     this.lodGeoBuckets = geoBuckets;
   }
 
-  /** remapLod hook — merges the lod1 geo list into the same material
+  /** remapLod hook - merges the lod1 geo list into the same material
    *  buckets mergeSkinnedParts produced. Identity until buckets exist. */
   private mergedLodGeos(gs: THREE.BufferGeometry[]): THREE.BufferGeometry[] {
     const b = this.lodGeoBuckets;
@@ -841,11 +841,11 @@ export class PlayerModel {
     if (next) {this.anim.currentAction = next;}
   }
 
-  /** Far-LOD swap: mannequin_lod1.glb is the same rig decimated ~80% —
+  /** Far-LOD swap: mannequin_lod1.glb is the same rig decimated ~80% -
    *  geometry carries the skin weights, so swapping geo alone keeps the
    *  pose. The skeleton/mixer is untouched. Only exists for 'mannequin'. */
   setLod(level: 0 | 1): void {
-    // The decimated rig is mannequin-only — LOD-swapping it onto a class
+    // The decimated rig is mannequin-only - LOD-swapping it onto a class
     // body would graft mannequin geometry onto a foreign skeleton.
     if (this.variant !== 'mannequin') {return;}
     this.lodCtl.set(level);
@@ -860,11 +860,11 @@ export class PlayerModel {
       child.castShadow = true;
       child.receiveShadow = true;
       child.geometry = smoothShade(child.geometry);
-      // Reskin + per-instance clone + emissive capture — playerMats.ts
+      // Reskin + per-instance clone + emissive capture - playerMats.ts
       this.mats.prep(child, this.variant === 'mannequin', this.mannRev);
-      // SkinnedMesh bind-pose bounds don't track bone-driven verts —
+      // SkinnedMesh bind-pose bounds don't track bone-driven verts -
       // wrong bounds get it frustum-culled when it shouldn't be. Take
-      // the bind-pose sphere (a plain buffer scan — the skinned bake
+      // the bind-pose sphere (a plain buffer scan - the skinned bake
       // walks every vert through every bone) and pad for anim travel
       // so culling can come back on.
       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
@@ -887,7 +887,7 @@ export class PlayerModel {
       || nb === 'basehumanrpalm') && !this.handBone) {
       this.handBone = child as THREE.Bone;
     }
-    // Foregrip palm — palm-line mounts orient the barrel along
+    // Foregrip palm - palm-line mounts orient the barrel along
     // grip→foregrip, so both hands must resolve.
     if ((child.name === 'Palm2L' || nb === 'defhandl' || nb === 'fistl'
       || nb === 'handl' || nb === 'handleft'
@@ -901,7 +901,7 @@ export class PlayerModel {
     if (child.name === 'FootL' || child.name === 'FootR') {this.pose.captureFootBone(child, this.model!);}
   }
 
-  // Procedural gun in the right hand — follows every animation.
+  // Procedural gun in the right hand - follows every animation.
   // The gun group/mount/follow all live in playerGun.ts; this wrapper
   // only decides whether a mount exists and sets the pose flags the
   // mount choice implies.
@@ -912,12 +912,12 @@ export class PlayerModel {
     // Socket rigs without native armed anims get the canned grip pose;
     // `armedHold` extends it to rigs whose own clips carry low-ready
     // (scifisoldier's *_Rifle set) but should ride the hip-fire grip in
-    // every state — including through Fire_* oneshots.
+    // every state - including through Fire_* oneshots.
     const armedHold = Boolean(RIG_MANIFEST[this.variant]?.armedHold);
     this.pose.wantHoldPose = (armedHold || !CLASS_BODY_SPEC[this.variant]?.anims) && Boolean(handBone);
     this.pose.holdShoots = armedHold;
     this.pose.holdIdle = Boolean(RIG_MANIFEST[this.variant]?.idleHold) && Boolean(handBone);
-    // Aim-pin rigs hold the same gripped torso through ground loco —
+    // Aim-pin rigs hold the same gripped torso through ground loco -
     // the aim layer already owns the masked quats, this pins what the
     // loco clip still sways.
     this.pose.lockLocoTorso = Boolean(RIG_MANIFEST[this.variant]?.mount?.aimPin);
@@ -929,7 +929,7 @@ export class PlayerModel {
     });
   }
 
-  // Nodes above the hips that authored rigs animate as root motion —
+  // Nodes above the hips that authored rigs animate as root motion -
   // computed from the loaded hierarchy once per model.
   private _rootMotionNodes: Set<string> | null = null;
 
@@ -940,7 +940,7 @@ export class PlayerModel {
     return this._rootMotionNodes;
   }
 
-  // The whole clip-drive surface delegates to playerAnim.ts — signatures
+  // The whole clip-drive surface delegates to playerAnim.ts - signatures
   // preserved for PlayerVisuals/remoteAnim/gunlab/posedump callers.
   playAnimation(name: string, startPhase = 0): void { this.anim.playAnimation(name, startPhase); }
 
@@ -954,7 +954,7 @@ export class PlayerModel {
 
   forceAnimationState(state: AnimationState, keepPhase = false): void { this._bindHeld = false; this.anim.forceAnimationState(state, keepPhase); }
 
-  /** Snap every bone back to the authored rest pose — the rig's T-pose.
+  /** Snap every bone back to the authored rest pose - the rig's T-pose.
    *  Held: update() keeps re-posing the skeleton until a clip runs again. */
   private _bindHeld = false;
   private _restPose: Map<THREE.Bone, { p: THREE.Vector3; q: THREE.Quaternion; s: THREE.Vector3 }> | null = null;
@@ -987,10 +987,10 @@ export class PlayerModel {
     this.auditStretch(dt);
   }
 
-  // Stretch canary — the exploded-rig bug smears verts between bones that
+  // Stretch canary - the exploded-rig bug smears verts between bones that
   // should sit ~2m apart; visAudit only samples at dump time, so a
   // transient mid-clip stretch never lands in the paste. Every 0.5s
-  // (staggered per model) measure the skeleton's max world-space spread —
+  // (staggered per model) measure the skeleton's max world-space spread -
   // >8m on a ≤2.8m body is impossible geometry. glitch() records the
   // variant + clip + state so the Alt+Q glitch census names the
   // animation that did it.
@@ -1007,14 +1007,14 @@ export class PlayerModel {
     for (const sm of this.skinnedMeshes) {
       // Per-skeleton spread, not pooled: duplicate-armature rigs (polyart
       // ships 5) park their unused skeletons at bind pose far from the
-      // driven one — cross-skeleton distance reads as stretch without a
+      // driven one - cross-skeleton distance reads as stretch without a
       // single vert moving.
-      // Sink/rise measures the POSED VERTEX bounds, not bones — rigs
+      // Sink/rise measures the POSED VERTEX bounds, not bones - rigs
       // park utility bones (weapon/headgear anchors) meters off the body
       // at bind pose; verts are what markers have to register against.
       // Strided 1-in-4 bake: the full computeBoundingBox walks every vert
       // through applyBoneTransform (~7% of a throttled profile at this
-      // cadence × fleet) — a canary doesn't need exact bounds.
+      // cadence × fleet) - a canary doesn't need exact bounds.
       {
         const pos = sm.geometry.getAttribute('position');
         let minY = Infinity;
@@ -1040,19 +1040,19 @@ export class PlayerModel {
       }
       if (meshMax > maxSq) { maxSq = meshMax; bi = mi; bj = mj; maxMesh = sm; }
     }
-    // Sink/rise canary — HUD markers aim at the logical capsule (feet +
+    // Sink/rise canary - HUD markers aim at the logical capsule (feet +
     // head room), so a clip that drags the skeleton off the collider
     // reads as "marker at his feet" (mesh floated up) or "marker over
     // nothing" (mesh sank). Bones sit inside the mesh surface, so flag
     // only past a margin animation bob can't reach (~0.6m).
     if (this.model.parent) {
-      // World-space compare — previews nest models under transformed
+      // World-space compare - previews nest models under transformed
       // proxies, so the parent-local position.y isn't the world's feet.
       const feetY = this._bbMin.set(0, -this.feetOffsetY, 0).applyMatrix4(this.model.matrixWorld).y;
       const off = minBoneY - feetY;
-      // Oneshot clips ARE designed displacement — Hit_Chest rocks the rig
+      // Oneshot clips ARE designed displacement - Hit_Chest rocks the rig
       // ~0.8m back, Death slides the corpse, Pistol_Shoot's draw drops the
-      // scout ~1.6m. That motion is the clip, not a float bug — gate on
+      // scout ~1.6m. That motion is the clip, not a float bug - gate on
       // clip membership, not state (a 'shoot' state's clip is a oneshot).
       // Crossfades get the same pass: the outgoing clip still holds weight
       // while the incoming name is already current (death→idle sweeps the
@@ -1074,14 +1074,14 @@ export class PlayerModel {
     }
   }
 
-  /** Barrel-tip world point — third-person beam/tracer anchor. */
+  /** Barrel-tip world point - third-person beam/tracer anchor. */
   muzzleWorld(out: THREE.Vector3): boolean {
     return this.gunCtl.muzzleWorld(out);
   }
 
   // Recoil: exponential decay kick on the gun (position + muzzle flip);
   // muzzle flash is a ~90ms pop decaying on the same curve.
-  /** Third-person weapon swap — the same lower→switch→raise the
+  /** Third-person weapon swap - the same lower→switch→raise the
    *  viewmodel plays (its timings: 0.12s down, 0.16s up). */
   weaponSwap(): void { this.fx.weaponSwap(); }
   weaponThrow(): void { this.fx.weaponThrow(); }
@@ -1090,20 +1090,20 @@ export class PlayerModel {
 
   /** Swap the hand prop to the real weapon's silhouette. The wire only
    *  reveals a remote's weapon when they use it (playerShot/kill feed),
-   *  so types without a baked model — or not yet seen firing — keep the
+   *  so types without a baked model - or not yet seen firing - keep the
    *  generic prop rather than guess wrong. */
   setWeapon(wt: number | undefined): void {
     if (wt === undefined) {return;}
     this.gunCtl.setWeapon(wt);
   }
 
-  /** Damage white-pop — creature-style hit readability on the robot body. */
+  /** Damage white-pop - creature-style hit readability on the robot body. */
   damageFlash(): void { this.fx.damageFlash(); }
 
-  // Procedural fire kick + muzzle flash — call when the remote player shoots.
+  // Procedural fire kick + muzzle flash - call when the remote player shoots.
   fire(weaponType?: number): void {
     this.pose.fire();
-    // A shot reveals the held weapon — swapping the prop first means the
+    // A shot reveals the held weapon - swapping the prop first means the
     // muzzle flash frames the right barrel.
     if (weaponType !== undefined && weaponType !== WeaponType.Melee) {this.setWeapon(weaponType);}
     this.fx.fire(weaponType);
@@ -1118,7 +1118,7 @@ export class PlayerModel {
     // Collider gizmo is a child of the model, so it moves with it automatically
   }
 
-  /** Where the rendered body actually is (feet) — null before the GLB
+  /** Where the rendered body actually is (feet) - null before the GLB
    *  loads. The bot watchdog diffs this against the logical position to
    *  catch a stalled tick/interpolation path. */
   getModelPosition(out: THREE.Vector3): boolean {
@@ -1131,7 +1131,7 @@ export class PlayerModel {
   /** Directional body lean (jet thrust tilt): pitch = forward/back,
    *  roll = sideways. Set every frame a jet is active; pass 0,0 to ease
    *  back to level. Applied to the whole model so it composes with
-   *  whatever clip is playing — TA-style directional jetting reads from
+   *  whatever clip is playing - TA-style directional jetting reads from
    *  body tilt, not a per-direction clip set (UAL has none). */
   setBodyLean(pitch: number, roll: number): void { this.fx.setBodyLean(pitch, roll); }
 
@@ -1143,7 +1143,7 @@ export class PlayerModel {
       this.lastRoll = roll;
       this.model.rotation.z = roll;
       this.pose.aimPitch = pitch;
-      // Don't apply pitch to body — it's an aiming angle, not body orientation.
+      // Don't apply pitch to body - it's an aiming angle, not body orientation.
       // It goes to the head bone in update(), after the mixer writes the pose.
     }
   }
@@ -1155,7 +1155,7 @@ export class PlayerModel {
   }
 
   /** The ~300-node rig (mostly bones) costs traversal in updateMatrixWorld
-   *  and projectObject even while invisible — detaching is the only prune,
+   *  and projectObject even while invisible - detaching is the only prune,
    *  since matrixAutoUpdate flags don't stop the walk. Offscreen remotes
    *  detach; stale matrixWorlds correct themselves on re-add. */
   setSceneDetached(detached: boolean): void {
@@ -1166,10 +1166,10 @@ export class PlayerModel {
   }
   private _detached = false;
 
-  // Ghost shimmer — translucent material SWAP for the decloak-reveal.
+  // Ghost shimmer - translucent material SWAP for the decloak-reveal.
   // The meshes' real materials ride in ghostBaseline while each source
   // mat resolves to one shared translucent variant, so nothing ever gets
-  // mutated — baked/GLB mats serve every model and the viewmodel palette
+  // mutated - baked/GLB mats serve every model and the viewmodel palette
   // alike, and mutating them would shimmer every gun in the client. This
   // is also why hand-prop mats never need per-model clones.
   private ghostBaseline: Map<THREE.Mesh, THREE.Material | THREE.Material[]> | null = null;
@@ -1204,7 +1204,7 @@ export class PlayerModel {
     this.ghostBaseline = null;
   }
 
-  /** Friend-or-foe tint on the debug hitbox — remotes recolor on team
+  /** Friend-or-foe tint on the debug hitbox - remotes recolor on team
    *  assign; untouched models stay the default friendly green. The hex is
    *  cached so a call landing before the GLB load still tints the capsule
    *  when it's built. */
@@ -1213,7 +1213,7 @@ export class PlayerModel {
   /** Debug (?debug / menu DEBUG): render the body as wireframe so it can
    *  be eyeballed against the collider capsule. */
   setWireframe(on: boolean): void { this.mats.setWireframe(on, this.model); }
-  /** Team tint — hex lerps every body material toward the hue, null
+  /** Team tint - hex lerps every body material toward the hue, null
    *  restores the authored palette. Vertexized parts take the same
    *  lerp through their color attribute (armor verts only). */
   setTeamTint(hex: number | null): void {
@@ -1239,7 +1239,7 @@ export class PlayerModel {
       }
     }
   }
-  /** Fresnel rim experiment — emissive edge glow on the body mats; the
+  /** Fresnel rim experiment - emissive edge glow on the body mats; the
    *  hand prop's shared material is cloned per model so it rims too
    *  without leaking onto every other model's gun. */
   setRim(hex: number | null): void {
@@ -1254,7 +1254,7 @@ export class PlayerModel {
 
   // Inverted-hull outline: per SkinnedMesh a clone sharing the SAME
   // skeleton (animates for free, no geometry copy) with a flat BackSide
-  // material whose vertex shader puffs verts along normals — every
+  // material whose vertex shader puffs verts along normals - every
   // plate expands on its own axes, which is the hull a hard-surface
   // model needs (uniform scale would drift the parts apart).
   private hullMat: THREE.MeshBasicMaterial | null = null;
@@ -1273,7 +1273,7 @@ export class PlayerModel {
       if (m.isMesh && !(m as THREE.SkinnedMesh).isSkinnedMesh) {src.push(m);}
     });
     for (const m of src) {
-      // Prop geos can ship without normals — that renders them flat black
+      // Prop geos can ship without normals - that renders them flat black
       // AND NaNs the hull's normal-extrude (invisible). computeVertexNormals
       // fixes both; safe on the shared geo.
       if (!m.geometry.attributes.normal) {m.geometry.computeVertexNormals();}
@@ -1281,7 +1281,7 @@ export class PlayerModel {
       // SPLIT normals (each face copy extrudes its own way). Weld a
       // hull-only copy BY POSITION ONLY (uv/face-normal splits would
       // veto the merge) so the extrude directions are smooth.
-      // Body meshes skip this — they're already smooth-shaded and their
+      // Body meshes skip this - they're already smooth-shaded and their
       // normals get skinned (a welded clone wouldn't animate).
       let hgeo = m.geometry;
       if (!m.geometry.index) {
@@ -1299,30 +1299,30 @@ export class PlayerModel {
     for (const h of this.gunHulls) {h.visible = this.hulls[0]?.visible ?? false;}
   }
 
-  /** Enemy outline — hex shows a normal-extruded silhouette drawn
+  /** Enemy outline - hex shows a normal-extruded silhouette drawn
    *  through occluders (depthTest off = wallhack read), null hides. */
   setOutline(hex: number | null): void {
     if (hex !== null && this.hulls.length === 0 && this.model) {
       if (!this.hullMat) {
         // Normal depth test: the inflated shell occludes behind the body
-        // so only the silhouette rim survives — and the rim hides behind
+        // so only the silhouette rim survives - and the rim hides behind
         // walls with the body, matching the OW enemy rule (through-wall
         // is an ally privilege; wallhack-red enemies would be broken).
         this.hullMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, depthWrite: false, toneMapped: false });
         this.hullMat.onBeforeCompile = (sh): void => {
-          // uHull stays tiny — only enough to un-z-fight the backfaces;
+          // uHull stays tiny - only enough to un-z-fight the backfaces;
           // it rides model scale so a small rig's ring vanishes if it
-          // does the visible work. uHullPx is NDC — same pixel rim on
+          // does the visible work. uHullPx is NDC - same pixel rim on
           // every body at every distance.
           sh.uniforms.uHull = { value: 0.006 };
-          // Rim width ∝ √distance — constant-px reads fat when bodies
+          // Rim width ∝ √distance - constant-px reads fat when bodies
           // shrink at range, world-constant vanishes; sqrt splits it.
           // 0.019 → ~2.5px at 10m, ~1px at 60m, ~0.5px past 120m.
           sh.uniforms.uHullPx = { value: 0.019 };
           sh.vertexShader = `uniform float uHull;\nuniform float uHullPx;\n${sh.vertexShader}`.replace(
             '#include <project_vertex>',
             `// FLIP_SIDED is defined for BackSide materials and negates
-// transformedNormal — un-negate or the clip push shrinks the shell
+// transformedNormal - un-negate or the clip push shrinks the shell
 // INTO the body instead of ringing it.
 #if defined(USE_SKINNING) || defined(USE_ENVMAP)
 vec3 hullObjN = objectNormal; vec3 hullViewN = -transformedNormal;
@@ -1331,7 +1331,7 @@ vec3 hullObjN = normal; vec3 hullViewN = normalize(normalMatrix * normal);
 #endif
 transformed += normalize(hullObjN) * uHull;
 #include <project_vertex>
-// World-space nudge alone is subpixel past ~20m — expand again in clip
+// World-space nudge alone is subpixel past ~20m - expand again in clip
 // space along the VIEW-space normal for a constant ~2px rim at range.
 vec4 hullN = projectionMatrix * vec4(hullViewN, 0.0);
 gl_Position.xy += normalize(hullN.xy + vec2(1e-6)) * uHullPx * sqrt(max(gl_Position.w, 0.25));`);
@@ -1343,7 +1343,7 @@ gl_Position.xy += normalize(hullN.xy + vec2(1e-6)) * uHullPx * sqrt(max(gl_Posit
         // Same split-normal crack as the gun: plate hard edges carry
         // divergent per-face normals, so the clip push shreds the ring.
         // Weld a hull-only copy carrying the SKIN attributes (position
-        // alone won't merge uv/normal splits) — verts with different
+        // alone won't merge uv/normal splits) - verts with different
         // bone weights stay split, which is correct for animation.
         let hgeo: THREE.BufferGeometry = sk.geometry;
         const pos = sk.geometry.attributes.position;
@@ -1384,7 +1384,7 @@ gl_Position.xy += normalize(hullN.xy + vec2(1e-6)) * uHullPx * sqrt(max(gl_Posit
   }
 
   setScale(scale: number): void {
-    // Class bodies carry the class silhouette in the GLB itself — a
+    // Class bodies carry the class silhouette in the GLB itself - a
     // _classScale bump on top would double the tiering.
     if (CLASS_BODY_SPEC[this.variant]) {return;}
     this._visScale = scale;
@@ -1392,7 +1392,7 @@ gl_Position.xy += normalize(hullN.xy + vec2(1e-6)) * uHullPx * sqrt(max(gl_Posit
       // Multiply the model's own fit scale (0.5 robot, 2.0/size.y mannequin)
       // so the armor-class bump composes with whichever GLB loaded.
       this.model.scale.setScalar((this.modelScale || 0.5) * scale);
-      // The gizmo is a child of the scaled root — rebuild it so the wire
+      // The gizmo is a child of the scaled root - rebuild it so the wire
       // still traces the sim capsule, not the bumped silhouette.
       if (this.collider.attached) {
         this.setColliderCapsule(this.collider.cap ?? {
@@ -1410,7 +1410,7 @@ gl_Position.xy += normalize(hullN.xy + vec2(1e-6)) * uHullPx * sqrt(max(gl_Posit
       logger.debug('MODEL REMOVED from scene');
       this.anim.dispose();
       this.model = null;
-      this.gibParts = null; // just (mesh, indices) — nothing GPU-owned here
+      this.gibParts = null; // just (mesh, indices) - nothing GPU-owned here
       this.mats.dispose();
     }
     this.collider.dispose();

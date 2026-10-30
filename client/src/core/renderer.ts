@@ -28,7 +28,7 @@ export interface RendererSetup {
   render: (dt?: number) => void;
   needsComposer: () => boolean;
   /** FLOYD mode: extra draw onto the GL canvas between scene render and the
-   *  readPixels (the viewmodel pass — otherwise the gun vanishes in FS). */
+   *  readPixels (the viewmodel pass - otherwise the gun vanishes in FS). */
   setOverlayPass: (fn: (() => void) | null) => void;
   isFloyd: () => boolean;
   isPostProcessingEnabled: () => boolean;
@@ -37,13 +37,13 @@ export interface RendererSetup {
   updateRendererSize: () => void;
   /** Compile every scene material chunked across frames so programs
    *  don't lazily stall their first draw (or monolithically stall one
-   *  boot frame — compileAsync's link+introspection is serial). */
+   *  boot frame - compileAsync's link+introspection is serial). */
   warmup: () => void;
   /** Retro pixel pipeline as two axes: integer size divisor (1-4) and
    *  mode (0 raw / 1 smooth-xBR / 2 dithered / 3 atkinson). scale=1
    *  disables the pipeline entirely. */
   setPixel: (scale: number, mode: number, persist?: boolean) => void;
-  /** Fractional resolution scale (auto-quality degrade) — softens the
+  /** Fractional resolution scale (auto-quality degrade) - softens the
    *  frame evenly via pixel-ratio scaling; only meaningful outside the
    *  hard-pixel modes, which need integer factors to keep the chunky
    *  grid regular. */
@@ -67,14 +67,14 @@ const PX_MODES: Record<string, number> = {
 // Potato first-run: no stored pixel/shadow picks + a weak GL renderer →
 // start on the low tier instead of laddering down through 10s of 4fps.
 // Explicit user picks (any stored key) always win.
-// Adreno needs no version gate — every Adreno is a mobile tile-GPU
+// Adreno needs no version gate - every Adreno is a mobile tile-GPU
 // (the old 0-5xx bound predates 6xx/7xx parts that dominate today).
 const WEAK_GL = /swiftshader|llvmpipe|software|intel.*(hd|uhd)\s?graphics|mali|adreno|videocore|apple gpu/i;
 function detectWeakGpu(): boolean {
   try {
     const c = document.createElement('canvas');
     const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null;
-    if (!gl) {return true;} // no GL at all — deepest tier either way
+    if (!gl) {return true;} // no GL at all - deepest tier either way
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const r = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '');
     gl.getExtension('WEBGL_lose_context')?.loseContext();
@@ -87,7 +87,7 @@ function seedPotatoDefaults(): void {
   settings.set('fps-pscale', 4);
   settings.set('fps-shadows', false);
   // Bloom's multi-pass luminance chain is the mobile-tile-GPU killer;
-  // the fused grade pass (tone map) is one fullscreen shader — keep it,
+  // the fused grade pass (tone map) is one fullscreen shader - keep it,
   // postpro OFF would strip the ACES look entirely (overexposed output).
   settings.set('fps-bloom', false);
 }
@@ -117,23 +117,23 @@ function resolveModes(): RenderModes {
   const bm = urlParams.get('bloom');
   if (bm !== null) {bloomEnabled = bm === 'on';}
   // Atkinson bypasses the composer entirely (GL render → CPU quantize),
-  // so postpro/bloom can never engage under it — suppress dead toggles.
+  // so postpro/bloom can never engage under it - suppress dead toggles.
   if (pmode === 3) {
     postproEnabled = false;
     bloomEnabled = false;
   }
-  // ?dirt=off — isolates the lens-dirt stage when bisecting the
+  // ?dirt=off - isolates the lens-dirt stage when bisecting the
   // black-frame NaN smear (bloom stays on, dirt never samples it).
   const dirtOff = urlParams.get('dirt') === 'off';
   return { pscale, pmode, postproEnabled, bloomEnabled, dirtOff };
 }
 
-const FS_LEVELS = 6; // per-channel quantization — 4 was chroma-noise soup
+const FS_LEVELS = 6; // per-channel quantization - 4 was chroma-noise soup
 
 // ---- Floyd-Steinberg mode (5): real CPU error diffusion ----
 // GL canvas renders at hard-mode scale but stays hidden; each frame we
 // readPixels → F-S quantize in JS → putImageData to this 2D canvas which
-// CSS upscales. Costs a few ms + one pipeline stall per frame — that's
+// CSS upscales. Costs a few ms + one pipeline stall per frame - that's
 // the experiment.
 function makeFloydEngine(renderer: THREE.WebGLRenderer) {
   const canvasEl = document.createElement('canvas');
@@ -163,14 +163,14 @@ function makeFloydEngine(renderer: THREE.WebGLRenderer) {
     ctx2d.putImageData(img, 0, 0);
   }
 
-  /** One serpentine row of quantize + error push — extracted so
+  /** One serpentine row of quantize + error push - extracted so
    *  quantize() isn't carrying the per-channel conditionals. errA/errB
    *  (and their swap) live on the engine closure. */
   function ditherRow(y: number, src: Uint8ClampedArray, dst: Uint8ClampedArray,
       w: number, h: number, step: number): void {
-    const srcRow = (h - 1 - y) * w * 4; // GL rows are bottom-up — flip here
+    const srcRow = (h - 1 - y) * w * 4; // GL rows are bottom-up - flip here
     const dstRow = y * w * 4;
-    // Serpentine: alternate scan direction per row — pure raster order
+    // Serpentine: alternate scan direction per row - pure raster order
     // smears error one way and leaves diagonal worm artifacts
     const fwd = (y & 1) === 0;
     const ahead = fwd ? 3 : -3, behind = -ahead;
@@ -199,15 +199,15 @@ else if (v > 255) {q = 255;}
 
 
 // Low-res sizing for the CSS-upscaled paths: RAW (nearest upscale by
-// definition — that's the retro look) and ATKINSON (hidden GL feed for
+// definition - that's the retro look) and ATKINSON (hidden GL feed for
 // the CPU dither canvas). Composer modes (smooth/dithered) keep a
 // full-res canvas and shrink buffers instead. Returns true when the
-// canvas was shrunk. GL canvas MUST stay visible — pointer lock targets
+// canvas was shrunk. GL canvas MUST stay visible - pointer lock targets
 // it; fsCanvas is pointer-events:none.
 // The world renders a canonical 16:9 frame at every window shape: the
 // canvas is oversized to cover the window at that aspect and CSS
 // center-crops it, so a non-16:9 window crops (never squashes) the same
-// frame — every player sees identical vertical FOV, and video capture of
+// frame - every player sees identical vertical FOV, and video capture of
 // the canvas is natively 16:9 with no staging pass. body{overflow:hidden}
 // already crops the overscan; the canvas stays centered via transform.
 export const GAME_ASPECT = 16 / 9;
@@ -223,13 +223,13 @@ function applyPixelSize(renderer: THREE.WebGLRenderer,
     fsCanvas: HTMLCanvasElement, pscale: number, pmode: number): boolean {
   fsCanvas.style.display = pmode === 3 ? 'block' : 'none';
   // pscale<1 = 2× supersample: render a bigger buffer, CSS downsamples it
-  // (bilinear is right here — this path exists for fill-rate profiling,
+  // (bilinear is right here - this path exists for fill-rate profiling,
   // not a crispness pick). Same math: w/0.5 = 2w.
   if (pscale === 1 || (pmode !== 0 && pmode !== 3)) {return false;}
   const { w, h } = overscanSize();
   renderer.setPixelRatio(1);
   // pscale<1 supersampling can overrun MAX_TEXTURE_SIZE the same way the
-  // pixelRatio path can — floor the scale so the buffer always fits.
+  // pixelRatio path can - floor the scale so the buffer always fits.
   const maxTex = renderer.capabilities.maxTextureSize;
   const scale = Math.max(pscale, w / maxTex, h / maxTex);
   renderer.setSize(Math.floor(w / scale),
@@ -244,23 +244,23 @@ function applyPixelSize(renderer: THREE.WebGLRenderer,
 // Whole-scene bloom gated by a luminance threshold: emitters (trails,
 // explosions, nuggets) push the brightest colors, the lit terrain and sky
 // stay under it, so bloom never washes the frame. (A second composer and
-// SelectiveBloomEffect both proved fragile here — keep the simple one.)
+// SelectiveBloomEffect both proved fragile here - keep the simple one.)
 // SafeBloomEffect: same BloomEffect, but the merge shader zeroes
 // non-finite bloom-texture samples instead of letting a NaN write black
-// through the SCREEN blend — see BLOOM_MERGE_GLSL.
+// through the SCREEN blend - see BLOOM_MERGE_GLSL.
 class SafeBloomEffect extends BloomEffect {
   constructor(opts: ConstructorParameters<typeof BloomEffect>[0]) {
     super(opts);
     this.setFragmentShader(BLOOM_MERGE_GLSL);
   }
 }
-// Viewmodel-aware scene pass — the gun scene draws into the same frame
+// Viewmodel-aware scene pass - the gun scene draws into the same frame
 // buffer right after the world (depth cleared, color kept), so the WHOLE
 // chain downstream treats it as scene content: bloom, grade, and the
 // smooth/dithered upscale. Without this the viewmodel was composited on
-// canvas after the composer — full-res and unprocessed on a chunky frame.
+// canvas after the composer - full-res and unprocessed on a chunky frame.
 class VmRenderPass extends RenderPass {
-  /** Draw hook — the same overlay fn floyd injects pre-readback. */
+  /** Draw hook - the same overlay fn floyd injects pre-readback. */
   vmDraw: (() => void) | null = null;
   override render(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget | null,
       outputBuffer: THREE.WebGLRenderTarget | null, deltaTime?: number, stencilTest?: boolean): void {
@@ -282,10 +282,10 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const bloomEffect = new SafeBloomEffect({
     mipmapBlur: true,
     // HDR linear frame: authored/emitting pixels sit at or above ~2
-    // luminance (sun disc runs far past it) — the threshold's job is to
+    // luminance (sun disc runs far past it) - the threshold's job is to
     // isolate emitters, intensity does the drama. Most scene content peaks
     // at fog/sky ~0.9-1.1, but snow albedo (0.98) × sun+rim lights to ~1.4
-    // — 1.5 keeps Whiteout's whole field from blooming at intensity 5
+    // - 1.5 keeps Whiteout's whole field from blooming at intensity 5
     // while stacked-additive emitters still clear the gate.
     luminanceThreshold: 1.3,
     luminanceSmoothing: 0.25,
@@ -306,7 +306,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   // HDR linear buffers: three skips toneMapping AND output encoding when
   // rendering into a render target (WebGLPrograms gates on
   // currentRenderTarget===null), so the composer chain is responsible for
-  // grading — acesPass replicates the canvas path's ACES exactly. Every
+  // grading - acesPass replicates the canvas path's ACES exactly. Every
   // custom shader carries tonemapping_fragment/colorspace_fragment, so
   // the two paths stay pixel-consistent instead of double-encoding.
   const composer = new EffectComposer(renderer, {
@@ -318,39 +318,39 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
 
   // NaN/Inf guard before the mip chain: a single Inf texel (additive
   // stacks over the fp16 ceiling) turns to NaN inside bloom's blur and
-  // upsamples into a full-frame black flash. Cheap fullscreen fix —
+  // upsamples into a full-frame black flash. Cheap fullscreen fix -
   // also strips NaNs already baked in by scene shaders.
   const sanitizePass = new EffectPass(camera, new Effect('HdrSanitize', SANITIZE_GLSL));
   composer.addPass(sanitizePass);
 
   // Bloom reads the raw linear frame, before the ACES grade clamps it to
-  // display range — HDR luminance is what makes the threshold selective.
+  // display range - HDR luminance is what makes the threshold selective.
   const bloomMergePass = new EffectPass(camera, bloomEffect);
   composer.addPass(bloomMergePass);
 
   // Second NaN/Inf guard AFTER bloom: the merge's own luminance mip chain
   // can emit a bad texel even with clean input (internal blur/upsample
   // arithmetic), and lens dirt + ACES then smear it into a black frame.
-  // Cheap insurance — folds any bloom-side NaN back to a clean pixel.
+  // Cheap insurance - folds any bloom-side NaN back to a clean pixel.
   const postBloomSanitize = new Effect('HdrSanitize2', SANITIZE_GLSL);
 
-  // Lens dirt rides the bloom toggle — without bloom there's no halo for
+  // Lens dirt rides the bloom toggle - without bloom there's no halo for
   // the dirt to diffract, so a dirt-only frame would do nothing.
-  // 1k AVIF (28KB) — the 4k/5MB source is wasteful for a screen-fit
+  // 1k AVIF (28KB) - the 4k/5MB source is wasteful for a screen-fit
   // multiplier mask; artifacts are invisible inside additive glow.
   const dirtTex = new THREE.TextureLoader().load('/assets/LensDirt/LensDirt03_1k.webp');
   const dirtEffect = new Effect('LensDirt', LENS_DIRT_GLSL, {
     uniforms: new Map<string, THREE.Uniform>([
       ['dirtMap', new THREE.Uniform(dirtTex)],
       // Unity-style: dirt × the isolated bloom composite. BloomEffect's
-      // .texture IS its mip-chain output RT — the dirt pass runs after
+      // .texture IS its mip-chain output RT - the dirt pass runs after
       // bloomMerge so it's already filled. Fog can't fake it: the bloom
       // buffer only holds light that cleared the 1.3 gate.
       ['bloomTex', new THREE.Uniform(bloomEffect.texture)],
       ['dirtIntensity', new THREE.Uniform(3)],
     ]),
   });
-  // One fused grade pass — EffectPass compiles all its effects into a
+  // One fused grade pass - EffectPass compiles all its effects into a
   // single fullscreen shader, so sanitize+dirt+aces+contrast cost ONE
   // buffer roundtrip instead of four. Shed-at-deep-tier disables the
   // whole pass, which was already the intent for dirt+contrast; losing
@@ -364,7 +364,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const upscalePass = new EffectPass(camera, upscaleEffect);
   composer.addPass(upscalePass);
 
-  // xBR-lv2 pass — real edge-rule upscale for the fractional-degrade path
+  // xBR-lv2 pass - real edge-rule upscale for the fractional-degrade path
   // (FILTER: XBR). Sits after the lite upscaler in the chain; only one of
   // the two is ever enabled.
   const xbrEffect = new Effect('XBRlv2', XBR_GLSL, {
@@ -377,7 +377,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const xbrPass = new EffectPass(camera, xbrEffect);
   composer.addPass(xbrPass);
 
-  // AA runs LAST — on the display-res frame after the upscale passes, so
+  // AA runs LAST - on the display-res frame after the upscale passes, so
   // it smooths real output edges (post-tonemap LDR is what FXAA/SMAA are
   // designed for). MSAA isn't a pass at all: it multisamples the composer
   // buffer itself.
@@ -386,11 +386,11 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   composer.addPass(fxaaPass);
 
   // ?gpuperf: wrap every composer pass in a GPU timer query so the
-  // harness reads per-pass GPU ms — the honest version of 'which pass
+  // harness reads per-pass GPU ms - the honest version of 'which pass
   // costs what'. Inert otherwise (queries only issue under the flag).
   if (urlParams.get('gpuperf') === '1' && gpuPassInit(renderer)) {
     for (const pass of composer.passes) {
-      // EffectPass.name is just 'EffectPass' — the EFFECT inside names
+      // EffectPass.name is just 'EffectPass' - the EFFECT inside names
       // the work ('ACESGrade', 'LensDirt'). Multi-effect passes join.
       const {effects} = (pass as { effects?: { name: string }[] });
       const label = effects?.length
@@ -407,12 +407,12 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   bloomMergePass.enabled = bloomEnabled;
   gradePass.enabled = postproEnabled;
   dirtEffect.uniforms.get('dirtIntensity')!.value = bloomEnabled && !dirtOff ? 3 : 0;
-  upscalePass.enabled = pmode === 2; // dithered; upscalePass is Bayer-only now — smooth runs the xBR pass
+  upscalePass.enabled = pmode === 2; // dithered; upscalePass is Bayer-only now - smooth runs the xBR pass
   upscaleEffect.uniforms.get('mode')!.value = 2;
   xbrPass.enabled = false;
 
   // postprocessing's autoRenderToScreen only flags the LAST pass in the
-  // array — upscalePass — so disabling it (every non-pixelated mode)
+  // array - upscalePass - so disabling it (every non-pixelated mode)
   // leaves no pass writing to the canvas: the whole composer rendered
   // black. The last ENABLED pass must carry the flag; re-sync on every
   // toggle, not just construction.
@@ -425,12 +425,12 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
       if (p.renderToScreen) {found = true;}
     }
   }
-  // fps-aa: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x — MSAA rebuilds
+  // fps-aa: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x - MSAA rebuilds
   // the multisampled buffer via the composer's setter, the rest toggle a
   // pass. syncRenderToScreen must re-run since the tail pass changed.
   function applyAA(v: number): void {
     // MSAA hidden: its composer-buffer resolve paints black speckle
-    // artifacts (worst at low res) — a stored MSAA pick behaves as SMAA.
+    // artifacts (worst at low res) - a stored MSAA pick behaves as SMAA.
     if (v >= 3) {v = 2;}
     fxaaPass.enabled = v === 1;
     smaaPass.enabled = v === 2;
@@ -440,7 +440,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
 
   syncRenderToScreen();
 
-  // Alt+Q census — enabled flag + which pass currently owns the screen
+  // Alt+Q census - enabled flag + which pass currently owns the screen
   // blit. The chain is static so labels can be hardcoded in order.
   const dumpPasses = (): string[] => ([
     ['scene', scenePass], ['sanitize', sanitizePass], ['bloom', bloomMergePass],
@@ -451,7 +451,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   return { composer, scenePass, bloomMergePass, gradePass, dirtEffect, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses };
 }
 
-// Canvas sizing for every pixel/res path — hard modes render into a
+// Canvas sizing for every pixel/res path - hard modes render into a
 // shrunken GL canvas (CSS upscale), everything else scales the buffer
 // via pixel ratio and lets the composer's upscale pass finish it.
 interface SizingGetters { pscale: () => number; pmode: () => number;
@@ -462,13 +462,13 @@ function makeUpdateRendererSize(renderer: THREE.WebGLRenderer,
   const { pscale, pmode, resScale, pixelRatio } = getters;
   return (): void => {
     // RAW/ATKINSON never touch the composer: render straight into a low-res
-    // canvas and let CSS upscale it — colors are identical to direct
+    // canvas and let CSS upscale it - colors are identical to direct
     // rendering by construction, and it's the cheapest path.
     if (applyPixelSize(renderer, fsCanvas, pscale(), pmode())) {
       if (pmode() === 3) { fsCanvas.width = renderer.domElement.width; fsCanvas.height = renderer.domElement.height; fs.alloc(fsCanvas.width, fsCanvas.height); }
       return;
     }
-    // Canvas stays full-res — in smooth mode only the composer buffers
+    // Canvas stays full-res - in smooth mode only the composer buffers
     // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
     const { w, h } = overscanSize();
     // Clamp pixel ratio so the drawing buffer fits the GPU: portrait
@@ -478,7 +478,7 @@ function makeUpdateRendererSize(renderer: THREE.WebGLRenderer,
     renderer.setPixelRatio(Math.min(pixelRatio(), maxTex / w, maxTex / h));
     renderer.setSize(w, h);
     // Fractional degrade upscales a sub-res buffer through the same CSS
-    // filter path — SHARP keeps deep rungs readable, SMOOTH hides mild ones.
+    // filter path - SHARP keeps deep rungs readable, SMOOTH hides mild ones.
     renderer.domElement.style.imageRendering =
       resScale() < 1 && settings.get('fps-filter') === 0 ? 'pixelated' : 'auto';
     renderer.domElement.style.width = `${w}px`;
@@ -506,7 +506,7 @@ function wireSegRow(id: string, current: () => number,
 function wireAARow(applyAA: (v: number) => void, onChange?: (v: number) => void): void {
   let aaMode = settings.get('fps-aa');
   // MSAA picks are hidden (composer-buffer resolve paints black speckle
-  // artifacts, worst at low res) — demote a stored MSAA pick to SMAA.
+  // artifacts, worst at low res) - demote a stored MSAA pick to SMAA.
   if (aaMode >= 3) {aaMode = 2;}
   applyAA(aaMode);
   onChange?.(aaMode);
@@ -519,13 +519,13 @@ function wireAARow(applyAA: (v: number) => void, onChange?: (v: number) => void)
 function wireToggleButtons(modes: RenderModes, onBm: () => void, onPp: () => void): { bloomToggleBtn: HTMLButtonElement; postproToggleBtn: HTMLButtonElement; } {
   const bloomToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
   const postproToggleBtn = document.getElementById('postpro-toggle')! as HTMLButtonElement;
-  // Player-facing label is GLOW — "bloom" carries washed-out baggage and
+  // Player-facing label is GLOW - "bloom" carries washed-out baggage and
   // ours is emitter-gated (trails/explosions), which is what glow means.
   bloomToggleBtn.classList.toggle('on', modes.bloomEnabled);
   postproToggleBtn.classList.toggle('on', modes.postproEnabled);
   bloomToggleBtn.addEventListener('click', onBm);
   postproToggleBtn.addEventListener('click', onPp);
-  // Wake-cone shells are cosmetic only — pure settings flip, read per frame.
+  // Wake-cone shells are cosmetic only - pure settings flip, read per frame.
   const wakeToggleBtn = document.getElementById('wake-toggle')! as HTMLButtonElement;
   wakeToggleBtn.classList.toggle('on', settings.get('fps-wake'));
   wakeToggleBtn.addEventListener('click', (): void => {
@@ -566,16 +566,16 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   let {pmode} = modes;
   let {postproEnabled} = modes;
   let {bloomEnabled} = modes;
-  // MSAA hidden (see applyAA) — a stored 3/4 pick reports as SMAA.
+  // MSAA hidden (see applyAA) - a stored 3/4 pick reports as SMAA.
   let aaMode = Math.min(settings.get('fps-aa'), 2);
 
   // high-performance asks the browser to pick the dGPU on dual-GPU
-  // machines — default lets the OS park us on the iGPU.
-  // A lost context is unrecoverable for three — every buffer/texture/
-  // program died with it — so the standard recovery is a reload
+  // machines - default lets the OS park us on the iGPU.
+  // A lost context is unrecoverable for three - every buffer/texture/
+  // program died with it - so the standard recovery is a reload
   // (khronos wiki: re-create ALL resources; production three apps
   // reload). Creation can also fail while the GPU process is mid-reset
-  // or after Chrome blocked the page for prior losses — same cure:
+  // or after Chrome blocked the page for prior losses - same cure:
   // reload gets a fresh page (and a fresh loss budget). The 1s delay
   // lets a transient GPU churn settle instead of thrash-reloading.
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
@@ -593,23 +593,23 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   const fs = makeFloydEngine(renderer);
   const fsCanvas = fs.canvasEl;
-  // No z-index anywhere: stack by DOM order — gl → fsCanvas → #hud —
+  // No z-index anywhere: stack by DOM order - gl → fsCanvas → #hud -
   // so ATKINSON's 2D canvas covers the GL feed but sits under the HUD.
   // Appended after renderer.domElement below.
   fsCanvas.style.cssText =
     'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none;pointer-events:none';
   let fsOverlay: (() => void) | null = null; // viewmodel pass, injected by gameLoop
-  // auto-quality degrade — hard-pixel modes force 1 (integer grid).
+  // auto-quality degrade - hard-pixel modes force 1 (integer grid).
   // ?res=0.5 pins a starting scale for headless degrade/filter testing.
   const resParam = urlParams.get('res');
   let resScale = resParam === null ? 1 : Math.min(1, Math.max(0.25, Number.parseFloat(resParam) || 1));
   // Effective pixel mode: at PIXEL SCALE 1× there's no low-res buffer for
   // SMOOTH/DITHERED/ATKINSON to process, so they collapse to RAW. pmode
-  // keeps the stored pick — bumping the scale restores it.
+  // keeps the stored pick - bumping the scale restores it.
   const pmodeEff = (): number => (pscale > 1 ? pmode : 0);
   // Effective AA: in SMOOTH the display-res xBR tail sits mid-chain, so
   // FXAA/SMAA after it demote its output back into the low-res ping-pong
-  // buffers — reads as strictly "less smooth". MSAA is different: it
+  // buffers - reads as strictly "less smooth". MSAA is different: it
   // multisamples the low-res buffer itself (pre-upscale AA), which is a
   // legitimate look in every mode, so only FXAA/SMAA get forced off.
   const aaEff = (): number => (pmodeEff() === 1 && (aaMode === 1 || aaMode === 2) ? 0 : aaMode);
@@ -622,19 +622,19 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
       pixelRatio: getPixelRatio });
 
   updateRendererSize();
-  // Skip the whole shadow-map raster when the scene opted out — the
+  // Skip the whole shadow-map raster when the scene opted out - the
   // second full-scene pass is the dominant fill cost on weak GPUs.
   renderer.shadowMap.enabled = urlParams.get('shadows') !== 'off' && settings.get('fps-shadows');
   // r184 deprecated PCFSoftShadowMap: WebGLShadowMap mutates .type to
   // PCFShadowMap on the FIRST raster, so every material compiled before
   // it keyed SHADOWMAP_TYPE_BASIC (sampler2D) and then sampled the
-  // depth-compare texture — GL_INVALID_OPERATION on every lit draw.
+  // depth-compare texture - GL_INVALID_OPERATION on every lit draw.
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  // Skip the per-link infoLog query — lazy material variants compile
+  // Skip the per-link infoLog query - lazy material variants compile
   // mid-match (new elites, tracers) and a live profile caught the
   // getProgramInfoLog validation stack at ~1.5% of the frame. Compile
   // still runs; only the log read is dropped. Dev sessions can flip it
-  // back on with __renderer.debug.checkShaderErrors = true — or boot
+  // back on with __renderer.debug.checkShaderErrors = true - or boot
   // with ?shadererrors=1 (debugging invalid-program spam).
   renderer.debug.checkShaderErrors = urlParams.get('shadererrors') === '1';
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -652,7 +652,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   const cc = makeComposer(renderer, scene, camera, modes);
   const { composer, scenePass, bloomMergePass, gradePass, dirtEffect, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses } = cc;
 
-  // composer.setSize() also resizes the canvas — set buffers first, then
+  // composer.setSize() also resizes the canvas - set buffers first, then
   // restore whichever canvas sizing the pixel mode wants (it never shrinks).
   function applyBufferSizes(): void {
     // Post buffers track render res: composer pixel modes render at
@@ -666,12 +666,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     xbrEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);
     xbrEffect.uniforms.get('xbrScale')!.value = ow / w;
     // xBR pass handles SMOOTH pixel mode (integer degrade) and the
-    // FILTER:XBR fractional tier — either case feeds it a low-res buffer.
+    // FILTER:XBR fractional tier - either case feeds it a low-res buffer.
     upscalePass.enabled = pscale > 1 && pmodeEff() === 2;
     xbrPass.enabled = (pscale > 1 && pmodeEff() === 1) ||
       (resScale < 1 && pscale === 1 && settings.get('fps-filter') === 2);
     syncRenderToScreen();
-    // composer.setSize() also resizes the canvas — restore whichever canvas
+    // composer.setSize() also resizes the canvas - restore whichever canvas
     // sizing the active pixel mode wants.
     updateRendererSize();
   }
@@ -680,18 +680,18 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // Half-rate shadow updates: the pass re-rasterizes every caster each
   // frame (~46% of the frame measured); one frame of lag is invisible.
   let shadowTick = 0; renderer.shadowMap.autoUpdate = false;
-  // Allocate sun.shadow.map in the FIRST render — lit materials (terrain,
+  // Allocate sun.shadow.map in the FIRST render - lit materials (terrain,
   // instanced species) draw with sampler2DShadow bound to the 1x1 empty
   // texture until a raster exists, erroring per draw; seeding needsUpdate
   // before the first frame means the binding is real from draw one.
   if (renderer.shadowMap.enabled) {renderer.shadowMap.needsUpdate = true;}
   // Lit materials that compile before the lazy shadow-map allocation
-  // exists keep directionalShadowMap bound to unit 0 — every one of
+  // exists keep directionalShadowMap bound to unit 0 - every one of
   // their draws then logs GL_INVALID_OPERATION (texture/sampler type
   // mismatch) forever. One needsUpdate pass after the first raster
   // rebinds them for the session; the cost hides inside boot warmup.
   // Late-compiled lit materials (tracers, elites, remote models pooled
-  // mid-match) hit the same unit-0 binding — a one-shot traverse only
+  // mid-match) hit the same unit-0 binding - a one-shot traverse only
   // heals the boot set, and every later straggler errors per draw for
   // the session. Re-sweep every ~2s against the SAME seen-set: materials
   // already healed cost a Set lookup, only new compiles rebind.
@@ -705,7 +705,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
         // The sweep heals even with shadows OFF: a material compiled
         // while the sampler2DShadow was bound keeps erroring per draw,
         // and needsUpdate recompiles it against the now-shadowless
-        // light set — dropping the dead binding outright.
+        // light set - dropping the dead binding outright.
         if (shadowTick > 4 && (litShadowTick += 1) % 120 === 1) {
           scene.traverse((o): void => {
             const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
@@ -726,7 +726,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
         }
       } });
 
-  // Seg-row markers — assigned by wireSegRow below; setPixel fires them
+  // Seg-row markers - assigned by wireSegRow below; setPixel fires them
   // so auto-quality steps re-light the row too.
   let markPscale: ((v: number) => void) | undefined = undefined;
   let markPmode: ((v: number) => void) | undefined = undefined;
@@ -739,7 +739,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     pmode = Math.min(3, Math.max(0, mode));
     if (persist) { settings.set('fps-pscale', pscale); settings.set('fps-pmode', pmode); }
     syncRenderToScreen();
-    // ATKINSON bypasses the composer entirely — bloom/post have no
+    // ATKINSON bypasses the composer entirely - bloom/post have no
     // pipeline to live in there, so opting into it drops them.
     if (pmodeEff() === 3) {
       if (postproEnabled) {setPostProcessingEnabled(false);}
@@ -749,27 +749,27 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     applyBufferSizes();
     markPscale?.(pscale);
     markPmode?.(pmode);
-    applyAA(aaEff()); // AA is re-evaluated — non-RAW modes force it off
+    applyAA(aaEff()); // AA is re-evaluated - non-RAW modes force it off
     syncPmodeLocks();
     syncAALocks();
   }
 
   // At 1× the non-RAW buttons are dead options (no low-res buffer to
-  // process) — gray them out; the stored pick survives for scale-up.
+  // process) - gray them out; the stored pick survives for scale-up.
   function syncPmodeLocks(): void {
     const locked = pscale <= 1;
     const row = document.getElementById('pmode-row');
     row?.querySelectorAll('button').forEach((b): void => {
       const v = Number(b.dataset['v'] ?? 0);
       b.disabled = locked && v > 0;
-      // Locked reads as RAW — a dimmed active SMOOTH would read "still on".
+      // Locked reads as RAW - a dimmed active SMOOTH would read "still on".
       // Unlock restores the stored pick's highlight.
       b.classList.toggle('active', locked ? v === 0 : v === pmode);
     });
   }
 
   // SMOOTH can't honor post-chain AA without degrading xBR output (see
-  // aaEff) — gray out FXAA/SMAA; MSAA stays live (it's pre-upscale, not a
+  // aaEff) - gray out FXAA/SMAA; MSAA stays live (it's pre-upscale, not a
   // mid-chain pass). Locked reads as OFF so an armed-but-dead pick
   // doesn't display as active.
   function syncAALocks(): void {
@@ -789,9 +789,9 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
 
   // persist=false for staging holds (boot veil): the stored key is the
-  // user's pick — a temporary off must not overwrite it.
+  // user's pick - a temporary off must not overwrite it.
   function setPostProcessingEnabled(enabled: boolean, persist = true): void {
-    // Floyd mode has no composer — enabling post there drops floyd rather
+    // Floyd mode has no composer - enabling post there drops floyd rather
     // than silently refusing (the toggle used to clamp back to OFF with
     // no feedback and read as dead). Other pixel modes share the chain.
     if (enabled && pmodeEff() === 3) {setPixel(pscale, 0, false);} // compat drop, not a user pick
@@ -803,7 +803,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
 
   function setBloomEnabled(enabled: boolean): void {
-    // Same story as post — only atkinson is exclusive.
+    // Same story as post - only atkinson is exclusive.
     if (enabled && pmodeEff() === 3) {setPixel(pscale, 0, false);}
     bloomEnabled = enabled;
     settings.set('fps-bloom', bloomEnabled);
@@ -826,7 +826,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   // applyBufferSizes (not just updateRendererSize): pixel/composer
   // pass enables are only re-evaluated on that path.
-  // 0.5X (2× supersample — fill-rate profiling) is a dev-box control:
+  // 0.5X (2× supersample - fill-rate profiling) is a dev-box control:
   // localhost exposes the button, tunneled/prod users never see it.
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]') {
     document.getElementById('pscale-half')?.style.removeProperty('display');
@@ -837,22 +837,22 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     (v): void => setPixel(pscale, v));
   syncPmodeLocks(); // boot: 1× scale starts with non-RAW locked
   // applyAA wrapper takes the picked v (wireAARow calls it before onChange
-  // updates our aaMode) — clamps to 0 whenever a non-RAW mode is live.
+  // updates our aaMode) - clamps to 0 whenever a non-RAW mode is live.
   wireAARow((v): void => applyAA(pmodeEff() === 1 && (v === 1 || v === 2) ? 0 : v), (v): void => { aaMode = v; });
   syncAALocks(); // boot: non-RAW pixel mode starts with AA locked
 
   // Postpro is the master switch for the composer chain: the grade pass
-  // IS the output transform — a live composer minus grade pumps raw
+  // IS the output transform - a live composer minus grade pumps raw
   // linear HDR to canvas (overexposed). So OFF must mean direct render:
   // bloom/AA keep their (unpersisted) picks but can't drive the composer
   // without it, and materials' own tone mapping takes over on canvas.
   // Residual: SMOOTH/xBR upscale + postpro-off still lacks a terminal
-  // encode — a debug-tier combo, not a user tier.
+  // encode - a debug-tier combo, not a user tier.
   const needsComposerNow = (): boolean => postproEnabled ||
     (pscale > 1 && (pmode === 1 || pmode === 2)) ||
     (resScale < 1 && pscale === 1 && settings.get('fps-filter') === 2);
 
-  // Alt+Q render census — the pipeline state that produced the frame:
+  // Alt+Q render census - the pipeline state that produced the frame:
   // pixel-mode picks (stored vs effective), AA pick + MSAA buffer flag,
   // composer buffer vs canvas size (the low-res mismatch that demotes
   // mid-chain passes), tonemapping, and the enabled-pass chain.
@@ -867,7 +867,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     passes: dumpPasses(),
   });
 
-  let compileInflight = false; // warmup's reentry guard — see below
+  let compileInflight = false; // warmup's reentry guard - see below
   return {
     renderer,
     composer,
@@ -881,19 +881,19 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     isBloomEnabled: (): boolean => bloomEnabled,
     setBloomEnabled,
     updateRendererSize,
-    // compileAsync reentry guard — see warmup below.
+    // compileAsync reentry guard - see warmup below.
     // checkMaterialsReady throws inside three when a material added
-    // mid-compile never receives a currentProgram — benign, but the
+    // mid-compile never receives a currentProgram - benign, but the
     // rejection was surfacing as a pageerror in probes.
     // Serialize: three's KHR_parallel_shader_compile poll shares one
-    // internal set across calls — a second compileAsync while one is in
+    // internal set across calls - a second compileAsync while one is in
     // flight iterates entries the first already evicted
     // (Fe.get(e).currentProgram === undefined → isReady crash).
     warmup: (): void => {
       if (compileInflight) {return;}
       compileInflight = true;
       try {
-        // Sync compile — compileAsync's KHR poll throws uncatchably in its
+        // Sync compile - compileAsync's KHR poll throws uncatchably in its
         // own setTimeout when a material lands mid-compile (Fe.get(e) →
         // undefined → 'isReady' crash). One serial pass has no async gap.
         renderer.compile(scene, camera);

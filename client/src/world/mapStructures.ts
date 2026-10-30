@@ -18,8 +18,8 @@ import { KIT_HULLS } from '../../../shared/structKits.js';
 import { urlParams } from '../core/params.js';
 
 // 'kit' spec pieces → their real builders (names match KIT_HULLS in
-// shared/structKits — the piece collides as that table's boxes).
-// Exported so the hull-parity test can build the REAL mapping — a table
+// shared/structKits - the piece collides as that table's boxes).
+// Exported so the hull-parity test can build the REAL mapping - a table
 // duplicated in the test would pin a copy, not the seam.
 export const KIT_BUILDERS: Record<string, (glow: number) => THREE.Group> = {
   bastion:   (g): THREE.Group<THREE.Object3DEventMap> => mkBastion(g),
@@ -47,10 +47,10 @@ export const KIT_BUILDERS: Record<string, (glow: number) => THREE.Group> = {
   ramp:      (): THREE.Group<THREE.Object3DEventMap> => ramp(5, 12, 2.5),
 };
 
-// Static map structures — the server's map spec arrives on gameState and
+// Static map structures - the server's map spec arrives on gameState and
 // every client builds identical geometry locally. Primitives stay dumb:
 // one shared box geometry, per-kind material, merged into a handful of
-// draw calls regardless of piece count. Collision is the next layer —
+// draw calls regardless of piece count. Collision is the next layer -
 // for now these are cover you can stand behind, not walls that stop you.
 const TINTS = {
   neutral: 0x4A_50_58,
@@ -65,7 +65,7 @@ let spawnGizmos: THREE.Group | null = null;
 
 let dome: THREE.Mesh | null = null;
 
-/** Gate shield panes by owning spec — a downed generator switches its
+/** Gate shield panes by owning spec - a downed generator switches its
  *  team's fields off (visual half; the collider list is rebuilt by
  *  structureSpecs.setTeamGridDown). */
 const shieldPanes: { team?: string; mesh: THREE.Mesh }[] = [];
@@ -73,7 +73,7 @@ export function setShieldPanesOn(team: string, on: boolean): void {
   for (const p of shieldPanes) {if (p.team === team) {p.mesh.visible = on;}}
 }
 
-/** Drop the arena dome — admin hot-reload removed the boundary. */
+/** Drop the arena dome - admin hot-reload removed the boundary. */
 export function clearArenaDome(scene: THREE.Scene): void {
   if (!dome) {return;}
   scene.remove(dome);
@@ -83,7 +83,7 @@ export function clearArenaDome(scene: THREE.Scene): void {
 }
 
 /** Translucent dome marking the arena boundary (Quicksand-style). Non-
- * blocking — visible geometry only; enforcement is a separate layer. */
+ * blocking - visible geometry only; enforcement is a separate layer. */
 export function buildArenaDome(a: { x: number; z: number; radius: number }, groundY: number, scene: THREE.Scene): void {
   if (dome) {
     scene.remove(dome);
@@ -93,7 +93,7 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
   }
   const mat = new THREE.MeshBasicMaterial({
     color: 0x66_CC_FF, transparent: true, opacity: 0,
-    // DoubleSide: BackSide is invisible from outside — and outside is
+    // DoubleSide: BackSide is invisible from outside - and outside is
     // exactly where an offender stands when the boundary matters.
     side: THREE.DoubleSide, depthWrite: false,
   });
@@ -102,7 +102,7 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
     mat,
   );
   // Tribes-style: the barrier is invisible at range and fades in only near
-  // the shell — so both inside-approach and outside-approach measure
+  // the shell - so both inside-approach and outside-approach measure
   // distance to the shell surface, not the dome center.
   dome.onBeforeRender = (_r, _s, cam): void => {
     const dx = cam.position.x - a.x;
@@ -120,7 +120,7 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
   scene.add(dome);
 }
 
-// Non-terrain collider wireframes — same ?debug / menu DEBUG gate as the
+// Non-terrain collider wireframes - same ?debug / menu DEBUG gate as the
 // player hitbox + AOE blast gizmos. Drawn straight from structureColliders
 // output, so the overlay IS the set the sim resolves against (dif hulls,
 // stands, cover) rather than a second guess at it.
@@ -137,7 +137,7 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
   if (colliders.length === 0) {return;}
 
   if (urlParams.debug) {
-    // Stand float probe — the wire spec vs the OBB it becomes. A dais
+    // Stand float probe - the wire spec vs the OBB it becomes. A dais
     // mesh anchors at home.y (ground); its skirt collider should start
     // at the SAME y. If collider base - spec pos.y ≠ 0, the mismatch is
     // in the collider math; if pos.y itself is high, the server snapped
@@ -185,14 +185,14 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
 
 
 
-/** Sediment-lip radius per structure kind — the apron mound heightmap.ts
+/** Sediment-lip radius per structure kind - the apron mound heightmap.ts
  *  draws around the footprint. 'shield' skipped: a pane is a wall, not a
  *  mass that collects soil. 'kit' pieces get a fixed modest lip (their
  *  real hulls are KIT_HULLS, not `size`). */
 export function structureBumps(list: StructureSpec[]): TerrainBump[] {
   const out: TerrainBump[] = [];
   for (const s of list) {
-    if (s.kind === 'shield' || s.kind === 'hull') {continue;} // hull = invisible T2 collision — the interior mesh owns the lip
+    if (s.kind === 'shield' || s.kind === 'hull') {continue;} // hull = invisible T2 collision - the interior mesh owns the lip
     let r: number;
     if (s.kind === 'kit') { r = 9 * (s.scale ?? 1); }
     else { r = Math.max(s.size.x, s.size.z) * 0.5; }
@@ -205,7 +205,7 @@ export function structureBumps(list: StructureSpec[]): TerrainBump[] {
 export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terrain?: Pick<Terrain, 'heightU' | 'reloadHeightmap'>): void {
   setTerrainBumps('structs', structureBumps(list));
   terrain?.reloadHeightmap();
-  // Sand-creep seam blend — patch the shared kit palette (idempotent)
+  // Sand-creep seam blend - patch the shared kit palette (idempotent)
   // and this build's spec-box mats so every wall/kit foot fades into
   // the heightfield instead of hard-intersecting it.
   if (terrain) {
@@ -214,12 +214,12 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   if (built) {
     scene.remove(built);
     // Every material in `built` comes from this file's per-build `mats`
-    // (shared kit mats live in structures.ts, not here) — disposing the
+    // (shared kit mats live in structures.ts, not here) - disposing the
     // handful per rebuild is safe; double-dispose is a no-op.
     built.traverse((o): void => {
       if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
         o.geometry.dispose();
-        // Kit pieces share the kit's module-level palette materials —
+        // Kit pieces share the kit's module-level palette materials -
         // disposing them here poisons every later map/gunlab build.
         let shared = false;
         for (let p: THREE.Object3D | null = o; p; p = p.parent) {
@@ -249,16 +249,16 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   if (terrain) {for (const m of Object.values(mats)) {applyTerrainBlend(m, terrain.heightU);}}
   const unit = new THREE.BoxGeometry(1, 1, 1);
   const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
-  // Bake every piece into one geometry per material — a map's worth of
+  // Bake every piece into one geometry per material - a map's worth of
   // cover is ~40 static boxes, and per-mesh draws were ~40 program keys
   // per frame for pixels that never move.
   const byMat = new Map<keyof typeof mats, THREE.BufferGeometry[]>();
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
-  // 'stand'/'hull' specs are collision-only — the flag dais mesh and
+  // 'stand'/'hull' specs are collision-only - the flag dais mesh and
   // ported interiors are their visuals; drawing the generic box would
   // double-render over them. 'kit' pieces take the real builder path.
   //
-  // Kit visuals bake into per-material merged meshes — the builders all
+  // Kit visuals bake into per-material merged meshes - the builders all
   // draw from the shared kit palette, so a 160-piece bastion layout was
   // ~300 draws (color + shadow passes) before this. Buckets key on
   // material + attribute layout + 512m cell (the interiors pattern) so
@@ -266,7 +266,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   // stay: userData.hulls is read off them by collider tooling.
   const kitBuckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[]; cast: boolean }>();
   // Per-piece material clones (teamGlow Basic, per-builder Lambert
-  // variants) carry unique uuids — same params, different identity →
+  // variants) carry unique uuids - same params, different identity →
   // they'd never bucket. Canonicalize on the renderable signature and
   // reuse the first instance per signature.
   const canonMats = new Map<string, THREE.Material>();
@@ -310,13 +310,13 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     for (const g of geos) {g.dispose();}
     if (!merged) {continue;}
     const mesh = new THREE.Mesh(merged, mat);
-    mesh.userData.kitPiece = true; // shared kit palette — never dispose the mats
+    mesh.userData.kitPiece = true; // shared kit palette - never dispose the mats
     mesh.castShadow = cast;
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     built.add(mesh);
   }
-  // 'shield' panes — team-gated energy fields. Translucent so allies read
+  // 'shield' panes - team-gated energy fields. Translucent so allies read
   // the gate they can pass and enemies read the wall they can't; the
   // collider carries passTeam so the server resolves who gets through.
   for (const s of list) {
@@ -331,7 +331,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     );
     pane.position.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
     pane.rotation.y = s.rotY ?? 0;
-    // Bright edge outline — the pane alone vanishes at glancing angles;
+    // Bright edge outline - the pane alone vanishes at glancing angles;
     // the frame keeps the portal's extent readable from any approach.
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(pane.geometry),
@@ -382,7 +382,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   }
   built.updateMatrixWorld(true);
   scene.add(built);
-  // Template geometries only exist to stamp clones — the merged result
+  // Template geometries only exist to stamp clones - the merged result
   // was already added; the templates themselves aren't in the scene.
   unit.dispose();
   cyl.dispose();
@@ -390,7 +390,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
 }
 
 /** Spawn-sphere overlay (F1 debug): one wireframe dome per anchor, resting
- *  on the terrain — authored y=0 anchors are ground-lifted by the picker,
+ *  on the terrain - authored y=0 anchors are ground-lifted by the picker,
  *  so a dome reads the zone better than a buried bubble. Neutral pool
  *  pale grey, team pools in team color. Point anchors get a 2m marker. */
 export function buildSpawnGizmos(pools: { spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } } | null, scene: THREE.Scene, groundAt: (x: number, z: number) => number): void {
@@ -424,7 +424,7 @@ export function buildSpawnGizmos(pools: { spawns?: SpawnPoint[]; teamSpawns?: { 
   scene.add(spawnGizmos);
 }
 
-/** The debug toggle is live — menu flips mid-session must reach the
+/** The debug toggle is live - menu flips mid-session must reach the
  *  overlay, so visibility re-reads the flag each frame. */
 export function refreshColliderGizmoVisibility(): void {
   if (colliderGizmos) {colliderGizmos.visible = urlParams.debug;}

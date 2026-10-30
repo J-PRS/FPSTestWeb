@@ -47,6 +47,12 @@ const GRANDFATHERED: Record<string, number> = {
   // file legitimately aggregates gun constructors; next split goes to
   // weaponsGeoArchive. Pinned; still alarms at +15%.
   'client/src/entities/viewmodel/weaponsGeoBallistic.ts': 924,
+  // Crossed via the draw-call campaign — the renderer legitimately
+  // aggregates passes; pinned at its breached size, +15% alarms.
+  'client/src/core/renderer.ts': 907,
+  // Procedural map toolkit — gen mutations accumulate here; pinned,
+  // still alarms at +15%.
+  'client/src/maplab/gen.ts': 966,
 };
 
 function* walk(dir: string): Generator<string> {

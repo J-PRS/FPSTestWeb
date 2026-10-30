@@ -23,7 +23,7 @@ import { UdpLane } from './udpLane.js';
 const logger = new ChildLogger('NetworkManager');
 
 // Roster upsert fields + fresh-player defaults (optional fields default
-// undefined). The field list comes from the player kind's wire declaration —
+// undefined). The field list comes from the player kind's wire declaration -
 // every field the roster can carry is exactly spawn ∪ update ∪ roster, so a
 // new declared field patches through here without a second list to update.
 const ROSTER_FIELDS = declaredFieldNames(WORLD_MODEL['player']!, 'spawnFields', 'updateFields', 'rosterFields');
@@ -38,7 +38,7 @@ const ROSTER_DEFAULTS: Partial<RemotePlayerState> = {
 
 export interface RemotePlayerState {
   id: string;
-  /** Chosen display name (cosmetic — ids are still the identity). */
+  /** Chosen display name (cosmetic - ids are still the identity). */
   name?: string;
   internalId: string;
   position: { x: number; y: number; z: number };
@@ -48,31 +48,31 @@ export interface RemotePlayerState {
   health: number;
   ping?: number;
   ski?: number;
-  /** Held jet input from the tick frame — remote DR burns thrust on it. */
+  /** Held jet input from the tick frame - remote DR burns thrust on it. */
   jet?: number;
-  /** Status bitmask — STATUS_* bits (shared/status.ts). */
+  /** Status bitmask - STATUS_* bits (shared/status.ts). */
   status?: number;
   team?: TeamId;
-  /** Server-reported connect tier (join transport claim) — scoreboard NET.
+  /** Server-reported connect tier (join transport claim) - scoreboard NET.
    *  'ws+udp' composite when that session's udp lane is live. */
   transport?: string;
-  /** Armor tier from playerJoined/gameState — remote model scale cue. */
+  /** Armor tier from playerJoined/gameState - remote model scale cue. */
   armorClass?: string;
-  /** Server-known current weapon — draw the real gun before a shot edge. */
+  /** Server-known current weapon - draw the real gun before a shot edge. */
   weapon?: number;
-  /** Server-side sheep meter (bots only) — how pedestrian this bot is. */
+  /** Server-side sheep meter (bots only) - how pedestrian this bot is. */
   sheep?: number;
-  /** Wall-clock the position field last changed on the wire — the
+  /** Wall-clock the position field last changed on the wire - the
    *  stateHash [sim]-pos audit gates on it: a stale record vs a fresh
    *  snapshot is wire starvation, not replica divergence. */
   posAt?: number;
-  /** Headhunt held-token count — arrives via gameState row + playerHeld
+  /** Headhunt held-token count - arrives via gameState row + playerHeld
    *  edges; undefined outside headhunt (no badge drawn). */
   held?: number;
 }
 
 /**
- * Network manager — owns the transport (WebSocketConnection) directly.
+ * Network manager - owns the transport (WebSocketConnection) directly.
  * One transport, one protocol layer; the binary codec lives in shared/wire.ts.
  */
 export class NetworkManager {
@@ -80,13 +80,13 @@ export class NetworkManager {
   private localPlayerId: string;
   private sessionToken: string | null;
   private connected = false;
-  /** performance.now() at the live-join ack — parity counters need it to
+  /** performance.now() at the live-join ack - parity counters need it to
    *  skip join-race echoes (events that happened before prediction
    *  existed can't be "unpredicted"). */
   private connectedAtMs = 0;
   private tierRewarded = false;
   msSinceConnect(): number { return Date.now() - this.connectedAtMs; }
-  /** ms since the last non-inputSync inbound — wire starvation clock.
+  /** ms since the last non-inputSync inbound - wire starvation clock.
    *  Stamps/expiry horizons that outlive a silent wire must not expire
    *  mid-stall: the echo was delayed, not refused. */
   msSinceLiveRx(): number { return this.wireIn.lastLiveRxAt > 0 ? Date.now() - this.wireIn.lastLiveRxAt : Infinity; }
@@ -94,7 +94,7 @@ export class NetworkManager {
   joinPerk: (() => string) | null = null;
   joinClass: (() => string) | null = null;
   joinSkill: (() => string) | null = null;
-  /** REMOTE players only — local player is never stored here */
+  /** REMOTE players only - local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number) => void) | null = null;
   public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean) => void) | null = null;
@@ -102,16 +102,16 @@ export class NetworkManager {
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, age?: number, t?: number) => void) | null = null;
-  /** Server refused a claim — `health` is the authoritative resync value
+  /** Server refused a claim - `health` is the authoritative resync value
    *  (rejected predicted self-splash leaves client health divergent). */
   public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined, shotId?: string) => void) | null = null;
   public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
   public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, age?: number) => void) | null = null;
-  /** Belt-sticky combo — rider server id glued dead-center onto host id. */
+  /** Belt-sticky combo - rider server id glued dead-center onto host id. */
   public onProjRide: ((riderId: string, hostId: string) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
-  /** Headhunt held-count edge — roster patch already landed; this is the
+  /** Headhunt held-count edge - roster patch already landed; this is the
    *  local-player + HUD notification half (locals aren't in the map). */
   public onPlayerHeld: ((playerId: string, n: number) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean, yank?: boolean) => void) | null = null;
@@ -121,23 +121,23 @@ export class NetworkManager {
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
   public onMatchEnd: ((winner: TeamId | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
-  /** Signed match receipt — pairs with a demo for leaderboard submissions. */
+  /** Signed match receipt - pairs with a demo for leaderboard submissions. */
   public onMatchToken: ((token: import('../../../shared/resultToken.js').ResultToken) => void) | null = null;
-  /** Server-owned flag state (CTF rooms) — pos/state/carrier per team. */
+  /** Server-owned flag state (CTF rooms) - pos/state/carrier per team. */
   public onFlagUpdate: ((flags: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
-  /** Conquest lattice roster — owner/build/hp/core per node, whole grid. */
+  /** Conquest lattice roster - owner/build/hp/core per node, whole grid. */
   public onNodeUpdate: ((nodes: { id: number; gx: number; gz: number; pos: { x: number; y: number; z: number }; owner: 'alpha' | 'bravo' | 'neutral'; hp: number; maxHp: number; build: number; core: boolean }[]) => void) | null = null;
   public onMatchNotice: ((text: string, meta?: { multi?: number; actor?: string; ann?: string }) => void) | null = null;
-  /** Server anti-cheat flag — renders as a banner, not a disconnect. */
+  /** Server anti-cheat flag - renders as a banner, not a disconnect. */
   public onServerWarn: ((text: string) => void) | null = null;
   public onPickupSpawn: ((id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind, val?: number, vel?: { x: number; y: number; z: number }) => void) | null = null;
-  /** Powerup applied to US — server-owned buffs (armor/heal/timed). */
+  /** Powerup applied to US - server-owned buffs (armor/heal/timed). */
   public onBuff: ((msg: { kind: 'heal' | 'armor' | 'regen' | 'dd' | 'shield'; armor?: number; health?: number; until?: number }) => void) | null = null;
-  /** Server-owned heal echo (regen/mend/powerup tick in the sim) — keeps
+  /** Server-owned heal echo (regen/mend/powerup tick in the sim) - keeps
    *  local hp converged between discrete hit events. */
   public onYourHealth: ((health: number, armor?: number) => void) | null = null;
   /** Wall time of the last event-driven health write (playerHit or
-   *  yourHealth). The stateHash-diff heal defers to it — its snapshot is
+   *  yourHealth). The stateHash-diff heal defers to it - its snapshot is
    *  a tick-interval stale and must not resurrect an older hp over a
    *  fresher event (the 'hp drop' ping-pong that warns). */
   public lastHealthEventAt = 0;
@@ -145,28 +145,28 @@ export class NetworkManager {
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number> | undefined, winAt: number, deltaId?: string, deltaScore?: number, rm?: boolean) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
-  /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
+  /** Admin hot-reload - structures/arena changed mid-match; rebuild them. */
   public onMapUpdate: ((map: { mapName?: string; silent?: boolean; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] }) => void) | null = null;
-  // Server-owned deployables — rendered as dumb visuals client-side;
+  // Server-owned deployables - rendered as dumb visuals client-side;
   // the sim (firing/damage) stays authoritative on the server.
   public onDeploySpawn: ((id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, team?: TeamId) => void) | null = null;
   public onDeployGone: ((id: number) => void) | null = null;
-  /** Base asset shelled into a hulk / stood back up — wreck↔live visuals. */
+  /** Base asset shelled into a hulk / stood back up - wreck↔live visuals. */
   public onDeployDown: ((id: number, kind: DeployKind, team: string | undefined, respawnS: number) => void) | null = null;
   public onDeployUp: ((id: number) => void) | null = null;
-  /** Base sensor sweep — hostiles inside a mast's radius, relayed to its team. */
+  /** Base sensor sweep - hostiles inside a mast's radius, relayed to its team. */
   public onSensorPing: ((id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]) => void) | null = null;
-  /** Server sim fired a remote sentry — paint the rocket at the deployable. */
+  /** Server sim fired a remote sentry - paint the rocket at the deployable. */
   public onTurretShot: ((id: number, owner: string, targetId: string) => void) | null = null;
   public onSentryShot: ((id: number, owner: string, x: number, y: number, z: number) => void) | null = null;
   public onMortarShot: ((id: number, owner: string, vx: number, vy: number, vz: number) => void) | null = null;
-  /** Server-owned mine exploded — explosion FX only; damage flows via the
+  /** Server-owned mine exploded - explosion FX only; damage flows via the
    *  normal playerHit/knockback channel. */
   public onMineBoom: ((id: number, pos: { x: number; y: number; z: number }) => void) | null = null;
-  /** Server measured a hard landing on a shadow — remote slam dressing
+  /** Server measured a hard landing on a shadow - remote slam dressing
    *  (thud + dust); the owner already predicted theirs locally. */
   public onLanded: ((playerId: string, pos: { x: number; y: number; z: number }, impact: number) => void) | null = null;
-  /** Server's vitals table for a deployable — repair heals echo back
+  /** Server's vitals table for a deployable - repair heals echo back
    *  through this; armor is the repair-tool overheal pool. */
   public onDeployHp: ((id: number, hp: number, armor: number, src?: string) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
@@ -182,8 +182,8 @@ export class NetworkManager {
   public onCrawlRoster: ((data: Extract<ServerMessage, { type: 'crawlRoster' }>) => void) | null = null;
   public onRemoteTeleport: ((playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
   public lastPositionSendTime = 0;
-  private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
-  private readonly STILL_SEND_INTERVAL = 250; // 4Hz parked heartbeat — server sees identical truth
+  private readonly POSITION_SEND_INTERVAL = 50; // 20Hz - extrapolation covers the gap
+  private readonly STILL_SEND_INTERVAL = 250; // 4Hz parked heartbeat - server sees identical truth
   private lastSentState?: { px: number; py: number; pz: number; yaw: number; pitch: number };
   // Tick ARRIVAL cadence is the server loop's 50ms interval (20Hz).
   private readonly telemetry = new NetTelemetry(50);
@@ -192,24 +192,24 @@ export class NetworkManager {
   // --- Client-side prediction: sequence tracking + state history ---
   private sequenceCounter = 0;
   // (The old stateHistory map was deleted: written and pruned on ack but
-  // never read — reconciliation replays the input journal, not stored
+  // never read - reconciliation replays the input journal, not stored
   // snapshots.)
-  /** Inbound dispatch — owns the handler table, wire-id roster, tick
+  /** Inbound dispatch - owns the handler table, wire-id roster, tick
    *  decode pool, and per-room seq watermarks (see wireIn.ts). */
   private readonly wireIn = new WireIn(this);
-  /** Highest server tick applied — e2e probes wait on it to prove the
+  /** Highest server tick applied - e2e probes wait on it to prove the
    *  binary lane flows. Lives in wireIn after the dispatch extraction. */
   get lastTickSeq(): number { return this.wireIn.tickSeq; }
-  /** Contained wire-handler throws — the Alt+Q census reads it. */
+  /** Contained wire-handler throws - the Alt+Q census reads it. */
   get handlerThrows(): number { return this.wireIn.handlerThrows; }
-  /** Boot only: queue inbound until wireNetworkHandlers binds the deps —
+  /** Boot only: queue inbound until wireNetworkHandlers binds the deps -
    *  lets the socket fly during init without dropping world-bearing
    *  messages on unbound hooks. markWireReady flushes in order. */
   armWireQueue(): void { this.wireIn.armEarlyQueue(); }
   markWireReady(): void { this.wireIn.markReady(); }
   /** Reset the JSON-lane reconnect counter when the lane recovers. */
   resetJsonLaneCounter(): void { this.jsonLaneReconnects = 0; }
-  /** Server position correction — the dispatch lives in wireIn but is
+  /** Server position correction - the dispatch lives in wireIn but is
    *  routed through here so tests can wrap/count it. */
   handleCorrection(data: Parameters<WireIn['handleCorrection']>[0]): void {
     this.wireIn.handleCorrection(data);
@@ -221,7 +221,7 @@ export class NetworkManager {
 
   constructor() {
     armLoafDiag();
-    // Player ID + token persist in localStorage — a claimed identity
+    // Player ID + token persist in localStorage - a claimed identity
     // survives F5, browser restarts, and (with FPS_SECRET) server restarts.
     const stored = settings.get('fps-player-id');
     if (stored) {
@@ -230,7 +230,7 @@ export class NetworkManager {
       this.localPlayerId = `player_${Math.random().toString(36).slice(2, 11)}`;
       settings.set('fps-player-id', this.localPlayerId);
     }
-    // Session token issued by the server on first join — required to
+    // Session token issued by the server on first join - required to
     // reclaim a grace-period slot after F5/reconnect
     this.sessionToken = settings.get('fps-session-token') || null;
   }
@@ -242,36 +242,36 @@ export class NetworkManager {
   /** `makeTransport` swaps the wire: P2P passes a factory that builds a
    *  LoopbackTransport (host) or DataChannelTransport (guest) instead of
    *  a real WebSocket. Same callbacks, same protocol, different pipe. */
-  // True once connect() has been asked for a session — distinguishes
+  // True once connect() has been asked for a session - distinguishes
   // 'never went online' (offline mode) from 'online and currently down'
   // so the HUD can warn only in the second case.
   private onlineExpected = false;
-  // Silence watchdog — a black-holed socket (dead tunnel/proxy, half-open
+  // Silence watchdog - a black-holed socket (dead tunnel/proxy, half-open
   // TCP) keeps readyState OPEN and never fires close: no banner, no
   // reconnect, frozen game. Any inbound frame proves liveness; >STALL_MS
   // of nothing while "connected" forces a teardown + re-probe.
   private lastRxAt = 0;
   private stallTimer: ReturnType<typeof setInterval> | null = null;
-  /** Outer-reconnect backoff — a transport-level connect failure (dead
+  /** Outer-reconnect backoff - a transport-level connect failure (dead
    *  worker spawn, dead endpoint) must not hot-loop a 1Hz retry. */
   private retryAt = 0;
   private retryStreak = 0;
   private workerCrashStreak = 0;
   private crashWarned = false;
-  /** Set when isConnected() first reads false — the 10s arm before the
+  /** Set when isConnected() first reads false - the 10s arm before the
    *  outer respawn so an inner lane's own reconnect always wins. */
   private deadSince: number | null = null;
   private jsonLaneReconnects = 0;
   private static readonly STALL_MS = 4000;
   /** JSON events (ping/stateHash/hits/spawns) land several times a second
-   *  in any live room — 10s of silence while ticks flow is a dead lane,
+   *  in any live room - 10s of silence while ticks flow is a dead lane,
    *  never a quiet match. */
   private static readonly JSON_STALL_MS = 10_000;
   private lastUrl: string | null = null;
   private lastFactory: TransportFactory | undefined;
   private lastResolveUrl: (() => Promise<string | null>) | undefined;
 
-  /** Admission gate — invoked before EVERY dial (initial join + the
+  /** Admission gate - invoked before EVERY dial (initial join + the
    *  stall loop's retries). Deploy-check hook: a version bump at the
    *  connect boundary reloads before this client gets admitted. */
   public onPreConnect: (() => Promise<unknown> | unknown) | null = null;
@@ -285,7 +285,7 @@ export class NetworkManager {
     this.stallTimer ??= setInterval((): void => this.checkStall(), 1000);
     const dial = (): Promise<void> => new Promise((resolve, reject): void => {
       try {
-        // Default: the whole transport stack runs on the net worker —
+        // Default: the whole transport stack runs on the net worker -
         // Blink starves ws dispatch under input/render load, so the wire
         // lives on its own event loop. Tests/node have no Worker.
         const factory = makeTransport ?? ((cfg): TieredTransport | WorkerTransport => typeof Worker === 'undefined' ? new TieredTransport(cfg) : new WorkerTransport(cfg));
@@ -296,7 +296,7 @@ export class NetworkManager {
             this.connected = true;
             this.connectedAtMs = Date.now();
             this.tierRewarded = false;
-            // A fresh socket counts as alive until proven silent — the
+            // A fresh socket counts as alive until proven silent - the
             // inner transport's own reconnect doesn't re-stamp this, so
             // without it the stall watchdog inherited the DEAD lane's
             // silence window and reaped a healthy reseat seconds after
@@ -309,34 +309,34 @@ export class NetworkManager {
             logger.info(`Connected as ${this.localPlayerId}`);
             this.lastDownReason = null;
             // Queued reliable commands ride the live lane after the join
-            // (bounded 16 — a dead lane never earns an unbounded backlog).
+            // (bounded 16 - a dead lane never earns an unbounded backlog).
             for (const q of this.pendingCmds) {this.send(q);}
             this.pendingCmds = [];
             resolve();
           },
           onDisconnect: (code, reason): void => {
-            // 1008 = server rejected our session — drop stored identity so
+            // 1008 = server rejected our session - drop stored identity so
             // auto-reconnect joins fresh instead of looping on bad creds
             if (code === 1008) {this.resetIdentity(reason);}
             // A reasoned close ('server restarting', 'kicked') reads
-            // differently than a dead pipe — the banner names it.
+            // differently than a dead pipe - the banner names it.
             this.lastDownReason = code !== undefined && code >= 1000 && reason ? reason : null;
             logger.info('Disconnected', { code, reason });
             // Module-load failures (dead vite serving the page) fire a
-            // blank worker 'error' before any worker code runs — every
+            // blank worker 'error' before any worker code runs - every
             // outer reconnect spawns another doomed worker forever.
             this.workerCrashStreak = reason === 'net worker crashed' ? this.workerCrashStreak + 1 : 0;
             this.connected = false;
             this.wireIn.resetForReconnect(); // a reconnect starts fresh seq spaces
             this.inputs.reset(); // journaled inputs + change-only edge state die with the lane
-            // Claims sent on the dead lane are void — the server replays
+            // Claims sent on the dead lane are void - the server replays
             // in-flight hits, not lost ones; stamped claims classify as
             // transport-lost, not unconfirmed.
             this.ledger.dropAll(true);
-            // Same for the cadence metric — else the dead period counts as
+            // Same for the cadence metric - else the dead period counts as
             // missed ticks and loss reads ~100% right after rejoining.
             this.telemetry.reset();
-            // Drop the wire roster — kept entries pass the liveness gate
+            // Drop the wire roster - kept entries pass the liveness gate
             // on their stale ping, so their bodies freeze at the last
             // snapshot for the whole 60s stale window and their HUD dots
             // freeze with them. gameState re-seeds the map on reconnect.
@@ -351,29 +351,29 @@ export class NetworkManager {
           },
           onMessage: (data): void => this.wireIn.message(data),
           onBinaryMessage: (data): void => this.wireIn.binary(data),
-          // Worker-measured RTT — wire-honest (no main-loop queue delay).
+          // Worker-measured RTT - wire-honest (no main-loop queue delay).
           onRtt: (rtt): void => this.telemetry.onPong(Date.now() - rtt, Date.now()),
         });
         this.ws.connect(url);
-        // The join posts NOW — it parks in the tier transport's pending
+        // The join posts NOW - it parks in the tier transport's pending
         // queue and rides out AT connect instead of paying a starved
         // main-thread 'up' hop (~1.5-2.5s while the GLB parse owns main).
         // Ordering is preserved: join is the first frame queued, the
         // pendingCmds flush lands behind it. 'transport' is stamped by the
-        // tier at flush — the probe hasn't picked a lane yet.
+        // tier at flush - the probe hasn't picked a lane yet.
         this.ws.send(JSON.stringify(this.joinMsg()));
       } catch (error) {
         reject(error);
       }
     });
-    // Sync path when no gate is wired — a gate hook defers the dial by
+    // Sync path when no gate is wired - a gate hook defers the dial by
     // a microtask, and the stall-loop tests assert transports exist
     // synchronously.
     const pre = this.onPreConnect;
     return pre ? Promise.resolve(pre()).then(dial) : dial();
   }
 
-  /** Server says our stored identity is no good — burn id+token so the
+  /** Server says our stored identity is no good - burn id+token so the
    *  next connect joins fresh. Reached via close(1008) on WS and via the
    *  `sessionRejected` message on WT/RTC, where the close code is lost. */
   private resetIdentity(reason?: string): void {
@@ -382,13 +382,13 @@ export class NetworkManager {
     this.sessionToken = null;
     this.localPlayerId = `player_${Math.random().toString(36).slice(2, 11)}`;
     settings.set('fps-player-id', this.localPlayerId);
-    logger.info(`Session rejected (${reason}) — rejoining as ${this.localPlayerId}`);
+    logger.info(`Session rejected (${reason}) - rejoining as ${this.localPlayerId}`);
   }
 
   disconnect(): void {
     this.onlineExpected = false;
     this.lastRxAt = 0;
-    // The watchdog has nothing to watch while deliberately offline —
+    // The watchdog has nothing to watch while deliberately offline -
     // reconnect re-arms it via the ??= in connect().
     if (this.stallTimer !== null) { clearInterval(this.stallTimer); this.stallTimer = null; }
     this.ws?.disconnect();
@@ -399,7 +399,7 @@ export class NetworkManager {
 
   private checkStall(): void {
     // Outer reconnect driver: when the transport-level connect() fails
-    // outright — crashed/blocked worker spawn, a dead endpoint — nothing
+    // outright - crashed/blocked worker spawn, a dead endpoint - nothing
     // else retries (the inner lanes' own loops never started). Without
     // this, one watchdog tick converts a transient failure into a
     // permanently dead session (observed: offline emulation killed the
@@ -409,12 +409,12 @@ export class NetworkManager {
     // fresh outer connect (the parallel-join flood).
     if (!this.isConnected() && this.onlineExpected && this.lastUrl) {
       // A worker that never reports 'up' means the page's backend is
-      // gone — no transport retry can fix an unfetchable module; stop
+      // gone - no transport retry can fix an unfetchable module; stop
       // spawning doomed workers and say so once.
       if (this.workerCrashStreak >= 3) {
         if (!this.crashWarned) {
           this.crashWarned = true;
-          logger.error('net worker failed to spawn 3× — the page backend (vite) is unreachable; reload the tab to retry');
+          logger.error('net worker failed to spawn 3× - the page backend (vite) is unreachable; reload the tab to retry');
         }
         return;
       }
@@ -423,9 +423,9 @@ export class NetworkManager {
       if (now - this.deadSince >= 10_000 && now >= this.retryAt) {
         this.retryAt = now + Math.min(1000 * 2 ** this.retryStreak, 15_000);
         this.retryStreak += 1;
-        logger.info(`outer reconnect (transport dead ${Math.round((now - this.deadSince) / 1000)}s) — attempt ${this.retryStreak}`);
+        logger.info(`outer reconnect (transport dead ${Math.round((now - this.deadSince) / 1000)}s) - attempt ${this.retryStreak}`);
         const url = this.lastUrl;
-        // Kill the old transport before replacing it — an abandoned lane
+        // Kill the old transport before replacing it - an abandoned lane
         // keeps auto-reconnecting with these callbacks still bound: its
         // joins fight the live session for the seat and its close events
         // tear down roster/ledger state (the join-timeout flap loop).
@@ -437,14 +437,14 @@ export class NetworkManager {
     }
     this.deadSince = null;
     if (!this.isConnected() || !this.lastUrl) {return;}
-    // Hidden tabs throttle this interval AND starve the network pump —
+    // Hidden tabs throttle this interval AND starve the network pump -
     // the "silent" window is throttling, not a dead socket. A real death
     // still trips wt.closed/the pumps, and the visibility resync covers
     // whatever's left on regain.
     if (document.hidden) {
       // The position pump carries our liveness ping and stops with rAF,
       // so a hidden tab reads as 60s of silence and gets idle-reaped.
-      // Timers still fire (≥1Hz throttled) — keep the app-level ping
+      // Timers still fire (≥1Hz throttled) - keep the app-level ping
       // alive from here instead. If intensive throttling suspends timers
       // entirely the silence is real and the reap is right.
       const now = Date.now();
@@ -454,7 +454,7 @@ export class NetworkManager {
       }
       return;
     }
-    // Worker transports stamp liveness at the receive edge — a main-loop
+    // Worker transports stamp liveness at the receive edge - a main-loop
     // stall delays DRAIN, not arrival, and must not read as socket silence.
     const lastRx = Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0);
     const now2 = Date.now();
@@ -474,7 +474,7 @@ export class NetworkManager {
     const laneNeverOpened = this.wireIn.lastLiveRxAt === 0 && ticksFlowing && this.connectedAtMs > 0 && (now2 - this.connectedAtMs) > NetworkManager.JSON_STALL_MS;
     const laneDead = liveSilent > NetworkManager.JSON_STALL_MS || laneNeverOpened;
     if (!laneDead && (lastRx === 0 || silent < NetworkManager.STALL_MS)) {
-      // Healthy session proved itself past the warmup — decay the tier's
+      // Healthy session proved itself past the warmup - decay the tier's
       // bench streak once per connect so a later spurious flap doesn't
       // inherit punishment for sessions that were fine.
       const t = this.ws?.tier;
@@ -491,7 +491,7 @@ export class NetworkManager {
     // reconnects, force a full page reload - the transport is stuck in
     // a state no reconnect can fix.
     if (laneDead) {
-      // A zombie WT session never fires onDisconnect — the QUIC teardown
+      // A zombie WT session never fires onDisconnect - the QUIC teardown
       // lands server-side (E_SESSION_CLOSED) while the client session
       // still reads open, so the tier flap breaker can't see it. Bench
       // the tier or every forced re-probe re-picks the same dying lane.
@@ -524,17 +524,17 @@ export class NetworkManager {
     return this.connectionDown() ? this.lastDownReason : null;
   }
 
-  /** Sends that never left the pipe — connected() false or the inner
+  /** Sends that never left the pipe - connected() false or the inner
    *  lane dropped the frame. Sampled warn keeps Alt+Q honest about
    *  "I shot but nothing happened" windows (RTC flap, probe racing). */
   private sendDrops = 0;
 
-  /** Commands worth surviving a dead lane — time-critical claims (shots,
+  /** Commands worth surviving a dead lane - time-critical claims (shots,
    *  hits, inputMove) are dropped as before; replaying a 30s-old hit is a
    *  stale-claim bug, not a recovery. Bounded like Colyseus
    *  maxEnqueuedMessages so a dead lane can't queue forever. */
   private static readonly QUEUEABLE = new Set([
-    // respawn/throwFlag/switchRoom are deliberately NOT here — a queued
+    // respawn/throwFlag/switchRoom are deliberately NOT here - a queued
     // suicide or room-hop firing seconds later on the next connect is
     // worse than losing the intent.
     'chat', 'deploy', 'classUpdate', 'perkUpdate', 'resync', 'snapshotRequest',
@@ -542,7 +542,7 @@ export class NetworkManager {
   private pendingCmds: ClientMessage[] = [];
   private static readonly MAX_PENDING_CMDS = 16;
 
-  /** The join handshake payload — everything but 'transport', which the
+  /** The join handshake payload - everything but 'transport', which the
    *  tier stamps at pending-flush once the probe picks a lane. */
   private joinMsg(): ClientMessage {
     return {
@@ -550,15 +550,15 @@ export class NetworkManager {
       playerId: this.localPlayerId,
       name: settings.get('fps-name').trim() || undefined,
       token: this.sessionToken ?? undefined,
-      // Offset cursor — a reclaim carries the last reliable ev we
+      // Offset cursor - a reclaim carries the last reliable ev we
       // saw so the server replays only the missed frames.
       resumeSeq: this.sessionToken ? this.wireIn.evWatermark : undefined,
-      // We own a session veil — hold the body off-spawn until the
+      // We own a session veil - hold the body off-spawn until the
       // veil-drop sends 'ready' (or the 8s force timer).
       spawnHold: true,
       room: urlParams.room ?? undefined,
       // Creation hints: explicit ?mode wins, then the persisted
-      // join-spec — NOT fps-mode, which is the solo tab's pick
+      // join-spec - NOT fps-mode, which is the solo tab's pick
       // and mustn't leak into room mints (lobby ANY bug).
       mode: urlParams.get('mode') ?? readJoinSpec().mode,
       map: urlParams.map ?? readJoinSpec().map,
@@ -572,7 +572,7 @@ export class NetworkManager {
     };
   }
 
-  /** Outbound JSON event — typed against the shared protocol union. */
+  /** Outbound JSON event - typed against the shared protocol union. */
   private send(msg: ClientMessage): void {
     if (!this.ws?.connected()) {
       if (this.onlineExpected && NetworkManager.QUEUEABLE.has(msg.type)) {
@@ -585,7 +585,7 @@ export class NetworkManager {
     }
     if (NetworkManager.FAST_LANE.has(msg.type)) {this.sendFast(msg); return;}
     // Symmetric send-side check: the server checkIntent-warns a drifted
-    // intent AFTER it crossed the wire — running the same check here
+    // intent AFTER it crossed the wire - running the same check here
     // catches the omit at the call site instead.
     checkIntent(msg.type, msg as unknown as Record<string, unknown>);
     const s = JSON.stringify(msg);
@@ -594,7 +594,7 @@ export class NetworkManager {
     if (this.ws.send(s) === false) {this.noteDrop(msg.type);}
   }
 
-  /** wireIn hook: a tickSeq gap on the datagram lane — ask the server for
+  /** wireIn hook: a tickSeq gap on the datagram lane - ask the server for
    *  a full-record window instead of waiting out the ~750ms staggered
    *  full cadence. Throttled: a torn link nacks every frame otherwise. */
   private lastNackAt = 0;
@@ -606,7 +606,7 @@ export class NetworkManager {
     this.send({ type: 'tickNack' });
   }
 
-  /** wireIn hook: a counted-miss seq arrived late — cancel the loss. */
+  /** wireIn hook: a counted-miss seq arrived late - cancel the loss. */
   public onSeqReorder(count: number): void {
     this.telemetry.onSeqReorder(Date.now(), count);
   }
@@ -615,20 +615,20 @@ export class NetworkManager {
     // Contract scream: a transport that flips connected()→false without
     // first firing onDisconnect leaves the tier manager blind (the WT
     // 64KB-carry bug). If we still believe we're online while the lane
-    // reports dead, the transport violated the contract — say so loudly.
+    // reports dead, the transport violated the contract - say so loudly.
     if (this.connected && this.ws && !this.ws.connected()) {
-      logger.error(`lane went dead with NO disconnect event — transport contract violation`, { tier: this.ws.tier });
+      logger.error(`lane went dead with NO disconnect event - transport contract violation`, { tier: this.ws.tier });
       this.connected = false; // let the HUD stall-watchdog see the drop
     }
 this.sendDrops += 1;
-    // First drop is loud; repeats get sampled — a dead lane would
+    // First drop is loud; repeats get sampled - a dead lane would
     // otherwise spam the buffer once per position frame.
     if (this.sendDrops === 1 || (this.sendDrops & 31) === 0) {
-      logger.warn(`send dropped x${this.sendDrops} — no live lane`, { lastType: type });
+      logger.warn(`send dropped x${this.sendDrops} - no live lane`, { lastType: type });
     }
   }
 
-  /** inputMove goes binary on the same lane as position reports — the
+  /** inputMove goes binary on the same lane as position reports - the
    *  edge journal lands ~50ms fresher than the JSON stream (edge timing
    *  is replay fidelity for the server shadow). */
   private sendInputMsg(m: ClientMessage): void {
@@ -640,7 +640,7 @@ this.sendDrops += 1;
   }
 
   /** Claim/intent types that gain real latency by riding the binary
-   *  lane (stream-2/datagram on WT) instead of the JSON stream — the
+   *  lane (stream-2/datagram on WT) instead of the JSON stream - the
    *  position lane's transit, ~50ms earlier arrival. They stay inside
    *  the same ordered lane as each other, so intra-lane order is
    *  preserved; control/chat/room-hops keep the JSON stream. */
@@ -651,19 +651,19 @@ this.sendDrops += 1;
   ]);
 
   /** A claim that wants the fast lane: JSON-over-binary on the same
-   *  lane as position reports — the WIRE_JSON frame decodes into the
+   *  lane as position reports - the WIRE_JSON frame decodes into the
    *  ordinary text path server-side. */
   private sendFast(msg: ClientMessage): void {
     if (!this.ws?.connected()) { this.noteDrop(msg.type); return; }
     checkIntent(msg.type, msg as unknown as Record<string, unknown>);
-    // Native binary claims skip the JSON text entirely — bounded-read
+    // Native binary claims skip the JSON text entirely - bounded-read
     // decoders server-side double as validation, so this lane lands in
     // the same trusted dispatch as position frames.
     if (msg.type === 'shotFired') {
       this.txBytes += 45;
       recWireOut('bin:16');
       // Field ABSENCE is semantic (a bare intent's missing dir must not
-      // spawn) — pass through untouched, flags carry presence.
+      // spawn) - pass through untouched, flags carry presence.
       this.sendBinary(encodeShot({ weaponType: msg.weaponType ?? 0, pos: msg.pos, dir: msg.dir, shotId: msg.shotId, fireAt: msg.fireAt }));
       return;
     }
@@ -679,15 +679,15 @@ this.sendDrops += 1;
     this.sendBinary(encodeWireJson(s));
   }
 
-  /** Outbound binary frame — pre-encoded by shared/wire.ts. On RTC this
+  /** Outbound binary frame - pre-encoded by shared/wire.ts. On RTC this
    *  rides the 'game' lane (unordered, maxRetransmits:2): bounded retries
-   *  cover jitter without head-of-line stalling the association — the
+   *  cover jitter without head-of-line stalling the association - the
    *  reliable lane's retransmit queue was the recurring 4-5s silence.
    *  A rare real loss just widens the judge's time-gap tolerance; stale
    *  frames self-reject by seq, so disorder is free. WS/WT unchanged. */
   private sendBinary(data: Uint8Array): void {
     // Native-shell UDP lane: volatile frames ride the loopback shim →
-    // raw datagrams. WIRE_JSON is reliable traffic in binary clothing —
+    // raw datagrams. WIRE_JSON is reliable traffic in binary clothing -
     // the server drops it on the datagram lane, so it must stay on ws.
     if (data[1] !== WIRE_JSON && this.udpLane.send(data)) {
       this.txBytes += data.length;
@@ -702,7 +702,7 @@ this.sendDrops += 1;
 
   /** Byte counters → smoothed B/s pair, read by the backquote perf HUD.
    *  tx is exact (we build the buffers); rx counts binary exactly and
-   *  approximates JSON events by re-stringify — they're sparse, so the
+   *  approximates JSON events by re-stringify - they're sparse, so the
    *  cost is nothing and the number is close enough for a debug readout. */
   private txBytes = 0;
   private rxBytes = 0;
@@ -712,7 +712,7 @@ this.sendDrops += 1;
   private bwUp = 0;
   private bwDown = 0;
   private ledger = new ClaimLedger();
-  /** Native-shell volatile lane — adopted when gameState carries udp. */
+  /** Native-shell volatile lane - adopted when gameState carries udp. */
   private readonly udpLane = new UdpLane();
   private inputs = new InputStream();
 
@@ -721,7 +721,7 @@ this.sendDrops += 1;
     this.sweepLedgers(now);
     if (this.bwT === 0) {
       // First read ever. The per-frame poll lives in the perf HUD's counts
-      // callback, which early-returns while that panel is hidden — so the
+      // callback, which early-returns while that panel is hidden - so the
       // Alt+Q dump is usually the first caller and was showing 0.0/0.0 on
       // a live link. Report the session average instead.
       this.bwT = now;
@@ -742,7 +742,7 @@ this.sendDrops += 1;
   }
 
   /** Expire stale claim/damage-echo ledger entries. The HUD's bandwidth
-   *  call used to be the only driver — hidden HUD meant no sweeps, so
+   *  call used to be the only driver - hidden HUD meant no sweeps, so
    *  "unconfirmed" desync telemetry was inert in normal play. sendPosition
    *  now drives it at ~1Hz instead. */
   private lastLedgerSweep = 0;
@@ -752,7 +752,7 @@ this.sendDrops += 1;
     this.ledger.sweep(now, { pingMs: this.telemetry.ping, tier: this.ws?.tier,
       resend: (m): void => { if (this.isConnected()) { this.send(m as ClientMessage); } } });
     sweepDamageEchoes(now, Math.min(Math.max(0, this.msSinceLiveRx() - 100), 2000));
-    // shotFired carries no claimSeq — its dedupe is shotId — so the claim
+    // shotFired carries no claimSeq - its dedupe is shotId - so the claim
     // ledger can't resend it. A datagram-dropped fire intent leaves the
     // predicted shell unborn (parity 'srvAt:none') with only reconnect
     // replay to recover it; one in-session resend past ~2×RTT closes that
@@ -769,17 +769,17 @@ this.sendDrops += 1;
     }
   }
 
-  /** Probe counter — soaks count in-session fire-intent resends (distinct
+  /** Probe counter - soaks count in-session fire-intent resends (distinct
    *  from intentReplays, which only fires on reclaim). */
   intentResends = 0;
 
-  /** Ring of recent health-affecting events — read by the desync dump so a
+  /** Ring of recent health-affecting events - read by the desync dump so a
    *  hash mismatch says WHICH event diverged, not just that one did. */
   recentEvents(): readonly { type: string; t: number; detail: string }[] {
     return this.wireIn.recentEvents();
   }
 
-  // ---- WireIn host surface — the whole back-channel the dispatcher
+  // ---- WireIn host surface - the whole back-channel the dispatcher
   // needs (roster store, ledgers/journal, telemetry, session state).
 
   /** Any inbound frame proves liveness + feeds the byte counter. */
@@ -788,7 +788,7 @@ this.sendDrops += 1;
     this.rxBytes += bytes;
   }
 
-  /** Tick-arrival cadence — host loopback delivers ticks in per-frame
+  /** Tick-arrival cadence - host loopback delivers ticks in per-frame
    *  bursts, which would read as fake packet loss in the gap tracker. */
   tickArrived(): void {
     if (this.ws?.tier !== 'host') {this.telemetry.onTickArrival(Date.now());}
@@ -798,14 +798,14 @@ this.sendDrops += 1;
     this.telemetry.onPong(timestamp, Date.now());
   }
 
-  /** Server-clock offset estimate — the 'ping' probe's timestamp is the
+  /** Server-clock offset estimate - the 'ping' probe's timestamp is the
    *  server's wall clock, so stamp + rtt/2 approximates server-now.
    *  fireAt claims ride on this: the server measures (arrival − fireAt)
    *  as the claim's true uplink transit instead of an EMA guess. */
   private clockOffset = 0;
   private clockSynced = false;
 
-  /** Server-side RTT probe — echo verbatim; the timestamp is the
+  /** Server-side RTT probe - echo verbatim; the timestamp is the
    *  server's clock, not ours. */
   pingReceived(timestamp: number): void {
     this.send({ type: 'pong', timestamp });
@@ -820,7 +820,7 @@ this.sendDrops += 1;
     }
   }
 
-  /** Estimated server wall-clock right now — undefined until the first
+  /** Estimated server wall-clock right now - undefined until the first
    *  probe lands (claims simply omit fireAt before that). */
   serverNowMs(): number | undefined {
     return this.clockSynced ? Date.now() + this.clockOffset : undefined;
@@ -836,7 +836,7 @@ this.sendDrops += 1;
 
   ackPositionSeq(_seq: number): void {
     // No-op: position history was dead bookkeeping (see note at field
-    // site). Kept as the wire seam — wireIn calls it on every ack frame.
+    // site). Kept as the wire seam - wireIn calls it on every ack frame.
   }
 
   confirmClaimHit(targetId: string, shotId?: string): void {
@@ -856,7 +856,7 @@ this.sendDrops += 1;
     this.resyncQuietUntil = 0;
   }
 
-  /** Server-issued session token — persisted so a reconnect can reclaim
+  /** Server-issued session token - persisted so a reconnect can reclaim
    *  the grace-period seat. */
   acceptSessionToken(token: string): void {
     this.sessionToken = token;
@@ -867,7 +867,7 @@ this.sendDrops += 1;
     this.resetIdentity(reason);
   }
 
-  /** gameState's authoritative roster — replaces, never merges (v3 ids
+  /** gameState's authoritative roster - replaces, never merges (v3 ids
    *  and per-room state would alias across a merge). */
   remoteReset(players: GameStatePlayer[] | undefined): void {
     this.players.clear();
@@ -884,7 +884,7 @@ this.sendDrops += 1;
   // doesn't carry: merge order is patch → existing → default, so partial
   // updates (hit = health only) never stomp unrelated roster state.
   //
-  // Owns CREATE too — call only from membership feeds (tickUpdate, joined,
+  // Owns CREATE too - call only from membership feeds (tickUpdate, joined,
   // respawn, roster/snapshot heal). One-off edges (hit, kill, teamUpdate)
   // must use patchRemotePlayer: minting on an edge leaves phantom roster
   // entries when the edge outlives its member (§2.165/§2.168).
@@ -893,17 +893,17 @@ this.sendDrops += 1;
     const existing = this.players.get(playerId);
     // Mutate in place: a fresh object per player per tick was the
     // biggest steady-state allocation on the 20Hz wire path. Merge
-    // order is unchanged — patch → existing → default.
+    // order is unchanged - patch → existing → default.
     const next = existing ?? ({ id: playerId } as RemotePlayerState);
     if (!existing) {
-      // Vec defaults are shared literals — clone or the first in-place
+      // Vec defaults are shared literals - clone or the first in-place
       // update corrupts every roster entry built after this one.
       next.position = Object.assign({}, ROSTER_DEFAULTS.position!);
       next.rotation = Object.assign({}, ROSTER_DEFAULTS.rotation!);
       next.velocity = Object.assign({}, ROSTER_DEFAULTS.velocity!);
     }
     for (const k of ROSTER_FIELDS) {
-      // Vec fields are handled below — storing the patch ref would alias
+      // Vec fields are handled below - storing the patch ref would alias
       // the decode pool (a pooled slot tracks whichever player decoded
       // LAST), so they fill the entry's own sub-objects instead.
       if (k === 'position' || k === 'rotation' || k === 'velocity') {continue;}
@@ -911,14 +911,14 @@ this.sendDrops += 1;
       (next as unknown as Record<string, unknown>)[k] = patch[key] ?? next[key] ?? ROSTER_DEFAULTS[key];
     }
     // NaN components from any edge (join/respawn/roster heal) would
-    // poison the stored row forever — drop the whole vec, not the player.
+    // poison the stored row forever - drop the whole vec, not the player.
     if (patch.position && Number.isFinite(patch.position.x + patch.position.y + patch.position.z)) { next.position.x = patch.position.x; next.position.y = patch.position.y; next.position.z = patch.position.z; next.posAt = Date.now(); }
     if (patch.rotation && Number.isFinite(patch.rotation.yaw + patch.rotation.pitch)) { next.rotation.yaw = patch.rotation.yaw; next.rotation.pitch = patch.rotation.pitch; }
     if (patch.velocity && Number.isFinite(patch.velocity.x + patch.velocity.y + patch.velocity.z)) { next.velocity.x = patch.velocity.x; next.velocity.y = patch.velocity.y; next.velocity.z = patch.velocity.z; }
     if (!existing) {this.players.set(playerId, next);}
   }
 
-  // Patch-in-place-or-drop for one-off edges — returns false when the
+  // Patch-in-place-or-drop for one-off edges - returns false when the
   // roster holds no such member (edge for a departed/never-joined player),
   // so callers can't manufacture phantom entries by accident.
   patchRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): boolean {
@@ -928,7 +928,7 @@ this.sendDrops += 1;
   }
 
   /** Wire-feed seam for recorded streams (.rec): pushes one message
-   *  through the exact live dispatch path — handlers can't tell the
+   *  through the exact live dispatch path - handlers can't tell the
    *  difference between a capture and a socket. Dev replay only. */
   replayWireMessage(data: ServerMessage | Uint8Array): void {
     this.wireIn.dispatch(data);
@@ -939,7 +939,7 @@ this.sendDrops += 1;
    * Send player position to server with rate limiting (20Hz binary frame)
    */
   /**
-   * Declared discontinuity — the position jump (warp, respawn) is
+   * Declared discontinuity - the position jump (warp, respawn) is
    * intentional. Server reseats its plausibility anchor instead of
    * rejecting the move and rubber-banding us.
    */
@@ -954,8 +954,8 @@ this.sendDrops += 1;
     const now = Date.now();
 
     // Still-throttle: a truly parked player (no pos/vel/aim change) earns
-    // a 4Hz heartbeat instead of 20Hz — identical truth, ~5x less server
-    // reconcile/rewind work per idle player. Any wiggle (incl. aim —
+    // a 4Hz heartbeat instead of 20Hz - identical truth, ~5x less server
+    // reconcile/rewind work per idle player. Any wiggle (incl. aim -
     // standing snipers still aim) returns to full rate instantly.
     const still = this.lastSentState !== undefined
       && Math.hypot(position.x - this.lastSentState.px, position.y - this.lastSentState.py, position.z - this.lastSentState.pz) < 0.05
@@ -988,14 +988,14 @@ this.sendDrops += 1;
     this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping, this.inputs.seq,
       held ? { forward: held.forward, right: held.right, jump: held.jump, ski: held.ski, jet: held.jet ?? 0 } : undefined));
 
-    // Send ping if interval elapsed — worker transports own their own
+    // Send ping if interval elapsed - worker transports own their own
     // probe (measured off the main thread, so stall can't inflate it).
     if (!this.ws?.ownsPing && now - this.lastPingSendTime >= this.PING_INTERVAL) {
       this.lastPingSendTime = now;
       this.send({ type: 'ping', timestamp: now });
     }
 
-    // Client ops uplink ~0.1Hz — rides the position cadence so it only
+    // Client ops uplink ~0.1Hz - rides the position cadence so it only
     // ever fires while a game is actually streaming (no lobby noise).
     if (now - this.lastStatsSendTime >= NetworkManager.STATS_INTERVAL) {
       this.lastStatsSendTime = now;
@@ -1016,7 +1016,7 @@ this.sendDrops += 1;
     }
   }
 
-  /** GameLoop feeds live perf numbers — the uplink above can't read
+  /** GameLoop feeds live perf numbers - the uplink above can't read
    *  the perf HUD itself without an import cycle the other direction. */
   statsSource: (() => { fps: number; jsMs: number; renderLagMs?: number; renderLag?: Record<string, number>; starve?: number; starveMs?: number }) | null = null;
   private lastStatsSendTime = 0;
@@ -1024,20 +1024,20 @@ this.sendDrops += 1;
 
   /**
    * Send input move for client-side prediction.
-   * Player calls this every frame — we only transmit on actual input change,
+   * Player calls this every frame - we only transmit on actual input change,
    * rate-limited to the position tick rate. Yaw/pitch already ride in the
    * binary position frame, so the rotation payload only matters when the
    * input bits themselves change.
    */
   sendInputMove(input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }): void {
-    // Ungated sends during the connect window counted as drops — the
+    // Ungated sends during the connect window counted as drops - the
     // journal keeps the entry regardless, so skipping the fast path
     // loses nothing (inputSync re-requests on the server's word).
     if (!this.isConnected()) {return;}
     this.inputs.sendMove(input, rotation, (m): void => this.sendInputMsg(m));
   }
 
-  /** Journal entries with seq > `after` — what the server hadn't consumed
+  /** Journal entries with seq > `after` - what the server hadn't consumed
    *  when it issued a correction. Also prunes consumed entries. */
   inputsAfter(after: number, gapMs = 0): { t: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }[] {
     return this.inputs.inputsAfter(after, gapMs);
@@ -1052,10 +1052,10 @@ this.sendDrops += 1;
 
   /** Desync-checker heal: adopt the server's health for a remote roster
    *  entry. Routes through upsertRemotePlayer so the same field/defaults
-   *  bookkeeping applies as a wire update. Health only — position stays
+   *  bookkeeping applies as a wire update. Health only - position stays
    *  correction-owned, isDead stays event-owned. */
   healRemoteHealth(playerId: string, health: number): void {
-    // upsert would CREATE a stub for an unknown id — a heal must never
+    // upsert would CREATE a stub for an unknown id - a heal must never
     // materialize a phantom roster row.
     if (!this.players.has(playerId)) {return;}
     this.upsertRemotePlayer(playerId, { health });
@@ -1064,7 +1064,7 @@ this.sendDrops += 1;
   /** Desync-checker heal for LIVENESS: a killed/respawned event lost on
    *  the wire leaves the remote's isDead permanently wrong (roster health
    *  heals but the corpse flag is event-owned). The snapshot diff is the
-   *  safety net — server isDead wins outright; the caller mirrors it into
+   *  safety net - server isDead wins outright; the caller mirrors it into
    *  the RemotePlayer entity (respawn/playDeath visuals). Returns the
    *  flip direction so the caller knows which visual to run. */
   healRemoteLife(playerId: string, isDead: boolean, health: number, position?: { x: number; y: number; z: number }): 'revived' | 'killed' | null {
@@ -1076,21 +1076,21 @@ this.sendDrops += 1;
     return isDead ? 'killed' : 'revived';
   }
 
-  /** Single AOE message — weaponType resolves server-side via the shared
+  /** Single AOE message - weaponType resolves server-side via the shared
    *  weapon table (WEAPONS in shared/weapons.ts). projectileId/airtime bind
    *  the blast to a tracked projectile so the server can validate the
-   *  trajectory — skill AOEs (slam) send neither and are position-checked
+   *  trajectory - skill AOEs (slam) send neither and are position-checked
    *  against the player instead. */
   sendAOEShot(a: {
     position: { x: number; y: number; z: number }; weaponType: number;
     excludeTargetId?: string | null; projectileId?: string | null;
     airtime?: number; power?: number; directHit?: boolean; shotId?: string;
   }): void {
-    if (this.authoritySims()) { return; } // dedicated sims outcomes — the claim would only earn a refused ack
+    if (this.authoritySims()) { return; } // dedicated sims outcomes - the claim would only earn a refused ack
     if (performance.now() < this.resyncQuietUntil) { noteMutedClaim(); return; } // same resync-gap mute as sendShot
-    if (!this.isConnected()) {return;} // dead lane — a stamp here mints a phantom ledger entry
+    if (!this.isConnected()) {return;} // dead lane - a stamp here mints a phantom ledger entry
     // Victim-named claims (beam tics, direct-hit blasts) ride the same
-    // confirm ledger shots use — keyed per victim so a held beam is one
+    // confirm ledger shots use - keyed per victim so a held beam is one
     // slot, not a map entry per tic. Splash claims with no named target
     // can't confirm by target and stay unledgered by design.
     if (a.excludeTargetId && a.excludeTargetId !== 'local') {
@@ -1099,7 +1099,7 @@ this.sendDrops += 1;
     this.send(Object.assign({}, a, {excludeTargetId: a.excludeTargetId ?? null,projectileId: a.projectileId ?? undefined,fireAt: this.serverNowMs(),type: 'aoeShot' as const}));
   }
 
-  /** Slam landing intent — the server derives blast power from its own
+  /** Slam landing intent - the server derives blast power from its own
    *  velocity shadow; only the landing spot crosses the wire. */
   sendSlam(position: { x: number; y: number; z: number }): void {
     if (!this.isConnected()) {return;}
@@ -1118,9 +1118,9 @@ this.sendDrops += 1;
     this.send({ type: 'jetpack', position });
   }
 
-  /** Cosmetic fire relay — hitscan kinds (fan/beam) leave no projectile,
+  /** Cosmetic fire relay - hitscan kinds (fan/beam) leave no projectile,
    *  so this tells the server to paint muzzle audio/visual on observers.
-   *  For SERVER_SIMMED_WEAPONS it's the fire intent — pos/shotId help the
+   *  For SERVER_SIMMED_WEAPONS it's the fire intent - pos/shotId help the
    *  spawn hint + echo binding; the server derives truth itself. */
   sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; vel?: { x: number; y: number; z: number }; shotId?: string }): void {
     if (!this.connected) {return;}
@@ -1128,7 +1128,7 @@ this.sendDrops += 1;
     this.send(msg);
     // Journal for the post-reclaim replay: a socket that dies while the
     // intent is in flight leaves a predicted shell the server never
-    // spawned — local hit prediction with no adjudication. ~3s window,
+    // spawned - local hit prediction with no adjudication. ~3s window,
     // server dedupes by shotId, room-scoped so a hop can't replay a
     // stale shell into the wrong room.
     this.claimIntents.push({ msg, t: performance.now(), room: this.netRoom });
@@ -1136,24 +1136,24 @@ this.sendDrops += 1;
   }
 
   /** Recent predicted intents eligible for post-reclaim replay
-   *  (shotFired/deploy/slam — the claims the client already acted on
-   *  locally). Bounded — a dead lane never earns an unbounded intent
+   *  (shotFired/deploy/slam - the claims the client already acted on
+   *  locally). Bounded - a dead lane never earns an unbounded intent
    *  backlog either. Replays are safe because the server dedupes by
    *  shotId (shots) or (type,claimSeq) (stamped claims). */
   private claimIntents: { msg: ClientMessage; t: number; room?: string; resent?: boolean }[] = [];
-  /** Room the last gameState seated us in — journal entries fire under it. */
+  /** Room the last gameState seated us in - journal entries fire under it. */
   private netRoom: string | undefined;
   /** Replay window must cover the real reclaim path: socket-death
-   *  detection + grace + rejoin roundtrip routinely runs past 3s —
+   *  detection + grace + rejoin roundtrip routinely runs past 3s -
    *  a window shorter than the reclaim never actually replays. */
   private static readonly FIRE_REPLAY_MS = 10_000;
 
-  /** Called by wireIn's gameState handler — the seat is (re)established.
+  /** Called by wireIn's gameState handler - the seat is (re)established.
    *  Resends fire intents the dead lane may have lost; entries from a
    *  different room (a hop) or older than the window are dropped. */
   replayFireIntents(room?: string, udp?: { token: string; port: number }): void {
     this.netRoom = room;
-    // A native-shell server offered the volatile lane — adopt it. ws
+    // A native-shell server offered the volatile lane - adopt it. ws
     // stays the control lane; only volatile binary reroutes.
     if (udp) {this.udpLane.adopt(udp, (b): void => this.wireIn.binary(b));}
     const entries = this.claimIntents;
@@ -1166,7 +1166,7 @@ this.sendDrops += 1;
     }
   }
 
-  /** Probe counter — soaks assert the reclaim replay actually fired
+  /** Probe counter - soaks assert the reclaim replay actually fired
    *  (a pass reading only shell fates can't tell replay from luck). */
   intentReplays = 0;
 
@@ -1175,7 +1175,7 @@ this.sendDrops += 1;
     this.send({ type: 'projectileDestroy', projectileId, shotId });
   }
 
-  /** Deployable plant claim — sent when the pod lands and seats, so the
+  /** Deployable plant claim - sent when the pod lands and seats, so the
    *  position is the settled one the server will enforce caps/TTL on. */
   sendDeploy(kind: DeployKind, position: { x: number; y: number; z: number }, vel?: { x: number; y: number; z: number }): void {
     if (!this.isConnected()) {return;}
@@ -1186,7 +1186,7 @@ this.sendDrops += 1;
     if (this.claimIntents.length > 16) {this.claimIntents.shift();}
   }
 
-  /** Repair claim — only the target id crosses the wire; the server
+  /** Repair claim - only the target id crosses the wire; the server
    *  re-derives range, LOS, team, heal amount, and pacing itself. */
   sendRepair(targetId: number): void {
     if (!this.isConnected() || this.authoritySims()) { return; }
@@ -1195,7 +1195,7 @@ this.sendDrops += 1;
     this.send(msg);
   }
 
-  /** Instant-skill ante mirror — skills.ts already spent the energy
+  /** Instant-skill ante mirror - skills.ts already spent the energy
    *  locally; the server applies the same drain to its shadow tank. */
   sendSkillUse(skill: string): void {
     if (!this.isConnected()) {return;}
@@ -1204,27 +1204,27 @@ this.sendDrops += 1;
     this.send(msg);
   }
 
-  /** Loadout class pick mid-match — the server banks it for the next
+  /** Loadout class pick mid-match - the server banks it for the next
    *  respawn (same rule the client applies locally). */
   sendClassUpdate(armorClass: string): void {
     if (!this.connected) {return;}
     this.send({ type: 'classUpdate', armorClass });
   }
 
-  /** Perk pick mid-match — same respawn-bank rule as the class pick. */
+  /** Perk pick mid-match - same respawn-bank rule as the class pick. */
   sendPerkUpdate(perk: string): void {
     if (!this.connected) {return;}
     this.send({ type: 'perkUpdate', perk });
   }
 
-  /** Post-resync claim mute — see sendResync. */
+  /** Post-resync claim mute - see sendResync. */
   private resyncQuietUntil = 0;
 
-  /** Offline authority — when there's no server, damage/heal claims apply
+  /** Offline authority - when there's no server, damage/heal claims apply
    *  locally through this hook instead of being dropped on the floor. */
   localAuthority: { envDamage(amount: number): void; heal(amount: number): void; respawn?(): void } | null = null;
 
-  /** Deliberate respawn (K) — the server owns the kill; offline falls
+  /** Deliberate respawn (K) - the server owns the kill; offline falls
    *  back to the local death path. `hold` (the L bind) parks the corpse:
    *  no auto-respawn until a plain dead-state press releases it. */
   sendRespawn(hold = false): void {
@@ -1232,28 +1232,28 @@ this.sendDrops += 1;
     this.send({ type: 'respawn', hold: hold || undefined });
   }
 
-  /** Flag toss claim (G) — server resolves the arc. Offline the caller
+  /** Flag toss claim (G) - server resolves the arc. Offline the caller
    *  routes to the local flag sims (FlagRunBridge/CtfFlags) instead. */
   sendThrowFlag(): void {
     if (!this.connected) {return;}
     this.send({ type: 'throwFlag' });
   }
 
-  /** Self-inflicted environment damage (crawler pounce, etc.) — the server
+  /** Self-inflicted environment damage (crawler pounce, etc.) - the server
    *  clamps and applies it, then broadcasts the authoritative health. */
   sendEnvironmentDamage(amount: number, attacker?: string): void {
     if (!this.connected) { this.localAuthority?.envDamage(amount); return; }
-    // Every self-reported damage claim logs — this channel carries blast
+    // Every self-reported damage claim logs - this channel carries blast
     // self-splash, creature bites, and bot melee, so the buffer answers
     // "did the client even claim it?" before any server-side question.
-    if (!this.isConnected()) {return;} // lane dead — don't mint a phantom stamp
+    if (!this.isConnected()) {return;} // lane dead - don't mint a phantom stamp
     logger.info(`envDamage claim: ${Math.round(amount * 10) / 10}`, { attacker });
     const msg = { type: 'environmentDamage' as const, amount, attacker, claimSeq: undefined as number | undefined };
     msg.claimSeq = this.ledger.stamp('environmentDamage', false, msg);
     this.send(msg);
   }
 
-  /** Client-claimed heal (nugget pickup) — keeps server health the truth. */
+  /** Client-claimed heal (nugget pickup) - keeps server health the truth. */
   sendHeal(amount: number): void {
     if (!this.connected) { this.localAuthority?.heal(amount); return; }
     if (!this.isConnected()) {return;}
@@ -1263,7 +1263,7 @@ this.sendDrops += 1;
   }
 
   /** Hit claim on a server-owned creature (netDriven ball). kx/ky/kz is the
-   *  impulse the shot imparted — server clamps magnitude and rebroadcasts
+   *  impulse the shot imparted - server clamps magnitude and rebroadcasts
    *  the new segment so every client sees the same shove. */
   sendCrawlerHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
     if (this.authoritySims() || !this.isConnected()) { return; }
@@ -1290,7 +1290,7 @@ this.sendDrops += 1;
     this.send({ type: 'snapshotRequest' });
   }
 
-  /** Spawn gate: the server holds the body off-world until this lands —
+  /** Spawn gate: the server holds the body off-world until this lands -
    *  fires at session-veil drop (stable frames or the 8s force timer). */
   sendReady(): void {
     this.send({ type: 'ready' });
@@ -1301,13 +1301,13 @@ this.sendDrops += 1;
    *  rewinding the backgrounded interval. */
   sendResync(): void {
     // Position-dependent claims (shot/aoeShot) are muted until the
-    // reply snaps us onto server truth — the cap is a fallback if the
+    // reply snaps us onto server truth - the cap is a fallback if the
     // replay never arrives.
     this.resyncQuietUntil = performance.now() + 5000;
     this.send({ type: 'resync' });
   }
 
-  /** Discard the prediction journal — a correction arriving after this
+  /** Discard the prediction journal - a correction arriving after this
    *  hard-snaps to the echoed state instead of replaying seconds of
    *  queued inputs at once (the "rewinding" storm after alt-tab). */
   dropInputJournal(): void {
@@ -1318,7 +1318,7 @@ this.sendDrops += 1;
     this.send({ type: 'chat', text, team: team || undefined, vgs });
   }
 
-  /** Mid-match room hop — the server re-seats this session and answers
+  /** Mid-match room hop - the server re-seats this session and answers
    *  with a fresh gameState, which the normal (re)connect path rebuilds
    *  from. Returns false when there's no live socket (caller falls back
    *  to a reload join). */
@@ -1344,7 +1344,7 @@ this.sendDrops += 1;
   }
 
   /**
-   * The authority runs the shared sims (RoomProjectiles/creature sims) —
+   * The authority runs the shared sims (RoomProjectiles/creature sims) -
    * claims/intents only make sense against it. A P2P host embeds the
    * same server modules but deliberately carries no roster sims, so
    * peers fall back to the claim lanes the host can still adjudicate
@@ -1357,7 +1357,7 @@ this.sendDrops += 1;
 
   /**
    * Narrower than authoritySims: the authority runs the WEAPON sims
-   * (RoomProjectiles + beamSweep). P2P hosts qualify — a guest's simmed
+   * (RoomProjectiles + beamSweep). P2P hosts qualify - a guest's simmed
    * shot/beam sends intents only and receives projectileCreated echoes,
    * while creature/deploy/repair claims keep running the claim lanes.
    */
@@ -1367,19 +1367,19 @@ this.sendDrops += 1;
 
   getPing(): number {
     // Worker transports measure rtt off-main (probe.rttMs) and consume
-    // their own pongs — telemetry.ping can read 0 while a session is
+    // their own pongs - telemetry.ping can read 0 while a session is
     // otherwise fine; prefer the populated probe over a zero.
     const probe = this.ws?.probe?.rttMs;
     return this.telemetry.ping > 0 ? this.telemetry.ping : (probe ?? this.telemetry.ping);
   }
 
-  /** Server-measured RTT echoed back on each pong — the same wire the
+  /** Server-measured RTT echoed back on each pong - the same wire the
    *  client ping rides, minus our own event-loop stall. null until the
    *  first echo lands (or on transports without the probe). */
   serverPingMs: number | null = null;
 
   /** Transit-symmetry probe (netcode-gap item): srvPing measures the
-   *  reliable-lane RTT while `ping` measures the datagram lane — a
+   *  reliable-lane RTT while `ping` measures the datagram lane - a
    *  persistent gap is the lane asymmetry, not noise, and it widens the
    *  server's rewind window by that much. EMA + an outlier count land in
    *  the Alt+Q dump so the 7ms/61ms reading answers "is it systematic". */
@@ -1394,7 +1394,7 @@ this.sendDrops += 1;
   }
 
   /** Worker-transport probes (clean wire RTT, postMessage delivery lag,
-   *  coalesced tick count) — null on non-worker transports. */
+   *  coalesced tick count) - null on non-worker transports. */
   get netProbe(): { rttMs: number; lagMs: number; coalesced: number; drainMsMax?: number } | null {
     return this.ws?.probe ?? null;
   }
@@ -1407,9 +1407,9 @@ this.sendDrops += 1;
     return this.telemetry.jitter();
   }
 
-  /** Netcode-v2 tier our own connection negotiated — self row on the
+  /** Netcode-v2 tier our own connection negotiated - self row on the
    *  scoreboard (remotes get theirs from gameState/playerJoined). A live
-   *  UDP volatile lane shows as '<tier>+udp' — the composite is the tier. */
+   *  UDP volatile lane shows as '<tier>+udp' - the composite is the tier. */
   getTransportTier(): TransportKind | 'p2p' | 'host' | string | undefined {
     const t = this.ws?.tier;
     return t !== undefined && this.udpLane.live ? `${t}+udp` : t;

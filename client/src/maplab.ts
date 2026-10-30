@@ -1,5 +1,5 @@
 /* oxlint-disable typescript/no-explicit-any -- window debug handle */
-// maplab — live terrain synth viewer (/maplab.html). Sliders → seeded
+// maplab - live terrain synth viewer (/maplab.html). Sliders → seeded
 // field synth + hydraulic erosion → heightmap relief + a 3D view built
 // from the same baked bytes the sim reads, so the preview IS the physics.
 import * as THREE from 'three';
@@ -10,7 +10,7 @@ import { terrainFrag } from './world/terrainShaders.js';
 import { hillshadeImage } from './world/hillshade.js';
 import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, rockPass, playaPass, dunesPass, terracePass, cliffPass, fanPass, floodPass, sinkPass, sharpenPass, foldPass, platesPass, canyonPass, snowPass, lakePass, slumpPass, ruggedPass, contrastPass, stretchPass, breachPass, scramblePass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
 
-// Player-facing lab: served on prod too — no isDevHost gate on the entry.
+// Player-facing lab: served on prod too - no isDevHost gate on the entry.
 
 const state: GenParams & { heightScale: number; preset: number; showRaw: boolean; wire: boolean; slopeOverlay: boolean; flowOverlay: boolean; dropHeight: number; ballTerm: number; map: string; verbs: string[] } =
   Object.assign({}, DEFAULTS, { heightScale: 1, preset: 1, showRaw: false, wire: false, slopeOverlay: true, flowOverlay: true, dropHeight: 0, ballTerm: 100, map: '', verbs: [] });
@@ -38,7 +38,7 @@ const WS = 1500;
 const SEG = 256;
 const geo = new THREE.PlaneGeometry(WS, WS, SEG, SEG);
 geo.rotateX(-Math.PI / 2);
-// The REAL terrain fragment shader — the plane is authored in world
+// The REAL terrain fragment shader - the plane is authored in world
 // space so vWorldPos/vNormal come straight from the attributes and the
 // procedural palette renders exactly as in-game (spec.terrainPreset is
 // the compile-time TERRAIN_PRESET define).
@@ -85,7 +85,7 @@ const mat = new THREE.ShaderMaterial({
 });
 const terrain = new THREE.Mesh(geo, mat);
 scene.add(terrain);
-// Frame grid — the tile edge, so wrap-seams read at a glance.
+// Frame grid - the tile edge, so wrap-seams read at a glance.
 const frame = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.PlaneGeometry(WS, WS).rotateX(-Math.PI / 2)),
   new THREE.LineBasicMaterial({ color: 0x55_AA_FF }),
@@ -96,12 +96,12 @@ scene.add(frame);
 const posAttr = geo.getAttribute('position') as THREE.BufferAttribute;
 
 // --- ski-ball probe: frictionless MoveSim ice cubes (skiHeld, inelastic
-// landings) — same physics as _tools/sweeps/skiProbe.ts, watched live.
+// landings) - same physics as _tools/sweeps/skiProbe.ts, watched live.
 // Each ball is a vertical loot-beam (Borderlands style): a thin glow
 // pillar, hue-ramped cold→hot by speed, visible through terrain.
 // Alpha blend, NOT additive: additive over the bright terrain palette
 // sums every overlapping hue to white (the smear this used to read as),
-// and ACES tone mapping flattens what's left — toneMapped:false keeps
+// and ACES tone mapping flattens what's left - toneMapped:false keeps
 // the debug hues literal.
 const BALL_N = 150;
 const BEAM_H = 140;
@@ -195,7 +195,7 @@ addEventListener('keydown', (e: KeyboardEvent): void => {
   held.add(e.code);
 });
 addEventListener('keyup', (e: KeyboardEvent): void => { held.delete(e.code); });
-// Mouse look — pointer lock, same convention as the game (yaw gains going
+// Mouse look - pointer lock, same convention as the game (yaw gains going
 // right, pitch gains looking up; MoveSim forward = (sin yaw, ·, cos yaw)).
 addEventListener('mousemove', (e: MouseEvent): void => {
   if (!player || document.pointerLockElement !== renderer.domElement) {return;}
@@ -244,16 +244,16 @@ function tickPlay(dt: number): void {
 // --- pipeline ---
 let field: ReturnType<typeof hmParseBin>;   // refresh()/loadMap() assign before the loop starts
 let bakedBytes = new Uint8Array(8 + 4);
-let drain: Drainage | null = null;          // last accumulation — the flow overlay
+let drain: Drainage | null = null;          // last accumulation - the flow overlay
 // Vertical gain of the DISPLAYED field: synth uses the slider, a loaded
-// map uses its spec — paintHeightmap/the palette read this, not state.
+// map uses its spec - paintHeightmap/the palette read this, not state.
 let activeHeightScale = 1;
-// Which map is currently painted — refresh() skips a redundant re-fetch
+// Which map is currently painted - refresh() skips a redundant re-fetch
 // when a synth slider pokes it while an existing map is on screen.
 let loadedMap = '';
 
 // --- verbs: one-shot ops that replay cumulatively on every refresh ---
-// The bake-chain sims (simrock/simwater/simsand) as buttons — the log
+// The bake-chain sims (simrock/simwater/simsand) as buttons - the log
 // persists in state, so sliders keep working and verbs layer on top.
 // Each verb's seed derives from its log position, so replay is exact.
 const VERBS: Record<string, (h: Float32Array, N: number, i: number) => void> = {
@@ -296,7 +296,7 @@ function addVerb(op: string): void {
 }
 
 function refresh(): void {
-  // An existing map is a fixed .bin, not a synth — fetch + paint it.
+  // An existing map is a fixed .bin, not a synth - fetch + paint it.
   if (state.map) {
     if (state.map !== loadedMap) { loadMap(state.map); }
     return;
@@ -312,9 +312,9 @@ function refresh(): void {
     glacierPass(h, state.size, state);      // U-troughs on the drainage spine
     if (state.talus > 0) { talusPass(h, state.size, state); }
   }
-  flatsPass(h, state.size, state);          // base pads level last — not erosion
+  flatsPass(h, state.size, state);          // base pads level last - not erosion
   applyVerbs(h, state.size);                // one-shot ops replayed on top
-  // Flow map for the overlay — computed on the DISPLAYED field so the
+  // Flow map for the overlay - computed on the DISPLAYED field so the
   // channels you see are the ones the surface actually drains.
   drain = state.flowOverlay ? drainage(h, state.size) : null;
   const N = state.size;
@@ -332,7 +332,7 @@ function refresh(): void {
 
 // Fetch an existing map's spec + terrain .bin off /maps (the same route
 // the game loads), then paint those bytes. Bails if the pick changed
-// while the fetch was in flight — the dropdown can fire faster than the
+// while the fetch was in flight - the dropdown can fire faster than the
 // network. Palette preset falls back to the current slider when the spec
 // omits terrainPreset.
 async function loadMap(name: string): Promise<void> {
@@ -343,7 +343,7 @@ async function loadMap(name: string): Promise<void> {
     const file = spec.terrain ?? `${name}.bin`;
     const buf = new Uint8Array(await (await fetch(`/maps/${file}`, { cache: 'no-cache' })).arrayBuffer());
     if (state.map !== name) { return; }
-    // Verbs apply to loaded maps too — decode → mutate → re-encode so
+    // Verbs apply to loaded maps too - decode → mutate → re-encode so
     // hmParseBin sees the edited field (the shipped .bin stays untouched).
     if (state.verbs.length > 0) {
       const N = new DataView(buf.buffer, buf.byteOffset).getUint32(0, true);
@@ -352,7 +352,7 @@ async function loadMap(name: string): Promise<void> {
       applyVerbs(h, N);
       for (let i = 0; i < N * N; i += 1) { buf[8 + i] = Math.round(Math.min(1, Math.max(0, h[i]!)) * 255); }
     }
-    drain = null; // flow overlay is a synth product — an existing map has none
+    drain = null; // flow overlay is a synth product - an existing map has none
     activeHeightScale = spec.heightScale ?? 1;
     field = hmParseBin(buf, activeHeightScale);
     loadedMap = name;
@@ -366,17 +366,17 @@ async function loadMap(name: string): Promise<void> {
 }
 
 // Shared tail of refresh()/loadMap(): push the parsed field to the GPU
-// palette, the mesh, the heightmap, the stats — and drop stale balls.
+// palette, the mesh, the heightmap, the stats - and drop stale balls.
 function paintField(ms: number): void {
   mat.uniforms.hscale.value = HM_HEIGHT_SCALE * activeHeightScale;
-  clearBalls(); // field changed — old balls roll on stale terrain
+  clearBalls(); // field changed - old balls roll on stale terrain
   paintMesh();
   paintHeightmap();
   paintStats(ms);
 }
 
-// 3D mesh — displaced by the BAKED byte field through hmHeight (chord =
-// the rendered clipmap the sim walks on). Vertex colors: slope ramp —
+// 3D mesh - displaced by the BAKED byte field through hmHeight (chord =
+// the rendered clipmap the sim walks on). Vertex colors: slope ramp -
 // ski-able flats read green, steep faces rock, tops snow.
 const _n = { x: 0, y: 0, z: 0 };
 function paintMesh(): void {
@@ -389,7 +389,7 @@ function paintMesh(): void {
   geo.computeVertexNormals();
 }
 
-// Hillshade relief — same picture hillshade.cjs emits for shipped maps,
+// Hillshade relief - same picture hillshade.cjs emits for shipped maps,
 // plus a red overlay where the face is too steep to ski (slope > ~0.8).
 const hmcv = document.querySelector<HTMLCanvasElement>('#hmview')!;
 const hmctx = hmcv.getContext('2d')!;
@@ -410,7 +410,7 @@ ballHud.style.cssText = 'position:fixed;right:258px;top:120px;color:#cde;font:11
 document.body.append(ballHud);
 const ballPeaks = { mean: 0, med: 0, p10: 0, p90: 0, max: 0, horiz: 0, abs: 0, vert: 0, vertAbs: 0 };
 let ballHudT = 0;
-// Ski-ball aggregate — mean/p90 speed + the fast share, reported in the
+// Ski-ball aggregate - mean/p90 speed + the fast share, reported in the
 // status once the probe has run ~4s. The only metric that captures route
 // connectivity (dead-end bowls trap balls even at good slope).
 let skiLine = '';
@@ -475,7 +475,7 @@ function updateBallHud(): void {
     `\npeakV p50 ${  peaks[Math.floor(n * 0.5)]!.toFixed(0)  }  p90 ${  peaks[Math.floor(n * 0.9)]!.toFixed(0)  }`;
 }
 
-// Ball trails over the minimap — the ski-line test made visible: live
+// Ball trails over the minimap - the ski-line test made visible: live
 // routes show as long strokes, dead-end bowls as tight scribbles.
 function drawBallTrails(): void {
   const ws = field.worldScale ?? WS;
@@ -496,7 +496,7 @@ function drawBallTrails(): void {
 }
 
 function paintStats(genMs: number): void {
-  // Field stats in world units — the signature terrainstats.js measures
+  // Field stats in world units - the signature terrainstats.js measures
   // on shipped maps: relief + sd + mean slope + steep share, tagged with
   // the Tribes band the field lands in (roller/dramatic/mixed).
   let mn = Infinity, mx = -Infinity, sum = 0, sum2 = 0, slopeSum = 0, steep = 0, n = 0;
@@ -532,10 +532,10 @@ ${
 
 // --- rail UI ---
 const rail = document.querySelector<HTMLDivElement>('#rail')!;
-// Right rail — actions (view/export) + the verb rack; params stay left.
+// Right rail - actions (view/export) + the verb rack; params stay left.
 const rail2 = document.querySelector<HTMLDivElement>('#rail2')!;
 
-// Hover tooltip — one shared div, delegated; any element with data-tip
+// Hover tooltip - one shared div, delegated; any element with data-tip
 // gets the blurb at its right edge (the rail clips ::after tooltips).
 const tipEl = document.querySelector<HTMLDivElement>('#tip')!;
 document.addEventListener('mouseover', (e): void => {
@@ -544,7 +544,7 @@ document.addEventListener('mouseover', (e): void => {
   tipEl.textContent = t.dataset.tip!;
   const r = t.getBoundingClientRect();
   tipEl.style.top = `${r.top}px`;
-  // Right-rail items tip leftward — right+8 would overflow the edge.
+  // Right-rail items tip leftward - right+8 would overflow the edge.
   tipEl.style.left = t.closest('#rail2')
     ? `${r.left - tipEl.offsetWidth - 8}px`
     : `${r.right + 8}px`;
@@ -601,7 +601,7 @@ function schedule(): void {
 // repaints once it lands. Falls back to custom-only if the server is down.
 let mapNames: string[] = [];
 let mapT2: boolean[] = [];
-// Picker filter — 'custom' = shipped [C] maps, 'tribes' = T1/T2 ports.
+// Picker filter - 'custom' = shipped [C] maps, 'tribes' = T1/T2 ports.
 let mapFilter: 'all' | 'custom' | 'tribes' = 'all';
 const visMaps = (): { name: string; isT2: boolean }[] =>
   mapNames.map((n, i): { name: string; isT2: boolean } => ({ name: n, isT2: mapT2[i]! }))
@@ -619,7 +619,7 @@ async function loadMapList(): Promise<void> {
     mapT2 = grouped.map((r) => (r.t2 || r.t1) === true);
     paintRail();
   } catch {
-    flash('maps list unavailable — custom only');
+    flash('maps list unavailable - custom only');
   }
 }
 
@@ -642,7 +642,7 @@ function terrainSelect(): HTMLSelectElement {
   return sel;
 }
 
-// Full-width first-person ski toggle — sits at the top of the rail next to
+// Full-width first-person ski toggle - sits at the top of the rail next to
 // the terrain picker because it's the headline action on the page.
 function playButton(): HTMLButtonElement {
   const b = document.createElement('button');
@@ -655,9 +655,9 @@ function playButton(): HTMLButtonElement {
   return b;
 }
 
-// Noise archetype select — fBm / billow / swiss / jordan per-octave
+// Noise archetype select - fBm / billow / swiss / jordan per-octave
 // shaping (gen.ts `shape`). Same row pattern as the tilt-axis select.
-/** ◀/▶ cyclic option steppers — lets dropdowns be browsed like sliders
+/** ◀/▶ cyclic option steppers - lets dropdowns be browsed like sliders
  *  without opening the native picker. */
 function stepBtn(sel: HTMLSelectElement, dir: number): HTMLButtonElement {
   const b = document.createElement('button');
@@ -746,12 +746,12 @@ function paintRail(): void {
   rail.append(noiseRow());
   rail.append(tiltRow());
 
-  // Probe-only control (not a GenParams key) — must NOT call schedule(),
+  // Probe-only control (not a GenParams key) - must NOT call schedule(),
   // so it lives here instead of SLIDERS. Re-drops live balls on release.
   rail.append(dropHeightRow());
   rail.append(ballTermRow());
   rail.append(dbgStageRow());
-  // lit-knee tuning — live uniforms, no regen. See terrainShaders desert block.
+  // lit-knee tuning - live uniforms, no regen. See terrainShaders desert block.
   for (const [key, min, max] of [['litKnee', 0.5, 1], ['litKeep', 0, 0.6], ['colCap', 0.9, 1]] as const) {
     rail.append(uniformRow(key, min, max));
   }
@@ -790,12 +790,12 @@ function paintRail(): void {
     }),
     mk('🎲 params', (): void => {
       // Every knob re-rolled within its own slider range (grid size + seed
-      // excluded — size is a heavy regen, seed has its own dice).
+      // excluded - size is a heavy regen, seed has its own dice).
       for (const [key, , min, max, step] of SLIDERS) {
         if (key === 'size' || key === 'seed') {continue;}
         (state as unknown as Record<string, unknown>)[key] = min + Math.round((Math.random() * (max - min)) / step) * step;
       }
-      state.preset = Math.floor(Math.random() * 10); // PRESETS 0–9
+      state.preset = Math.floor(Math.random() * 10); // PRESETS 0-9
       mat.defines.TERRAIN_PRESET = state.preset;
       mat.needsUpdate = true;
       state.noiseType = Math.floor(Math.random() * 4); // fBm/billow/swiss/jordan
@@ -830,42 +830,42 @@ function paintRail(): void {
     }),
   );
   rail2.append(row2);
-  // Verbs — one-shot sims applied cumulatively; the log replays on every
-  // refresh, on synth fields AND loaded maps (the shipped .bin is safe —
+  // Verbs - one-shot sims applied cumulatively; the log replays on every
+  // refresh, on synth fields AND loaded maps (the shipped .bin is safe -
   // the mutation only lives in the preview buffer).
   const verbGrp = document.createElement('div'); verbGrp.className = 'group';
   verbGrp.textContent = `verbs${state.verbs.length > 0 ? ` (${state.verbs.join(', ')})` : ''}`;
   rail2.append(verbGrp);
   const VERB_TIPS: Record<string, string> = {
-    rock: '12 seeded impact craters — oblique lobate rims, rough floors',
-    scree: 'talus slide ×12 — debris creeps to repose under cliffs',
-    streams: 'stream-power ×2 — carve coherent river valleys on the drainage net',
-    erode: '50k droplet hydraulic erosion — gullies and sediment fans',
-    smooth: 'diffusion ×4 — softens ridges, kills the noise carpet',
+    rock: '12 seeded impact craters - oblique lobate rims, rough floors',
+    scree: 'talus slide ×12 - debris creeps to repose under cliffs',
+    streams: 'stream-power ×2 - carve coherent river valleys on the drainage net',
+    erode: '50k droplet hydraulic erosion - gullies and sediment fans',
+    smooth: 'diffusion ×4 - softens ridges, kills the noise carpet',
     glacier: 'polish U-troughs along the high-flow drainage spine',
-    playa: 'fill shallow basins to spill level — flat lakebeds where water ponds',
-    dunes: 'aeolian drift — sand creeps downwind, ridges pile on the lee',
-    terrace: 'quantize heights into jittered steps — farmland/badlands benches',
-    meteor: '16 seeded impacts, big ones first — ancient pitted surface',
-    cliff: 'steepen what is already steep — carved escarpments, flats untouched',
-    fan: 'alluvial fans — sediment cones at slope breaks / valley mouths',
-    flood: 'clamp everything below water level — flat seabed + coastline',
-    sink: 'karst dissolve — seeded rimless sinkholes',
-    sharpen: 'unsharp mask on crests — restores eroded ridgelines',
-    fold: 'parallel bent ridges along an axis — folded strata',
-    plates: 'voronoi plates with per-plate offsets — tectonic steps',
-    canyon: 'noise-steered wandering channel — meandering river canyon',
-    snow: 'deposit on high + gentle — cornices on ridges, bare cliffs',
-    lake: 'fill closed basins to spill — real lakes, playa complement',
-    slump: 'collapse steep cells — hillside lobes, flats untouched',
-    rugged: 'amplify mid-frequency bumps — rocky texture, same shape',
-    uplift: 'gamma-raise the field — mids and highs get taller',
-    contrast: 'sigmoid around the median — canyonize: lows drop, highs lift',
-    stretch: 'renormalize to full 0–1 — restores export range after verbs',
-    breach: 'cut one outlet channel per closed basin — flow restructure',
-    scramble: 'phase-scramble the spectrum — same vitals, shuffled identity (A/B: toggle in verb log)',
+    playa: 'fill shallow basins to spill level - flat lakebeds where water ponds',
+    dunes: 'aeolian drift - sand creeps downwind, ridges pile on the lee',
+    terrace: 'quantize heights into jittered steps - farmland/badlands benches',
+    meteor: '16 seeded impacts, big ones first - ancient pitted surface',
+    cliff: 'steepen what is already steep - carved escarpments, flats untouched',
+    fan: 'alluvial fans - sediment cones at slope breaks / valley mouths',
+    flood: 'clamp everything below water level - flat seabed + coastline',
+    sink: 'karst dissolve - seeded rimless sinkholes',
+    sharpen: 'unsharp mask on crests - restores eroded ridgelines',
+    fold: 'parallel bent ridges along an axis - folded strata',
+    plates: 'voronoi plates with per-plate offsets - tectonic steps',
+    canyon: 'noise-steered wandering channel - meandering river canyon',
+    snow: 'deposit on high + gentle - cornices on ridges, bare cliffs',
+    lake: 'fill closed basins to spill - real lakes, playa complement',
+    slump: 'collapse steep cells - hillside lobes, flats untouched',
+    rugged: 'amplify mid-frequency bumps - rocky texture, same shape',
+    uplift: 'gamma-raise the field - mids and highs get taller',
+    contrast: 'sigmoid around the median - canyonize: lows drop, highs lift',
+    stretch: 'renormalize to full 0-1 - restores export range after verbs',
+    breach: 'cut one outlet channel per closed basin - flow restructure',
+    scramble: 'phase-scramble the spectrum - same vitals, shuffled identity (A/B: toggle in verb log)',
     undo: 'pop the last verb off the replay log',
-    clear: 'empty the verb log — back to the raw pipeline',
+    clear: 'empty the verb log - back to the raw pipeline',
   };
   const verbBtn = (op: string): HTMLButtonElement => {
     const b = mk(`+${op}`, () => { addVerb(op); paintRail(); });
@@ -927,7 +927,7 @@ function dropHeightRow(): HTMLDivElement {
   return row;
 }
 
-// Ball terminal velocity — live-applies to falling balls, no re-drop.
+// Ball terminal velocity - live-applies to falling balls, no re-drop.
 // 0 disables the airborne fall clamp (free-fall accelerates forever).
 function ballTermRow(): HTMLDivElement {
   const row = document.createElement('div');
@@ -982,14 +982,14 @@ function presetRow(): HTMLDivElement {
   sel.addEventListener('change', (): void => {
     state.preset = Number(sel.value);
     mat.defines.TERRAIN_PRESET = state.preset;
-    mat.needsUpdate = true; // preset is a compile-time define — recompiles once
+    mat.needsUpdate = true; // preset is a compile-time define - recompiles once
     save();
   });
   row.append(lab, stepBtn(sel, -1), sel, stepBtn(sel, 1));
   return row;
 }
 
-// Style bundles — param sets tuned against the shipped maps' measured
+// Style bundles - param sets tuned against the shipped maps' measured
 // stats (terrainstats.js). One pick → the field lands in the genre band;
 // sliders stay free to diverge after.
 function styleRow(): HTMLDivElement {

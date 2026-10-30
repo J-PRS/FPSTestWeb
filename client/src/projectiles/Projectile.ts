@@ -24,7 +24,7 @@ import { ProjCollide } from './projCollide.js';
 import { ballGhostPos } from './sweep.js';
 import { ProjStuck } from './projStuck.js';
 const _rayDir = new THREE.Vector3();
-// Rope dart: shared geo/mat + scratch — one taut rod per live dart, so a
+// Rope dart: shared geo/mat + scratch - one taut rod per live dart, so a
 // per-dart allocation would be churn for a 5-vert cylinder.
 // Visual only: once attached the rope may shorten but never stretch; a longer
 // span detaches the thrower end and reels it back toward the anchor.
@@ -34,7 +34,7 @@ const _ropeMat = new THREE.MeshBasicMaterial({ color: 0x1A_14_0C });
 const _ropeV = new THREE.Vector3();
 const _ropeUp = new THREE.Vector3(0, 1, 0);
 
-/** Backstop fuse — see the age check in updateAlive. */
+/** Backstop fuse - see the age check in updateAlive. */
 const ABSOLUTE_TTL_S = 10;
 
 
@@ -72,19 +72,19 @@ const ABSOLUTE_TTL_S = 10;
  * On impact, the projectile records `hitBall`, `directHit`, `hitAccuracy`, etc.,
  * marks itself `exploded`, and the visual effect is handled elsewhere.
  *
- * Trail visuals live in vfx.ts (QuarksTrail) — the batched particle path.
- * (Not a bug: `hitRadius` starts at `hitMin`=0 by design — it's the expanding
+ * Trail visuals live in vfx.ts (QuarksTrail) - the batched particle path.
+ * (Not a bug: `hitRadius` starts at `hitMin`=0 by design - it's the expanding
  *  WAKE threshold, not the direct-hit radius, and a fresh projectile must not
  *  whack its own shooter. Core hits use the constant `bodyRadius`.)
  */
-// Anything swept-collidable that ISN'T a damageable target — currently
+// Anything swept-collidable that ISN'T a damageable target - currently
 // turretter bolts. prevPos = start-of-frame pos so the check is
 // segment-vs-segment (both objects moved this frame).
 export interface SweepObstacle {
   readonly pos: THREE.Vector3;
   readonly prevPos: THREE.Vector3;
   readonly radius: number;
-  /** Optional filter — shield domes let friendly shells sail through.
+  /** Optional filter - shield domes let friendly shells sail through.
    *  Presence ALSO overrides the noExplosion guard (a field eats hitscan
    *  slugs too); obstacles without a predicate keep the old behavior. */
   blocks?(p: Projectile): boolean;
@@ -97,29 +97,29 @@ export class Projectile {
   vel: THREE.Vector3;
   dead = false;
   exploded = false;
-  /** Body-hit blast deferred — local contact suppressed the fake blast;
+  /** Body-hit blast deferred - local contact suppressed the fake blast;
    *  the wire 'gone' handler paints the authority's real one instead. */
   ghostBodyPop = false;
-  /** Which replica pop path ended the shell — carried onto the self-shove
+  /** Which replica pop path ended the shell - carried onto the self-shove
    *  stamp so a kb-pop-div row names the divergence class (painted
    *  contact where the server shell flew on). */
   popClass?: string;
-  hitBolt: SweepObstacle | null = null; // mid-air interception — combat turns this into a cookoff blast
+  hitBolt: SweepObstacle | null = null; // mid-air interception - combat turns this into a cookoff blast
   age = 0;
   spawnedThisFrame = true; // skip first update so projectile renders at spawn pos before moving
   isRemote = false; // true for server-authoritative/demo projectiles
-  hitBall: Targetable | null = null; // balls AND crawlers — any shootable target
+  hitBall: Targetable | null = null; // balls AND crawlers - any shootable target
   hitPlayerId: string | null = null;
   // remote player hit tracking. Assigning a real id reseeds the fuse
-  // cache — a jittered ttl computed pre-bind used a random seed, not the
+  // cache - a jittered ttl computed pre-bind used a random seed, not the
   // server's idSeed(id), and a stale random fuse can pop a replica a
   // full jitter-window off its authority.
   private _serverProjectileId: string | null = null;
-  /** Replica age when the create echo bound — -1 if never bound (the
+  /** Replica age when the create echo bound - -1 if never bound (the
    *  echo was late/lost; traj-outlier rows read this: an unbound
    *  replica flies its own spawn arc, no re-anchor ever ran). */
   boundAtAge = -1;
-  /** Spawned on the server's rewind-epoch mirror (fire.ts) — the trajDiv
+  /** Spawned on the server's rewind-epoch mirror (fire.ts) - the trajDiv
    *  audit tags whether a divergent shell had the mirror state. */
   mirrored = false;
   get serverProjectileId(): string | null {return this._serverProjectileId;}
@@ -128,25 +128,25 @@ export class Projectile {
     this._serverProjectileId = v;
   }
   /** Client-minted nonce sent with the spawn claim and echoed on every
-   *  claim naming this shell — binds claims before/independent of the
+   *  claim naming this shell - binds claims before/independent of the
    *  serverProjectileId round-trip. */
   shotId: string | null = null;
-  /** Burst fans bind server echoes by `${pullId}#${pelletIdx}` — the key
+  /** Burst fans bind server echoes by `${pullId}#${pelletIdx}` - the key
    *  under which this pellet sits in registry.byFanSlot, so death and
    *  destroy cleanup can drop it. Single shells leave it unset. */
   fanSlot: string | null = null;
-  /** Whose shell this is — kill attribution for local-authority shots
+  /** Whose shell this is - kill attribution for local-authority shots
    *  (offline GameBots; null = the local player). */
   shooterId: string | null = null;
-  /** Shooter's team — team-filtered solids (shield gates) let this shell
+  /** Shooter's team - team-filtered solids (shield gates) let this shell
    *  through when it matches theirs. null = teamless/unresolvable. */
   shooterTeam: string | null = null;
   /** Local-player sweep override: offline bot shells include the local
-   *  player as a hittable body — they're the only projectiles whose
+   *  player as a hittable body - they're the only projectiles whose
    *  shooter ISN'T the local player, so self-hits can't happen. Returns
    *  the live local pos each frame, or null to skip. */
   sweepLocal: (() => THREE.Vector3 | null) | null = null;
-  /** Local player's armor class — the body sweep needs its capsule. */
+  /** Local player's armor class - the body sweep needs its capsule. */
   localClass: (() => string | undefined) | null = null;
   demoProjectileId = 0; // demo recording tracking ID
   hitAccuracy = 0; // actual center-to-center dist at moment of hit
@@ -154,46 +154,46 @@ export class Projectile {
   hitDistance = 0; // travel distance from shot origin
   directHit = false; // true = hit with core hitbox, false = expanding wake hitbox
   minHitDist = 0; // minimum distance during sweep (for accurate accuracy)
-  // Contact bookkeeping — read/written by projCollide (the impact-policy family).
+  // Contact bookkeeping - read/written by projCollide (the impact-policy family).
   hitX = 0; hitY = 0; hitZ = 0; hitT = 1;
-  lastDt = 0; // dt of the running update — hitAge backs off to swept contact
+  lastDt = 0; // dt of the running update - hitAge backs off to swept contact
   bouncesTaken = 0;
   readonly hitPoint = new THREE.Vector3(); // exact sweep intersection (set by sweepTerrain)
   hitPointValid = false;
   explosionProcessed = false;
-  // Sticky: froze to a surface — physics off, fuse still burning. The
+  // Sticky: froze to a surface - physics off, fuse still burning. The
   // blast is what hurts people, not the glue point.
   stuck = false;
   /** Belt-sticky combo: this bomb was caught mid-flight by a same-owner
    *  shell and rides it dead-center (Painkiller: grenade on the stake).
    *  Physics + collision off; pos/vel shadow the host; when the host
    *  dies this pops at its contact point. Trails keep emitting from the
-   *  same point — the "combined trail" is the two ribbons overlapping. */
+   *  same point - the "combined trail" is the two ribbons overlapping. */
   host: Projectile | null = null;
-  // Embed (javelin) + sticky glue — the planted-shell family lives in
+  // Embed (javelin) + sticky glue - the planted-shell family lives in
   // projStuck.ts behind the StuckHost surface.
   glue = new ProjStuck(this); // public-ish: projCollide calls stickAt
 
   // Ray-burst (remote railgun): at rayBurst.delay the slug discharges a
-  // hitscan beam down its velocity line — implemented as one giant swept
+  // hitscan beam down its velocity line - implemented as one giant swept
   // step so terrain/target/obstacle collision applies to the beam itself.
   // Terminal: hit or miss, the slug is spent at the end of the segment.
   rayFired = false;
   private rayDone = false;
   private readonly rayFrom = new THREE.Vector3();
-  /** Visual/sfx hook — fired once at discharge with (beam origin, end). */
+  /** Visual/sfx hook - fired once at discharge with (beam origin, end). */
   onRayBurst: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null;
-  /** One-shot death edge — fires on the first explode() call, including
+  /** One-shot death edge - fires on the first explode() call, including
    *  local fuse/terrain deaths the server never announces. */
   onExploded: (() => void) | null = null;
 
   readonly config: ProjectileConfig;
-  /** This shot's effective fuse — config.maxLifetime spread by ttlJitter,
+  /** This shot's effective fuse - config.maxLifetime spread by ttlJitter,
    *  seeded by the server id when we know it (remote replicas pop in sync
    *  with the server's detonation; local shots fall back to a random roll
-   *  since their fuse is cosmetic — the destroy edge is authoritative). */
+   *  since their fuse is cosmetic - the destroy edge is authoritative). */
   private ttl: number | undefined;
-  // Random tumble axis for 'ball' projectiles — fixed per shot
+  // Random tumble axis for 'ball' projectiles - fixed per shot
   private readonly tumbleX = Math.random() * 2 - 1;
   private readonly tumbleY = Math.random() * 2 - 1;
   private readonly tumbleZ = Math.random() * 2 - 1;
@@ -203,17 +203,17 @@ export class Projectile {
   readonly wakeBallDistances = new Map<Targetable, number>(); // target -> min distance seen
   readonly wakePlayerDistances = new Map<string, number>(); // playerId -> min distance seen
 
-  // Wake-proxy radius — shared/combat.ts so the server's hit-claim
+  // Wake-proxy radius - shared/combat.ts so the server's hit-claim
   // validation computes the exact same number from the reported airtime.
   get hitRadius(): number {
     return hitRadiusAt(this.config.weaponType, this.age);
   }
 
-  /** Map-structure colliders — set once per map load alongside
+  /** Map-structure colliders - set once per map load alongside
    *  Ball.colliders so shells and balls bounce off the same geometry. */
   static solidColliders: readonly StructureCollider[] = [];
   static solidIndex: ColliderIndex | null = null;
-  /** Planted deployable hulls — the Deployables array by reference, so
+  /** Planted deployable hulls - the Deployables array by reference, so
    *  shells detonate on contact instead of phasing through a generator
    *  and popping on the wall behind it (server sweeps the same set). */
   static dynColliders: readonly StructureCollider[] = [];
@@ -225,7 +225,7 @@ export class Projectile {
   /** Effective fuse for THIS shell: config.maxLifetime spread by
    *  ttlJitter, seeded from serverProjectileId when the server link has
    *  landed (remote replicas assign it right after construction) so both
-   *  ends pop at the same age; pending local shots seed randomly — their
+   *  ends pop at the same age; pending local shots seed randomly - their
    *  fuse is cosmetic, the server's destroy edge is authoritative anyway. */
   fuseTtl(): number | undefined {
     if (this.ttl !== undefined) {return this.ttl || undefined;}
@@ -238,39 +238,39 @@ export class Projectile {
     return this.ttl;
   }
 
-  scene: THREE.Scene;  // public — collide/stuck families remove planted meshes
+  scene: THREE.Scene;  // public - collide/stuck families remove planted meshes
   mesh: THREE.Mesh;
   glowMesh: THREE.Mesh | null = null;
-  readonly prevPos: THREE.Vector3; // start-of-frame pos — sweeps step prevPos→pos
+  readonly prevPos: THREE.Vector3; // start-of-frame pos - sweeps step prevPos→pos
   readonly shotOrigin: THREE.Vector3;
   /** What the renderer draws: pos + renderOffset. Netcode can seed
    *  renderOffset so a remote shell visibly leaves the shooter's rendered
-   *  muzzle, then blends onto the true simmed path (~100ms decay) — sim
+   *  muzzle, then blends onto the true simmed path (~100ms decay) - sim
    *  truth stays in pos, so trails, sweeps and hit points never lie. */
   readonly rendered: THREE.Vector3 = new THREE.Vector3();
   readonly renderOffset: THREE.Vector3 = new THREE.Vector3();
-  /** Velocity at spawn — the server's claim validator checks claimed
+  /** Velocity at spawn - the server's claim validator checks claimed
    *  reach against origin velocity, and gravity/drag mutate `vel`, so
    *  the launch vector lives separately for the client-side re-check. */
   readonly launchVel: THREE.Vector3;
-  /** Construction wall-time — mirrors the server's spawnAt for the
+  /** Construction wall-time - mirrors the server's spawnAt for the
    *  shared claim legality check's age-vs-airtime gate. */
   readonly spawnedAtMs: number;
 
-  // Particle trail — quarks-batched.
+  // Particle trail - quarks-batched.
   private trail: QuarksTrail;
-  // Rope dart: a unit cylinder stretched thrower→dart every frame —
+  // Rope dart: a unit cylinder stretched thrower→dart every frame -
   // taut by construction; sag would be a lie.
   private ropeMesh: THREE.Mesh | null = null;
-  // F1 debug: hitbox (config.radius, red) + wake proxy (hitRadius, orange —
+  // F1 debug: hitbox (config.radius, red) + wake proxy (hitRadius, orange -
   // grows with age, rescaled every updateMesh). Scene-level, not mesh
-  // children — the shell mesh is instanced and can't carry them.
+  // children - the shell mesh is instanced and can't carry them.
   private dbgCore: THREE.Mesh | null = null;
   private dbgWake: THREE.Mesh | null = null;
   private projectileRemoved = false;
   private disposed = false;
   private ribbons: (RibbonTrail | RailSpiral)[] = [];
-  // Runtime-owned emit/jump decisions for every trail layer (P1) —
+  // Runtime-owned emit/jump decisions for every trail layer (P1) -
   // pos discontinuities need no caller teleport(): the driver cuts all
   // layers when its own last-sample says the host jumped.
   private readonly driver: TrailDriver;
@@ -282,7 +282,7 @@ export class Projectile {
     this.prevPos = origin.clone();
     this.shotOrigin = origin.clone();
     this.rendered.copy(origin);
-    // Player-velocity inheritance (Tribes Ascend style) — per-weapon via
+    // Player-velocity inheritance (Tribes Ascend style) - per-weapon via
     // config.inherit (0 on RemoteRailgun: the rail fires down this line)
     this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, config.inherit ?? 0.5);
     this.launchVel = this.vel.clone();
@@ -296,7 +296,7 @@ export class Projectile {
       config,
       pos: this.rendered, vel: this.vel,
       // Emission lead measures travel from sim truth, never the drawn
-      // (renderOffset-blended) anchor — see effects/trailLead.ts.
+      // (renderOffset-blended) anchor - see effects/trailLead.ts.
       travelPos: this.pos,
       age: (): number => this.age,
     });
@@ -312,13 +312,13 @@ export class Projectile {
     );
   }
 
-  /** Impact policy (bounce/fuse/intercept/target record) — projCollide.ts. */
+  /** Impact policy (bounce/fuse/intercept/target record) - projCollide.ts. */
   collide = new ProjCollide(this);
   solids(): readonly StructureCollider[] { return Projectile.solidColliders; }
   solidIdx(): ColliderIndex | null { return Projectile.solidIndex; }
   dynSolids(): readonly StructureCollider[] { return Projectile.dynColliders; }
 
-  // Swept collision math lives in sweep.ts (SweepHost) — the checks are
+  // Swept collision math lives in sweep.ts (SweepHost) - the checks are
   // free functions so they're testable without a scene-bound projectile.
 
   update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): void {
@@ -326,7 +326,7 @@ export class Projectile {
 
     // Converge the splice at ≤10% of flight speed: lateral correction
     // beyond that visibly bends the path (~6° deflection is perceptible);
-    // slower is invisible. tau = offset/rate self-scales — a big
+    // slower is invisible. tau = offset/rate self-scales - a big
     // reanchor stretches the blend, a small one snaps in a frame or two.
     const offsetLen = this.renderOffset.length();
     if (offsetLen > 0) {
@@ -345,9 +345,9 @@ export class Projectile {
     if (!this.exploded) {this.updateAlive(dt, terrain, balls, remotePlayers, obstacles, playerClasses);}
 
     // Cell-stepped shells render the sub-cell remainder ballistically
-    // (ballNet's rem pattern) — pos sits on the last 50ms grid boundary;
+    // (ballNet's rem pattern) - pos sits on the last 50ms grid boundary;
     // the fraction between it and the next step draws the arc, not a
-    // 20Hz staircase. cellAcc stays 0 for replicas — same formula.
+    // 20Hz staircase. cellAcc stays 0 for replicas - same formula.
     this.computeRendered();
 
     this.tickRayBurst();
@@ -361,19 +361,19 @@ export class Projectile {
     if (this.settled()) {this.dead = true;}
   }
 
-  // Teleport the projectile forward along its velocity without physics steps —
+  // Teleport the projectile forward along its velocity without physics steps -
   // used to compensate remote-spawn latency so it appears where it really is
   advanceBy(seconds: number): void {
     this.prevPos.copy(this.pos);
     this.pos.addScaledVector(this.vel, seconds);
     this.age += seconds;
-    // The jump reads as a discontinuity to the trail driver — it cuts
+    // The jump reads as a discontinuity to the trail driver - it cuts
     // every layer on its next tick, no caller declaration needed.
     this.rendered.copy(this.pos).add(this.renderOffset);
     if (this.mesh) { this.mesh.position.copy(this.rendered); syncProjectileInstance(this.mesh); }
   }
 
-  /** Ray-burst discharge: the rest of this frame's travel is the beam —
+  /** Ray-burst discharge: the rest of this frame's travel is the beam -
    *  prevPos stays at the discharge point so the swept segment covers the
    *  whole ray. Applies to remote replicas too: delay/direction/range are
    *  all deterministic from spawn state, like bounces. The jump reads as
@@ -391,7 +391,7 @@ export class Projectile {
   // Physics + collision + visuals for a live (non-exploded) projectile
   private updateAlive(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): void {
     // Riding a host shell: dead-center on its path, no own physics or
-    // collision. Host death pops us at ITS contact point — the rider is
+    // collision. Host death pops us at ITS contact point - the rider is
     // the payload the shell was carrying.
     if (this.host) {
       const h = this.host;
@@ -414,7 +414,7 @@ export class Projectile {
     this.tickArmedFx();
 
     // Stuck bomb: planted on a surface, ticking down to fuse. Age is the
-    // fuse clock (fuseAge = age − armAge) — it advances wall-clock here,
+    // fuse clock (fuseAge = age − armAge) - it advances wall-clock here,
     // the cell grid only owns physics+collision while the shell flies.
     if (this.stuck) {
       this.age += dt; this.lastDt = dt;
@@ -422,13 +422,13 @@ export class Projectile {
     }
 
     // Remote (server-authoritative/demo) replicas skip predicted
-    // collision (tickRemote instead) — but they still step on the 50ms
+    // collision (tickRemote instead) - but they still step on the 50ms
     // grid: frame-sized sub-segments resolve bounces/contacts at a
     // different phase than the authority's tick, which was the remote
     // half of the trajDiv tail (self:0 outliers).
     if (this.isRemote) {
       // Catch-up ceiling: replicas get WALL dt (the server shell doesn't
-      // starve when our frames loaf) — cap at 2s so a single jank frame
+      // starve when our frames loaf) - cap at 2s so a single jank frame
       // fully closes the gap instead of dripping it over seconds.
       this.cellAcc = Math.min(this.cellAcc + dt, 2);
       while (this.cellAcc >= 0.05) {
@@ -440,11 +440,11 @@ export class Projectile {
     }
 
     // Predicted shells step physics+collision on the SERVER's fixed 50ms
-    // cell grid — frame-sized sub-segments were the trajDiv tail: every
+    // cell grid - frame-sized sub-segments were the trajDiv tail: every
     // bounce/contacts resolved at a different phase point than the tick
     // grid the authority sweeps. The sub-cell remainder renders
     // ballistically (the ballNet rem pattern) so motion stays smooth.
-    // Wall-dt feed: the server shell doesn't starve under our jank —
+    // Wall-dt feed: the server shell doesn't starve under our jank -
     // catch up through the grid (cap 2s covers a full loafed frame).
     this.cellAcc = Math.min(this.cellAcc + dt, 2);
     while (this.cellAcc >= 0.05) {
@@ -457,14 +457,14 @@ export class Projectile {
     // frame settles and decides emit-vs-jump for every layer.
   }
 
-  /** Remainder of the current 50ms cell — rendered pos = pos + vel*rem. */
+  /** Remainder of the current 50ms cell - rendered pos = pos + vel*rem. */
   private cellAcc = 0;
 
   /** Wire-echo re-anchor: the server spawned this shell at its rewind
-   *  origin with shadow-velocity inherit — the claim's live pos/vel
+   *  origin with shadow-velocity inherit - the claim's live pos/vel
    *  differ by ~a transit of motion (and drift further on flat flyers).
    *  Take the authority's spawn state projected forward by this shell's
-   *  own age — spawn clocks agree within a transit — and fold the
+   *  own age - spawn clocks agree within a transit - and fold the
    *  positional splice into renderOffset so the mesh doesn't pop. */
   reanchorTo(pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number }, srvAge: number): void {
     Projectile._reanchorOld.copy(this.rendered);
@@ -472,7 +472,7 @@ export class Projectile {
     if (this.config.gravity) {this.pos.y += 0.5 * GRAVITY * srvAge * srvAge;}
     this.prevPos.copy(this.pos);
     this.vel.copy(Projectile._reanchorV);
-    // Clock sync: the splice trusts the authority's spawn state verbatim —
+    // Clock sync: the splice trusts the authority's spawn state verbatim -
     // the age rides with it or the two timelines diverge ~transit every bind.
     this.age = srvAge;
     this.computeRendered();
@@ -497,7 +497,7 @@ export class Projectile {
 
     // Absolute backstop: fuseless configs (bolt/disc/chaingun fly-until-
     // contact) or a remote replica whose destroy edge never arrived used
-    // to leave immortal shells drifting — simming 10k-particle trails
+    // to leave immortal shells drifting - simming 10k-particle trails
     // 90km below the world at 2300m/s. Any reasonable shot is long dead
     // by 10s (a 250m/s chaingun slug covers ~2.5km).
     if (this.age >= ABSOLUTE_TTL_S) {
@@ -522,8 +522,8 @@ export class Projectile {
     return this.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses);
   }
 
-  /** Fuse burn + overdue/fuseless diagnostics — true when the cell ends
-   *  the shell. Sticky ordnance is inert in flight (fuseAge -1) — a bomb
+  /** Fuse burn + overdue/fuseless diagnostics - true when the cell ends
+   *  the shell. Sticky ordnance is inert in flight (fuseAge -1) - a bomb
    *  that never attaches gets a failsafe triple-fuse so it can't drift
    *  forever. */
   private fuseExpired(): boolean {
@@ -535,12 +535,12 @@ export class Projectile {
       return true;
     }
     // A live shell this far past its fuse means the pop path itself failed
-    // (stale ttl, armed gate, stuck early-return) — name it in the dump.
+    // (stale ttl, armed gate, stuck early-return) - name it in the dump.
     if (ttl && !this.overdueFlagged && this.age > ttl * 2) {
       this.overdueFlagged = true;
       glitch('proj-overdue', { cfg: this.config.name, age: Number(this.age.toFixed(2)), ttl, fa, remote: this.isRemote, stuck: this.stuck, wt: this.config.weaponType });
     }
-    // Fuseless shells (missing maxLifetime — the BOLT_CONFIG fallback on an
+    // Fuseless shells (missing maxLifetime - the BOLT_CONFIG fallback on an
     // unknown weaponType is exactly this) fly to the 10s backstop; flag
     // them early so an immortal replica names itself instead of streaking.
     if (!ttl && !this.overdueFlagged && this.age > 4) {
@@ -561,7 +561,7 @@ export class Projectile {
     if (!this.exploded) {this.explode();}
   }
 
-  // Remote replicas skip claim collisions — terrain + the cosmetic body
+  // Remote replicas skip claim collisions - terrain + the cosmetic body
   // pop live in tickRemote (server owns damage on every hit).
   private tickRemote(terrain: Terrain, remotePlayers?: Map<string, THREE.Vector3>, playerClasses?: Map<string, string>): boolean { return tickRemote(this, terrain, remotePlayers, playerClasses); }
 
@@ -571,7 +571,7 @@ export class Projectile {
     return this.collide.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses, ballGhostPos);
   }
 
-  /** Plant the bomb at a contact point — the glue family owns the state. */
+  /** Plant the bomb at a contact point - the glue family owns the state. */
   stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
           remotePlayers?: Map<string, THREE.Vector3>): void {
     this.glue.stickAt(p, ball, playerId, remotePlayers);
@@ -581,7 +581,7 @@ export class Projectile {
     return this.config.armTime === undefined || this.age >= this.config.armTime;
   }
 
-  /** Body-contact gate — separate from the terrain/bounce arming: the GL
+  /** Body-contact gate - separate from the terrain/bounce arming: the GL
    *  skips off dirt for a second yet pops on a body at any age. */
   get bodiesLive(): boolean {
     const ba = this.config.bodyArmTime ?? this.config.armTime;
@@ -595,7 +595,7 @@ export class Projectile {
     this.ttl = Math.min(this.fuseTtl() ?? Infinity, this.fuseAge() + sec);
   }
 
-  /** Fuse clock — for sticky ordnance the fuse starts at ATTACH, not
+  /** Fuse clock - for sticky ordnance the fuse starts at ATTACH, not
    *  spawn: a lobbed bomb midair is inert (no fuse burn, no armed-light
    *  ramp). -1 = not armed yet; everything else just reads `age`. */
   fuseAge(): number {
@@ -603,7 +603,7 @@ export class Projectile {
     return this.glue.armAge === undefined ? -1 : this.age - this.glue.armAge;
   }
 
-  // Arming tell — the moment a fused shell cooks off it picks up a hot
+  // Arming tell - the moment a fused shell cooks off it picks up a hot
   // streak, so "this one can hurt you" reads at a glance instead of
   // requiring fuse math. Lives in `ribbons` so trail push/stop/pooling
   // treat it exactly like a launcher-attached ribbon.
@@ -615,14 +615,14 @@ export class Projectile {
     const armed = RibbonTrail.acquire(this.scene, {
       color: 0xFF_BB_33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
     });
-    // Late-join ribbons miss the driver's ctor follow-bind — without this
+    // Late-join ribbons miss the driver's ctor follow-bind - without this
     // the armed streak's tip trails the shell by a frame of travel.
     armed.follow = this.rendered;
     armed.followManaged = true;
     this.ribbons.push(armed);
   }
 
-  // GL/flak shells always bounce; a mortar only bounces while unarmed —
+  // GL/flak shells always bounce; a mortar only bounces while unarmed -
   // once armed it's impact-fused like any other shell.
   get canBounce(): boolean {
     return Boolean(this.config.bounces) && (this.config.armTime === undefined || !this.armed);
@@ -630,18 +630,18 @@ export class Projectile {
 
   // Contact point along this frame's sweep + its parametric position
   // (0=prevPos, 1=pos). Hit distance/airtime come from here, not the
-  // already-integrated end-of-frame pos — a fast shell could overshoot the
+  // already-integrated end-of-frame pos - a fast shell could overshoot the
   // target by meters inside one frame and inflate the hit score/claim.
   hitAt(x: number, y: number, z: number, t: number): void {
     this.hitX = x; this.hitY = y; this.hitZ = z; this.hitT = t;
-    // Also the detonation point — combat renders the blast at hitPoint when
+    // Also the detonation point - combat renders the blast at hitPoint when
     // valid, so target hits (not just terrain) explode at contact, not at
     // the overshot end-of-frame position.
     this.hitPoint.set(x, y, z);
     this.hitPointValid = true;
   }
 
-  // Mesh ramp-in: every projectile pops in small and grows to full size —
+  // Mesh ramp-in: every projectile pops in small and grows to full size -
   // a 1.6m cannonball spawning at your face shouldn't fill half the screen
   // for a frame. Config overrides via meshStartScale/meshRampInDuration;
   // meshRampIn === false opts out. Duration capped at 40% of maxLifetime
@@ -653,7 +653,7 @@ export class Projectile {
     updateProjectileMesh(this.mesh, this.glowMesh, Projectile._renderPos, this.vel,
       this.config, this.age, this.hitRadius,
       { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt, this.fuseAge());
-    // F1 is a runtime toggle — create lazily (shells predating the key
+    // F1 is a runtime toggle - create lazily (shells predating the key
     // still show), hide when it's off, spawn nothing in normal play.
     if (urlParams.debug) {
       if (!this.dbgCore) {
@@ -682,7 +682,7 @@ export class Projectile {
   removeProjectileMesh(): void {
     if (this.projectileRemoved) {return;}
     releaseProjectileInstance(this.mesh);
-    // mat/glowMat are cache-shared — never dispose
+    // mat/glowMat are cache-shared - never dispose
     if (this.glowMesh) {
       releaseProjectileInstance(this.glowMesh);
     }
@@ -692,7 +692,7 @@ export class Projectile {
     this.projectileRemoved = true;
   }
 
-  /** Diagnostics row — trail + ribbon state for the Alt+Q dump. */
+  /** Diagnostics row - trail + ribbon state for the Alt+Q dump. */
   dbg(): { trail: Record<string, unknown> | null; ribbons: ReturnType<RibbonTrail['dbg']>[] } {
     return {
       trail: this.trail instanceof QuarksTrail ? this.trail.diag() : null,
@@ -700,11 +700,11 @@ export class Projectile {
     };
   }
 
-  /** Rope dart's far end after connect — the terrain anchor point, or
+  /** Rope dart's far end after connect - the terrain anchor point, or
    *  the reeled victim's live position (the caller repoints it per frame
    *  on body hits). null = in flight, rope end is `rendered`. */
   ropeTo: THREE.Vector3 | null = null;
-  /** Remaining reel window — the rope stays drawn through the pull. */
+  /** Remaining reel window - the rope stays drawn through the pull. */
   ropeT = 0;
   /** Attached rope's shrink-only visual length (-1 = not yet measured). */
   private ropeLen = -1;
@@ -722,7 +722,7 @@ export class Projectile {
 
   /** Rope dart: caller passes the thrower's CURRENT chest pos each frame
    *  (local player for own darts, replica pos for remote throws). The
-   *  line is drawn taut — slack in flight would read as a disconnect. */
+   *  line is drawn taut - slack in flight would read as a disconnect. */
   setRope(from: THREE.Vector3): void {
     if (!this.ropeMesh) {
       this.ropeMesh = new THREE.Mesh(_ropeGeo, _ropeMat);
@@ -742,7 +742,7 @@ export class Projectile {
       if (this.ropeLen < 0 || len <= this.ropeLen + 0.02) {this.ropeLen = len;}
       else {
         // Span grew past the taut length (the reeled body overshot the
-        // anchor): the line lets go and reels back from the anchor —
+        // anchor): the line lets go and reels back from the anchor -
         // extending the free end to ropeMax here whipped the tip outward.
         this.startRecall();
         a = from; b = this.ropeFree;
@@ -760,7 +760,7 @@ export class Projectile {
 
   hideRope(): void { if (this.ropeMesh) {this.ropeMesh.visible = false;} }
 
-  /** Embedded shells outlive their trails — the planted corpse IS the
+  /** Embedded shells outlive their trails - the planted corpse IS the
    *  effect, so death waits on the mesh removal too. A hooked rope holds
    *  the shell alive through its reel window the same way. */
   private settled(): boolean {
@@ -768,14 +768,14 @@ export class Projectile {
       && !this.ropeHold && !this.ropeRecall && (!this.glue.embedded || this.projectileRemoved);
   }
 
-  /** Reel window countdown — the rope outlives the dart by design. */
+  /** Reel window countdown - the rope outlives the dart by design. */
   private tickRope(dt: number): void {
     if (this.ropeHold) {
       this.ropeT -= dt;
       if (this.ropeT <= 0) {this.startRecall();}
     } else if (this.ropeRecall) {
       // Constant-time reel: the free end lerps anchor→thrower over
-      // ROPE_REEL_S regardless of span — a 400m miss retracts as fast
+      // ROPE_REEL_S regardless of span - a 400m miss retracts as fast
       // as a 20m one, so the line never lingers behind a moving thrower.
       this.ropeReelT += dt;
       const k = Math.min(1, this.ropeReelT / ROPE_REEL_S);
@@ -793,7 +793,7 @@ export class Projectile {
   explode(): void {
     if (this.exploded) {return;}
     this.exploded = true;
-    // Remote replicas name their pop path for the kb-pop-div census —
+    // Remote replicas name their pop path for the kb-pop-div census -
     // untagged explode sites collapse to 'other' so the count is honest.
     if (this.isRemote && !this.popClass) {this.popClass = 'other';}
     // A connect holds the line on its anchor for the yank window, then every
@@ -809,7 +809,7 @@ export class Projectile {
     this.onExploded = null;
     hook?.();
     for (const r of this.ribbons) {r.stop();}
-    // Embed-capable shells plant on world hits — no target, a swept
+    // Embed-capable shells plant on world hits - no target, a swept
     // contact point to sit at. Fuse pops in mid-air still vanish normally.
     if (this.glue.tryEmbed()) {return;}
     this.removeProjectileMesh();
@@ -824,7 +824,7 @@ export class Projectile {
     this.trail.dispose();
     this.disposed = true;
     // Mark dead so a mass-dispose (demo teardown) can't leave a live object
-    // updating — update loops key off `dead`, not `disposed`.
+    // updating - update loops key off `dead`, not `disposed`.
     this.dead = true;
   }
 }

@@ -21,7 +21,7 @@ import * as sfxWorld from '../core/sfx/world.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
 import { sampleRemoteGhosts } from './ghostTrace.js';
 
-// Hostiles always read red — team colors are for your own side only.
+// Hostiles always read red - team colors are for your own side only.
 const ENEMY_RED = 0xFF_33_33;
 
 // Shared scratch for the per-tick offscreen test.
@@ -45,7 +45,7 @@ export interface RemotesDeps {
   /** Offline DM owns its score map in TeamBots; network matches populate
    *  world.ffaScores from authoritative score echoes instead. */
   lazyOfflineFfaScores?: () => Map<string, number> | null;
-  /** Local sheep meter — the self row's sheep cell reads the same
+  /** Local sheep meter - the self row's sheep cell reads the same
    *  client-side meter the crosshair readout shows. */
   lazyPlayerSheep?: () => { shown: number };
 }
@@ -58,12 +58,12 @@ function makeRemoteHooks(deps: RemotesDeps) {
       if (state.isDead) {return undefined;}
       const rp = new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain(), state.armorClass);
       rp.setClass(state.armorClass);
-      // Roster-declared weapon — the real gun instead of the placeholder
+      // Roster-declared weapon - the real gun instead of the placeholder
       // prop for remotes we haven't seen fire yet.
       if (state.weapon !== undefined) {rp.model.setWeapon(state.weapon);}
       return rp;
     },
-    // Bots are hosted in the room sim — they never ping, so the
+    // Bots are hosted in the room sim - they never ping, so the
     // dead-socket gate can't apply to them or they render as ghosts.
     isLive: (id: string, state: WirePlayerState | undefined): boolean => isBotId(id) || state?.ping != null,
     onCreate: (id: string, rp: RemotePlayer): void => deps.logger.debug('CREATED remote player', { instanceId: rp.instanceId, playerId: id, total: deps.world.remotePlayers.size }),
@@ -71,7 +71,7 @@ function makeRemoteHooks(deps: RemotesDeps) {
       deps.lazyHud().removePlayerIndicator(id);
       deps.lazyHealthBarSystem().forgetPlayer(id);
       sfxWorld.remoteMoveAudioGone(id);
-      // aliveSince/lastWeaponByPlayer key on live ids — a leaver drops
+      // aliveSince/lastWeaponByPlayer key on live ids - a leaver drops
       // here or the module maps grow one entry per departed player
       // forever. kill/death counts are NOT cleared: onRemove also fires
       // on the corpse→respawn entity swap, and zeroing the score there
@@ -90,13 +90,13 @@ function isRemoteActive(deps: RemotesDeps, playerId: string, players: Map<string
 
 // Status bitmask → per-effect visuals. One bit = one row; the next
 // toggle effect lands here, nowhere else in the netcode. Returns false
-// when cloaked — an enemy's HUD must give no trace (dust off an
+// when cloaked - an enemy's HUD must give no trace (dust off an
 // invisible skier is a giveaway). A teammate's cloak is different: it
 // stays on screen wearing the ghost shimmer, so only enemies vanish.
-// Standalone so demo playback drives the same lanes — the live caller
+// Standalone so demo playback drives the same lanes - the live caller
 // passes world/hud from RemotesDeps, playback from its own lifecycle.
 export function applyStatusVisuals(localTeam: string | undefined, hud: HUD, removeBar: ((id: string) => void) | null, playerId: string, remotePlayer: RemotePlayer, status: number, theirTeam: string | undefined): boolean {
-  // Corpses hold no channels — the corpse window's row still streams the
+  // Corpses hold no channels - the corpse window's row still streams the
   // pre-death bits until respawn clears them server-side, and a cloaked
   // corpse would render nothing at all.
   const s = remotePlayer.isDead ? 0 : status;
@@ -110,7 +110,7 @@ export function applyStatusVisuals(localTeam: string | undefined, hud: HUD, remo
   remotePlayer.setDdAura(Boolean(s & STATUS.DD));
   remotePlayer.setCharged(Boolean(s & STATUS.CHARGED));
   if (!cloaked || friendly) {return true;}
-  // Fire-reveal: his own shot left the shimmer window open — the marker
+  // Fire-reveal: his own shot left the shimmer window open - the marker
   // and bar stay up like any visible enemy until ghostT closes it.
   if (remotePlayer.ghostT > 0) {return true;}
   hud.removePlayerIndicator(playerId);
@@ -131,13 +131,13 @@ function isJetting(rp: RemotePlayer, dead: boolean): boolean {
 // name marker from the extrapolated position.
 function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: RemotePlayer, playerState: WirePlayerState): void {
   const hud = deps.lazyHud();
-  // The wire ski bit doubles as the animation claim — tuck when held,
+  // The wire ski bit doubles as the animation claim - tuck when held,
   // run when released, regardless of how much momentum remains.
   const ski = !playerState.isDead && Boolean(playerState.ski);
   const jet = !playerState.isDead && Boolean(playerState.jet);
   remotePlayer.wireSki = ski;
   remotePlayer.wireJet = jet;
-  // The wire has no onGround bit — same feet-vs-ground read the ski dust
+  // The wire has no onGround bit - same feet-vs-ground read the ski dust
   // always used. Only needed when carving, so idle frames skip the probes.
   let grounded = false;
   const v = remotePlayer.vel;
@@ -146,7 +146,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
     const groundY = Math.max(terrain.getHeight(remotePlayer.position.x, remotePlayer.position.z), terrain.getRenderedHeight(remotePlayer.position.x, remotePlayer.position.z));
     grounded = remotePlayer.feetY - groundY < 0.8;
   }
-  // Same shared pass the local player and offline bots use — one gate, one
+  // Same shared pass the local player and offline bots use - one gate, one
   // pair of spawn calls, so a remote's trail matches anyone else's.
   const jetting = isJetting(remotePlayer, playerState.isDead);
   emitLocomotionFx(deps.lazyEffects(), remotePlayer.position, v, grounded, ski, jetting);
@@ -155,14 +155,14 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   if (playerState.isDead) {
     hud.removePlayerIndicator(playerId);
   } else {
-    // Teammates read green, everything else stays enemy red — FFA and
+    // Teammates read green, everything else stays enemy red - FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.
     const friendly = Boolean(playerState.team) && playerState.team === deps.world.localTeam;
-    // Anchor at the RENDERED eye — the slope/lift pass can raise the
+    // Anchor at the RENDERED eye - the slope/lift pass can raise the
     // mesh ~2.5m over the logical feet; marking raw position sinks the
     // chevron into the body exactly when the lift is live.
     _markPos.copy(remotePlayer.position); _markPos.y += remotePlayer.renderLift;
-    // Unnamed humans show their id minus the 'player_' prefix — still
+    // Unnamed humans show their id minus the 'player_' prefix - still
     // marks them as a real person vs a bot's HP number.
     hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held, name: playerState.name ?? playerId.replace(/^player_/, '') });
     // The number stays on the indicator; the crown renders the pile itself.
@@ -170,7 +170,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   }
 }
 
-/** Offscreen flag for the anim gate — one frustum extraction per frame,
+/** Offscreen flag for the anim gate - one frustum extraction per frame,
  *  a ~2m sphere test per remote. Mixer ticks for culled bodies were pure
  *  waste (the skin never rasterizes). */
 function tickOnScreen(deps: RemotesDeps, cam: THREE.PerspectiveCamera): void {
@@ -192,15 +192,15 @@ function aswAccrue(id: string, dead: boolean, grounded: boolean, skiing: boolean
 
 // Friend-or-foe marker: teammates wear their team's color, enemies are
 // always red. Tint applies only when the wire team changes. Exported for
-// the demo playback lane — same reason as applyStatusVisuals.
+// the demo playback lane - same reason as applyStatusVisuals.
 export function applyTeamTint(localTeam: string | undefined, lastTintOf: Map<string, string>,
     playerId: string, remotePlayer: RemotePlayer, theirTeam: string | undefined): void {
-  // Debug hitbox wireframe — friendly green, everyone else red. Runs every
+  // Debug hitbox wireframe - friendly green, everyone else red. Runs every
   // tick (setHex is free) so teamless/FFA bodies read enemy-red, not the
   // constructor's default green.
   const friendly = Boolean(theirTeam) && theirTeam === localTeam;
   remotePlayer.setColliderColor(friendly ? 0x00_FF_00 : ENEMY_RED);
-  // Body marks — enemies carry the scarlet hull+rim (through-wall read);
+  // Body marks - enemies carry the scarlet hull+rim (through-wall read);
   // allies get the quieter squad-green rim only. Bodies stay neutral.
   remotePlayer.model.setOutline(friendly ? null : 0xF0_4A_4A);
   remotePlayer.model.setRim(friendly ? 0x44_CC_55 : 0xF0_4A_4A);
@@ -220,7 +220,7 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   const remotePlayer = deps.world.remotePlayers.ensure(playerId, playerState);
   if (!remotePlayer) {return;}
 
-  // Entity liveness mirrors roster truth every frame — the kill/respawn
+  // Entity liveness mirrors roster truth every frame - the kill/respawn
   // events are just the fast path. A lost event leaves _isDead frozen
   // while ticks already say alive (roster heals, body stays a corpse:
   // the silent invisible-bot desync the hash can't flag because the
@@ -230,10 +230,10 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
     else {remotePlayer.respawn(playerState.position);}
   }
 
-  // Hide stale remote players — backgrounded tabs keep the socket open but
+  // Hide stale remote players - backgrounded tabs keep the socket open but
   // stop sending updates, leaving ghosts standing around. 60s grace covers
   // genuine packet loss; dead reckoning handles shorter gaps. Players that
-  // never reported ping (>5s without one) are dead sockets — hide them too.
+  // never reported ping (>5s without one) are dead sockets - hide them too.
   const inactive = !deps.world.remotePlayers.active(playerId, remotePlayer, nm.getPlayers().get(playerId));
   deps.world.remotePlayers.setStale(remotePlayer, inactive);
   if (inactive) {
@@ -244,9 +244,9 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   }
 
   // tick() drives interpolation + dead reckoning and internally advances
-  // the AnimationMixer — a second model.update here would 2x animations.
+  // the AnimationMixer - a second model.update here would 2x animations.
   remotePlayer.tick(dt, deps.lazyCamera().position);
-  // Same grounded heuristic the ski dust uses — wire has no onGround bit.
+  // Same grounded heuristic the ski dust uses - wire has no onGround bit.
   // It feeds the scoreboard's asw column, so a ~5Hz cache is plenty:
   // 32 unconditional height samples/frame was ~2.3% of a throttled CPU.
   let grounded = aswGround.get(playerId) ?? true;
@@ -259,19 +259,19 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   } else {aswGroundT.set(playerId, gt);}
   aswAccrue(playerId, playerState.isDead, grounded, Boolean(playerState.ski), dt);
   // Class rides every tick record because strict-tier role re-fits
-  // (hof→heavy, capper→light) land mid-life on the server — the
+  // (hof→heavy, capper→light) land mid-life on the server - the
   // silhouette must follow the sim's body, not the create-time class.
   if (remotePlayer.armorClass !== playerState.armorClass) {remotePlayer.setClass(playerState.armorClass);}
 
   // A decloak-revealed enemy (ghostT live from his own shot) reads like
-  // any visible foe: HUD marker, team tint, ski dust — the cloak only
+  // any visible foe: HUD marker, team tint, ski dust - the cloak only
   // blanks him once the shimmer window closes.
   if (!applyStatusVisuals(deps.world.localTeam, deps.lazyHud(), (id): void => { deps.lazyHealthBarSystem().removeBar(id); }, playerId, remotePlayer, playerState.status ?? 0, playerState.team) && remotePlayer.ghostT <= 0) {return;}
   applyTeamTint(deps.world.localTeam, lastTintOf, playerId, remotePlayer, playerState.team);
   tickRemoteCosmetics(deps, playerId, remotePlayer, playerState);
 }
 
-/** CTF flag diamonds — projected every frame like player indicators.
+/** CTF flag diamonds - projected every frame like player indicators.
  *  This tick also OWNS the flag mesh position (Group.onBeforeRender
  *  never fires, so a render hook can't do it): carried flags ride the
  *  carrier's body, loose flags ease toward the last wire pos so a
@@ -291,11 +291,11 @@ function tickFlagMarkers(deps: RemotesDeps, localPlayerId: string,
     }
     _flagAnchor.set(m.position.x, m.position.y + 3.4, m.position.z);
     hud.updateFlagIndicator(`flag:${team}`, _flagAnchor, cam, team);
-    // The stand's hollow socket marker sits at gem height — flag home
+    // The stand's hollow socket marker sits at gem height - flag home
     // reads as a flag-over-stand pin stack; flag away leaves the empty
     // socket marking where it belongs. While the flag is home the socket
     // rides the flag diamond's anchor so the filled diamond nests inside
-    // it — projecting both from home would leave them ~3m apart on screen.
+    // it - projecting both from home would leave them ~3m apart on screen.
     if (marker.homeKnown) {
       const home = deps.world.flagStates[team] === 'home';
       if (!home) {_flagAnchor.set(marker.home.x, marker.home.y + FLAG_STAND_TOP + 0.07, marker.home.z);}
@@ -305,7 +305,7 @@ function tickFlagMarkers(deps: RemotesDeps, localPlayerId: string,
 }
 
 const _nodeAnchor = new THREE.Vector3();
-/** Conquest node pins — same DOM diamonds as the flags. net/nodes.ts
+/** Conquest node pins - same DOM diamonds as the flags. net/nodes.ts
  *  decides WHICH nodes pin (cores + your frontier) via marker.show;
  *  this loop only projects. */
 function tickNodeMarkers(deps: RemotesDeps, hud: HUD, cam: THREE.PerspectiveCamera): void {
@@ -313,7 +313,7 @@ function tickNodeMarkers(deps: RemotesDeps, hud: HUD, cam: THREE.PerspectiveCame
   if (marks.size === 0) {return;}
   for (const [id, m] of marks) {
     if (!m.show) {continue;}
-    // Pin floats above the beam base — readable against the ring at
+    // Pin floats above the beam base - readable against the ring at
     // standoff range, clear of the pillar glow up close.
     _nodeAnchor.set(m.pos.x, m.pos.y + (m.core ? 12 : 7), m.pos.z);
     hud.updateFlagIndicator(`node:${id}`, _nodeAnchor, cam, m.owner === 'neutral' ? 'neutral' : m.owner, m.core ? 'stand' : 'flag');
@@ -322,16 +322,16 @@ function tickNodeMarkers(deps: RemotesDeps, hud: HUD, cam: THREE.PerspectiveCame
 
 // Remove disconnected players and dead players that have shrunk to 0
 function cleanupRemotePlayers(deps: RemotesDeps, players: Map<string, WirePlayerState>): void {
-  // `bot:` entries are locally driven (Nugget Wars) — the network roster
+  // `bot:` entries are locally driven (Nugget Wars) - the network roster
   // knows nothing about them; cleanup is owned by TeamBots.
-  // 'dummy' is the ?dummy debug body — gameLoop ticks it from a closure,
+  // 'dummy' is the ?dummy debug body - gameLoop ticks it from a closure,
   // so pruning it would leave a disposed model animating forever.
   // Wire 'BOT-' ids are NOT exempt: they live and die by the roster like
-  // humans, or a bot that left keeps an unticked frozen shell forever —
+  // humans, or a bot that left keeps an unticked frozen shell forever -
   // shootable, but every claim lands 'Shot: unknown target'.
   deps.world.remotePlayers.prune(
     (id): boolean => id.startsWith('bot:') || id.startsWith('dummy') || players.has(id),
-    // Local bots/dummies keep their body across death+respawn — the death
+    // Local bots/dummies keep their body across death+respawn - the death
     // shrink must NOT reap them or they respawn invisible and off-board.
     // A wire bot's corpse shrink may reap it: roster truth recreates it.
     (id): boolean => id.startsWith('bot:') || id.startsWith('dummy'),
@@ -346,16 +346,16 @@ function scoreboardScores(deps: RemotesDeps, nm: NetworkManager, localId: string
     : { scores: deps.world.ffaScores, localScoreId: localId };
 }
 
-// Per-player alive clock — spawn/join stamps, cleared on death. The
+// Per-player alive clock - spawn/join stamps, cleared on death. The
 // scoreboard polls it every frame, so dead→alive transitions in ANY
 // source (wire events, tick isDead flips, offline bot respawns) reset it.
 const aliveSince = new Map<string, number>();
 
-/** A/S/W split of the CURRENT life — ms buckets, wiped on death exactly
+/** A/S/W split of the CURRENT life - ms buckets, wiped on death exactly
  *  like aliveSince. Ski reads as grounded-and-skiing; airborne ski time
  *  counts as air (you can't ski without a surface). */
 const asw = new Map<string, { a: number; s: number; w: number }>();
-// Grounded-verdict cache for the asw sampler — refreshed ~5Hz per remote.
+// Grounded-verdict cache for the asw sampler - refreshed ~5Hz per remote.
 const aswGround = new Map<string, boolean>();
 const aswGroundT = new Map<string, number>();
 function aswStr(id: string): string | null {
@@ -375,7 +375,7 @@ function pruneAsw(live: Set<string>): void {
   }
 }
 
-/** Seconds alive, or null while dead. A first-seen-alive id stamps now —
+/** Seconds alive, or null while dead. A first-seen-alive id stamps now -
  * join-time is the closest observable the client has for pre-existing
  * players. */
 function aliveSecs(id: string, dead: boolean, now: number): number | null {
@@ -385,7 +385,7 @@ function aliveSecs(id: string, dead: boolean, now: number): number | null {
   return Math.floor((now - at) / 1000);
 }
 
-/** A leaver who quit alive never trips the death prune — evict ids the
+/** A leaver who quit alive never trips the death prune - evict ids the
  *  current pass didn't query or the map holds every departed id forever. */
 function pruneAliveSince(live: Set<string>): void {
   for (const id of aliveSince.keys()) {
@@ -399,7 +399,7 @@ let scoreboardStale = true;
 // Scoreboard rows: local player first, then remotes sorted by frags desc
 function updateScoreboard(deps: RemotesDeps): void {
   const hud = deps.lazyHud();
-  // Rows rebuild at ~4Hz, not per frame — a full roster Set+sort every
+  // Rows rebuild at ~4Hz, not per frame - a full roster Set+sort every
   // rendered frame is pure churn for a display the eye can't resolve
   // past a few updates a second anyway. Open edge forces one immediate
   // pass so the board never shows a stale frame.
@@ -416,7 +416,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   const { scores: ffa, localScoreId } = scoreboardScores(deps, nm, localId);
   // My frags land under TWO keys: wire kills credit the network id
   // (playerKill broadcast), kills on the client-side fill bots credit
-  // 'local' (botKill's authority id). Sum them — reading only one key
+  // 'local' (botKill's authority id). Sum them - reading only one key
   // silently dropped every kill that went through the other path.
   const selfFrags = (deps.world.killCounts.get('local') ?? 0)
     + (localScoreId === 'local' ? 0 : deps.world.killCounts.get(localScoreId) ?? 0);
@@ -424,7 +424,7 @@ function updateScoreboard(deps: RemotesDeps): void {
     + (localScoreId === 'local' ? 0 : deps.world.deathCounts.get(localScoreId) ?? 0);
   const now = Date.now();
   const rows = [{ name: settings.get('fps-name') || localId, frags: selfFrags, deaths: selfDeaths, score: ffa.get(localScoreId) ?? null, ping: nm.serverPingMs == null ? nm.getPing() : `${nm.getPing()}/${Math.round(nm.serverPingMs)}`, net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass, asw: aswStr(localId) }];
-  // net is string|null — 'bot' rows carry a label, not a transport tier.
+  // net is string|null - 'bot' rows carry a label, not a transport tier.
   const queriedIds = new Set<string>([localId]);
   const remoteRows: { name: string; frags: number; deaths: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string; asw?: string | null }[] = [...nm.getPlayers().keys()]
     .filter((id): boolean => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
@@ -433,7 +433,7 @@ function updateScoreboard(deps: RemotesDeps): void {
       const ps = nm.getPlayers().get(id);
       return { name: isBotId(id) ? botRosterName(id) : (ps?.name ?? id), frags: deps.world.killCounts.get(id) ?? 0, deaths: deps.world.deathCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now), cls: ps?.armorClass, asw: aswStr(id) };
     });
-  // Offline bots live in world.remotePlayers, not the network roster —
+  // Offline bots live in world.remotePlayers, not the network roster -
   // they'd be invisible on the scoreboard otherwise.
   for (const [id, rp] of deps.world.remotePlayers) {
     if (nm.getPlayers().has(id)) {continue;}
@@ -443,7 +443,7 @@ function updateScoreboard(deps: RemotesDeps): void {
     const t = (rp as { team?: string }).team;
     remoteRows.push({ name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, deaths: deps.world.deathCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now), cls: rp.armorClass, asw: aswStr(id) });
   }
-  // Self sorts into the ranking like everyone else — pinning the local
+  // Self sorts into the ranking like everyone else - pinning the local
   // row to the top read as "unordered" whenever the leader wasn't you.
   const allRows = [...rows, ...remoteRows];
   const ranked = rankRows(deps.world.mode, allRows);
@@ -462,7 +462,7 @@ export function createRemotes(deps: RemotesDeps) {
   let wasConnected = true;
 
   deps.world.remotePlayers.hooks = makeRemoteHooks(deps);
-  // Tint memory keys on ids — same leaver-leak class as aliveSince.
+  // Tint memory keys on ids - same leaver-leak class as aliveSince.
   const prevOnRemove = deps.world.remotePlayers.hooks.onRemove;
   deps.world.remotePlayers.hooks.onRemove = (id, ent, reason): void => {
     lastTintOf.delete(id);
@@ -479,12 +479,12 @@ export function createRemotes(deps: RemotesDeps) {
   function networkTick(dt: number): void {
     const nm = deps.lazyNetworkManager();
     const player = deps.lazyPlayer();
-    // Demo playback drives player.pos from recorded frames — sending them
+    // Demo playback drives player.pos from recorded frames - sending them
     // would look like teleport spam to the server, and live remote ticks
     // would mix the real match into the replay scene.
     if (deps.world.playbackMode) {
       player.pendingTeleport = false; // don't queue a stale teleport for later
-      // Playback feeds flagMarkers/nodeMarkers from the demo stream —
+      // Playback feeds flagMarkers/nodeMarkers from the demo stream -
       // the projection ticks must still run or the HUD diamonds die.
       tickFlagMarkers(deps, nm.getLocalPlayerId(), player.pos, deps.lazyHud(), deps.lazyCamera());
       tickNodeMarkers(deps, deps.lazyHud(), deps.lazyCamera());
@@ -513,7 +513,7 @@ export function createRemotes(deps: RemotesDeps) {
     );
 
     // Connected → disconnected: the wire map is already cleared, so the
-    // prune below reaps the entities — but indicator ids that aren't
+    // prune below reaps the entities - but indicator ids that aren't
     // entity-keyed (flag:alpha/bravo) have no owner to clean them.
     // Sweep the whole overlay once on the transition or they freeze
     // mid-screen for the life of the session.
@@ -526,7 +526,7 @@ export function createRemotes(deps: RemotesDeps) {
     const localPlayerId = nm.getLocalPlayerId();
     aswAccrue(localPlayerId, player.isDead, player.onGround, player.skiing, dt);
 
-    // Roster work — player list UI + join/leave log — is polled at 2Hz.
+    // Roster work - player list UI + join/leave log - is polled at 2Hz.
     // Per-position logging at 60Hz was a console flood, and building the
     // roster arrays every frame was pure GC churn; a join/leave rendered
     // half a second late loses nothing.
@@ -541,24 +541,24 @@ export function createRemotes(deps: RemotesDeps) {
     }
 
     players.forEach((playerState, playerId): void => tickRemotePlayer(deps, lastTintOf, playerId, playerState, dt));
-    // 10Hz ghost-epoch sampler — rendered/wire/ghost divergence audit.
+    // 10Hz ghost-epoch sampler - rendered/wire/ghost divergence audit.
     sampleRemoteGhosts(deps.world.remotePlayers.values());
     const hud = deps.lazyHud();
     const cam = deps.lazyCamera();
     tickOnScreen(deps, cam);
     // Local bots ('bot:', 'dummy') aren't in the network roster, so the
-    // forEach above never touches them — same red marker as real remotes.
+    // forEach above never touches them - same red marker as real remotes.
     for (const [id, rp] of deps.world.remotePlayers) {
       if (players.has(id)) {continue;}
       const gb = rp as { grounded?: boolean; wireSki?: boolean };
       if (rp.isDead) {
         hud.removePlayerIndicator(id);
       } else {
-        // Local bots aren't network remotes — they used to jet silently and
+        // Local bots aren't network remotes - they used to jet silently and
         // leave NO ski dust at all. Same shared pass, so a bot's trail reads
         // exactly like a human's.
         emitLocomotionFx(deps.lazyEffects(), rp.position, rp.vel, gb.grounded ?? true, Boolean(gb.wireSki), isJetting(rp, false));
-        // GameBot carries `team` ('alpha'/'bravo', own id in FFA) — plain
+        // GameBot carries `team` ('alpha'/'bravo', own id in FFA) - plain
         // RemotePlayers have none and stay enemy red.
         const friendly = (rp as { team?: string }).team === deps.world.localTeam
           && (rp as { team?: string }).team !== undefined;
