@@ -71,16 +71,16 @@ const SLOTS: readonly LoadoutSlot[] = ['near', 'mid', 'far', 'belt', 'side'];
  *  stays in the candidate pool implicitly, and kitConsistent rejects
  *  anything the derived class can't shoulder. */
 export const BOT_ALT_SLOTS: Partial<Record<LoadoutSlot, WeaponType[]>>[] = [
-  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon], far: [WeaponType.Railgun], belt: [WeaponType.ImpactGrenade], side: [WeaponType.Revolver] }, // chaser
-  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // siege
+  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Railgun], belt: [WeaponType.ImpactGrenade], side: [WeaponType.Revolver] }, // chaser
+  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // siege
   { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.RocketLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] }, // anchor
-  { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon], far: [WeaponType.Disc], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] }, // skirmisher
+  { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] }, // skirmisher
   { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // hose
-  { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] }, // bruiser
+  { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] }, // bruiser
   { near: [WeaponType.Chaingun, WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.Disc], belt: [WeaponType.Grenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // flak skirmisher
-  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard], far: [WeaponType.MRVLauncher, WeaponType.RocketLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] }, // artillery
-  { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] }, // beam rider
-  { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] }, // trapper
+  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.MRVLauncher, WeaponType.RocketLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] }, // artillery
+  { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] }, // beam rider
+  { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] }, // trapper
   { near: [WeaponType.Chaingun], mid: [WeaponType.GrenadeLauncher, WeaponType.Sprinkler], far: [WeaponType.BoltLauncher], belt: [WeaponType.Grenade, WeaponType.Javelin], side: [WeaponType.Revolver] }, // support
   { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.BoltLauncher], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] }, // medic — near's HealBeam stays: a medic that never zaps still heals
   { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Disc], far: [WeaponType.Disc], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] }, // field medic
@@ -101,7 +101,7 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   near: [WeaponType.Shotgun, WeaponType.Flak],
   // Bombard lives in mid — a 160dmg... a direct-hit slug has no business
   // in the far band where only splash reach matters.
-  mid: [WeaponType.Chaingun, WeaponType.Lightning, WeaponType.Disc, WeaponType.Cannon, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard, WeaponType.RocketLauncher],
+  mid: [WeaponType.Chaingun, WeaponType.Lightning, WeaponType.Disc, WeaponType.Cannon, WeaponType.Gonne, WeaponType.Basilisk, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard, WeaponType.RocketLauncher],
   far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.MRVLauncher],
   // Every player belt throw + every player sidearm — parity both ways:
   // a wildcard bot can field anything a player can legally equip.
