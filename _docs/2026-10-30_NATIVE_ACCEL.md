@@ -57,17 +57,41 @@ and the fix that actually worked last time was *sharding* (2 procs ×
 across threads. 24 logical cores, currently ~2 utilized — linear-ish
 scaling on JS we already have, no port.
 
-## What to actually do
+## What to actually do — measured 2026-10-30
 
-1. `bun _tools/profload.ts --bots 500 --secs 40 --cpuprof` — server tick
-   attribution; `perf.ts --compare` — client frame attribution.
-   The last attribution pointed at encode/serialization territory —
-   if that holds, **FFI-encode is the single best pilot** (smallest
-   surface, classic shape).
-2. If per-seat sim work dominates instead → **worker thread sharding**
-   before any C port — bigger lever, no port risk.
-3. Client: only if VFX stepping shows up in the frame → shared-memory
-   wasm pilot on the particle pool. Otherwise worker first.
+`bun _tools/profload.ts --bots 500 --secs 40 --cpuprof` (74 seats
+joined, 59.5s profile, `server_bun/CPU.20261030.165523.29252.0.001.cpuprofile`):
+
+| Slice | Self ms | Share |
+|---|---|---|
+| `send` (ws.send syscall) | 21,524 | **~36%** |
+| `fanoutRecords` | 3,291 | 5.5% |
+| `tick` (RoomMoveSim) | 3,202 | 5.4% |
+| `hmChord` | 1,512 | 2.5% |
+| `buildRecords` | 1,156 | 1.9% |
+| `wallNow` | 889 | 1.5% |
+| `encodeTickPlayerV4` | 889 | 1.5% |
+
+**The guess was wrong — and the profile caught it.** `send` alone is
+~36% of CPU, 24× the encode slice. phaseMs agrees: `fanout 0.87ms` vs
+`sim:move 0.22 + sim:proj 0.12` at 74 seats — the broadcast path costs
+~2× the sim, and it scales linearly per seat.
+
+- **FFI-encode is dead by the data** — encode is 1.5%, not a pilot.
+- **FFI can't help `send` at all** — it's a kernel socket syscall,
+  not JS math. No portable work there.
+- **The lever is fewer, bigger frames** — at 17-19µs/ws.send (bare-
+  socket measure, earlier herd work), send-count reduction is the
+  whole game: more aggregation per seat-tick, the volatile-batching
+  direction continued.
+- **Shards still work** — same lever as the 2×490-seat split that
+  crushed ELD; there are spare cores for a third/fourth worker.
+- Second tier (`fanoutRecords`+`buildRecords`+`wallNow` ≈ 9%) is
+  FFI-shaped if the send path ever stops dominating — worth a look
+  after the send lever is pulled, not before.
+
+Client-side conclusion unchanged: profile before piloting; worker
+offload and GPU-side updates rank above any wasm.
 
 ## Don't bother
 
