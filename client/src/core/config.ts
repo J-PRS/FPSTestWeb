@@ -494,6 +494,10 @@ export const MAX_HEALTH = 100; // Maximum player health
 export const TERRAIN_HEIGHT_SCALE = 125; // Terrain height scale
 export const TERRAIN_WORLD_SCALE = 1500; // Terrain world scale
 export const TERRAIN_HEIGHTMAP_DIVISOR = 255; // Heightmap value divisor
+// Sediment lips — structures mound the DRAWN field around their bases.
+// Visual-only (collision/sim read the raw field). ?nolips kills it at
+// runtime for A/B without reverting.
+export const TERRAIN_STRUCTURE_LIPS = true;
 
 // Networking backend configuration
 // Options: 'tribes2' (Tribes2-style with bit-packing for LAN-like gameplay), 'fastapi' (Simple JSON-based WebSocket)

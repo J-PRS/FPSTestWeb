@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { Heightfield } from '../../../shared/heightfield.js';
 
 import {
-  TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR
+  TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR, TERRAIN_STRUCTURE_LIPS
 } from '../core/config.js';
+import { urlParams } from '../core/params.js';
 
 const HSCALE = TERRAIN_HEIGHT_SCALE;
 const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
@@ -241,7 +242,7 @@ export function clearTerrainBumps(): void {
 }
 
 function rebuildVisual(): void {
-  if (!hmData || !hmSize || bumpSources.size === 0) {hmVisual = null; return;}
+  if (!TERRAIN_STRUCTURE_LIPS || urlParams.noLips || !hmData || !hmSize || bumpSources.size === 0) {hmVisual = null; return;}
   const v = new Uint8ClampedArray(hmData);
   const metersToByte = TERRAIN_HEIGHTMAP_DIVISOR / (HSCALE * hmScale);
   let idx = 0;

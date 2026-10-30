@@ -132,6 +132,7 @@ export const urlParams = {
    *  creature gates still read noCreatures above. */
   get creatures(): boolean { return live().has('creatures') || settings.get('fps-creatures') === 1; },
   get noBalls(): boolean { return live().has('noballs') || settings.get('fps-noballs') === 1; },
+  get noLips(): boolean { return live().has('nolips') || settings.get('fps-nolips') === 1; },
   /** Local ambient ball field only — honors an explicit ?noballs, but NOT
    *  the persisted fps-noballs room-creation flag (pure-PvP hosted default
    *  shouldn't strip the offline sandbox's main attraction). */
