@@ -247,8 +247,17 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // the AnimationMixer — a second model.update here would 2x animations.
   remotePlayer.tick(dt, deps.lazyCamera().position);
   // Same grounded heuristic the ski dust uses — wire has no onGround bit.
-  const tY = Math.max(deps.lazyTerrain().getHeight(remotePlayer.position.x, remotePlayer.position.z), deps.lazyTerrain().getRenderedHeight(remotePlayer.position.x, remotePlayer.position.z));
-  aswAccrue(playerId, playerState.isDead, remotePlayer.feetY - tY < 0.8, Boolean(playerState.ski), dt);
+  // It feeds the scoreboard's asw column, so a ~5Hz cache is plenty:
+  // 32 unconditional height samples/frame was ~2.3% of a throttled CPU.
+  let grounded = aswGround.get(playerId) ?? true;
+  const gt = (aswGroundT.get(playerId) ?? 0) - dt;
+  if (gt <= 0) {
+    aswGroundT.set(playerId, 0.2);
+    const tY = Math.max(deps.lazyTerrain().getHeight(remotePlayer.position.x, remotePlayer.position.z), deps.lazyTerrain().getRenderedHeight(remotePlayer.position.x, remotePlayer.position.z));
+    grounded = remotePlayer.feetY - tY < 0.8;
+    aswGround.set(playerId, grounded);
+  } else {aswGroundT.set(playerId, gt);}
+  aswAccrue(playerId, playerState.isDead, grounded, Boolean(playerState.ski), dt);
   // Class rides every tick record because strict-tier role re-fits
   // (hof→heavy, capper→light) land mid-life on the server — the
   // silhouette must follow the sim's body, not the create-time class.
@@ -346,6 +355,9 @@ const aliveSince = new Map<string, number>();
  *  like aliveSince. Ski reads as grounded-and-skiing; airborne ski time
  *  counts as air (you can't ski without a surface). */
 const asw = new Map<string, { a: number; s: number; w: number }>();
+// Grounded-verdict cache for the asw sampler — refreshed ~5Hz per remote.
+const aswGround = new Map<string, boolean>();
+const aswGroundT = new Map<string, number>();
 function aswStr(id: string): string | null {
   const e = asw.get(id);
   if (!e) {return null;}
@@ -357,6 +369,9 @@ function aswStr(id: string): string | null {
 function pruneAsw(live: Set<string>): void {
   for (const id of asw.keys()) {
     if (!live.has(id)) {asw.delete(id);}
+  }
+  for (const id of aswGroundT.keys()) {
+    if (!live.has(id)) {aswGroundT.delete(id); aswGround.delete(id);}
   }
 }
 

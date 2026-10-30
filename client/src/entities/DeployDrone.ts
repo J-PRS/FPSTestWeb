@@ -125,6 +125,7 @@ export class DeployDrone {
     if (this.unfoldT < 1) { this.tickUnfold(dt); return null; }
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.09);
+    this.flash.visible = this.flashT > 0; // opacity-0 sprites still cost a draw call
     this.rotorSpin += dt * 30;
 
     // Anchor: above the head, biased slightly back — out of view, close

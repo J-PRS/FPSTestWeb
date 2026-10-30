@@ -35,6 +35,68 @@ const gunmetalBake = new Map<string, Promise<void>>();
 // playerClipSurgery.ts — extracted so the layered-anim carve-up is
 // testable without loading the rig.
 
+// Vertexized body material — class rigs ship 3 color/rough/metal-only
+// materials ('armor'/'dark'/'accent') whose ONLY differences are three
+// scalar uniforms. Baking them into per-vertex attributes lets the whole
+// body merge into ONE skinned draw call (~2 draws saved per remote ×2
+// more in the shadow pass). customProgramCacheKey is constant so every
+// remote's clone shares one program; uniforms stay per-model so damage
+// flash / rim / tint still act per player.
+function makeAtlasMat(): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ name: 'atlas', vertexColors: true, roughness: 1, metalness: 1 });
+  m.userData.atlasMat = true; // PlayerMats skips tint — it rides the attr
+  m.onBeforeCompile = (sh): void => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aRough;\nattribute float aMetal;\nvarying float vRough;\nvarying float vMetal;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRough = aRough;\nvMetal = aMetal;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vRough;\nvarying float vMetal;')
+      .replace('float roughnessFactor = roughness;', 'float roughnessFactor = vRough;')
+      .replace('float metalnessFactor = metalness;', 'float metalnessFactor = vMetal;');
+  };
+  m.customProgramCacheKey = (): string => 'atlasbody';
+  return m;
+}
+
+/** Bake a color/rough/metal-only material's three scalars into geometry
+ *  attributes; authColor + tintMask stash let setTeamTint rewrite the
+ *  attr later (armor verts lerp, dark/accent stay authored). */
+function vertexizeGeo(g: THREE.BufferGeometry, m: THREE.MeshStandardMaterial): void {
+  const n = g.getAttribute('position').count;
+  const col = new Float32Array(n * 3);
+  const rg = new Float32Array(n);
+  const mt = new Float32Array(n);
+  const mask = new Float32Array(n).fill(m.name === 'armor' ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    col[i * 3] = m.color.r; col[i * 3 + 1] = m.color.g; col[i * 3 + 2] = m.color.b;
+    rg[i] = m.roughness; mt[i] = m.metalness;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('aRough', new THREE.BufferAttribute(rg, 1));
+  g.setAttribute('aMetal', new THREE.BufferAttribute(mt, 1));
+  g.userData.authColor = col.slice();
+  g.userData.tintMask = mask;
+}
+
+// One mergeVertices pass per class variant — every remote of a class
+// produces the byte-identical merged body, so later spawns clone the
+// buffers (~memcpy) instead of re-hashing every vertex. userData
+// authColor/tintMask are read-only inputs to setTeamTint — shared refs
+// are safe; the clone owns the mutable `color` attr itself.
+const _atlasGeoCache = new Map<string, THREE.BufferGeometry>();
+
+/** Culling bounds for skinned meshes without the applyBoneTransform
+ *  bake (three walks every vert through every bone — ~7% of a throttled
+ *  profile). Bind-pose geometry sphere + anim-travel pad is equivalent:
+ *  the bake it replaced ran at load pose ≈ bind pose anyway. */
+function cheapSkinnedBounds(sm: THREE.SkinnedMesh): void {
+  const g = sm.geometry;
+  if (!g.boundingSphere) {g.computeBoundingSphere();}
+  if (!sm.boundingSphere) {sm.boundingSphere = new THREE.Sphere();}
+  sm.boundingSphere.copy(g.boundingSphere!);
+  sm.boundingSphere.radius += 0.6;
+}
+
 export type { AnimationState } from './playerClips.js';
 
 export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'juggernaut' | 'juggernaut_og' | 'juggernaut_brick' | 'juggernaut_wedge' | 'juggernaut_bld' | 'juggernaut_kit' | 'juggernaut_scp' | 'juggernaut_shell' | 'light_scp' | 'light_plate' | 'light_brick' | 'light_shell' | 'dreadnought' | 'brawler' | 'scout';
@@ -286,7 +348,9 @@ export class PlayerModel {
     this.model.traverse((child): void => this.prepareChild(child));
     this.shareDrivenSkeleton(gltf.animations);
     this.unifySkeletons();
+    this.vertexizeBody();
     this.mergeSkinnedParts();
+    this.mergeAtlasParts(gltf.animations);
     this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed —
     // the freshly captured skinnedMeshes need the swap applied now.
@@ -480,6 +544,211 @@ export class PlayerModel {
     }
   }
 
+  /** Color/rough/metal-only parts vertexize onto ONE shared-per-model
+   *  material, then mergeSkinnedParts collapses them into a single draw.
+   *  Parts with real material differences (maps, transparency, vertex
+   *  colors) stay on their own materials and merge as before. */
+  private readonly atlasParts: THREE.SkinnedMesh[] = [];
+
+  private vertexizeBody(): void {
+    // mannequin's lod1 swap replaces geometry wholesale — the swapped-in
+    // geos wouldn't carry the extra attributes, so it stays split.
+    if (this.variant === 'mannequin') {return;}
+    const am = makeAtlasMat();
+    let any = false;
+    for (const sm of this.skinnedMeshes) {
+      const m = sm.material as THREE.MeshStandardMaterial;
+      if (!m?.isMeshStandardMaterial || m.map || m.normalMap || m.emissiveMap
+        || m.aoMap || m.roughnessMap || m.metalnessMap || m.transparent || m.vertexColors) {continue;}
+      vertexizeGeo(sm.geometry, m);
+      const base = sm.userData.baseGeo as THREE.BufferGeometry | undefined;
+      if (base) {vertexizeGeo(base, m);}
+      sm.material = am;
+      this.atlasParts.push(sm);
+      any = true;
+    }
+    // Register so flash/rim/dispose reach the shared clone — tint itself
+    // is attr-side (setTeamTint below), mats skips it via userData.atlasMat.
+    if (any) {this.mats.adopt(am);}
+  }
+
+  /** Cross-parent merge for atlas parts: class rigs parent armor pieces
+   *  under named bone-empties (anklel/elbowl/mohawk) — static attachment
+   *  nodes, the skeleton does the actual animating. Merge under the
+   *  parts' deepest COMMON ancestor (usually the GLB root, e.g.
+   *  'brawler' — it may itself be animated; the merged mesh rides it).
+   *  Each part's transform relative to that anchor is constant and
+   *  bakes into the merged geometry; binding to the anchor's world
+   *  matrix reproduces the original vertex path exactly
+   *  (A(t)×A(0)⁻¹×ΣboneMat×B×v with B=A₀, geo' = A₀⁻¹×T_i×v → identical).
+   *  Guard: a part whose chain contains an ANIMATED node strictly
+   *  between it and the anchor stays split — its transform isn't
+   *  constant. */
+  private mergeAtlasParts(animations: THREE.AnimationClip[]): void {
+    const parts = this.skinnedMeshes.filter((sm): boolean => (sm.material as THREE.Material).userData.atlasMat === true);
+    if (parts.length < 2 || !this.model) {return;}
+    const animated = new Set<string>();
+    for (const clip of animations) {
+      for (const t of clip.tracks) {animated.add(t.name.split('.')[0]!);}
+    }
+    this.model.updateMatrixWorld(true);
+    // Deepest common ancestor — first part's chain, intersected in order.
+    let anchor: THREE.Object3D | null = null;
+    {
+      const chains = parts.map((sm): THREE.Object3D[] => {
+        const c: THREE.Object3D[] = [];
+        for (let p: THREE.Object3D | null = sm.parent; p; p = p.parent) {c.unshift(p);}
+        return c;
+      });
+      const first = chains[0]!;
+      for (let i = 0; i < first.length; i++) {
+        if (chains.every((c): boolean => c[i] === first[i])) {anchor = first[i]!;} else {break;}
+      }
+    }
+    if (!anchor) {return;}
+    const A = anchor.matrixWorld.clone();
+    const Ainv = A.clone().invert();
+    const consumed = new Set<THREE.SkinnedMesh>();
+    const T = new THREE.Matrix4();
+    // Which parts merge is per-instance state (blocked parents), but the
+    // merged OUTPUT is identical per variant — the cache key just needs
+    // the same bake inputs, and the consumed set is computed either way.
+    for (const sm of parts) {
+      let blocked = false;
+      for (let p: THREE.Object3D | null = sm.parent; p && p !== anchor; p = p.parent) {
+        if (animated.has(p.name)) {blocked = true; break;}
+      }
+      if (!blocked) {consumed.add(sm);}
+    }
+    let merged = _atlasGeoCache.get(this.variant)?.clone();
+    if (!merged) {
+      const geos: THREE.BufferGeometry[] = [];
+      const geosSrc: THREE.BufferGeometry[] = [];
+      for (const sm of consumed) {
+        const g = sm.geometry.clone();
+        g.applyMatrix4(T.copy(Ainv).multiply(sm.matrixWorld));
+        geos.push(g);
+        geosSrc.push(sm.geometry);
+      }
+      if (geos.length < 2) {return;}
+      merged = mergeGeometries(geos, false) ?? undefined;
+      if (!merged) {return;}
+      // Rebuild authColor/tintMask across the merge for setTeamTint.
+      const nv = merged.getAttribute('position').count;
+      const auth = new Float32Array(nv * 3);
+      const mask = new Float32Array(nv);
+      let vo = 0;
+      for (const src of geosSrc) {
+        const a = src.userData.authColor as Float32Array | undefined;
+        const mk = src.userData.tintMask as Float32Array | undefined;
+        const n = src.getAttribute('position').count;
+        if (a) {auth.set(a, vo * 3);}
+        if (mk) {mask.set(mk, vo);}
+        vo += n;
+      }
+      merged.userData.authColor = auth;
+      merged.userData.tintMask = mask;
+      const stashed = merged.clone();
+      stashed.userData.authColor = auth; // clone()'s userData copy mangles Float32Arrays
+      stashed.userData.tintMask = mask;
+      _atlasGeoCache.set(this.variant, stashed);
+    }
+    const cached = _atlasGeoCache.get(this.variant)!;
+    merged.userData.authColor = cached.userData.authColor;
+    merged.userData.tintMask = cached.userData.tintMask;
+    const mm = new THREE.SkinnedMesh(merged, parts[0]!.material);
+    mm.name = 'atlas-body';
+    mm.castShadow = parts[0]!.castShadow;
+    mm.receiveShadow = parts[0]!.receiveShadow;
+    mm.frustumCulled = parts[0]!.frustumCulled;
+    anchor.add(mm);
+    mm.bind(parts[0]!.skeleton, A);
+    cheapSkinnedBounds(mm);
+    for (const sm of consumed) {sm.removeFromParent();}
+    const rigid = this.foldRigidAccessories(animations, parts[0]!.skeleton, anchor, Ainv, A);
+    const kept = this.skinnedMeshes.filter((sm): boolean => !consumed.has(sm));
+    this.skinnedMeshes.length = 0; // shared reference with PlayerModelLod — mutate in place
+    this.skinnedMeshes.push(...kept, mm, ...rigid);
+    this.atlasParts.length = 0;
+    this.atlasParts.push(mm);
+  }
+
+  /** Rigid accessories are non-skinned meshes parented under a skeleton
+   *  bone (mohawk, pouches — ~7 meshes/remote, the last big draw bucket
+   *  in the census). A rigid child of bone B is identical to a skinned
+   *  part with weight 1.0 to B: bake B.bindWorld⁻¹×meshWorld into the
+   *  verts, stamp skinIndex=B, and it rides the skeleton exactly like
+   *  the rigid node did. Buckets stay per-material so Lambert keeps its
+   *  own shading and tint/flash tracking keeps its material identity. */
+  private foldRigidAccessories(animations: THREE.AnimationClip[], skeleton: THREE.Skeleton,
+      anchor: THREE.Object3D, Ainv: THREE.Matrix4, A: THREE.Matrix4): THREE.SkinnedMesh[] {
+    if (!this.model) {return [];}
+    const animated = new Set<string>();
+    for (const clip of animations) {
+      for (const t of clip.tracks) {animated.add(t.name.split('.')[0]!);}
+    }
+    const boneSet = new Set<THREE.Object3D>(skeleton.bones);
+    const boneIndex = new Map<THREE.Object3D, number>();
+    skeleton.bones.forEach((b, i): void => {boneIndex.set(b, i);});
+    // Bone lookup by name too — GLB part parents are often empty nodes
+    // sharing the bone's name rather than the Bone instance itself.
+    const boneByName = new Map<string, { bone: THREE.Bone; idx: number }>();
+    skeleton.bones.forEach((b, i): void => {if (!boneByName.has(b.name)) {boneByName.set(b.name, { bone: b, idx: i });}});
+    const consumed: THREE.Mesh[] = [];
+    const buckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[] }>();
+    const T = new THREE.Matrix4();
+    this.model.traverse((o): void => {
+      const rm = o as THREE.Mesh;
+      if (!rm.isMesh || (rm as THREE.SkinnedMesh).isSkinnedMesh || consumed.includes(rm)) {return;}
+      if (Array.isArray(rm.material)) {return;}
+      if ((rm.material as THREE.Material).userData.atlasMat === true) {return;} // atlas part handled above
+      // Resolve the bone ancestor: nearest ancestor that IS a skeleton
+      // bone OR shares its name. Any ANIMATED node strictly between the
+      // mesh and the bone blocks the fold — its transform isn't constant.
+      let boneEntry: { bone: THREE.Bone; idx: number } | null = null;
+      let blocked = false;
+      for (let p: THREE.Object3D | null = rm.parent; p && p !== this.model; p = p.parent) {
+        if (boneSet.has(p) || boneByName.has(p.name)) {
+          const idx = boneSet.has(p) ? boneIndex.get(p)! : boneByName.get(p.name)!.idx;
+          boneEntry = { bone: skeleton.bones[idx]!, idx };
+          break;
+        }
+        if (animated.has(p.name)) {blocked = true; break;}
+      }
+      if (!boneEntry || blocked) {return;}
+      const key = `${rm.material.uuid}|${Object.keys(rm.geometry.attributes).toSorted().join(',')}|${rm.geometry.index ? 'i' : 'n'}`;
+      const b = buckets.get(key) ?? { mat: rm.material, geos: [] };
+      const g = rm.geometry.clone();
+      // Anchor-space bake, same convention as the atlas merge above —
+      // the skeleton does the motion: skinIndex=B makes the output
+      // B_now×B_bind⁻¹×meshWorld×v = the rigid node's exact world path.
+      g.applyMatrix4(T.copy(Ainv).multiply(rm.matrixWorld));
+      const nv = g.getAttribute('position').count;
+      const skinIdx = new Uint16Array(nv * 4);
+      const skinW = new Float32Array(nv * 4);
+      for (let i = 0; i < nv; i += 1) {skinIdx[i * 4] = boneEntry.idx; skinW[i * 4] = 1;}
+      g.setAttribute('skinIndex', new THREE.BufferAttribute(skinIdx, 4));
+      g.setAttribute('skinWeight', new THREE.BufferAttribute(skinW, 4));
+      b.geos.push(g);
+      buckets.set(key, b);
+      consumed.push(rm);
+    });
+    const out: THREE.SkinnedMesh[] = [];
+    for (const { mat, geos } of buckets.values()) {
+      const merged = mergeGeometries(geos, false);
+      if (!merged) {continue;}
+      const rm = new THREE.SkinnedMesh(merged, mat);
+      rm.name = 'rigid-parts';
+      rm.castShadow = true;
+      anchor.add(rm);
+      rm.bind(skeleton, A.clone());
+      cheapSkinnedBounds(rm);
+      out.push(rm);
+    }
+    for (const rm of consumed) {rm.removeFromParent();}
+    return out;
+  }
+
   private mergeSkinnedParts(): void {
     const parts = this.skinnedMeshes;
     if (parts.length < 2) {return;}
@@ -530,8 +799,7 @@ export class PlayerModel {
         const base = mergeGeometries(grp.map((s): THREE.BufferGeometry => (s.userData.baseGeo as THREE.BufferGeometry) ?? s.geometry), false);
         if (base) {mm.userData.baseGeo = base;}
       }
-      mm.computeBoundingSphere();
-      if (mm.boundingSphere) {mm.boundingSphere.radius += 0.6;}
+      cheapSkinnedBounds(mm);
       mm.userData.srcParent = grp[0]!.parent;
       merged.push(mm);
       detach.push(...grp);
@@ -595,14 +863,14 @@ export class PlayerModel {
       // Reskin + per-instance clone + emissive capture — playerMats.ts
       this.mats.prep(child, this.variant === 'mannequin', this.mannRev);
       // SkinnedMesh bind-pose bounds don't track bone-driven verts —
-      // wrong bounds get it frustum-culled when it shouldn't be. Compute
-      // the skinned bounds at load (three walks verts through the
-      // skeleton) and pad for anim travel so culling can come back on.
+      // wrong bounds get it frustum-culled when it shouldn't be. Take
+      // the bind-pose sphere (a plain buffer scan — the skinned bake
+      // walks every vert through every bone) and pad for anim travel
+      // so culling can come back on.
       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
         const sk = child as THREE.SkinnedMesh;
         this.skinnedMeshes.push(sk);
-        sk.computeBoundingSphere();
-        if (sk.boundingSphere) {sk.boundingSphere.radius += 0.6;}
+        cheapSkinnedBounds(sk);
       }
     }
 
@@ -744,11 +1012,20 @@ export class PlayerModel {
       // Sink/rise measures the POSED VERTEX bounds, not bones — rigs
       // park utility bones (weapon/headgear anchors) meters off the body
       // at bind pose; verts are what markers have to register against.
-      sm.computeBoundingBox();
-      const bb = sm.boundingBox;
-      if (bb) {
-        this._bbMin.copy(bb.min).applyMatrix4(sm.matrixWorld);
-        if (this._bbMin.y < minBoneY) {minBoneY = this._bbMin.y;}
+      // Strided 1-in-4 bake: the full computeBoundingBox walks every vert
+      // through applyBoneTransform (~7% of a throttled profile at this
+      // cadence × fleet) — a canary doesn't need exact bounds.
+      {
+        const pos = sm.geometry.getAttribute('position');
+        let minY = Infinity;
+        for (let i = 0; i < pos.count; i += 4) {
+          sm.applyBoneTransform(i, this._bbMin);
+          if (this._bbMin.y < minY) {minY = this._bbMin.y;}
+        }
+        if (Number.isFinite(minY)) {
+          this._bbMin.set(0, minY, 0).applyMatrix4(sm.matrixWorld);
+          if (this._bbMin.y < minBoneY) {minBoneY = this._bbMin.y;}
+        }
       }
       const {bones} = sm.skeleton;
       let meshMax = 0, mi = -1, mj = -1;
@@ -937,8 +1214,31 @@ export class PlayerModel {
    *  be eyeballed against the collider capsule. */
   setWireframe(on: boolean): void { this.mats.setWireframe(on, this.model); }
   /** Team tint — hex lerps every body material toward the hue, null
-   *  restores the authored palette. */
-  setTeamTint(hex: number | null): void { this.mats.setTint(hex); }
+   *  restores the authored palette. Vertexized parts take the same
+   *  lerp through their color attribute (armor verts only). */
+  setTeamTint(hex: number | null): void {
+    this.mats.setTint(hex);
+    if (this.atlasParts.length === 0) {return;}
+    const tint = hex === null ? null : new THREE.Color(hex).lerp(new THREE.Color(0x20_20_24), 0.2);
+    for (const sm of this.atlasParts) {
+      for (const g of [sm.geometry, sm.userData.baseGeo as THREE.BufferGeometry | undefined]) {
+        const auth = g?.userData.authColor as Float32Array | undefined;
+        const mask = g?.userData.tintMask as Float32Array | undefined;
+        const attr = g?.getAttribute('color') as THREE.BufferAttribute | undefined;
+        if (!g || !auth || !mask || !attr) {continue;}
+        const arr = attr.array as Float32Array;
+        for (let i = 0; i < mask.length; i++) {
+          const t = mask[i]! * 0.7;
+          const tc = tint ? [tint.r, tint.g, tint.b] : null;
+          for (let c = 0; c < 3; c++) {
+            const a = auth[i * 3 + c]!;
+            arr[i * 3 + c] = tc ? a + (tc[c]! - a) * t : a;
+          }
+        }
+        attr.needsUpdate = true;
+      }
+    }
+  }
   /** Fresnel rim experiment — emissive edge glow on the body mats; the
    *  hand prop's shared material is cloned per model so it rims too
    *  without leaking onto every other model's gun. */

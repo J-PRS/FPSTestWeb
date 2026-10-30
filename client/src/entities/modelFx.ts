@@ -75,6 +75,7 @@ export class ModelFx {
     });
     const s = new THREE.Sprite(flashMat);
     s.scale.setScalar(0); // hidden until fire()
+    s.visible = false;    // scale=0 still issues a draw call — be actually invisible
     s.position.set(0, 0.05, 1); // barrel tip (gun-local)
     return s;
   }
@@ -194,8 +195,11 @@ else if (t < up + hold) {e = 1;}
       const f = this.flashTTL / 0.09;
       flash.scale.setScalar(0.5 * f + 0.15 * f * f);
       (flash.material as THREE.SpriteMaterial).opacity = f;
-    } else if (flash && flash.scale.x > 0) {
+      flash.visible = true;
+    } else if (flash && flash.visible) {
+      // scale=0 still draws — only visible=false drops the draw call.
       flash.scale.setScalar(0);
+      flash.visible = false;
     }
   }
 

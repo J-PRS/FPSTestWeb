@@ -140,6 +140,7 @@ export class PlayerMats {
       ? mats.filter((m): boolean => m.name === 'armor')
       : mats;
     for (const m of targets) {
+      if (m.userData.atlasMat) {continue;} // vertexized body — tint rides its color attr
       const sm = m as THREE.MeshStandardMaterial;
       if (!sm.isMeshStandardMaterial) {continue;}
       let base = this.baseCols.get(m);
@@ -179,6 +180,17 @@ export class PlayerMats {
         sm.needsUpdate = true;
       }
       u.value.setHex(col);
+    }
+  }
+
+  /** Take a material built outside ownMaterial (the vertexized body
+   *  atlas) into the clone set — flash capture, rim patch, tint-skip
+   *  via userData.atlasMat, and dispose all reach it through the same
+   *  door. */
+  adopt(m: THREE.MeshStandardMaterial): void {
+    this.clones.set(m, m);
+    if (!this.flashMats.some((f): boolean => f.m === m)) {
+      this.flashMats.push({ m, e: m.emissive.clone(), i: m.emissiveIntensity });
     }
   }
 

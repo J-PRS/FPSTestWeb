@@ -67,7 +67,9 @@ const PX_MODES: Record<string, number> = {
 // Potato first-run: no stored pixel/shadow picks + a weak GL renderer →
 // start on the low tier instead of laddering down through 10s of 4fps.
 // Explicit user picks (any stored key) always win.
-const WEAK_GL = /swiftshader|llvmpipe|software|intel.*(hd|uhd)\s?graphics|mali|adreno\s?[0-5]|videocore/i;
+// Adreno needs no version gate — every Adreno is a mobile tile-GPU
+// (the old 0-5xx bound predates 6xx/7xx parts that dominate today).
+const WEAK_GL = /swiftshader|llvmpipe|software|intel.*(hd|uhd)\s?graphics|mali|adreno|videocore|apple gpu/i;
 function detectWeakGpu(): boolean {
   try {
     const c = document.createElement('canvas');
@@ -84,6 +86,10 @@ function seedPotatoDefaults(): void {
   if (!detectWeakGpu()) {return;}
   settings.set('fps-pscale', 4);
   settings.set('fps-shadows', false);
+  // Bloom's multi-pass luminance chain is the mobile-tile-GPU killer;
+  // the fused grade pass (tone map) is one fullscreen shader — keep it,
+  // postpro OFF would strip the ACES look entirely (overexposed output).
+  settings.set('fps-bloom', false);
 }
 
 // Pixel pipeline = two axes: fps-pscale (integer divisor 1-4) and
@@ -835,11 +841,16 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   wireAARow((v): void => applyAA(pmodeEff() === 1 && (v === 1 || v === 2) ? 0 : v), (v): void => { aaMode = v; });
   syncAALocks(); // boot: non-RAW pixel mode starts with AA locked
 
-  // AA>0 pulls the composer in even with post+glow off — FXAA/SMAA are
-  // composer passes and MSAA is its buffer flag; without this the whole
-  // ANTIALIAS row silently no-ops on the direct-render path.
-  const needsComposerNow = (): boolean => (pscale > 1 && (pmode === 1 || pmode === 2)) || bloomEnabled || postproEnabled ||
-    aaEff() > 0 || (resScale < 1 && pscale === 1 && settings.get('fps-filter') === 2);
+  // Postpro is the master switch for the composer chain: the grade pass
+  // IS the output transform — a live composer minus grade pumps raw
+  // linear HDR to canvas (overexposed). So OFF must mean direct render:
+  // bloom/AA keep their (unpersisted) picks but can't drive the composer
+  // without it, and materials' own tone mapping takes over on canvas.
+  // Residual: SMOOTH/xBR upscale + postpro-off still lacks a terminal
+  // encode — a debug-tier combo, not a user tier.
+  const needsComposerNow = (): boolean => postproEnabled ||
+    (pscale > 1 && (pmode === 1 || pmode === 2)) ||
+    (resScale < 1 && pscale === 1 && settings.get('fps-filter') === 2);
 
   // Alt+Q render census — the pipeline state that produced the frame:
   // pixel-mode picks (stored vs effective), AA pick + MSAA buffer flag,

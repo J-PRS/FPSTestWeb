@@ -257,6 +257,27 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   // 'stand'/'hull' specs are collision-only — the flag dais mesh and
   // ported interiors are their visuals; drawing the generic box would
   // double-render over them. 'kit' pieces take the real builder path.
+  //
+  // Kit visuals bake into per-material merged meshes — the builders all
+  // draw from the shared kit palette, so a 160-piece bastion layout was
+  // ~300 draws (color + shadow passes) before this. Buckets key on
+  // material + attribute layout + 512m cell (the interiors pattern) so
+  // opposite bases still frustum-cull each other. The empty piece Groups
+  // stay: userData.hulls is read off them by collider tooling.
+  const kitBuckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[]; cast: boolean }>();
+  // Per-piece material clones (teamGlow Basic, per-builder Lambert
+  // variants) carry unique uuids — same params, different identity →
+  // they'd never bucket. Canonicalize on the renderable signature and
+  // reuse the first instance per signature.
+  const canonMats = new Map<string, THREE.Material>();
+  const canonOf = (mat: THREE.Material): THREE.Material => {
+    const std = mat as THREE.MeshStandardMaterial;
+    const sig = `${mat.type}|${std.color?.getHexString() ?? ''}|${std.emissive?.getHexString() ?? ''}|${std.roughness ?? ''}|${std.metalness ?? ''}|${mat.side}|${mat.transparent}|${mat.opacity}|${mat.blending}|${std.vertexColors ? 'v' : ''}|${std.map ? std.map.uuid : ''}`;
+    const canon = canonMats.get(sig);
+    if (canon) {return canon;}
+    canonMats.set(sig, mat);
+    return mat;
+  };
   for (const s of list) {
     if (s.kind !== 'kit') {continue;}
     const mk = KIT_BUILDERS[s.piece ?? ''];
@@ -267,11 +288,33 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     piece.rotation.y = s.rotY ?? 0;
     if (s.scale && s.scale !== 1) {piece.scale.setScalar(s.scale);}
     piece.updateMatrixWorld(true);
+    const cell = `${Math.trunc(s.pos.x / 512)},${Math.trunc(s.pos.z / 512)}`;
+    const consumed: THREE.Mesh[] = [];
     piece.traverse((o): void => {
       const m = o as THREE.Mesh;
-      if (m.isMesh && !(m.material instanceof THREE.MeshBasicMaterial)) {m.castShadow = true; m.receiveShadow = true;}
+      if (!m.isMesh || Array.isArray(m.material)) {return;}
+      const mat = canonOf(m.material);
+      if (!(mat instanceof THREE.MeshBasicMaterial)) {m.castShadow = true; m.receiveShadow = true;}
+      const key = `${mat.uuid}|${Object.keys(m.geometry.attributes).toSorted().join(',')}|${m.geometry.index ? 'i' : 'n'}|${cell}`;
+      const b = kitBuckets.get(key) ?? { mat, geos: [], cast: false };
+      b.geos.push(m.geometry.clone().applyMatrix4(m.matrixWorld));
+      b.cast = b.cast || m.castShadow;
+      kitBuckets.set(key, b);
+      consumed.push(m);
     });
+    for (const m of consumed) { m.removeFromParent(); m.geometry.dispose(); }
     built.add(piece);
+  }
+  for (const { mat, geos, cast } of kitBuckets.values()) {
+    const merged = mergeGeometries(geos, false);
+    for (const g of geos) {g.dispose();}
+    if (!merged) {continue;}
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.userData.kitPiece = true; // shared kit palette — never dispose the mats
+    mesh.castShadow = cast;
+    mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    built.add(mesh);
   }
   // 'shield' panes — team-gated energy fields. Translucent so allies read
   // the gate they can pass and enemies read the wall they can't; the

@@ -150,9 +150,16 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     d.canvas.style.transition = 'none';
   }
 
+  // The game canvas is centered via inline transform (left/top 50% +
+  // translate(-50%,-50%)) — every transform write here MUST keep that
+  // prefix or the canvas collapses to a bottom-right quadrant on narrow
+  // windows (the 16:9 overscan is wider than a portrait viewport).
+  const CENTER = 'translate(-50%, -50%)';
+  const centered = (y: number): string => `${CENTER} translateY(${y}px)`;
+
   // off = finger travel toward the neighbor (+ up/next, - down/prev).
   function trackPanes(off: number, dir: 1 | -1): void {
-    d.canvas.style.transform = `translateY(${-off}px)`;
+    d.canvas.style.transform = centered(-off);
     poster.style.transform = `translateY(${dir * window.innerHeight - off}px)`;
   }
 
@@ -160,7 +167,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     poster.style.display = 'none';
     poster.style.transform = '';
     poster.style.transition = '';
-    d.canvas.style.transform = '';
+    d.canvas.style.transform = CENTER;
     d.canvas.style.transition = '';
   }
 
@@ -171,7 +178,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
       const ease = `transform ${ms}ms ease-out`;
       poster.style.transition = ease;
       d.canvas.style.transition = ease;
-      d.canvas.style.transform = `translateY(${commit ? -dir * vh : 0}px)`;
+      d.canvas.style.transform = centered(commit ? -dir * vh : 0);
       poster.style.transform = `translateY(${commit ? 0 : dir * vh}px)`;
       setTimeout(resolve, ms);
     });
@@ -255,7 +262,7 @@ clipGen += 1;
     await slidePanes(dir, true, SLIDE_MS);
     // Canvas lands at 0 behind the placeholder poster — invisible swap.
     d.canvas.style.transition = 'none';
-    d.canvas.style.transform = '';
+    d.canvas.style.transform = CENTER;
     const data = await ready;
     play(ni, data);
     // Let one real frame render beneath the placeholder before reveal.
@@ -272,7 +279,7 @@ clipGen += 1;
     const e = entries[ni]!;
     paintPlaceholder(e);
     poster.style.transform = `translateY(${dir * window.innerHeight}px)`;
-    d.canvas.style.transform = 'translateY(0px)';
+    d.canvas.style.transform = centered(0);
     await commitAdvance(dir, ni, resolveClip(e));
     advancing = 0;
   }

@@ -37,6 +37,7 @@ type Schema = {
   'fps-nocreatures': number;  // 1 = hosted rooms mint without melee species
   'fps-creatures': number;    // 1 = opt back IN to species in offline pop (default balls-only)
   'fps-noballs': number;      // 1 = hosted rooms mint without the ball sim
+  'fps-nolips': number;       // 1 = lip-sync flares off (speech-jam debug)
   'fps-fav-rooms': string;    // JSON string[] — server-browser favorites column
   'fps-shadows': boolean;     // shadow map pass — off on potatoes (whole second scene raster per frame)
   'fps-tts-chat': boolean;    // speak typed chat aloud via system TTS (VGS lines always use the robot voice)
@@ -101,6 +102,7 @@ const DEFAULTS: Schema = {
   'fps-nocreatures': 1,
   'fps-creatures': 0,
   'fps-noballs': 1,
+  'fps-nolips': 0,
   'fps-fav-rooms': '[]',
   'fps-shadows': true,
   'fps-tts-chat': false,

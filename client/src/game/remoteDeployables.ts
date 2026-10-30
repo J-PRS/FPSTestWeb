@@ -5,6 +5,7 @@
 // base-asset visuals grew past the ~900-line file ceiling.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DeployTurret } from '../entities/DeployTurret.js';
 import { DeployMortar } from '../entities/DeployMortar.js';
 import { DeployCg } from '../entities/DeployCg.js';
@@ -36,6 +37,38 @@ type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: 
 const DEPLOY_V_CAP = DEPLOY_HP;
 
 const PING_TTL = 3;
+
+/** Merge a group's direct-child meshes into one mesh per material —
+ *  bakes the child's local transform into the geometry. Children in
+ *  `skip` keep their own meshes (things that still need to move). */
+function mergeByMat(parent: THREE.Group, skip: Set<THREE.Object3D>): void {
+  parent.updateMatrixWorld(false);
+  const buckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[]; cast: boolean }>();
+  const consumed: THREE.Mesh[] = [];
+  for (const o of parent.children) {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || Array.isArray(m.material) || skip.has(m)) {continue;}
+    const mat = m.material;
+    const key = `${mat.uuid}|${Object.keys(m.geometry.attributes).toSorted().join(',')}|${m.geometry.index ? 'i' : 'n'}`;
+    const b = buckets.get(key) ?? { mat, geos: [], cast: false };
+    m.updateMatrix();
+    b.geos.push(m.geometry.clone().applyMatrix4(m.matrix));
+    b.cast = b.cast || m.castShadow;
+    buckets.set(key, b);
+    consumed.push(m);
+  }
+  for (const m of consumed) {m.removeFromParent(); m.geometry.dispose();}
+  for (const { mat, geos, cast } of buckets.values()) {
+    const merged = mergeGeometries(geos, false);
+    if (!merged) {continue;}
+    for (const g of geos) {if (g !== merged) {g.dispose();}}
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = cast;
+    mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    parent.add(mesh);
+  }
+}
 
 // Offline mirrors of RoomDeployables' base-asset clock and the base
 // turret's envelope — same numbers, read from the shared table.
@@ -237,6 +270,7 @@ export class RemoteDeployables {
     const glowMat = new THREE.MeshBasicMaterial({ color: teamColor });
     const darkMat = new THREE.MeshLambertMaterial({ color: 0x39_42_4E });
     const hullMat = new THREE.MeshLambertMaterial({ color: 0x55_60_6E });
+    let spinMesh: THREE.Mesh | null = null;
     // Mounting plinth — a low deck plate with team-lit trim that stays
     // intact when the asset dies, so the site reads as a socket even
     // while its hulk is dark. Sits below the slumped wreck.
@@ -315,6 +349,7 @@ export class RemoteDeployables {
       const tip = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 6), glowMat);
       tip.position.y = 9.6;
       group.add(tip);
+      spinMesh = dish;
     }
     group.position.copy(at);
     // Tower-mounted assets author a real y — terrain is a floor for the
@@ -326,8 +361,15 @@ export class RemoteDeployables {
       const m = o as THREE.Mesh;
       if (m.isMesh && !(m.material instanceof THREE.MeshBasicMaterial)) {m.castShadow = true;}
     });
+    // ~9 small meshes per socket site × every base = ~70 draws on
+    // bastion. Static body parts merge per material; the scanning head's
+    // parts merge per material under `head` (it slews — group nodes only,
+    // the merged meshes themselves stay rigid). The sensor dish keeps
+    // its own mesh — it still spins.
+    mergeByMat(group, new Set<THREE.Object3D>([head, ...(spinMesh ? [spinMesh] : [])]));
+    mergeByMat(head, new Set());
     this.deps.scene.add(group);
-    const spin = kind === 'sensor' ? group.children[3]! : null;
+    const spin = spinMesh;
     const isSentry = kind === 'baseturret';
     let scanT = Math.random() * 6;
     // Joined mid-wreck: snapshot hp 0 → spawn it already dark.

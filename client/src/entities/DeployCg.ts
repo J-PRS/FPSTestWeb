@@ -49,6 +49,70 @@ const _geoEye = new THREE.SphereGeometry(0.16, 6, 5);
 const _v = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 
+// All CG mounts share instanced part meshes — the ~14 real meshes per
+// mount became ~14 draws each; instance matrices compose straight from
+// group/head/rotor locals so slew, spin-up, and unfold need no walk.
+const POOL_CAP = 128;
+const _rx90 = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+const _rz90 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2));
+const _m = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
+const _m3 = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3(1, 1, 1);
+const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+const _receiverLocal = new THREE.Matrix4().compose(_p.set(0, 0, -0.3), _rx90, _s.set(1, 1, 1));
+const _ammoLocal = new THREE.Matrix4().compose(_p.set(0, -0.25, -0.55), _rz90, _s.set(1, 1, 1));
+const _eyeLocal = new THREE.Matrix4().compose(_p.set(0, 0.4, -0.1), new THREE.Quaternion(), _s.set(1, 1, 1));
+const _collarLocal = new THREE.Matrix4().compose(_p.set(0, 0, 0), _rx90, _s.set(1, 1, 1));
+const _axleLocal = new THREE.Matrix4().compose(_p.set(0, 0, 0.55), _rx90, _s.set(1, 1, 1));
+const _barrelLocals: THREE.Matrix4[] = [];
+const _throatLocals: THREE.Matrix4[] = [];
+for (let i = 0; i < BARREL_COUNT; i += 1) {
+  const a = (i / BARREL_COUNT) * Math.PI * 2;
+  const dx = Math.cos(a) * CLUSTER_R, dy = Math.sin(a) * CLUSTER_R;
+  _barrelLocals.push(new THREE.Matrix4().compose(_p.set(dx, dy, 0.5), _rx90, _s.set(1, 1, 1)));
+  _throatLocals.push(new THREE.Matrix4().compose(_p.set(dx, dy, 0.5 + BARREL_LEN / 2 - 0.1), _rx90, _s.set(1, 1, 1)));
+}
+
+interface Pool {
+  base: THREE.InstancedMesh; mast: THREE.InstancedMesh;
+  receiver: THREE.InstancedMesh; ammo: THREE.InstancedMesh; eye: THREE.InstancedMesh;
+  collar: THREE.InstancedMesh; axle: THREE.InstancedMesh;
+  barrel: THREE.InstancedMesh; throat: THREE.InstancedMesh;
+  free: number[];
+}
+let _pool: Pool | null = null;
+
+function makeInstanced(geo: THREE.BufferGeometry, mat: THREE.Material, count: number, scene: THREE.Scene): THREE.InstancedMesh {
+  const m = new THREE.InstancedMesh(geo, mat, count);
+  m.count = count;
+  m.frustumCulled = false;
+  m.castShadow = !(mat instanceof THREE.MeshBasicMaterial);
+  for (let i = 0; i < count; i += 1) {m.setMatrixAt(i, _zero);}
+  scene.add(m);
+  return m;
+}
+
+function poolFor(scene: THREE.Scene): Pool {
+  if (!_pool) {
+    _pool = {
+      base: makeInstanced(_geoBase, _dark, POOL_CAP, scene),
+      mast: makeInstanced(_geoMast, _metal, POOL_CAP, scene),
+      receiver: makeInstanced(_geoReceiver, _metal, POOL_CAP, scene),
+      ammo: makeInstanced(_geoAmmo, _dark, POOL_CAP, scene),
+      eye: makeInstanced(_geoEye, _glow, POOL_CAP, scene),
+      collar: makeInstanced(_geoCollar, _dark, POOL_CAP, scene),
+      axle: makeInstanced(_geoAxle, _brass, POOL_CAP, scene),
+      barrel: makeInstanced(_geoBarrel, _metal, POOL_CAP * BARREL_COUNT, scene),
+      throat: makeInstanced(_geoThroat, _brass, POOL_CAP * BARREL_COUNT, scene),
+      free: [],
+    };
+    for (let i = POOL_CAP - 1; i >= 0; i -= 1) {_pool.free.push(i);}
+  }
+  return _pool;
+}
+
 export class DeployCg {
   readonly id: number;
   readonly candId: string;
@@ -63,6 +127,7 @@ export class DeployCg {
   readonly group = new THREE.Group();
   private head = new THREE.Group();
   private rotor = new THREE.Group(); // the spinning barrel cluster
+  private slot = -1;                 // instanced-pool index; -1 = overflow
   private flash: THREE.Sprite;
   private flashT = 0;
   private fireCd = DEPLOY_ITEMS.cgturret.armS!;
@@ -78,50 +143,12 @@ export class DeployCg {
     const bg = terrain.getHeight(pos.x, pos.z);
     if (Number.isFinite(bg)) {this.pos.y = bg;}
 
-    const base = new THREE.Mesh(_geoBase, _dark);
-    base.position.y = 0.22;
-    const mast = new THREE.Mesh(_geoMast, _metal);
-    mast.position.y = 0.75;
-    this.group.add(base, mast);
+    this.slot = poolFor(scene).free.pop() ?? -1;
 
     this.head.position.y = 1.25;
-    // Receiver drum behind the rotor — the stubby body that feeds the
-    // cluster, plus the ammo box slung under it.
-    const receiver = new THREE.Mesh(_geoReceiver, _metal);
-    receiver.rotation.x = Math.PI / 2;
-    receiver.position.z = -0.3;
-    this.head.add(receiver);
-    const ammo = new THREE.Mesh(_geoAmmo, _dark);
-    ammo.rotation.z = Math.PI / 2;
-    ammo.position.set(0, -0.25, -0.55); // tucked into the receiver rear — overlap hides inside the body
-    this.head.add(ammo);
-    const eye = new THREE.Mesh(_geoEye, _glow);
-    eye.position.set(0, 0.4, -0.1);
-    this.head.add(eye);
-    // Rotor: the exposed cluster — collar bearing, brass axle, three fat
-    // barrels with throat collars at the muzzle face.
     // Rotor sits fully ahead of the head pivot — barrels end at z=0 so
     // pitching can never sweep them through the mast behind.
     this.rotor.position.z = 0.25;
-    const collar = new THREE.Mesh(_geoCollar, _dark);
-    collar.rotation.x = Math.PI / 2;
-    this.rotor.add(collar);
-    const axle = new THREE.Mesh(_geoAxle, _brass);
-    axle.rotation.x = Math.PI / 2;
-    axle.position.z = 0.55;
-    this.rotor.add(axle);
-    for (let i = 0; i < BARREL_COUNT; i += 1) {
-      const a = (i / BARREL_COUNT) * Math.PI * 2;
-      const dx = Math.cos(a) * CLUSTER_R, dy = Math.sin(a) * CLUSTER_R;
-      const b = new THREE.Mesh(_geoBarrel, _metal);
-      b.rotation.x = Math.PI / 2;
-      b.position.set(dx, dy, 0.5);
-      this.rotor.add(b);
-      const throat = new THREE.Mesh(_geoThroat, _brass);
-      throat.rotation.x = Math.PI / 2;
-      throat.position.set(dx, dy, 0.5 + BARREL_LEN / 2 - 0.1);
-      this.rotor.add(throat);
-    }
     this.head.add(this.rotor);
     this.group.add(this.head);
 
@@ -135,11 +162,36 @@ export class DeployCg {
 
     this.group.position.copy(this.pos);
     this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
-    this.group.traverse((o): void => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh && !(m.material instanceof THREE.MeshBasicMaterial)) {m.castShadow = true;}
-    });
     scene.add(this.group);
+    this.syncMatrices();
+  }
+
+  /** Write this mount's instance slots from group/head/rotor transforms —
+   *  the real meshes are pool-owned; the nodes only carry the slew/spin
+   *  state and the flash sprite. */
+  private syncMatrices(): void {
+    if (this.slot < 0 || !_pool) {return;}
+    const pool = _pool;
+    const i = this.slot;
+    const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
+    const headM = _m2.compose(this.head.position, this.head.quaternion, _s.set(1, 1, 1)).premultiply(g).clone();
+    const rotorM = _m3.compose(this.rotor.position, this.rotor.quaternion, _s.set(1, 1, 1)).premultiply(headM).clone();
+
+    pool.base.setMatrixAt(i, _m3.makeTranslation(0, 0.22, 0).premultiply(g));
+    pool.mast.setMatrixAt(i, _m3.makeTranslation(0, 0.75, 0).premultiply(g));
+    pool.receiver.setMatrixAt(i, _m3.copy(_receiverLocal).premultiply(headM));
+    pool.ammo.setMatrixAt(i, _m3.copy(_ammoLocal).premultiply(headM));
+    pool.eye.setMatrixAt(i, _m3.copy(_eyeLocal).premultiply(headM));
+    pool.collar.setMatrixAt(i, _m3.copy(_collarLocal).premultiply(rotorM));
+    pool.axle.setMatrixAt(i, _m3.copy(_axleLocal).premultiply(rotorM));
+    for (let b = 0; b < BARREL_COUNT; b += 1) {
+      pool.barrel.setMatrixAt(i * BARREL_COUNT + b, _m3.copy(_barrelLocals[b]!).premultiply(rotorM));
+      pool.throat.setMatrixAt(i * BARREL_COUNT + b, _m3.copy(_throatLocals[b]!).premultiply(rotorM));
+    }
+
+    for (const mesh of [pool.base, pool.mast, pool.receiver, pool.ammo, pool.eye, pool.collar, pool.axle, pool.barrel, pool.throat]) {
+      mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   /** Returns {muzzle, vel} when a bolt leaves a barrel — caller spawns
@@ -148,9 +200,10 @@ export class DeployCg {
   update(dt: number, enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
       { muzzle: THREE.Vector3; vel: THREE.Vector3 } | null {
     if (this.dead) {return null;}
-    if (this.unfoldT < 1) { tickUnfold(this, dt); return null; }
+    if (this.unfoldT < 1) { tickUnfold(this, dt); this.syncMatrices(); return null; }
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.06);
+    this.flash.visible = this.flashT > 0; // opacity-0 sprites still cost a draw call
     this.fireCd -= dt;
     let best: (typeof enemies)[0] | null = null;
     let bestD2 = RANGE * RANGE;
@@ -162,7 +215,7 @@ export class DeployCg {
     // Rotor wind-up — spools while it has a target, spins down idle.
     this.spinV = Math.max(0, Math.min(SPIN_MAX, this.spinV + (best ? dt * 10 : -dt * 8)));
     this.rotor.rotation.z += this.spinV * dt;
-    if (!best) { this.scan(dt); return null; }
+    if (!best) { this.scan(dt); this.syncMatrices(); return null; }
 
     // Lead the runner — a real bolt has travel time, aim at where the
     // target will be, not where it is.
@@ -172,8 +225,8 @@ export class DeployCg {
     const ay = best.pos.y + 1 + best.vel.y * flight * 0.5;
     const az = best.pos.z + best.vel.z * flight;
     const aimed = this.slewTo(ax, ay, az, dt);
-    if (this.fireCd > 0 || !aimed) {return null;}
-    if (this.blockedTo(ax, ay, az)) { this.fireCd = 0.25; return null; }
+    if (this.fireCd > 0 || !aimed) { this.syncMatrices(); return null; }
+    if (this.blockedTo(ax, ay, az)) { this.fireCd = 0.25; this.syncMatrices(); return null; }
 
     this.fireCd = FIRE_INTERVAL;
     this.flashT = 0.06;
@@ -188,6 +241,7 @@ export class DeployCg {
       .applyMatrix4(this.head.matrixWorld).clone();
     const vel = new THREE.Vector3(ax - muzzle.x, ay - muzzle.y, az - muzzle.z)
       .normalize().multiplyScalar(BOLT_SPEED);
+    this.syncMatrices();
     return { muzzle, vel };
   }
 
@@ -232,6 +286,20 @@ export class DeployCg {
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
+    if (_pool && this.slot >= 0) {
+      for (const mesh of [_pool.base, _pool.mast, _pool.receiver, _pool.ammo, _pool.eye, _pool.collar, _pool.axle]) {
+        mesh.setMatrixAt(this.slot, _zero);
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+      for (let b = 0; b < BARREL_COUNT; b += 1) {
+        _pool.barrel.setMatrixAt(this.slot * BARREL_COUNT + b, _zero);
+        _pool.throat.setMatrixAt(this.slot * BARREL_COUNT + b, _zero);
+      }
+      _pool.barrel.instanceMatrix.needsUpdate = true;
+      _pool.throat.instanceMatrix.needsUpdate = true;
+      _pool.free.push(this.slot);
+      this.slot = -1;
+    }
     this.flash.material.dispose(); // per-instance SpriteMaterial
     // Shared geometries/materials intentionally not disposed — module-owned.
   }

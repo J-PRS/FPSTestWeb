@@ -286,9 +286,11 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
   ['stand',     (): THREE.Group<THREE.Object3DEventMap> => mkFlagPlate(TEAM_COLORS.alpha)],
   ['sentry',  (): THREE.Group<THREE.Object3DEventMap> => { ensureSwarms(); const d = new DeployTurret(LAB_SCENE, LAB_TERRAIN, _zero); const proxy = new THREE.Group(); proxy.add(d.group, creatureLayer); proxy.userData.liveFocus = (): THREE.Vector3 => d.group.getWorldPosition(new THREE.Vector3()); proxy.userData.disposeCreature = (): void => { d.dispose(LAB_SCENE); previewLive.tick = null; }; previewLive.tick = (dt): void => { proxy.updateMatrixWorld(); d.update(dt, []); }; bakeWearOnly(proxy, { grime: true }); return proxy; }],
   ['mortar',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployMortar(LAB_SCENE, LAB_TERRAIN, _zero);
-      d.unfoldDone(); return { group: d.group, update: (dt) => { d.update(dt, []); }, dispose: (s): void => d.dispose(s) }; })],
+      d.unfoldDone(); const wrap = new THREE.Group(); wrap.add(d.group, creatureLayer);
+      return { group: wrap, update: (dt) => { d.update(dt, []); }, dispose: (s): void => d.dispose(s) }; })],
   ['minigun', (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployCg(LAB_SCENE, LAB_TERRAIN, _zero);
-      d.unfoldDone(); return { group: d.group, update: (dt) => { d.update(dt, []); }, dispose: (s): void => d.dispose(s) }; })],
+      d.unfoldDone(); const wrap = new THREE.Group(); wrap.add(d.group, creatureLayer);
+      return { group: wrap, update: (dt) => { d.update(dt, []); }, dispose: (s): void => d.dispose(s) }; })],
   ['shield',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployShield(LAB_SCENE, LAB_TERRAIN, _zero);
       return { group: d.group, update: (dt): void => d.update(dt), dispose: (s): void => d.dispose(s) }; })],
   ['station', (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployStation(LAB_SCENE, LAB_TERRAIN, _zero);

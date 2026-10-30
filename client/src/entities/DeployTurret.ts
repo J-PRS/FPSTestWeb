@@ -185,6 +185,7 @@ export class DeployTurret {
     if (this.unfoldT < 1) { this.tickUnfold(dt); return null; } // still assembling
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.09);
+    this.flash.visible = this.flashT > 0; // opacity-0 sprites still cost a draw call
     // Barrel recoil: each fired tube slides back AND shortens — the tail
     // must stay inside the pod housing (a knock-back that pokes through
     // the rear face reads as a bug, not a cannon). z-slide gives the

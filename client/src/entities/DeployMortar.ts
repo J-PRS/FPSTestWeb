@@ -40,6 +40,68 @@ const _geoMouth = new THREE.CircleGeometry(0.24, 10);
 
 const _v = new THREE.Vector3();
 
+// All mortars share instanced part meshes — same pool pattern as
+// DeployTurret: the ~9 real meshes per mount were 9 draws each; instance
+// matrices compose straight from group/head/tube locals so slew, recoil,
+// and unfold need no scene-graph walk.
+const POOL_CAP = 128;
+const _rx90 = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+const _rxm90 = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+const _m = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
+const _m3 = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3(1, 1, 1);
+const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+// Leg local offsets are static — precompute the three lean matrices.
+const _legLocals: THREE.Matrix4[] = [];
+for (let i = 0; i < 3; i += 1) {
+  const a = (i / 3) * Math.PI * 2;
+  _legLocals.push(new THREE.Matrix4().compose(
+    _p.set(Math.cos(a) * 0.7, 0.55, Math.sin(a) * 0.7),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.sin(a) * 0.5, 0, Math.cos(a) * 0.5)),
+    _s.set(1, 1, 1),
+  ));
+}
+const _ringLocal = new THREE.Matrix4().compose(_p.set(0, 1, 0), _rx90, _s.set(1, 1, 1));
+const _mouthLocal = new THREE.Matrix4().compose(_p.set(0, 1, 0), _rxm90, _s.set(1, 1, 1));
+
+interface Pool {
+  base: THREE.InstancedMesh; post: THREE.InstancedMesh; leg: THREE.InstancedMesh;
+  tube: THREE.InstancedMesh; breech: THREE.InstancedMesh; breechCap: THREE.InstancedMesh;
+  ring: THREE.InstancedMesh; mouth: THREE.InstancedMesh;
+  free: number[];
+}
+let _pool: Pool | null = null;
+
+function makeInstanced(geo: THREE.BufferGeometry, mat: THREE.Material, count: number, scene: THREE.Scene): THREE.InstancedMesh {
+  const m = new THREE.InstancedMesh(geo, mat, count);
+  m.count = count;
+  m.frustumCulled = false;
+  m.castShadow = !(mat instanceof THREE.MeshBasicMaterial);
+  for (let i = 0; i < count; i += 1) {m.setMatrixAt(i, _zero);}
+  scene.add(m);
+  return m;
+}
+
+function poolFor(scene: THREE.Scene): Pool {
+  if (!_pool) {
+    _pool = {
+      base: makeInstanced(_geoBase, _dark, POOL_CAP, scene),
+      post: makeInstanced(_geoPost, _dark, POOL_CAP, scene),
+      leg: makeInstanced(_geoLeg, _metal, POOL_CAP * 3, scene),
+      tube: makeInstanced(_geoTube, _metal, POOL_CAP, scene),
+      breech: makeInstanced(_geoBreech, _dark, POOL_CAP, scene),
+      breechCap: makeInstanced(_geoBreechCap, _metal, POOL_CAP, scene),
+      ring: makeInstanced(_geoRing, _dark, POOL_CAP, scene),
+      mouth: makeInstanced(_geoMouth, _glow, POOL_CAP, scene),
+      free: [],
+    };
+    for (let i = POOL_CAP - 1; i >= 0; i -= 1) {_pool.free.push(i);}
+  }
+  return _pool;
+}
+
 export class DeployMortar {
   readonly id: number;
   readonly candId: string;
@@ -54,7 +116,8 @@ export class DeployMortar {
   readonly group = new THREE.Group();
   /** Yaw-pivoted head — the tube tilts with the solved launch pitch. */
   private head = new THREE.Group();
-  private tube = new THREE.Mesh(_geoTube, _metal);
+  private tube = new THREE.Group(); // transform node — the barrel mesh is pool-owned
+  private slot = -1;               // instanced-pool index; -1 = overflow (invisible)
   private flash: THREE.Sprite;
   private flashT = 0;
   private fireCd = DEPLOY_ITEMS.mortar.armS!; // assemble, then load
@@ -75,36 +138,10 @@ export class DeployMortar {
     }
     if (Number.isFinite(bg)) {this.pos.y = bg;}
 
-    const base = new THREE.Mesh(_geoBase, _dark);
-    base.position.y = 0.25;
-    this.group.add(base);
-    for (let i = 0; i < 3; i += 1) {
-      const leg = new THREE.Mesh(_geoLeg, _metal);
-      const a = (i / 3) * Math.PI * 2;
-      leg.position.set(Math.cos(a) * 0.7, 0.55, Math.sin(a) * 0.7);
-      leg.rotation.set(-Math.sin(a) * 0.5, 0, Math.cos(a) * 0.5);
-      this.group.add(leg);
-    }
-    const post = new THREE.Mesh(_geoPost, _dark);
-    post.position.y = 0.65;
-    this.group.add(post);
+    this.slot = poolFor(scene).free.pop() ?? -1;
     this.head.position.y = 0.9;
     this.tube.position.y = 0.7;
     this.tube.rotation.x = 0.9; // resting ~50 deg elevation toward facing - cannon, not chimney
-    const breech = new THREE.Mesh(_geoBreech, _dark);
-    breech.position.y = -0.75;
-    this.tube.add(breech);
-    const breechCap = new THREE.Mesh(_geoBreechCap, _metal);
-    breechCap.position.y = -0.6;
-    breech.add(breechCap);
-    const ring = new THREE.Mesh(_geoRing, _dark);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 1;
-    this.tube.add(ring);
-    const mouth = new THREE.Mesh(_geoMouth, _glow);
-    mouth.rotation.x = -Math.PI / 2;
-    mouth.position.y = 1;
-    this.tube.add(mouth);
     this.head.add(this.tube);
     this.group.add(this.head);
 
@@ -118,11 +155,33 @@ export class DeployMortar {
 
     this.group.position.copy(this.pos);
     this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
-    this.group.traverse((o): void => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh && !(m.material instanceof THREE.MeshBasicMaterial)) {m.castShadow = true;}
-    });
     scene.add(this.group);
+    this.syncMatrices();
+  }
+
+  /** Write this mount's 9 instance slots from the group/head/tube
+   *  transforms — the real meshes are pool-owned; group/head/tube only
+   *  carry the flash sprite and the slew state. */
+  private syncMatrices(): void {
+    if (this.slot < 0 || !_pool) {return;}
+    const pool = _pool;
+    const i = this.slot;
+    const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
+    const headM = _m2.compose(this.head.position, this.head.quaternion, _s.set(1, 1, 1)).premultiply(g).clone();
+    const tubeM = _m3.compose(this.tube.position, this.tube.quaternion, _s.set(1, 1, 1)).premultiply(headM).clone();
+
+    pool.base.setMatrixAt(i, _m3.makeTranslation(0, 0.25, 0).premultiply(g));
+    pool.post.setMatrixAt(i, _m3.makeTranslation(0, 0.65, 0).premultiply(g));
+    for (let l = 0; l < 3; l += 1) {pool.leg.setMatrixAt(i * 3 + l, _m3.copy(_legLocals[l]!).premultiply(g));}
+    pool.tube.setMatrixAt(i, tubeM);
+    pool.breech.setMatrixAt(i, _m3.makeTranslation(0, -0.75, 0).premultiply(tubeM));
+    pool.breechCap.setMatrixAt(i, _m3.makeTranslation(0, -1.35, 0).premultiply(tubeM));
+    pool.ring.setMatrixAt(i, _m3.copy(_ringLocal).premultiply(tubeM));
+    pool.mouth.setMatrixAt(i, _m3.copy(_mouthLocal).premultiply(tubeM));
+
+    for (const mesh of [pool.base, pool.post, pool.leg, pool.tube, pool.breech, pool.breechCap, pool.ring, pool.mouth]) {
+      mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   /** Returns {muzzle, vel} when the fire cycle lands a shell — caller
@@ -132,9 +191,10 @@ export class DeployMortar {
   update(dt: number, enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
       { muzzle: THREE.Vector3; vel: THREE.Vector3 } | null {
     if (this.dead) {return null;}
-    if (this.unfoldT < 1) { tickUnfold(this, dt); return null; }
+    if (this.unfoldT < 1) { tickUnfold(this, dt); this.syncMatrices(); return null; }
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.15);
+    this.flash.visible = this.flashT > 0; // opacity-0 sprites still cost a draw call
     if (this.kick > 0.001) { this.kick *= Math.exp(-dt * 6); this.tube.position.y = 0.7 - this.kick * 0.2; }
 
     this.fireCd -= dt;
@@ -147,10 +207,10 @@ export class DeployMortar {
       const d2 = dx * dx + dz * dz;
       if (d2 < bestD2 && d2 >= minD2) { bestD2 = d2; best = e; }
     }
-    if (!best) { this.scan(dt); return null; }
+    if (!best) { this.scan(dt); this.syncMatrices(); return null; }
 
     const arc = this.solveArc(best.pos, best.vel);
-    if (!arc) {return null;} // in the band but unreachable — hold fire
+    if (!arc) { this.syncMatrices(); return null; } // in the band but unreachable — hold fire
     const wantYaw = Math.atan2(arc.vx, arc.vz);
     const wantTilt = Math.PI / 2 - arc.pitch; // tilt +Y barrel toward local +Z = aim dir
     this.slewTo(wantTilt, wantYaw, dt);
@@ -161,8 +221,10 @@ export class DeployMortar {
       this.flashT = 0.15;
       this.kick = 1;
       const muzzle = this.muzzleWorld(_v).clone();
+      this.syncMatrices();
       return { muzzle, vel: new THREE.Vector3(arc.vx, arc.vy, arc.vz) };
     }
+    this.syncMatrices();
     return null;
   }
 
@@ -220,6 +282,16 @@ export class DeployMortar {
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
+    if (_pool && this.slot >= 0) {
+      for (const mesh of [_pool.base, _pool.post, _pool.tube, _pool.breech, _pool.breechCap, _pool.ring, _pool.mouth]) {
+        mesh.setMatrixAt(this.slot, _zero);
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+      for (let l = 0; l < 3; l += 1) {_pool.leg.setMatrixAt(this.slot * 3 + l, _zero);}
+      _pool.leg.instanceMatrix.needsUpdate = true;
+      _pool.free.push(this.slot);
+      this.slot = -1;
+    }
     this.flash.material.dispose(); // per-instance SpriteMaterial
     // Shared geometries/materials intentionally not disposed — module-owned.
   }

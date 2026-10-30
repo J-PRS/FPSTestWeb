@@ -3,7 +3,7 @@
 // swapping geo alone keeps the pose. The skeleton/mixer is untouched.
 // Only exists for 'mannequin'.
 
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const _creased = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
@@ -59,8 +59,14 @@ export class PlayerModelLod {
       } else if (m.userData.baseGeo) {
         m.geometry = m.userData.baseGeo as THREE.BufferGeometry;
       }
-      m.computeBoundingSphere();
-      if (m.boundingSphere) {m.boundingSphere.radius += 0.6;}
+      // Bind-pose sphere, not the skinned bake — same reasoning as
+      // PlayerModel's cheapSkinnedBounds (the bake was ~7% of a
+      // throttled frame across the fleet's LOD swaps).
+      const g = m.geometry;
+      if (!g.boundingSphere) {g.computeBoundingSphere();}
+      if (!m.boundingSphere) {m.boundingSphere = new THREE.Sphere();}
+      m.boundingSphere.copy(g.boundingSphere!);
+      m.boundingSphere.radius += 0.6;
     });
   }
 }
