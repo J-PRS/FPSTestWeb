@@ -165,7 +165,7 @@ export class PlayerInput {
     this.bindMenuControls();
 
     // Phones/tablets: split-screen touch controls (left stick, right
-    // look-drag, FIRE/JET/JMP buttons). Not in feed mode — the clip
+    // look-drag, FIRE/JET/JMP buttons). Not in feed mode - the clip
     // viewer is playback, not gameplay, and the overlay would sit on it.
     if (window.matchMedia('(pointer: coarse)').matches && !feedMode.on) {
       void import('./touchControls.js').then((m): void => { this.touch = new m.TouchControls(this, h); });
@@ -173,7 +173,7 @@ export class PlayerInput {
 
   }
 
-  touch?: unknown; // TouchControls — coarse-pointer-only split controls
+  touch?: unknown; // TouchControls - coarse-pointer-only split controls
 
 
 

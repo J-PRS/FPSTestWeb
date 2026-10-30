@@ -66,7 +66,7 @@ const mkRig = (): Rig => {
 
 const args = (over: Partial<BlastArgs> = {}): BlastArgs => ((((Object.assign({}, {pos: new THREE.Vector3(0, 0, 0),radius: 10,force: 20,forceMode: 'push',forceMultiplier: 1,aoeDamage: 40,directHitTargetId: null}, over)))));
 
-describe('applyExplosionForce — local player', (): void => {
+describe('applyExplosionForce - local player', (): void => {
   it('own blast shoves the player and stamps the prediction', (): void => {
     const r = mkRig();
     r.player.pos.set(5, 0, 0);

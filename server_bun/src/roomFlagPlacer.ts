@@ -187,7 +187,7 @@ export class FlagPlacer {
     return this.seatAuto(this.pcaAxisSeats());
   }
 
-  /** Auto-derived stands must sit at least this far apart — under it a
+  /** Auto-derived stands must sit at least this far apart - under it a
    *  cap is a 2-second sprint and the match is broken (rimrock's ~140m
    *  auto pair capped at 2.1s). */
   private static readonly MIN_STAND_SEP = 500;
@@ -197,7 +197,7 @@ export class FlagPlacer {
     const d = Math.hypot(dx, dz);
     if (d < FlagPlacer.MIN_STAND_SEP) {
       // Push the pair apart along its own segment until the run is a
-      // real flag run — hilltop/PCA fallbacks pick seats by terrain
+      // real flag run - hilltop/PCA fallbacks pick seats by terrain
       // shape, not by separation, so the guard lives at the choke point.
       const cx = (raw.alpha.x + raw.bravo.x) / 2, cz = (raw.alpha.z + raw.bravo.z) / 2;
       const ux = d > 1e-3 ? dx / d : 1, uz = d > 1e-3 ? dz / d : 0;

@@ -32,7 +32,7 @@ async function statsFile(): Promise<{ dir: string; file: string } | null> {
 
 export interface WeaponRow {
   hits: number;
-  /** Raw application count BEFORE victim-dedup — a shell crediting the
+  /** Raw application count BEFORE victim-dedup - a shell crediting the
    *  same body direct+splash counts twice here. hits is deduped per
    *  (shotId|victim); hitsRaw is the forensic trail when they diverge. */
   hitsRaw: number;

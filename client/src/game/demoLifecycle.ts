@@ -59,7 +59,7 @@ export interface DemoLifecycleDeps {
   fragMessages: () => FragMessages;
   lazyHud: () => HUD;
   balls: Ball[];
-  targets: Targetable[]; // balls+crawlers live here too — keep in sync on removal
+  targets: Targetable[]; // balls+crawlers live here too - keep in sync on removal
   crawlers: Crawler[];
   scarabs: Scarab[];
   gnats: Gnat[];
@@ -216,6 +216,8 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
     d.lazyHud().removePlayerIndicator(`pb:${idx}`);
   }
   d.playbackRemotes.clear();
+  d.world.playbackRemotePlayers.clear();
+  d.world.playbackPlayers.clear();
   pbTintOf.clear(); pbWidOf.clear();
   // Playback-owned flag markers — remove so live flags reclaim the lane.
   for (const team of d.playbackFlagTeams) {
@@ -493,6 +495,10 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       else {
         _pbMark.x = rp.position.x; _pbMark.y = rp.position.y + rp.renderLift; _pbMark.z = rp.position.z;
         const rid = roster[s.rosterIdx] ?? indId;
+        // Roster-keyed mirrors — health bars read playback actors through
+        // the same maps the wire roster feeds them live.
+        d.world.playbackRemotePlayers.set(rid, rp);
+        d.world.playbackPlayers.set(rid, { position: pos, isDead: dead, health: s.hp, team: teamName });
         hud.updatePlayerIndicator(indId, _pbMark, d.lazyCamera(), {
           friendly: Boolean(teamName) && teamName === d.world.localTeam,
           sheep: s.sheep, bot: isBotId(rid), cls: CLS_NAME[s.cls ?? 0] ?? rp.armorClass,
@@ -515,6 +521,8 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
         rp.setStaleHidden(true);
         sfxWorld.remoteMoveAudioGone(`pb:${idx}`);
         d.lazyHud().removePlayerIndicator(`pb:${idx}`);
+        const rid = roster[idx];
+        if (rid) {d.world.playbackRemotePlayers.delete(rid); d.world.playbackPlayers.delete(rid);}
       }
     }
   };

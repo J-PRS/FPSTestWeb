@@ -1,9 +1,9 @@
 /**
- * TouchControls — narrow.one-style split-screen input for coarse-pointer
+ * TouchControls - narrow.one-style split-screen input for coarse-pointer
  * devices. Left half = floating move stick (writes the same keys[] the
  * keyboard path reads, so rebinding still works); right half = drag-to-look
  * through handlers.look. FIRE/JET/JUMP are DOM buttons driving the same
- * flags the mouse path sets. No library — pointer routing only.
+ * flags the mouse path sets. No library - pointer routing only.
  *
  * Instantiated by PlayerInput only when the primary pointer is coarse.
  */
@@ -111,7 +111,7 @@ export class TouchControls {
       for (const t of e.changedTouches) {
         if (t.identifier !== this.lookId) {continue;}
         if (!this.input.frozen) {
-        // ×2 — a finger drag covers far less ground per swipe than a
+        // ×2 - a finger drag covers far less ground per swipe than a
         // mouse pad does per flick; the handler applies sens on top.
         this.h.look((t.clientX - this.lookX) * 2, (t.clientY - this.lookY) * 2);
         }
