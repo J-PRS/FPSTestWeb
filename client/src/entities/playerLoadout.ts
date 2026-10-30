@@ -5,7 +5,7 @@ import { SIDEARM_DRAW_TIME } from './ViewModel.js';
 import type { MovementController } from './movement.js';
 import type { PlayerInput } from './player/input.js';
 import type { PerkId, PerkMods } from '../../../shared/perks.js';
-import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
+import { CLASS_STATS, CLASS_MODEL_SCALE, HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, type ArmorClass } from '../../../shared/botClasses.js';
 import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
 import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT } from './playerClips.js';
 import type * as THREE from 'three';
@@ -44,13 +44,14 @@ export interface LoadoutHost {
 }
 
 export class PlayerLoadout {
-  /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
-   *  TA where lights can't shoulder a mortar. Indexed SLOT_DEFS ids. */
-  static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11, 18, 19, 24]; // Mortar, PlasmaCannon, RocketLauncher, MRVLauncher, Bombard, Basilisk
+  /** Tier-restricted ordnance — SLOT_DEFS wids derived from the `tier`
+   *  markers on the shared stat rows (botClasses tier sets → widOf).
+   *  Never a literal list: hardcoded wids go stale on the next append. */
+  static readonly HEAVY_ONLY: readonly number[] = [...HEAVY_ONLY_WEAPONS].map(widOf).filter((w): boolean => w >= 0);
   /** Medium-only guns — lights trade them for speed, heavies for ordnance. */
-  static readonly MEDIUM_ONLY: readonly number[] = [5, 10, 15]; // Flak, Cannon, PlasmaGun
+  static readonly MEDIUM_ONLY: readonly number[] = [...MEDIUM_ONLY_WEAPONS].map(widOf).filter((w): boolean => w >= 0);
   /** Light-frame precision gear — heavier chassis can't shoulder them. */
-  static readonly LIGHT_ONLY: readonly number[] = [7, 8, 23]; // Railgun, Lightning, Gonne
+  static readonly LIGHT_ONLY: readonly number[] = [...LIGHT_ONLY_WEAPONS].map(widOf).filter((w): boolean => w >= 0);
   static readonly LOADOUT_SLOTS = 4;
   /** Per-class kit memory — the four weapon slots are remembered per
    *  tier, so heavy's ordnance rig survives a stint on light. */
