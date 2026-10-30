@@ -1,20 +1,32 @@
+// Scene-children census — per top-level group, count visible renderables
+// inside (the first eval couldn't attribute unnamed meshes to clusters).
 import { launchClient, closeClient } from './browser.ts';
-import { upStack } from './env.ts';
-const stack = await upStack();
-const c = await launchClient(stack.clientUrl('&room=census-0&map=crossfire&bots=10&mode=ctf&noballs=1&nocreatures=1'));
-await c.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
-await c.waitFor(`t.world.remotePlayers.entities.size >= 5`, 20000);
-await new Promise(r => setTimeout(r, 12000));
-const out = await c.page.evaluate(`(() => {
-  const scene = window.__scene;
-  const noCull = [], walkableStatics = new Set();
-  const chain = (o) => { const n=[]; for(let p=o;p&&p!==scene;p=p.parent) n.unshift(p.name||p.type); return n.join('>'); };
-  scene.traverse(o => {
-    if ((o.isMesh || o.isSkinnedMesh || o.isSprite || o.isLine || o.isPoints) && o.frustumCulled === false) {
-      noCull.push({ name: o.name || o.type, path: chain(o).slice(-90) });
+
+const client = await launchClient('http://localhost:5400/quickjoin?server=127.0.0.1:8000&mode=ctf&bots=16' + (process.argv[2] ?? ''));
+try {
+  await client.page.waitForFunction('window.__test && window.__test.player', { timeout: 120000 });
+  await new Promise(r => setTimeout(r, 12000));
+  const census = await client.page.evaluate(`(() => {
+    const scene = (window.__test || {}).scene;
+    if (!scene) { return 'no scene'; }
+    const info = (window.__renderer && window.__renderer.info) || {};
+    const out = [];
+    for (const child of scene.children) {
+      let meshes = 0, skinned = 0, inst = 0, other = 0, mats = new Set();
+      child.traverse((o) => {
+        if (!o.visible) { return; }
+        if (o.isSkinnedMesh) { skinned++; }
+        else if (o.isInstancedMesh) { inst++; }
+        else if (o.isMesh) { meshes++; }
+        else if (o.isLine || o.isPoints || o.isSprite) { other++; }
+        if (o.material) { for (const m of [].concat(o.material)) { mats.add(m.type + (m.map ? '+tex' : '')); } }
+      });
+      if (meshes + skinned + inst + other > 0) {
+        out.push({ name: child.name || child.type, mesh: meshes, skin: skinned, inst, other, mats: [...mats].slice(0, 6) });
+      }
     }
-  });
-  return { noCull: noCull.slice(0, 60), count: noCull.length };
-})()`);
-console.log('NOCULL', JSON.stringify(out));
-await closeClient(c); stack.down();
+    out.sort((a, b) => (b.mesh + b.skin + b.inst) - (a.mesh + a.skin + a.inst));
+    return JSON.stringify({ draws: info.render ? info.render.calls : '?', tris: info.render ? info.render.triangles : '?', out }, null, 1);
+  })()`);
+  console.log(census);
+} finally { await closeClient(client); }

@@ -1,25 +1,42 @@
+// Scene draw-call census — solo match, traverse the live scene, count
+// visible renderables grouped by type + material + top-level cluster.
+//   set E2E_GPU=1& bun _tools/e2e/_census.ts
 import { launchClient, closeClient } from './browser.ts';
-import { upStack } from './env.ts';
-const stack = await upStack();
-const c = await launchClient(stack.clientUrl('&room=census-0&map=crossfire&bots=10&mode=ctf&noballs=1&nocreatures=1'));
-await c.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
-await c.waitFor(`t.world.remotePlayers.entities.size >= 5`, 20000);
-await new Promise(r => setTimeout(r, 15000));
-const out = await c.page.evaluate(`(() => {
-  const scene = window.__scene, r = window.__renderer;
-  const stats = { objs: 0, skinned: 0, instanced: 0, frustumOff: 0, autoMatrixOn: 0, bones: 0, mats: new Set(), geoms: 0, staticFrozen: 0 };
-  const byType = {};
-  scene.traverse(o => {
-    stats.objs++;
-    byType[o.type] = (byType[o.type] || 0) + 1;
-    if (o.isSkinnedMesh) { stats.skinned++; stats.bones += o.skeleton?.bones?.length || 0; }
-    if (o.isInstancedMesh) stats.instanced++;
-    if (o.frustumCulled === false && (o.isMesh || o.isSkinnedMesh || o.isGroup)) stats.frustumOff++;
-    if (o.matrixAutoUpdate !== false) stats.autoMatrixOn++; else stats.staticFrozen++;
-    if (o.isMesh || o.isSkinnedMesh) { stats.geoms++; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => stats.mats.add(m.uuid)); }
-  });
-  const top = Object.entries(byType).sort((a,b) => b[1]-a[1]).slice(0,12);
-  return { ...stats, mats: stats.mats.size, topTypes: top, draws: r.info.render.calls, tris: r.info.render.triangles, remotes: window.__test.world.remotePlayers.entities.size };
-})()`);
-console.log('CENSUS', JSON.stringify(out));
-await closeClient(c); stack.down();
+
+const client = await launchClient(process.argv[2] ?? 'http://localhost:5400/quickjoin?server=127.0.0.1:8000&mode=ctf&bots=16');
+try {
+  await client.page.waitForFunction('window.__test && window.__test.player', { timeout: 120000 });
+  await new Promise(r => setTimeout(r, Number(process.argv[3] ?? 8000)));
+  const census = await client.page.evaluate(`(() => {
+    const scene = (window.__test || {}).scene;
+    if (!scene) { return 'no scene'; }
+    const info = (window.__test.renderer && window.__test.renderer.info)
+      || (window.__renderer && window.__renderer.info);
+    const buckets = {};
+    const mats = new Map();
+    const add = (o) => {
+      // cluster = nearest named ancestor under scene
+      let cl = o.name || o.type;
+      let p = o.parent;
+      while (p && p !== scene) { if (p.name) { cl = p.name; } p = p.parent; }
+      const key = o.type;
+      buckets[key] = buckets[key] || { n: 0, clusters: {} };
+      buckets[key].n++;
+      buckets[key].clusters[cl] = (buckets[key].clusters[cl] || 0) + 1;
+      const m = o.material;
+      if (m) {
+        const mid = Array.isArray(m) ? 'multi:' + m.length : (m.name || m.type + ':' + m.uuid.slice(0, 8));
+        mats.set(mid, (mats.get(mid) || 0) + 1);
+      }
+    };
+    scene.traverse((o) => {
+      if (!o.visible) { return; }
+      if (o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o.isLine || o.isPoints || o.isSprite) { add(o); }
+    });
+    const top = Object.entries(buckets).sort((a, b) => b[1].n - a[1].n)
+      .map(([k, v]) => k + '=' + v.n + ' ' + JSON.stringify(Object.fromEntries(Object.entries(v.clusters).sort((x, y) => y[1] - x[1]).slice(0, 8))));
+    const matTop = [...mats.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+    return JSON.stringify({ draws: info ? info.render.calls : '?', tris: info ? info.render.triangles : '?', top, matTop }, null, 1);
+  })()`);
+  console.log(census);
+} finally { await closeClient(client); }
