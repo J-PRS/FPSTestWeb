@@ -11,7 +11,17 @@ const beltOut = (w: WeaponType, fb: WeaponType): WeaponType =>
  *  maxHealth and the move shadow's jet economy match a real loadout.
  *  Shared by the server roster and offline GameBots so both sides field
  *  the same arsenal. */
-export interface BotLoadout { perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType; belt: WeaponType; side: WeaponType }
+export type LoadoutSlot = 'near' | 'mid' | 'far' | 'belt' | 'side';
+const SLOTS: readonly LoadoutSlot[] = ['near', 'mid', 'far', 'belt', 'side'];
+
+export interface BotLoadout {
+  perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType;
+  belt: WeaponType; side: WeaponType;
+  /** Per-slot alternates for this kit (rollLoadout draws from base+alts).
+   *  Lives on the row — a separate index-parallel array silently
+   *  mismatches the moment one list gets an insert. */
+  alts?: Partial<Record<LoadoutSlot, WeaponType[]>>;
+}
 
 // 15 read as knife-only: the force-matrix band table says 'near' guns
 // (shotgun/flak peak at 10-25m, chaingun at 25-60) live well past it.
@@ -46,46 +56,53 @@ export function botClassForLoadout(lo: BotLoadout): ArmorClass {
 }
 
 export const BOT_LOADOUTS: BotLoadout[] = [
-  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // chaser — light frame, so no medium-locked PlasmaGun
-  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // siege
-  { perk: 'armored',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor — heavies can't shoulder medium-only Cannon either
-  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // skirmisher
-  { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // hose — area denial
-  { perk: 'armored',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs (Railgun is light-frame gear, Cannon medium)
-  { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.BoltLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol }, // skirmisher — shove tools; Flak forces medium, so no heavy RL
-  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol   }, // artillery
-  { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.Implodisc,      side: WeaponType.Pistol   }, // beam rider
-  { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.RocketLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver }, // trapper
-  { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.ArmorGrenade,  side: WeaponType.Pistol   }, // support — plates the push
-  { perk: 'lifesteal',    near: WeaponType.HealBeam, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.HealGrenade,   side: WeaponType.Pistol   }, // medic — beam on the push, burst for the pack
-  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,        belt: WeaponType.HealGrenade,   side: WeaponType.Pistol   }, // field medic — fighter first, heals what it walks past
-  { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.HealBeam }, // pocket beam — fighter with a zap for hurt allies
+  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Railgun], belt: [WeaponType.ImpactGrenade], side: [WeaponType.Revolver] },
+  },  // chaser — light frame, so no medium-locked PlasmaGun
+  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
+  },  // siege
+  { perk: 'armored',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver,
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.MissileLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] },
+  },  // anchor — heavies can't shoulder medium-only Cannon either
+  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] },
+  },  // skirmisher
+  { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
+  },  // hose — area denial
+  { perk: 'armored',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver,
+    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] },
+  },  // bruiser — big slugs (Railgun is light-frame gear, Cannon medium)
+  { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.BoltLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Chaingun, WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.Disc], belt: [WeaponType.Grenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
+  },  // skirmisher — shove tools; Flak forces medium, so no heavy RL
+  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.MRVLauncher, WeaponType.MissileLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] },
+  },  // artillery
+  { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.Implodisc,      side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] },
+  },  // beam rider
+  { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.MissileLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver,
+    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] },
+  },  // trapper
+  { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.ArmorGrenade,  side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.GrenadeLauncher, WeaponType.Sprinkler], far: [WeaponType.BoltLauncher], belt: [WeaponType.Grenade, WeaponType.Javelin], side: [WeaponType.Revolver] },
+  },  // support — plates the push
+  { perk: 'lifesteal',    near: WeaponType.HealBeam, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.HealGrenade,   side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.BoltLauncher], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] },
+  },  // medic — beam on the push, burst for the pack
+  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,        belt: WeaponType.HealGrenade,   side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Disc], far: [WeaponType.Disc], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] },
+  },  // field medic — fighter first, heals what it walks past
+  { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.HealBeam,
+    alts: { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Cannon, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ClusterBomb, WeaponType.ArmorGrenade], side: [WeaponType.Pistol] },
+  },  // pocket beam — fighter with a zap for hurt allies
 ];
 
-export type LoadoutSlot = 'near' | 'mid' | 'far' | 'belt' | 'side';
-const SLOTS: readonly LoadoutSlot[] = ['near', 'mid', 'far', 'belt', 'side'];
 
-/** Per-slot alternates per BOT_LOADOUTS row (same order) — every slot
- *  carries candidates so the whole kit can drift; the picks run through
- *  the skill matrix (adaptLoadout), not flat luck. The base weapon
- *  stays in the candidate pool implicitly, and kitConsistent rejects
- *  anything the derived class can't shoulder. */
-export const BOT_ALT_SLOTS: Partial<Record<LoadoutSlot, WeaponType[]>>[] = [
-  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Railgun], belt: [WeaponType.ImpactGrenade], side: [WeaponType.Revolver] }, // chaser
-  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // siege
-  { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.RocketLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] }, // anchor
-  { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] }, // skirmisher
-  { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // hose
-  { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] }, // bruiser
-  { near: [WeaponType.Chaingun, WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.Disc], belt: [WeaponType.Grenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] }, // flak skirmisher
-  { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.MRVLauncher, WeaponType.RocketLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] }, // artillery
-  { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] }, // beam rider
-  { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.MRVLauncher], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] }, // trapper
-  { near: [WeaponType.Chaingun], mid: [WeaponType.GrenadeLauncher, WeaponType.Sprinkler], far: [WeaponType.BoltLauncher], belt: [WeaponType.Grenade, WeaponType.Javelin], side: [WeaponType.Revolver] }, // support
-  { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.BoltLauncher], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] }, // medic — near's HealBeam stays: a medic that never zaps still heals
-  { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Disc], far: [WeaponType.Disc], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] }, // field medic
-  { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Cannon, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ClusterBomb, WeaponType.ArmorGrenade], side: [WeaponType.Pistol] }, // pocket beam — side's HealBeam stays
-];
+/** @deprecated - read `BOT_LOADOUTS[i].alts`; kept for call sites still indexing it. */
+export const BOT_ALT_SLOTS = BOT_LOADOUTS.map((l): Partial<Record<LoadoutSlot, WeaponType[]>> => l.alts ?? {});
 
 /** The wildcard pool — spawns that skip the authored table draw any
  *  class-legal weapon per slot (MRV only ever fields through this or
@@ -101,7 +118,7 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   near: [WeaponType.Shotgun, WeaponType.Flak],
   // Bombard lives in mid — a 160dmg... a direct-hit slug has no business
   // in the far band where only splash reach matters.
-  mid: [WeaponType.Chaingun, WeaponType.Lightning, WeaponType.Disc, WeaponType.Cannon, WeaponType.Gonne, WeaponType.Basilisk, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard, WeaponType.RocketLauncher],
+  mid: [WeaponType.Chaingun, WeaponType.Lightning, WeaponType.Disc, WeaponType.Cannon, WeaponType.Gonne, WeaponType.Basilisk, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard, WeaponType.MissileLauncher],
   far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.MRVLauncher],
   // Every player belt throw + every player sidearm — parity both ways:
   // a wildcard bot can field anything a player can legally equip.

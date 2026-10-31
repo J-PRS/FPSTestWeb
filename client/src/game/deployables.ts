@@ -1,15 +1,15 @@
-// Deployables — the base-economy layer. Player presses `deploy` to plant
+// Deployables - the base-economy layer. Player presses `deploy` to plant
 // the selected pack item ahead of them; `cycleDeploy` picks the item.
 //
 // Two items in the first tranche:
-//   turret  — friendly sentry, lobs homing mini-rockets at hostiles
-//   mine    — proximity charge that triggers on ENEMIES (not the planter)
-//   station — recharge pad: energy + health while you stand in its field
-//   drone   — escort that hovers over your shoulder and fires mini-rockets
-//   shield  — barrier dome: hostile shells detonate on the field, yours pass
+//   turret  - friendly sentry, lobs homing mini-rockets at hostiles
+//   mine    - proximity charge that triggers on ENEMIES (not the planter)
+//   station - recharge pad: energy + health while you stand in its field
+//   drone   - escort that hovers over your shoulder and fires mini-rockets
+//   shield  - barrier dome: hostile shells detonate on the field, yours pass
 //
 // Deployables are creature-visible: they appear in the species targeting
-// candidates (dep:N ids) so the wildlife chews on them — that's the T2
+// candidates (dep:N ids) so the wildlife chews on them - that's the T2
 // "defense gets razed" pressure. They are NOT in entities.targets, so the
 // owner's own explosives don't grief the base they built.
 
@@ -49,11 +49,11 @@ import { canThrowPack, packCost, recyclesSeated } from './deployEconomy.js';
 import type { StructureCollider } from '../../../shared/ballCollide.js';
 export type { DeployKind } from '../../../shared/deployables.js';
 
-// Derived from the shared belt registry — caps/labels can no longer diverge
+// Derived from the shared belt registry - caps/labels can no longer diverge
 // from the server authority (drone max 1 vs 2 did once).
 const LASH_PAIRS = 8; // max simultaneously snared bodies painted
 // One tentacle = two fat tapered segments with a writhing mid-bend.
-// Thick at the knot (0.34r), thin at the victim — reads as a lashing
+// Thick at the knot (0.34r), thin at the victim - reads as a lashing
 // arm, not a hair-thin line.
 const _lashGeo = new THREE.CylinderGeometry(0.1, 0.34, 1, 7);
 _lashGeo.translate(0, 0.5, 0);
@@ -61,15 +61,15 @@ const _lashMat = new THREE.MeshLambertMaterial({ color: 0x14_0E_18 });
 export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] =
   DEPLOY_KINDS.map((kind): { kind: DeployKind; label: string; max: number; } => ({ kind, label: DEPLOY_ITEMS[kind].label.toUpperCase(), max: DEPLOY_MAX[kind] }));
 
-// Sentry mini-rockets live in deployRockets.ts — a real flying body with
+// Sentry mini-rockets live in deployRockets.ts - a real flying body with
 // mild homing, smoke trail, and a blast on contact.
-const DEPLOY_SLOPE = 0.75; // normal.y floor — can't plant on cliffs
+const DEPLOY_SLOPE = 0.75; // normal.y floor - can't plant on cliffs
 const POD_SPEED = 30;      // throw velocity along the crosshair
 const POD_INHERIT = 0.6;   // fraction of player velocity carried into the toss
 const POD_RADIUS = 0.32;
-const POD_TTL = 8;         // airtime budget — a pod that never settles fizzles
-const NUGGET_LOB = 0.55;   // fraction of pod speed — a nugget lobs, not launches
-// Nugget pod visual — identical to the Nugget pickup it lands as
+const POD_TTL = 8;         // airtime budget - a pod that never settles fizzles
+const NUGGET_LOB = 0.55;   // fraction of pod speed - a nugget lobs, not launches
+// Nugget pod visual - identical to the Nugget pickup it lands as
 // (entities/Nugget.ts): faceted gold icosa + additive halo. What leaves
 // your hand must read as the thing you'll pick back up.
 const NUG_POD_GEO = new THREE.IcosahedronGeometry(0.3, 0);
@@ -80,12 +80,12 @@ const _repTo = new THREE.Vector3(); // repair-beam ray scratch
 
 interface Pod {
   kind: DeployKind;
-  // The item itself IS the thrown body — it unfolds in the air and lands
+  // The item itself IS the thrown body - it unfolds in the air and lands
   // already full-size (same read as a Turretter dropping in). Seated
   // kinds share ONE field; mine/nugget keep their own (bespoke shape).
   item?: PodBody;
   mine?: Mine;
-  nugget?: THREE.Mesh; // pure visual — lands as a pickup, not an item
+  nugget?: THREE.Mesh; // pure visual - lands as a pickup, not an item
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   ttl: number;
@@ -95,7 +95,7 @@ interface Pod {
 type PodBody = DeployTurret | DeployMortar | DeployCg | DeployStation
   | DeployDrone | DeployShield | DeployBeacon | DeployTether | DeployWatersphere;
 
-/** Seated-kinds registry — one entry per bolted-down kit: ctor + the
+/** Seated-kinds registry - one entry per bolted-down kit: ctor + the
  *  adopter slot it lands in. A new kind writes ONE row here instead of
  *  growing a parallel if-chain in every pod path. Mine/nugget aren't
  *  here: their pod lifecycle is bespoke, not the shared seat ceremony. */
@@ -122,31 +122,31 @@ export interface Item {
   update: (dt: number) => void;
   dispose: () => void;
   hurt: (dmg: number) => void;
-  /** Plant owner — per-owner caps and owner-team foe lists for bots.
+  /** Plant owner - per-owner caps and owner-team foe lists for bots.
    *  Undefined = the local player. */
   owner?: string;
   /** Wire id the server assigned (echoed via deploySpawn). The repair
-   *  claim carries only this — the server re-derives the heal itself. */
+   *  claim carries only this - the server re-derives the heal itself. */
   serverId?: number;
-  /** Vitals the repair beam reads — the entity itself for real items,
+  /** Vitals the repair beam reads - the entity itself for real items,
    *  a plain record for remote-visual ones. */
   v: { health: number; armor: number; maxHealth: number };
   /** Team of the owner when known (bot DeployOwner.team / deploySpawn
-   *  wire field) — dome friend-foe checks read it. */
+   *  wire field) - dome friend-foe checks read it. */
   team?: string;
-  /** Dome lattice flare when the field soaks a shell — shield only. */
+  /** Dome lattice flare when the field soaks a shell - shield only. */
   flash?: () => void;
-  /** The live emitter — lets the aim solve tilt its sky shaft. */
+  /** The live emitter - lets the aim solve tilt its sky shaft. */
   beacon?: DeployBeacon;
-  /** Base-asset lifecycle — deployDown deploys the wreck state (dims
+  /** Base-asset lifecycle - deployDown deploys the wreck state (dims
    *  glow, slumps silhouette) without removing the item: it can still
    *  be welded back or respawn on the server clock. */
   downed?: boolean;
   setDown?: (down: boolean) => void;
-  /** Offline-authority clocks — server owns both connected. */
+  /** Offline-authority clocks - server owns both connected. */
   fireCd?: number;
   respawnT?: number;
-  /** Base-turret head group + the yaw the offline authority slews it to —
+  /** Base-turret head group + the yaw the offline authority slews it to -
    *  without this the gun sprays at a wall while its head sweeps a patrol
    *  arc ("aiming improperly" is the cosmetic head lying). */
   head?: THREE.Object3D;
@@ -154,7 +154,7 @@ export interface Item {
 }
 
 
-/** A bot that plants — foe lists, anchors, and heals all read through
+/** A bot that plants - foe lists, anchors, and heals all read through
  *  this instead of the local player singleton. */
 export interface DeployOwner {
   id: string;
@@ -166,13 +166,13 @@ export interface DeployOwner {
 }
 
 type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: string;
-  /** Bot's move controller — the watersphere dome + tether stamp on it. */
+  /** Bot's move controller - the watersphere dome + tether stamp on it. */
   move?: {
     setWaterDome(d?: { x: number; y: number; z: number; r: number }): void;
     setTether(t?: { x: number; y: number; z: number; r: number }): void;
     readonly tetherSlowNow: number;
   };
-  /** Jet-tank access — the tether's break-free zap. */
+  /** Jet-tank access - the tether's break-free zap. */
   drain?: (n: number) => void };
 
 export interface DeployDeps extends GameContext {
@@ -181,23 +181,23 @@ export interface DeployDeps extends GameContext {
   lazyCombat: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean; predictLocalShove?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string }): boolean; applyForceToPrey?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull'): void } | undefined;
   /** Enemy bots the turret may legally shoot (deployer's team excluded). */
   enemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
-  /** Damage funnel for bot hits — same authority as a player's bolts. */
+  /** Damage funnel for bot hits - same authority as a player's bolts. */
   damageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
-  /** Bots hostile to a given team — a bot-owned turret/mine scans these
+  /** Bots hostile to a given team - a bot-owned turret/mine scans these
    *  instead of the local player's enemies. */
   botFoes?: (team: string) => Foe[];
-  /** Offline nugget mint — connected play uses the server's pickup edge,
+  /** Offline nugget mint - connected play uses the server's pickup edge,
    *  disconnected drops a local nugget so the pack still works solo. */
   dropNugget?: (pos: THREE.Vector3) => void;
-  /** Damage numbers on remote-asset hits — without them a solo gen raid
+  /** Damage numbers on remote-asset hits - without them a solo gen raid
    *  reads as "nothing is happening" until the wreck. */
   damageNumbers?: { spawn(pos: THREE.Vector3, amount: number, color: string, cam: THREE.Camera): void };
-  /** Live vitals bar over a damaged item — same channel weld bars use. */
+  /** Live vitals bar over a damaged item - same channel weld bars use. */
   showItemBar?: (item: Item, ally: boolean) => void;
-  /** Generator power edge — offline only: a downed base generator drops
+  /** Generator power edge - offline only: a downed base generator drops
    *  its team's powered shield panes, revive restores them. */
   basePower?: (team: string, on: boolean) => void;
-  /** World camera — the beacon's HUD aim reticle projects through it. */
+  /** World camera - the beacon's HUD aim reticle projects through it. */
   camera: THREE.Camera;
 }
 
@@ -219,21 +219,21 @@ export class Deployables {
     });
   }
 
-  /** Pack item is a loadout choice (ESC menu), not a cycle — X throws
+  /** Pack item is a loadout choice (ESC menu), not a cycle - X throws
    *  whatever you packed. */
   private get selDef(): { kind: DeployKind; label: string; max: number; } {
     return DEPLOY_DEFS.find((d): boolean => d.kind === this.deps.lazyPlayer().packItem) ?? DEPLOY_DEFS[0]!;
   }
 
-  /** Throw the selected pack item — the pod arcs out along the crosshair,
+  /** Throw the selected pack item - the pod arcs out along the crosshair,
    *  sticks where it lands, then unfolds into the real deployable. */
   deploy(): void {
     const p = this.deps.lazyPlayer();
     const def = this.selDef;
-    if (p.throwLockT > 0) {return;} // mid-throw — the gun hand is busy
+    if (p.throwLockT > 0) {return;} // mid-throw - the gun hand is busy
     // The gate pays on release and counts pods already in the air (see
     // deployEconomy). Charging on touchdown let a high tosser stack free
-    // pods — every airborne throw still saw a full belt and slipped the
+    // pods - every airborne throw still saw a full belt and slipped the
     // cost and the kind cap alike.
     const seated = this.items.filter((i): boolean => i.kind === def.kind && !i.dead);
     const airborne = this.pods.reduce((n, pod): number => n + ((pod.kind === def.kind && !pod.landed) ? 1 : 0), 0);
@@ -241,7 +241,7 @@ export class Deployables {
     // Belt-throw ceremony: weapon lowers, pod releases at THROW_RELEASE.
     p.throwLockT = THROW_TOTAL;
     this.deps.lazyViewModel?.()?.startThrow();
-    // Aim captured at release, not at keypress — the wind-up is long
+    // Aim captured at release, not at keypress - the wind-up is long
     // enough to swing the throw across the sky.
     setTimeout((): void => {
       if (p.isDead) {return;} // corpse doesn't release the wind-up
@@ -255,7 +255,7 @@ export class Deployables {
   }
 
   private throwPod(kind: DeployKind, p: { pos: THREE.Vector3; vel: THREE.Vector3 }, dir: THREE.Vector3): void {
-    // Belt charge is spent at release — the same beat a belt throw pays.
+    // Belt charge is spent at release - the same beat a belt throw pays.
     // Re-check on release: the belt can't have grown since the wind-up
     // gate, but a shot/death in the window must not mint a free pod.
     const pl = this.deps.lazyPlayer();
@@ -265,7 +265,7 @@ export class Deployables {
     // Cap recycle lives here, not at the keypress gate: the oldest seated
     // item of the kind is retired only once the pod actually leaves the
     // hand, so a death/dry abort in the wind-up can't cost you a plant for
-    // free. (The gate already refused an all-airborne full cap — reaching
+    // free. (The gate already refused an all-airborne full cap - reaching
     // here at cap means a seated item exists to recycle.)
     const cap = DEPLOY_DEFS.find((d): boolean => d.kind === kind)?.max ?? 0;
     const seated = this.items.filter((i): boolean => i.kind === kind && !i.dead);
@@ -279,20 +279,20 @@ export class Deployables {
       vel: dir.multiplyScalar(POD_SPEED * (kind === 'nugget' ? NUGGET_LOB : 1)).addScaledVector(p.vel, POD_INHERIT),
       ttl: POD_TTL, landed: false,
     };
-    // Thrown nuggets claim at RELEASE with the lob velocity — the server's
+    // Thrown nuggets claim at RELEASE with the lob velocity - the server's
     // pickup sim owns the flight and settles the gem to truth. Claiming at
     // landing made a long lob read 'toofar' and the pod vanished (JP's
     // disappearing-nugget report). Planted kinds still claim at seating.
     if (kind === 'nugget' && this.deps.lazyNetworkManager().isConnected()) {
       this.deps.lazyNetworkManager().sendDeploy('nugget', { x: pos.x, y: pos.y, z: pos.z }, { x: pod.vel.x, y: pod.vel.y, z: pod.vel.z });
     }
-    // The item is constructed at release — it flies folded and finishes
+    // The item is constructed at release - it flies folded and finishes
     // unfolding mid-air, so touchdown lands a full-size sentry/dome.
     if (kind === 'nugget') {
       pod.nugget = new THREE.Mesh(NUG_POD_GEO, NUG_POD_MAT);
       pod.nugget.position.copy(pos);
       pod.nugget.layers.enable(BLOOM_LAYER);
-      // Same additive halo the pickup wears — the pickup read at distance.
+      // Same additive halo the pickup wears - the pickup read at distance.
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
         map: getGlowTexture(32), color: 0xFF_D5_4A, transparent: true,
         blending: THREE.AdditiveBlending, depthWrite: false,
@@ -302,7 +302,7 @@ export class Deployables {
       this.deps.scene.add(pod.nugget);
     }
     // Server-tracked life: the planted mine lives its wire ttl, not the
-    // overlord field's 45s — the server still explodes it either way.
+    // overlord field's 45s - the server still explodes it either way.
     else if (kind === 'mine') {pod.mine = new Mine(this.deps.scene, terrain, pos, false, DEPLOY_ITEMS.mine.ttlS);}
     else {pod.item = SEATED[kind]!.make(this.deps.scene, terrain, pos);}
     this.pods.push(pod);
@@ -316,7 +316,7 @@ export class Deployables {
     pod.vel.y += GRAVITY * dt;
     pod.pos.addScaledVector(pod.vel, dt);
 
-    // The unfolding kits share one tumble — assemble mid-air, spin, track
+    // The unfolding kits share one tumble - assemble mid-air, spin, track
     // the pod's fall. Mine/nugget pods differ below.
     const flying = pod.item;
     if (flying) {
@@ -326,14 +326,14 @@ export class Deployables {
       flying.group.position.copy(pod.pos);
     } else if (pod.nugget) {
       pod.nugget.position.copy(pod.pos);
-      pod.nugget.rotation.y += dt * 9;  // tumble — the pickup's own two-axis spin, faster in flight
+      pod.nugget.rotation.y += dt * 9;  // tumble - the pickup's own two-axis spin, faster in flight
       pod.nugget.rotation.x += dt * 3.6;
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
-      pod.mine.update(dt, _FAR); // airborne — nobody to trigger on
+      pod.mine.update(dt, _FAR); // airborne - nobody to trigger on
     }
 
-    // Collide with the drawn surface, not the smooth field — on convex
+    // Collide with the drawn surface, not the smooth field - on convex
     // ground the flat triangles dip under bilinear and a field rest
     // reads as a pod hovering (same gap the Nugget rest fixed).
     const groundY = terrain.getRenderedHeight(pod.pos.x, pod.pos.z);
@@ -342,7 +342,7 @@ export class Deployables {
       if (n.y >= DEPLOY_SLOPE) {
         this.attach(pod, n);
       } else {
-        // Cliff face — glance off instead of sticking sideways.
+        // Cliff face - glance off instead of sticking sideways.
         pod.pos.y = groundY + POD_RADIUS;
         const vn = pod.vel.dot(n);
         pod.vel.addScaledVector(n, -vn * 1.4); // reflect, lose energy
@@ -352,37 +352,37 @@ export class Deployables {
 
   }
 
-  /** Touchdown on landable ground — seat the already-unfolded item and
+  /** Touchdown on landable ground - seat the already-unfolded item and
    *  hand it to the live items list. No post-land growth: it dropped in
    *  full-size like a Turretter. */
   private attach(pod: Pod, n: THREE.Vector3): void {
     const terrain = this.deps.lazyTerrain();
     const impact = Math.abs(pod.vel.y);
     pod.landed = true;
-    pod.ttl = 0; // consumed — the item lives in this.items now
+    pod.ttl = 0; // consumed - the item lives in this.items now
     const seat = terrain.getRenderedHeight(pod.pos.x, pod.pos.z);
     if (Number.isFinite(seat)) {pod.pos.y = seat;}
     // Every bolted-down kit shares the seat: snap to the pod spot, tilt to
-    // the face normal, adopt into items. Drone skips the tilt — it lifts
+    // the face normal, adopt into items. Drone skips the tilt - it lifts
     // off the touchdown spot on its own lift.
     const seated = pod.item;
     if (seated) {
       seated.pos.copy(pod.pos);
       seated.group.position.copy(pod.pos);
-      // Drone/watersphere skip the tilt — they orient on their own lift.
+      // Drone/watersphere skip the tilt - they orient on their own lift.
       if (pod.kind !== 'drone' && pod.kind !== 'watersphere') {seated.group.quaternion.setFromUnitVectors(_UP, n);}
       seated.group.scale.setScalar(1); // snap any unfolding tail to done
       seated.unfoldDone();
       SEATED[pod.kind]!.adopt(this.adopter, seated, undefined);
       pod.item = undefined;
-      // ownership moved — fizzle cleanup must not dispose it
+      // ownership moved - fizzle cleanup must not dispose it
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.seatOn(terrain);
       this.adopter.adoptMine(pod.mine, undefined);
       pod.mine = undefined;
     } else if (pod.nugget) {
-      // Nothing seats — the pod IS the payload. Connected, the deploy
+      // Nothing seats - the pod IS the payload. Connected, the deploy
       // claim below mints the server pickup whose spawn edge paints the
       // resting gem; offline, drop a local nugget in its place.
       if (!this.deps.lazyNetworkManager().isConnected()) {
@@ -395,11 +395,11 @@ export class Deployables {
     sfx.land(impact);
     // Charge was spent at release (throwPod); this claim is the server's
     // copy of the same spend, not a second one. The nugget already claimed
-    // at release — the server sims its flight; don't double-charge.
+    // at release - the server sims its flight; don't double-charge.
     if (pod.kind !== 'nugget') {this.deps.lazyNetworkManager().sendDeploy(pod.kind, pod.pos);}
   }
 
-  /** Bot-authored plant — the brain already chose the landing spot, so
+  /** Bot-authored plant - the brain already chose the landing spot, so
    *  the item arrives directly (mirrors the server's handleDeploy, not
    *  the player's thrown pod). Per-owner kind caps apply. */
   plantFor(kind: DeployKind, pos: { x: number; y: number; z: number }, owner: DeployOwner): void {
@@ -455,7 +455,7 @@ export class Deployables {
   // visuals grew past the ~900-line file ceiling); these are thin routes.
   private readonly remotes: RemoteDeployables;
 
-  /** deploySpawn echo for a plant we already rendered locally — false
+  /** deploySpawn echo for a plant we already rendered locally - false
    *  when no live pod exists (replayed intent), caller falls back to a
    *  remote replica so the item isn't a ghost. */
   ackLocal(id: number): boolean {
@@ -467,7 +467,7 @@ export class Deployables {
     this.remotes.spawn(id, spec);
   }
 
-  /** deployHp broadcast — server is the vitals authority; the local
+  /** deployHp broadcast - server is the vitals authority; the local
    *  beam's predicted heal gets corrected by this same write. */
   applyDeployHp(id: number, hp: number, armor: number): void {
     this.remotes.applyDeployHp(id, hp, armor);
@@ -477,7 +477,7 @@ export class Deployables {
   remoteUp(id: number): void { this.remotes.up(id); }
 
   /** Blast-echo attribution: a triggered mine explodes server-side with
-   *  no projectile replica, and its deployDown races the knockback echo —
+   *  no projectile replica, and its deployDown races the knockback echo -
    *  a live mine within the radius means the blast was expected, not a
    *  prediction miss. */
   mineNear(pos: THREE.Vector3, radius: number): boolean {
@@ -488,14 +488,14 @@ export class Deployables {
     return false;
   }
 
-  /** Repair-beam pick: nearest deployed item along the ray, padded —
+  /** Repair-beam pick: nearest deployed item along the ray, padded -
    *  beam thin but not needle-thin, aim at the body not the feet.
-   *  Scans remote items too — without it a welder could only ever reach
+   *  Scans remote items too - without it a welder could only ever reach
    *  their OWN plants, so teammates' gear and base assets couldn't be
    *  repaired by a human at all (server accepted the claims; the ray
    *  just never found a target). */
   repairHit(origin: THREE.Vector3, dir: THREE.Vector3, range: number): { item: Item; t: number } | null {
-    // Mirrors the server's repairTarget assist — ~5° cone so the beam
+    // Mirrors the server's repairTarget assist - ~5° cone so the beam
     // visual lands on the same weldable the server picks. Direct
     // capsule hits beat cone candidates.
     const CONE_SIN = 0.0872;
@@ -507,7 +507,7 @@ export class Deployables {
     for (const list of [this.items, this.remotes.values()]) {for (const i of list) {
       if (i.dead) {continue;}
       _repTo.copy(i.pos).sub(origin);
-      _repTo.y += 0.7; // body center — turret mast / pad crystal / drone hull
+      _repTo.y += 0.7; // body center - turret mast / pad crystal / drone hull
       const proj = _repTo.dot(dir);
       if (proj < 0 || proj > range) {continue;}
       const perp2 = _repTo.lengthSq() - proj * proj;
@@ -525,7 +525,7 @@ export class Deployables {
   }
 
   /** Repair beam: heal to maxHealth, overflow banks as armor. The local
-   *  write is the offline authority AND the prediction — the server's
+   *  write is the offline authority AND the prediction - the server's
    *   deployHp echo lands the same number when connected. */
   healItem(item: Item, n: number): void {
     const {v} = item;
@@ -544,7 +544,7 @@ export class Deployables {
     return i.serverId === undefined ? i.candId : `s${i.serverId}`;
   }
 
-  /** Nearest damaged item the bot could weld — own gear always, same-team
+  /** Nearest damaged item the bot could weld - own gear always, same-team
    *  gear when the item knows its owner's side. 45m mirrors the server
    *  senses' reach so offline welders behave like wire ones. */
   repairJob(botId: string, team: string, pos: THREE.Vector3): { key: string; pos: THREE.Vector3; frac: number } | null {
@@ -563,7 +563,7 @@ export class Deployables {
     return best ? { key: this.keyOf(best), pos: best.pos, frac: best.v.health / best.v.maxHealth } : null;
   }
 
-  /** Resolve a brain's repair key to a heal — returns the welded item so
+  /** Resolve a brain's repair key to a heal - returns the welded item so
    *  the caller can paint the work, null when the item died mid-walk. */
   weld(key: string, n: number): Item | null {
     const find = (list: Iterable<Item>): Item | null => {
@@ -576,7 +576,7 @@ export class Deployables {
     return item;
   }
 
-  // --- Remote welders' beams, pings, shot/boom relays — all inside
+  // --- Remote welders' beams, pings, shot/boom relays - all inside
   // RemoteDeployables; these keep the public surface stable. -----------
 
   remoteWeld(srcId: string, serverId: number): void {
@@ -586,7 +586,7 @@ export class Deployables {
   remoteRemove(id: number): void {
     this.remotes.remove(id);
     // Own plants are registered by server-id via ackLocal but never join
-    // the remotes map — without this their deployGone (server cap-recycle,
+    // the remotes map - without this their deployGone (server cap-recycle,
     // blast kill) leaves the item alive in items forever: a ghost mesh
     // that also keeps hashing into netEntries against the server roster.
     for (const i of this.items) {
@@ -597,7 +597,7 @@ export class Deployables {
   /** Roster-reconcile cull for our OWN lane: remoteIds() only covers the
    *  remotes map, so an own plant whose serverId fell off the roster
    *  (cap-recycle while we were away, blast edge lost) would linger
-   *  forever — same ghost-mesh + phantom-hash class as deployGone. */
+   *  forever - same ghost-mesh + phantom-hash class as deployGone. */
   cullOwn(live: ReadonlySet<number>): void {
     for (const i of this.items) {
       if (i.serverId !== undefined && !live.has(i.serverId)) {this.killItem(i);}
@@ -606,7 +606,7 @@ export class Deployables {
 
   /** Wire-id → item pairs across BOTH lanes: remote spawns keyed by the
    *  map, plus our own plants once ackLocal stamped their serverId.
-   *  Feeds the §4.7 deployable fidelity hash — the server's roster
+   *  Feeds the §4.7 deployable fidelity hash - the server's roster
    *  covers our plants too. */
   netEntries(): [number, Item][] {
     const out: [number, Item][] = [...this.remotes.entries()];
@@ -620,7 +620,7 @@ export class Deployables {
     return this.remotes.ids();
   }
 
-  /** The remote replica map — roster reconcile owns its lifecycle. */
+  /** The remote replica map - roster reconcile owns its lifecycle. */
   remoteReplicas(): Map<number, Item> { return this.remotes.replicas(); }
 
   sensorPing(id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]): void {
@@ -634,22 +634,22 @@ export class Deployables {
 
 
 
-  // Sentry mini-rockets — see deployRockets.ts.
+  // Sentry mini-rockets - see deployRockets.ts.
   private readonly rockets: DeployRockets;
   private readonly adopter: DeployAdopter;
 
-  /** Escort drone — follows the owner's head, plinks enemies with weaker
+  /** Escort drone - follows the owner's head, plinks enemies with weaker
    *  mini-rockets (60% sentry damage). Same dep: targeting rules. */
 
 
 
 
-  /** Recharge pad — standing in the envelope refills energy fast and
+  /** Recharge pad - standing in the envelope refills energy fast and
    *  health slowly. Aggro bait by design: it's a dep: candidate, so the
    *  wildlife gnaws it while it works. */
 
 
-  /** Pod teardown — the geo/mat are module-shared (don't dispose), but
+  /** Pod teardown - the geo/mat are module-shared (don't dispose), but
    *  the halo sprite's per-instance material must go. */
   private disposeNuggetPod(mesh: THREE.Mesh): void {
     this.deps.scene.remove(mesh);
@@ -662,7 +662,7 @@ export class Deployables {
     if (item.dead) {return;}
     item.dead = true;
     if (item.kind === 'station' || item.kind === 'drone' || item.kind === 'shield') {
-      // Fizzle-pop — smaller than the turret's, still tells you it died.
+      // Fizzle-pop - smaller than the turret's, still tells you it died.
       let tint = 0x55_FF_CC;
   if (item.kind === 'drone') {tint = 0x88_DD_FF;}
   else if (item.kind === 'shield') {tint = 0x66_CC_FF;}
@@ -677,14 +677,14 @@ export class Deployables {
     }
   }
 
-  /** Creature contact damage — speciesKit calls this when a committed
+  /** Creature contact damage - speciesKit calls this when a committed
    *  hunter is gnawing on a deployable. dmg is per-tick-scaled by caller. */
   hurt(candId: string, dmg: number): void {
     const it = this.items.find((i): boolean => i.candId === candId && !i.dead);
     it?.hurt(dmg);
   }
 
-  /** Live domes as projectile obstacles — the sweep layer treats each
+  /** Live domes as projectile obstacles - the sweep layer treats each
    *  shield as a static sphere; `blocks` filters friendlies so your own
    *  fire sails through your field while hostile shells pop on contact. */
   private readonly _shieldObs: SweepObstacle[] = [];
@@ -709,10 +709,10 @@ export class Deployables {
   }
 
   /** Locally-simulated domes (yours or a GameBot's, offline): the foe
-   *  tables already resolve who's hostile — a bot's dome shields it from
+   *  tables already resolve who's hostile - a bot's dome shields it from
    *  YOUR shells, your dome eats enemy-bot fire. */
   private localShellHostile(i: Item, shooterId: string | null): boolean {
-    if (!i.owner) { // the local player's dome — hostile = enemy bots
+    if (!i.owner) { // the local player's dome - hostile = enemy bots
       return shooterId != null && Boolean(this.deps.enemyBots?.().some((b): boolean => b.playerId === shooterId));
     }
     // Bot-owned dome: the bot's foe list names who's hostile; 'local'
@@ -722,7 +722,7 @@ export class Deployables {
   }
 
   /** Remote (server-owned) domes: teammates pass, everyone else eats the
-   *  field — the owner's own shells are replicas elsewhere and never run
+   *  field - the owner's own shells are replicas elsewhere and never run
    *  this sweep anyway. Team unknown → ffa: all but the owner's shots. */
   private remoteShellHostile(i: Item, shooterId: string | null): boolean {
     const nm = this.deps.lazyNetworkManager();
@@ -734,7 +734,7 @@ export class Deployables {
     return (shooterId ?? me) !== i.owner;
   }
 
-  /** Offline mirror of RoomDeployables.applyBlast — connected the server
+  /** Offline mirror of RoomDeployables.applyBlast - connected the server
    *  owns item hp and this is dead code; solo the same funnel damages the
    *  map's base assets. Direct inside bodyR pays `damage`, outside pays
    *  the `splash` falloff; sticky pays 2x like the server. */
@@ -742,9 +742,9 @@ export class Deployables {
     if (this.deps.lazyNetworkManager().isConnected()) {return;}
     const mult = weapon === WeaponType.Sticky ? 2 : 1;
     const aoe = splash || damage;
-    // Both lists — `items` holds locally-adopted plants (mine and the
+    // Both lists - `items` holds locally-adopted plants (mine and the
     // bots'); the server's applyBlast sweeps its whole roster. Own gear
-    // never eats own splash — shooter null/undefined is the local player,
+    // never eats own splash - shooter null/undefined is the local player,
     // whose items carry owner === undefined.
     for (const i of [...this.items, ...this.remotes.values()]) {
       if (i.dead || i.downed) {continue;}
@@ -767,7 +767,7 @@ export class Deployables {
     }
   }
 
-  /** Nearest hostile emplacement an attacker could shell — mirrors the
+  /** Nearest hostile emplacement an attacker could shell - mirrors the
    *  server senses' hostileGear scan (enemy-team items in range). */
   hostileGear(team: string | undefined, pos: THREE.Vector3, range: number): { pos: THREE.Vector3; kind: DeployKind } | null {
     let best: Item | null = null; let bd = range * range;
@@ -779,7 +779,7 @@ export class Deployables {
     return best ? { pos: best.pos, kind: best.kind } : null;
   }
 
-  /** Creature-targeting candidates — deployed items aggro the wildlife. */
+  /** Creature-targeting candidates - deployed items aggro the wildlife. */
   candidates(): TargetCandidate[] {
     this._candList.length = 0;
     for (const i of this.items) {
@@ -790,7 +790,7 @@ export class Deployables {
 
   get count(): number { return this.items.filter((i): boolean => !i.dead).length; }
 
-  /** Solid hulls for the prediction MoveSim — mirrors the server's
+  /** Solid hulls for the prediction MoveSim - mirrors the server's
    *  RoomDeployables.solidCols (same DEPLOY_ITEMS bodyR/bodyH boxes) so
    *  brushing a turret resolves identically on both ends. The array is
    *  handed to the MovementController once and rewritten in place when
@@ -843,7 +843,7 @@ export class Deployables {
     if (sig !== this.solidSig) { this.solidSig = sig; this.refreshSolidCols(); }
     const mv = this.deps.lazyPlayer()?.movement as unknown as { setDynamicCols(c: readonly StructureCollider[]): void } | undefined;
     if (mv && mv !== this.solidMv) { mv.setDynamicCols(this.solidCols); this.solidMv = mv; }
-    // Same live array for the shell sweep — a planted generator stops a
+    // Same live array for the shell sweep - a planted generator stops a
     // disc on contact instead of letting it phase through to the wall.
     if (Projectile.dynColliders !== this.solidCols) {Projectile.dynColliders = this.solidCols;}
   }
@@ -883,9 +883,9 @@ export class Deployables {
 
   private lashPair(tx: number, ty: number, tz: number, ex: number, ey: number, ez: number): void {
     this._lashA.set(tx, ty + 0.15, tz);
-    // Waist height — above the head reads as the nameplate, not a grab.
+    // Waist height - above the head reads as the nameplate, not a grab.
     this._lashB.set(ex, ey + 0.6, ez);
-    // Mid control point: lifted and side-slung, waving — the bend is what
+    // Mid control point: lifted and side-slung, waving - the bend is what
     // reads as a lash instead of a rope.
     const w = Math.sin(this.lashT * 7 + ex * 1.3);
     const w2 = Math.cos(this.lashT * 5.3 + ez * 1.7);
@@ -924,7 +924,7 @@ export class Deployables {
     }
   }
 
-  /** The tether snare the local body stands in — the same rule as the
+  /** The tether snare the local body stands in - the same rule as the
    *  server's tickTethers (enemy-side, outside the owner) so the local
    *  replay bleeds the same outward speed. Local plants carry owner
    *  undefined; those are ours, never a snare on ourselves. */
@@ -945,7 +945,7 @@ export class Deployables {
     return undefined;
   }
 
-  /** The watersphere pocket the local body wades in — the same rule as
+  /** The watersphere pocket the local body wades in - the same rule as
    *  the server's tickWatersphere: only a HOSTILE team's dome drags you
    *  (teamless domes are friendly to everyone, matching tickWatersphere). */
   private waterDomeFor(): { x: number; y: number; z: number; r: number } | undefined {
@@ -964,7 +964,7 @@ export class Deployables {
     return undefined;
   }
 
-  /** Offline half of RoomDeployables.tickWatersphere — solo is the local
+  /** Offline half of RoomDeployables.tickWatersphere - solo is the local
    *  sim's own authority, so hostile waterspheres stamp the drag dome on
    *  enemy bot bodies here (server shadows never see offline bots). */
   private readonly domeBots = new Map<string, { setWaterDome(d?: { x: number; y: number; z: number; r: number }): void }>();
@@ -999,7 +999,7 @@ export class Deployables {
     return want;
   }
 
-  /** Offline mirror of RoomDeployables.tickTethers — snare enemies inside
+  /** Offline mirror of RoomDeployables.tickTethers - snare enemies inside
    *  a tether ring, bleed their outward run, zap their jet tank on the
    *  break-free (slow accumulated while held × tetherZap). */
   private readonly snareBots = new Map<string, { mv: NonNullable<Foe['move']>; drain: NonNullable<Foe['drain']>; hold: number }>();
@@ -1057,7 +1057,7 @@ export class Deployables {
     const d = Math.hypot(dx, dz);
     if (!cfg || cfg.speed <= 0 || d < 1) { hud.updateBeaconAim(null, null, cam, true); return; }
     if (!cfg.gravity) {
-      // Flat gun — the reticle IS the beacon; still worth marking.
+      // Flat gun - the reticle IS the beacon; still worth marking.
       beacon.beacon?.setAim(_UP, 40);
       this._beaconAim.set(t.x, t.y + 0.6, t.z);
       hud.updateBeaconAim(this._beaconAim, null, cam, true);
@@ -1066,7 +1066,7 @@ export class Deployables {
     const v = cfg.speed, g = Math.abs(GRAVITY);
     const disc = v * v * v * v - g * (g * d * d + 2 * dy * v * v);
     if (disc < 0) {
-      // Out of this gun's arc — flag it so the reticle reads "can't reach"
+      // Out of this gun's arc - flag it so the reticle reads "can't reach"
       // instead of lying about a lob that falls short.
       beacon.beacon?.setAim(_UP, 40);
       this._beaconAim.set(t.x, t.y + 0.6, t.z);
@@ -1074,7 +1074,7 @@ export class Deployables {
       return;
     }
     // Two roots to the lob quadratic: the direct low arc and the T2
-    // mortar lob over obstacles — both reticles, distinct styles.
+    // mortar lob over obstacles - both reticles, distinct styles.
     const sqrtD = Math.sqrt(disc);
     const thetaLow = Math.atan((v * v - sqrtD) / (g * d));
     const thetaLob = Math.atan((v * v + sqrtD) / (g * d));
@@ -1089,14 +1089,14 @@ export class Deployables {
       o.y + Math.sin(thetaLob) * dist,
       o.z + hz * Math.cos(thetaLob) * dist);
     // The sky shaft reaches from the emitter to the exact world point the
-    // lob reticle projects — the beam tip and the marker coincide on screen.
+    // lob reticle projects - the beam tip and the marker coincide on screen.
     this._beaconDir.subVectors(this._beaconLob, t);
     const beamLen = this._beaconDir.length();
     beacon.beacon?.setAim(this._beaconDir, Math.max(beamLen, 4));
     hud.updateBeaconAim(this._beaconAim, this._beaconLob, cam, true);
   }
 
-  // A server-acked local item also sits in byId — drop it or
+  // A server-acked local item also sits in byId - drop it or
   // applyDeployHp/remoteWeld keep resolving a corpse until deployGone.
   private reapDeadItems(): void {
     for (let i = this.items.length - 1; i >= 0; i -= 1) {
