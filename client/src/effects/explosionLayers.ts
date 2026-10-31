@@ -16,7 +16,7 @@ const layerOpacity = (kind: string): number => {
 
 
 
-// Per-weapon blast layer recipes — the spawn side of Explosion. Each
+// Per-weapon blast layer recipes - the spawn side of Explosion. Each
 // variant returns true after laying its full recipe so the caller falls
 // through to the shared powder blast only when no variant applies.
 // Split from explosion.ts; owns the shock-dome pool and the ground
@@ -32,8 +32,8 @@ interface Shockwave {
 }
 
 const GEO_SHOCK = new THREE.SphereGeometry(0.3, 16, 16); // shockwave shell
-const shockPool: Shockwave[] = []; // module pool — shared across blasts
-// Grow-only freelists held peak burst memory forever — pool a small warm
+const shockPool: Shockwave[] = []; // module pool - shared across blasts
+// Grow-only freelists held peak burst memory forever - pool a small warm
 // floor and dispose the rest (each entry owns a MeshBasicMaterial).
 const SHOCK_POOL_KEEP = 16;
 function releaseShock(sw: Shockwave): void {
@@ -56,7 +56,7 @@ export class ExplosionLayers implements VariantHost {
     readonly hasTint: boolean,
   ) {}
 
-  /** Lay the whole blast recipe — variant dispatch first, shared powder
+  /** Lay the whole blast recipe - variant dispatch first, shared powder
    *  blast as the fallback. Caller finalizes the spark batch after. */
   spawn(vfx: string | undefined, pos: THREE.Vector3, mult: number,
         directHit: boolean, timeScale: number, terrain?: Terrain): void {
@@ -69,18 +69,18 @@ export class ExplosionLayers implements VariantHost {
       if (directHit) {this.variants.directHitLayers(pos, timeScale);}
       this.spawnGroundRing(pos, mult, terrain);
     }
-    // Any blast at the waterline throws a column — additive to the blast's
+    // Any blast at the waterline throws a column - additive to the blast's
     // own recipe (a rocket at sea still booms AND splashes). 'splash'
-    // blasts ARE water already — layering a sea column on a hose is spam.
+    // blasts ARE water already - layering a sea column on a hose is spam.
     if (vfx !== 'splash') {waterSplashAt(pos, mult, terrain);}
   }
 
-  // Layer 0: Instant flash — one giant white-hot sprite, gone in ~90ms.
+  // Layer 0: Instant flash - one giant white-hot sprite, gone in ~90ms.
   // The frame-zero flash is what reads as "something violent happened".
   spawnFlash(pos: THREE.Vector3, mult: number): void {
     _c.setHex(0xFF_F6_D8);
     if (this.hasTint) {_c.lerp(this.tint, 0.3);}
-    // One batched particle, not a pooled sprite — a flash is a burst of 1.
+    // One batched particle, not a pooled sprite - a flash is a burst of 1.
     blastBurst(pos, {
       count: 1, spdMin: 0, spdMax: 0, vy: 0,
       lifeMin: 0.09, lifeMax: 0.09,
@@ -91,7 +91,7 @@ export class ExplosionLayers implements VariantHost {
     }, true);
   }
 
-  // Layer 0b: Spike rays — thin stretched quads radiating out fast
+  // Layer 0b: Spike rays - thin stretched quads radiating out fast
   // (Mega Man X / Metal Slug strength cue), additive, ~0.15s. Quarks
   // StretchedBillBoard does the velocity-stretch on the batch, so all
   // rays land in the shared draw call instead of a mesh each.
@@ -112,7 +112,7 @@ export class ExplosionLayers implements VariantHost {
   // One particle layer: `count` (scaled by mult) particles on a randomized
   // cone, with per-particle jittered life/size and a color gradient.
   spawnBurst(pos: THREE.Vector3, l: BurstLayer): void {
-    // One batched quarks burst instead of count pooled meshes/sprites —
+    // One batched quarks burst instead of count pooled meshes/sprites -
     // the whole layer lands in a single draw call.
     let {r1} = l, {g1} = l, {b1} = l, {r2} = l, {g2} = l, {b2} = l;
     if (this.hasTint && l.kind === 'glow') {
@@ -144,11 +144,11 @@ else if (l.kind === 'solid') {sMul = 2;}
     const dh = directHit;
     const dhBoost = (v: number): number => (dh ? v : 1);
     const dhLife = dhBoost(1.4), dhSize = dhBoost(1.2);
-    // 'heavy' (concussion: mortar/cannon/warhead) — slower, dirtier, more
+    // 'heavy' (concussion: mortar/cannon/warhead) - slower, dirtier, more
     // smoke. HE reads as a thump with a black tail, not a clean fireball.
     const hv = heavy ? 1 : 0;
 
-    // Layer 1: Flash — white-yellow, very short
+    // Layer 1: Flash - white-yellow, very short
     this.spawnBurst(pos, {
       count: 20, countMult: mult,
       elvBase: 0.4, elvSpan: Math.PI * 0.5,
@@ -159,7 +159,7 @@ else if (l.kind === 'solid') {sMul = 2;}
       r1: 1, g1: 1, b1: 0.85, r2: 1, g2: 0.6 - hv * 0.15, b2: 0, kind: 'glow',
     });
 
-    // Layer 2: Fireball core — orange, additive (heavy burns redder)
+    // Layer 2: Fireball core - orange, additive (heavy burns redder)
     this.spawnBurst(pos, {
       count: 65, countMult: mult,
       elvBase: 0.25, elvSpan: Math.PI,
@@ -170,7 +170,7 @@ else if (l.kind === 'solid') {sMul = 2;}
       r1: 1, g1: 0.4 - hv * 0.15, g1Var: 0.35, b1: 0, r2: 0.55 - hv * 0.1, g2: 0.02, b2: 0, kind: 'glow', stagger: 0.07,
     });
 
-    // Layer 3: Debris — fast chunks; heavy HE throws dirt-brown shrapnel
+    // Layer 3: Debris - fast chunks; heavy HE throws dirt-brown shrapnel
     this.spawnBurst(pos, {
       count: 32 + Math.floor(hv * 14), countMult: mult,
       elvBase: 0.2, elvSpan: Math.PI * 0.75,
@@ -181,7 +181,7 @@ else if (l.kind === 'solid') {sMul = 2;}
       r1: 1 - hv * 0.55, g1: 0.3 - hv * 0.12, g1Var: 0.2, b1: 0, r2: 0.12, g2: 0.05, b2: 0.01, kind: 'solid', stagger: 0.1, spin: 5,
     });
 
-    // Layer 4: Embers — tiny, long life
+    // Layer 4: Embers - tiny, long life
     this.spawnBurst(pos, {
       count: 80, countMult: mult,
       elvBase: 0.3, elvSpan: Math.PI,
@@ -192,9 +192,9 @@ else if (l.kind === 'solid') {sMul = 2;}
       r1: 1, g1: 0.5, g1Var: 0.3, b1: 0, r2: 0.2, g2: 0, b2: 0, kind: 'glow', stagger: 0.15,
     });
 
-    // Layer 5: Smoke — dark billboards that linger and take over the tail
+    // Layer 5: Smoke - dark billboards that linger and take over the tail
     // (the contrast that makes the fire read as fire, per Sakurai's recipe).
-    // Heavy HE doubles it and drags it out — the dirt cloud is the tell.
+    // Heavy HE doubles it and drags it out - the dirt cloud is the tell.
     this.spawnBurst(pos, {
       count: 14 + Math.floor(hv * 12), countMult: mult,
       elvBase: 0, elvSpan: 0,
@@ -205,9 +205,24 @@ else if (l.kind === 'solid') {sMul = 2;}
       r1: 0.22 - hv * 0.08, g1: 0.2 - hv * 0.07, b1: 0.18 - hv * 0.06, r2: 0.06, g2: 0.06, b2: 0.06, kind: 'smoke', stagger: 0.12, spin: 1.4,
       planar: true,
     });
+
+    // Layer 6 (heavy only): the HE signature - a dirt column mushrooming
+    // up off the detonation point. Tight upward cone, slow rise, long
+    // tail; the T2 mortar fountain, missing from the shared recipe.
+    if (hv) {
+      this.spawnBurst(pos, {
+        count: 18, countMult: mult,
+        elvBase: 1.15, elvSpan: Math.PI * 0.12,
+        spdMin: 4, spdMax: 14, spdBoost: dhBoost(1.2), vy: 16,
+        lifeMin: 1.4, lifeVar: 1, lifeBoost: dhLife,
+        sizeMin: 0.5, sizeVar: 0.6, sizeBoost: dhSize,
+        gravity: -0.8,
+        r1: 0.3, g1: 0.22, b1: 0.14, r2: 0.08, g2: 0.07, b2: 0.06, kind: 'smoke', stagger: 0.18, spin: 1,
+      });
+    }
   }
 
-  // Expanding shock dome on EVERY blast — previously direct-hit-only, which
+  // Expanding shock dome on EVERY blast - previously direct-hit-only, which
   // is why ground-detonating weapons (mortar/GL/plasma) looked weak. Radius
   // scales with the weapon's real blast size (mult).
   private spawnShockDome(pos: THREE.Vector3, mult: number): void {
@@ -235,26 +250,26 @@ else if (l.kind === 'solid') {sMul = 2;}
     sw.mat.color.multiplyScalar(EMIT_GAIN); // HDR-hot so bloom catches it
     sw.mat.opacity = opacity;
     sw.mesh.position.copy(pos);
-    // Pooled meshes keep their last-frame scale — a reused dome at its
+    // Pooled meshes keep their last-frame scale - a reused dome at its
     // old full radius renders as a screen-swallowing sphere for one
     // frame before update() re-seats it. Reset at alloc.
     sw.mesh.scale.setScalar(0);
     sw.life = life;
-    // instant: seed elapsed past the growth phase — the dome spawns at full
+    // instant: seed elapsed past the growth phase - the dome spawns at full
     // radius (instant AOE telegraph) and its whole life is the fade-out.
     sw.elapsed = instant ? life * 0.6 : 0;
     sw.maxRadius = maxRadius; sw.dead = false;
     this.shockwaves.push(sw);
   }
 
-  // Trailing sparks for every blast — the debris streaks are most of what
+  // Trailing sparks for every blast - the debris streaks are most of what
   // makes a big explosion read as violent at distance. Kept sparse and
   // dim: at full strength they outshouted the fireball itself.
   private spawnDebrisSparks(pos: THREE.Vector3, mult: number): void {
     const count = Math.floor(8 * Math.min(mult, 2.5)); // cap count so mortar doesn't melt the pool
     for (let i = 0; i < count; i += 1) {
       const ang = Math.random() * Math.PI * 2;
-      const elv = (Math.random() - 0.3) * Math.PI * 0.7; // biased upward — ground blast
+      const elv = (Math.random() - 0.3) * Math.PI * 0.7; // biased upward - ground blast
       const spd = 18 + Math.random() * 35;
       const spark = this.sparks.alloc(pos);
       if (this.hasTint) {
@@ -303,7 +318,7 @@ else if (l.kind === 'solid') {sMul = 2;}
       if (sw.dead) {continue;}
       // Cap per-frame aging at 50ms: a spawn that lands on a hitch frame
       // (GC pause, tab-switch, queue drain) would otherwise age the dome
-      // birth→death in ONE update — scale 0 straight to removed, the
+      // birth→death in ONE update - scale 0 straight to removed, the
       // "dome vanishes in a frame" glitch. Normal 60fps is unaffected.
       sw.elapsed += Math.min(dt, 0.05);
       if (sw.elapsed >= sw.life) {
@@ -314,9 +329,9 @@ else if (l.kind === 'solid') {sMul = 2;}
       }
 alive += 1;
       const t = sw.elapsed / sw.life;
-      // r ∝ t^0.4 — measured point-blast growth law (Trilithon): violent
+      // r ∝ t^0.4 - measured point-blast growth law (Trilithon): violent
       // off the mark, decelerating tail. Radius lands at ~60% of life and
-      // HELD there — a dome that hits max size the instant it fades pops
+      // HELD there - a dome that hits max size the instant it fades pops
       // out like a glitch; the last 40% is a linger-and-dissolve.
       const grow = Math.min(t / 0.6, 1);
       const ease = grow ** 0.4;
