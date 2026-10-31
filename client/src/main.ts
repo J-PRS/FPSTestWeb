@@ -128,6 +128,16 @@ const rendererSetup = createRenderer(camera, scene);
 const { renderer } = rendererSetup;
 renderer.setClearColor(FOG_COLOR);
 
+// Environment probe — one-time PMREM bake of the scene's sky/atmosphere
+// so MeshStandardMaterial has real reflections. Without it metal armor
+// reflects void and reads dead-black; the bake is a few ms at boot, then
+// every standard material picks it up free (no per-frame cost).
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(scene, 0.06).texture;
+  pmrem.dispose();
+}
+
 // ---- Game state ----
 let demoManager: DemoManager | null = null;
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)

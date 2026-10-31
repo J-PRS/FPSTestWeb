@@ -64,6 +64,7 @@ import { Logger } from '../core/Logger.js';
 import type { PlayerSheep } from './playerSheep.js';
 import { BootWarmup } from './bootWarmup.js';
 import { warmRig } from '../entities/rigPool.js';
+import { PlayerModel } from '../entities/PlayerModel.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 // Frame-jump forensic: compare pos at the same point each frame so any
@@ -614,10 +615,18 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   hud.setTimerVisible(!(demoManager?.isPlaying ?? false) && !networkManager.isConnected() && !CLASSIC_MODE);
   hud.setTimer(deps.waveDirector().elapsed);
   // Classic's Unity-style top-center readout owns the clock - the
-  // corner timer hides so they don't double up.
-  hud.setClassicScore(CLASSIC_MODE
+  // corner timer hides so they don't double up. Classic is a solo mode:
+  // a joined session in the same page keeps CLASSIC_MODE true and the
+  // readout would linger over the online HUD.
+  hud.setClassicScore(CLASSIC_MODE && !networkManager.isConnected()
     ? { score: player.score, kills: player.kills, seconds: deps.waveDirector().elapsed }
     : null);
+  // The team-score strip has no per-frame owner: solo modes set it
+  // once and it stays up. Hide it when connected to a mode that
+  // doesn't write it - team modes online re-set it via match.ts anyway.
+  if (networkManager.isConnected() && !['nuggets', 'ctf', 'flagrun', 'conquest', 'headhunt'].includes(deps.world.mode ?? '')) {
+    hud.hideTeamScore();
+  }
   hud.setMatchStatus(
     deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,
     deps.world.flagStates,
@@ -790,7 +799,19 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
     if (count !== (st.lastRemoteCount ?? 0)) {st.lastRemoteCount = count; st.rewarmT = 90;}
     return;
   }
-  if ((st.warmN += 1) <= 60) {return;}
+  if ((st.warmN += 1) === 1) {
+    // Full-model warm: detached PlayerModels per class variant fill the
+    // retarget/atlas/AO caches the clone shelf doesn't touch. Kick at
+    // first tick (not after shader-warm ~18s) so pendingHeavy holds the
+    // veil over the whole multi-second bake instead of leaking it onto
+    // live frames - the veil-gate fix only covers loads it sees early.
+    const scratch = new THREE.Group() as unknown as THREE.Scene;
+    for (const v of ['scout', 'brawler', 'brute'] as const) {
+      const m = new PlayerModel(scratch, v);
+      m.load().then((): void => m.dispose()).catch((): void => undefined);
+    }
+  }
+  if (st.warmN <= 60) {return;}
   // getObjectByName walks the whole scene - poll every 30 ticks instead of
   // per frame while interiors land (a live profile caught the scan at ~2%
   // of a match profile through getObjectByProperty).

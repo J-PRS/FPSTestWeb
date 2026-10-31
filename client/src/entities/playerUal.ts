@@ -253,11 +253,18 @@ function bakeSource(
         continue;
       }
       const v = hipTr.values, t = hipTr.times;
+      // Hip bounce is a fraction of hip height at worst - clips whose
+      // source track carries world-space root motion (jump arcs landing
+      // far off bind) would otherwise teleport the rig hundreds of
+      // meters (the model-offset -300m sinks). Cap scales with the
+      // source's own bind length so cm-authored rigs aren't frozen.
+      const HIP_DELTA_CAP = Math.max(2, srcHipBind.length());
+      const cap = (d: number): number => Math.max(-HIP_DELTA_CAP, Math.min(HIP_DELTA_CAP, d));
       for (let i = 0; i < t.length; i += 1) {
         const s = interp.evaluate(t[i]!);
-        v[i * 3] = tgtHipBind.x + (s[0]! - srcHipBind.x) * deltaScale;
-        v[i * 3 + 1] = tgtHipBind.y + (s[1]! - srcHipBind.y) * deltaScale;
-        v[i * 3 + 2] = tgtHipBind.z + (s[2]! - srcHipBind.z) * deltaScale;
+        v[i * 3] = tgtHipBind.x + cap(s[0]! - srcHipBind.x) * deltaScale;
+        v[i * 3 + 1] = tgtHipBind.y + cap(s[1]! - srcHipBind.y) * deltaScale;
+        v[i * 3 + 2] = tgtHipBind.z + cap(s[2]! - srcHipBind.z) * deltaScale;
       }
     }
   };

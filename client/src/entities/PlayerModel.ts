@@ -8,6 +8,7 @@ import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../cor
 import { urlParams } from '../core/params.js';
 
 import { ChildLogger } from '../core/Logger.js';
+import { pendingHeavy } from '../game/bootWarmup.js';
 import { glitch } from '../core/fxDiag.js';
 import { buildGibParts, bakeDeathParts, type GibPart } from './playerGibs.js';
 
@@ -22,7 +23,7 @@ import { PlayerDistal } from './playerDistal.js';
 import { PlayerModelLod, smoothShade } from './playerModelLod.js';
 import { PlayerMats } from './playerMats.js';
 import { PoseControl } from './playerPose.js';
-import { bakeVertexAO } from '../effects/vertexAO.js';
+import { bakeVertexAO, enhanceWeaponMaterial } from '../effects/vertexAO.js';
 import { WeaponType } from '../../../shared/weapons.js';
 const logger = new ChildLogger('PlayerModel');
 
@@ -52,7 +53,9 @@ function makeAtlasMat(): THREE.MeshStandardMaterial {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vRough;\nvarying float vMetal;')
       .replace('float roughnessFactor = roughness;', 'float roughnessFactor = vRough;')
-      .replace('float metalnessFactor = metalness;', 'float metalnessFactor = vMetal;');
+      // Retro armor is matte, not metallic — clamp spec sheen so panels
+      // read as painted steel plates, not polished plastic.
+      .replace('float metalnessFactor = metalness;', 'float metalnessFactor = min(vMetal, 0.15);');
   };
   m.customProgramCacheKey = (): string => 'atlasbody';
   return m;
@@ -89,6 +92,29 @@ const _atlasGeoCache = new Map<string, THREE.BufferGeometry>();
  *  bake (three walks every vert through every bone - ~7% of a throttled
  *  profile). Bind-pose geometry sphere + anim-travel pad is equivalent:
  *  the bake it replaced ran at load pose ≈ bind pose anyway. */
+/** Quantized rigs store position/normal as integer arrays (u16 + a node
+ *  dequantize scale, or normalized u16). applyMatrix4 writes transformed
+ *  values back into the int array — verts snap to integers and clamp at
+ *  65535, collapsing the merged body. Convert to Float32 before the bake. */
+function denormGeo(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const DIV: Record<string, number> = {
+    Uint8Array: 255, Int8Array: 127, Uint16Array: 65_535, Int16Array: 32_767,
+    Uint32Array: 4_294_967_295, Int32Array: 2_147_483_647,
+  };
+  for (const name of Object.keys(g.attributes)) {
+    const a = g.getAttribute(name) as THREE.BufferAttribute;
+    const arr = a.array;
+    if (!arr || arr instanceof Float32Array || (a as unknown as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute) {continue;}
+    // Normalized attrs divide by the type max; plain int attrs keep value.
+    const div = a.normalized ? (DIV[arr.constructor.name] ?? 1) : 1;
+    const n = a.count * a.itemSize, src = arr as unknown as number[];
+    const f = new Float32Array(n);
+    for (let i = 0; i < n; i += 1) {f[i] = src[i]! / div;}
+    g.setAttribute(name, new THREE.BufferAttribute(f, a.itemSize));
+  }
+  return g;
+}
+
 function cheapSkinnedBounds(sm: THREE.SkinnedMesh): void {
   const g = sm.geometry;
   if (!g.boundingSphere) {g.computeBoundingSphere();}
@@ -235,6 +261,14 @@ export class PlayerModel {
   }
 
   async load(): Promise<void> {
+    // Gate the boot veil on model setup (GLB parse + retarget bake is a
+    // multi-second main-thread block) - see bootWarmup.pendingHeavy.
+    pendingHeavy.n += 1;
+    try { await this.loadInner(); }
+    finally { pendingHeavy.n -= 1; }
+  }
+
+  private async loadInner(): Promise<void> {
     const loader = mkGltfLoader();
     const mann = this.variant === 'mannequin';
     const knight = this.variant === 'knight';
@@ -271,11 +305,14 @@ export class PlayerModel {
               }
             });
             gunmetalBake.set(url, new Promise((res): void => {
+              // Deferred a macrotask but still heavy - count it against
+              // the veil gate or the veil drops into this bake's frame.
+              pendingHeavy.n += 1;
               setTimeout((): void => {
                 performance.mark('load:aoBakeStart');
-                bakeVertexAO(gltf.scene as THREE.Group, { grime: true, wearBoost: 0.5, edgeAngle: 28 });
+                try { bakeVertexAO(gltf.scene as THREE.Group, { grime: true, wearBoost: 0.5, edgeAngle: 28 }); }
+                finally { pendingHeavy.n -= 1; res(); }
                 performance.mark('load:aoBakeDone');
-                res();
               }, 0);
             }));
           }
@@ -590,7 +627,9 @@ export class PlayerModel {
    *  constant. */
   private mergeAtlasParts(animations: THREE.AnimationClip[]): void {
     const parts = this.skinnedMeshes.filter((sm): boolean => (sm.material as THREE.Material).userData.atlasMat === true);
-    if (parts.length < 2 || !this.model) {return;}
+    // ?noatlas — debug bypass: keep per-part skinned draws to isolate
+    // merge regressions (invisible-bodies class) without a revert.
+    if (parts.length < 2 || !this.model || globalThis.location?.search.includes('noatlas')) {return;}
     const animated = new Set<string>();
     for (const clip of animations) {
       for (const t of clip.tracks) {animated.add(t.name.split('.')[0]!);}
@@ -629,7 +668,7 @@ export class PlayerModel {
       const geos: THREE.BufferGeometry[] = [];
       const geosSrc: THREE.BufferGeometry[] = [];
       for (const sm of consumed) {
-        const g = sm.geometry.clone();
+        const g = denormGeo(sm.geometry.clone());
         g.applyMatrix4(T.copy(Ainv).multiply(sm.matrixWorld));
         geos.push(g);
         geosSrc.push(sm.geometry);
@@ -652,6 +691,24 @@ export class PlayerModel {
       }
       merged.userData.authColor = auth;
       merged.userData.tintMask = mask;
+      // Same wear bake the weapons get — run it HERE, pre-stash, so the
+      // cached clone carries baked attrs and a second player of this
+      // variant pays zero bake (was re-baking per model = seconds each).
+      {
+        const bakeWrap = new THREE.Group();
+        bakeWrap.add(new THREE.Mesh(merged, parts[0]!.material));
+        bakeVertexAO(bakeWrap, { grime: false, wearBoost: 0.2, edgeAngle: 28 });
+        // Pull the bake's darkening back toward authored color — full-
+        // strength AO paints joints/underlaps as void-black blotches on
+        // an organic body; floor keeps crevice shading without glitch-read.
+        const col = merged.getAttribute('color') as THREE.BufferAttribute | undefined;
+        if (col) {
+          for (let i = 0; i < col.count * 3; i += 1) {
+            col.array[i] = Math.max(auth[i]! * 0.55, auth[i]! * 0.6 + col.array[i]! * 0.4);
+          }
+          col.needsUpdate = true;
+        }
+      }
       const stashed = merged.clone();
       stashed.userData.authColor = auth; // clone()'s userData copy mangles Float32Arrays
       stashed.userData.tintMask = mask;
@@ -666,7 +723,17 @@ export class PlayerModel {
     mm.receiveShadow = parts[0]!.receiveShadow;
     mm.frustumCulled = parts[0]!.frustumCulled;
     anchor.add(mm);
-    mm.bind(parts[0]!.skeleton, A);
+    // Parts were bound model-locally at GLB load (bindMatrix_i = L_i =
+    // M·T_i), before the remote's world transform existed — binding the
+    // merge with A(0) bakes the spawn transform in twice and smears the
+    // body into a slab. M = L_0·T_0⁻¹ reproduces every part's original
+    // skinVertex: A(0) cancels between bake and bind.
+    const M = parts[0]!.bindMatrix.clone()
+      .multiply(T.copy(Ainv).multiply(parts[0]!.matrixWorld).invert());
+    mm.bind(parts[0]!.skeleton, M);
+    // Wear bake already ran inside the geo-cache build — the cached
+    // clone carries it; per-model cost is just the material hook.
+    enhanceWeaponMaterial(mm.material as THREE.MeshStandardMaterial);
     cheapSkinnedBounds(mm);
     for (const sm of consumed) {sm.removeFromParent();}
     const rigid = this.foldRigidAccessories(animations, parts[0]!.skeleton, anchor, Ainv, A);
@@ -686,7 +753,7 @@ export class PlayerModel {
    *  own shading and tint/flash tracking keeps its material identity. */
   private foldRigidAccessories(animations: THREE.AnimationClip[], skeleton: THREE.Skeleton,
       anchor: THREE.Object3D, Ainv: THREE.Matrix4, A: THREE.Matrix4): THREE.SkinnedMesh[] {
-    if (!this.model) {return [];}
+    if (!this.model || globalThis.location?.search.includes('norigid')) {return [];}
     const animated = new Set<string>();
     for (const clip of animations) {
       for (const t of clip.tracks) {animated.add(t.name.split('.')[0]!);}
@@ -722,7 +789,7 @@ export class PlayerModel {
       if (!boneEntry || blocked) {return;}
       const key = `${rm.material.uuid}|${Object.keys(rm.geometry.attributes).toSorted().join(',')}|${rm.geometry.index ? 'i' : 'n'}`;
       const b = buckets.get(key) ?? { mat: rm.material, geos: [] };
-      const g = rm.geometry.clone();
+      const g = denormGeo(rm.geometry.clone());
       // Anchor-space bake, same convention as the atlas merge above -
       // the skeleton does the motion: skinIndex=B makes the output
       // B_now×B_bind⁻¹×meshWorld×v = the rigid node's exact world path.
@@ -1021,8 +1088,13 @@ export class PlayerModel {
       // cadence × fleet) - a canary doesn't need exact bounds.
       {
         const pos = sm.geometry.getAttribute('position');
+        const weights = sm.geometry.getAttribute('skinWeight');
         let minY = Infinity;
         for (let i = 0; i < pos.count; i += 4) {
+          // Unweighted verts (folded accessories, zero-weight pads in the
+          // merged atlas) don't follow the skeleton - applyBoneTransform
+          // lands them at the mesh origin and reads as a phantom -200m sink.
+          if (weights && weights.getX(i) + weights.getY(i) + weights.getZ(i) + weights.getW(i) < 0.01) {continue;}
           sm.applyBoneTransform(i, this._bbMin);
           if (this._bbMin.y < minY) {minY = this._bbMin.y;}
         }

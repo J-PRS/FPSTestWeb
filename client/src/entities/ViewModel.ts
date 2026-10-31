@@ -6,6 +6,7 @@ import * as vm from './vmGhost.js';
 import { kickF } from './vmKick.js';
 import { VmEnvelopes } from './vmEnvelopes.js';
 import { VmBaked } from './vmBaked.js';
+import { pendingHeavy } from '../game/bootWarmup.js';
 // Timing constants live with the envelopes — re-export so Player/fire.ts
 // keep importing them from the file they already know.
 export { THROW_RELEASE, THROW_TOTAL, SIDEARM_DRAW_TIME, SWING_CONTACT_T, SWING_STRIKE_T } from './vmEnvelopes.js';
@@ -115,7 +116,11 @@ export class ViewModel {
     // up GLB-swapped discard the result entirely. loadBakedWeapons bakes AO
     // only on weapons whose bake fetch misses — i.e. the ones that actually
     // stay procedural.
-    this.baked.load();
+    // Streamed weapon AO/GLB bake is fire-and-forget but heavy -
+    // count it against the veil so the per-weapon ~100ms bake chunks
+    // can't leak past the drop as first-minute hitches.
+    pendingHeavy.n += 1;
+    this.baked.load().finally((): void => { pendingHeavy.n -= 1; });
 
     const hf = buildHandAndFlash(this.group);
     this.fistGroup = hf.fistGroup;
