@@ -41,6 +41,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-26_TTS_DTS_REFERENCE.md` | **TTS/DTS reference** - cold-boot time-to-shoot and data-to-shoot profile, phase breakdown, prediction table, improvement levers |
 | `_docs/2026-10-30_NATIVE_ACCEL.md` | **Native acceleration analysis** — wasm/bun:ffi candidates ranked (VFX pools, sweeps, wire encode, moveSim batch); boundary-cost + shared-memory rules; why worker offload and threads beat the port |
 | `_docs/2026-10-31_CAPACITY_KNEE.md` | **Capacity knee ~350-370 seats/process** — 368-seat profload: fanout is O(N²) in CPU (dSq per seat×record), intro seats bypass the record cap; spatial-index fix order for thousands-per-box; FPS_MAX_PLAYERS/GLOBAL gotcha for fill runs |
+| `_docs/2026-10-31_NETCODE_EFFICIENCY_PLAYBOOK.md` | **Netcode efficiency playbook** — prior-art survey (Tribes/Torque ghosts, Halo Reach priority-fill, Fortnite Replication Graph, Apex tickrate math, PlanetSide 2 culling, Gaffer compression) → parity table vs our stack + ranked P0-P4 plan: spatial index (O(N²) kill), priority fill, intro caps, per-conn budget, zoning; what NOT to copy |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
 | `_docs/2026-10-21_NETCODE_GAP.md` | Netcode gap analysis vs production shooters |
