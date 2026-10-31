@@ -184,8 +184,12 @@ export class TickFanout {
    *  emit tick their tier could ever fire on. */
   private readonly fastRecords: TickRecord[] = [];
   /** Per-recipient candidate list -- rebuilt each recipient, holds
-   *  near-circle + fast records. */
+   *  near-circle + fast records, ordered nearest-cell-first so the cap
+   *  cutoff can early-out the rest. */
   private readonly candList: TickRecord[] = [];
+  private readonly candListMin: number[] = [];
+  private readonly cellKeys: number[] = [];
+  private readonly cellMinSq: number[] = [];
   /** Cells a recipient's near circle actually included this tick --
    *  the far emit iterates every OTHER cell. */
   private readonly nearCellKeys = new Set<number>();
@@ -205,12 +209,12 @@ export class TickFanout {
   }
   /** Aim-cone engagement boost (the 500m rule): a record inside the
    *  recipient's +-45deg view sector scores CONE_BOOST x its true
-   *  distance-squared -- 500m in-cone competes like ~100m, so a live
-   *  target survives the cap over nearer bystanders it can't hurt.
-   *  Halo-style engagement priority; pure distance alone would cull
-   *  the sniper you're trading with. */
+   *  distance-squared -- 500m in-cone competes like ~200m, beating
+   *  midfield bystanders. The multiplier is deliberately no stronger
+   *  than the named constraint needs: it also bounds how far the
+   *  early-out cutoff must reach (cutoff x ~2.5, not x5). */
   private static readonly CONE_HALF = Math.PI / 4;
-  private static readonly CONE_BOOST = 0.04;
+  private static readonly CONE_BOOST = 0.16;
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -504,10 +508,11 @@ this.metrics.recordsIdleReaped += 1;
     for (const c of this.cells.values()) {c.length = 0;}
     this.fastRecords.length = 0;
     for (const r of records) {
-      // Every-tick list: fast movers (travel-budget tier) AND forced
-      // records (hit-window + staggered fulls) -- both carry truth
-      // that can't wait for a far-emit phase.
-      if ((r.spd ?? 0) > 12 || r.force) {this.fastRecords.push(r); continue;}
+      // Only forced records bypass the cells: they emit regardless
+      // of the cap, so their eval can't be early-outed. Fast movers
+      // bucket normally -- the speedTier logic in the eval body
+      // preserves their cadence wherever they actually earn a slot.
+      if (r.force) {this.fastRecords.push(r); continue;}
       const key = this.cellKey(r.pos.x, r.pos.z);
       let bucket = this.cells.get(key);
       if (!bucket) {bucket = []; this.cells.set(key, bucket);}
@@ -547,10 +552,16 @@ this.metrics.recordsIdleReaped += 1;
       // not a square span -- corner cells on a 2km map held a third of
       // the roster.
       const list = this.candList;
-      list.length = 0;
-      for (const r of this.fastRecords) {list.push(r);}
+      const listMin = this.candListMin;
+      list.length = 0; listMin.length = 0;
+      // Forced records eval first, unconditionally -- they emit
+      // regardless of the cap (hit-window + staggered-full truth).
+      for (const r of this.fastRecords) {list.push(r); listMin.push(0);}
       const nearKeys = this.nearCellKeys;
       nearKeys.clear();
+      const ckeys = this.cellKeys;
+      const cmins = this.cellMinSq;
+      ckeys.length = 0; cmins.length = 0;
       const ccx = Math.floor(rx / TickFanout.CELL);
       const ccz = Math.floor(rz / TickFanout.CELL);
       const SPAN = TickFanout.CELL_SPAN;
@@ -559,11 +570,28 @@ this.metrics.recordsIdleReaped += 1;
           const dxc = (cx + 0.5) * TickFanout.CELL - rx;
           const dzc = (cz + 0.5) * TickFanout.CELL - rz;
           if (dxc * dxc + dzc * dzc > TickFanout.NEAR_CELL_SQ) {continue;}
+          // Nearest-corner distance -- the early-out bound needs a
+          // true lower bound on any record inside, center is not one.
+          const nx = Math.max(0, Math.abs(dxc) - TickFanout.CELL / 2);
+          const nz = Math.max(0, Math.abs(dzc) - TickFanout.CELL / 2);
           const key = (cx + 4096) * 8192 + cz + 4096;
           nearKeys.add(key);
-          const bucket = this.cells.get(key);
-          if (bucket !== undefined) {for (const r of bucket) {list.push(r);}}
+          ckeys.push(key);
+          cmins.push(nx * nx + nz * nz);
         }
+      }
+      // Nearest-cell-first (~25 entries -- insertion sort beats a sort
+      // call's overhead): lets the cap cutoff early-out far cells the
+      // moment the pool can't be beaten even under the cone boost.
+      for (let i = 1; i < cmins.length; i += 1) {
+        const k = ckeys[i]!, m = cmins[i]!;
+        let j = i - 1;
+        while (j >= 0 && cmins[j]! > m) {ckeys[j + 1] = ckeys[j]!; cmins[j + 1] = cmins[j]!; j -= 1;}
+        ckeys[j + 1] = k; cmins[j + 1] = m;
+      }
+      for (let i = 0; i < ckeys.length; i += 1) {
+        const bucket = this.cells.get(ckeys[i]!);
+        if (bucket !== undefined) {for (const r of bucket) {list.push(r); listMin.push(cmins[i]!);}}
       }
       // Staggered far emit (tier-8 cadence, per-recipient phase): cells
       // wholly outside the near circle emit sparse records straight to
@@ -590,7 +618,20 @@ this.metrics.recordsIdleReaped += 1;
           }
         }
       }
-      for (const r of list) {
+      // Cutoff-bounded eval (Halo fill-until-budget on the scan itself):
+      // once the cap pool holds 32, candidates whose cell's nearest
+      // corner can't beat the cutoff -- even at the cone boost -- lose
+      // by construction, so their eval is provably wasted work.
+      let cutoff = Infinity;
+      for (let i = 0; i < list.length; i += 1) {
+        if (cands.length >= TickFanout.MAX_RECORDS) {
+          // First-pool cutoff is final forever: better candidates only
+          // shrink the 32nd score, so this is a permanent upper bound --
+          // anything skipped couldn't have won the cap either way.
+          if (cutoff === Infinity) {cutoff = kthSmallest(candScore, TickFanout.MAX_RECORDS);}
+          if (listMin[i]! * TickFanout.CONE_BOOST > cutoff) {break;}
+        }
+        const r = list[i]!;
         this.metrics.recordsScanned += 1;
         if (r.playerId === recipientId) {continue;}
         // Un-admitted seats don't exist for this conn yet -- their records
