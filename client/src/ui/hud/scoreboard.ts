@@ -96,7 +96,8 @@ const CLASS_SHORT: Record<string, string> = { light: 'LGT', medium: 'MED', heavy
 
  *  PTS empty — frags are the only rank either way. */
 
-const FRAG_RANKED: ReadonlySet<string> = new Set(['dm', 'tdm', 'duel']);
+const FRAG_RANKED: ReadonlySet<string> = new Set(
+  Object.entries(MODES).filter(([, m]): boolean => m.fragRanked === true).map(([k]): string => k));
 
 const scoreboardPing = (ping: number | string | null): string => {
   if (ping == null) {return '—';}

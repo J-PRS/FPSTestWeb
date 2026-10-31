@@ -77,6 +77,9 @@ export interface ModeSpec {
   /** DM scoring — a frag on a real player/bot vs a creature. */
   ptsPlayerKill: number;
   ptsCreatureKill: number;
+  /** Frags are the ranking axis (dm/tdm/duel) — scoreboard columns and
+   *  PTS-empty behavior read this, not a separate mode set. */
+  fragRanked?: boolean;
   /** 'empty' skips the ambient world sims (balls/crawl/pickups/deploy/
    *  influence) — the duel room runs move+proj+health only. Absent =
    *  the full simulated world. */
@@ -86,12 +89,12 @@ export interface ModeSpec {
 export const MODES: Record<ModeId, ModeSpec> = {
   nuggets: { label: 'NUGGET WARS', teams: true, ffa: false, flags: false, gems: true, winAt: WIN_NUGGETS, timeLimitS: 900, ptsPlayerKill: 0, ptsCreatureKill: 0 },
   ctf:     { label: 'CAPTURE THE FLAG', teams: true, ffa: false, flags: true, gems: false, winAt: 5, timeLimitS: 1200, ptsPlayerKill: 0, ptsCreatureKill: 0 },
-  dm:      { label: 'DEATHMATCH', teams: false, ffa: true, flags: false, gems: false, winAt: 100, timeLimitS: 600, ptsPlayerKill: 10, ptsCreatureKill: 1 },
-  tdm:     { label: 'TEAM DEATHMATCH', teams: true, ffa: false, flags: false, gems: false, winAt: 100, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
+  dm:      { label: 'DEATHMATCH', teams: false, ffa: true, flags: false, gems: false, winAt: 100, timeLimitS: 600, ptsPlayerKill: 10, ptsCreatureKill: 1, fragRanked: true },
+  tdm:     { label: 'TEAM DEATHMATCH', teams: true, ffa: false, flags: false, gems: false, winAt: 100, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0, fragRanked: true },
   // Rabbit: FFA around ONE neutral flag — the carrier is the only legal
   // target, hold time pays a point a second, kills pay one each.
   rabbit:  { label: 'RABBIT', teams: false, ffa: true, flags: true, gems: false, winAt: 60, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
-  duel:    { label: 'DUEL', teams: false, ffa: true, flags: false, gems: false, winAt: 10, timeLimitS: 300, ptsPlayerKill: 1, ptsCreatureKill: 0, world: 'empty' },
+  duel:    { label: 'DUEL', teams: false, ffa: true, flags: false, gems: false, winAt: 10, timeLimitS: 300, ptsPlayerKill: 1, ptsCreatureKill: 0, world: 'empty', fragRanked: true },
   // Flag Run: solo cap circuit — a square of stands alternating teams,
   // two flags a side; bank any enemy flag at either friendly stand.
   flagrun: { label: 'FLAG RUN', teams: true, ffa: false, flags: true, gems: false, winAt: 10, timeLimitS: 1800, ptsPlayerKill: 0, ptsCreatureKill: 0 },

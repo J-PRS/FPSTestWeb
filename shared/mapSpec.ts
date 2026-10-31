@@ -8,7 +8,7 @@
  * objectives land here next; the file already decides what a match IS.
  */
 
-import type { TeamId } from './teams.ts';
+import { MODES, type TeamId } from './teams.ts';
 import { KIT_HULLS, type Vec3like } from './structKits.js';
 import type { BotSkillSpec,BotTier,BotSkillMix } from './botSkill.ts';
 import type { DeployKind } from './deployables.ts';
@@ -708,8 +708,9 @@ export function resolveMapSpec(raw: unknown): MapSpec {
 export function specModes(spec: MapSpec | undefined): string[] {
   if (spec?.modes) {return spec.modes;}
   if (!spec?.mode) {return [];}
-  const legal = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel', 'flagrun', 'conquest', 'headhunt'];
-  return [...new Set([spec.mode, ...legal])];
+  // Every ruleset in MODES is map-agnostic — the spec's own declared
+  // mode rides along in case it names something older.
+  return [...new Set([spec.mode, ...Object.keys(MODES)])];
 }
 
 const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 'hull', 'kit', 'shield']);
