@@ -182,11 +182,14 @@ export class RemoteInterp {
     const rp = this.replay;
     if (!rp) {return;}
     const s = rp.sim.state;
+    // Yaw every record, not only on snap: input.forward is yaw-relative,
+    // so a turning remote replays on a stale heading until drift trips
+    // the snap otherwise.
+    s.yaw = yaw;
     const d = Math.hypot(pos.x - s.pos.x, pos.y - s.pos.y, pos.z - s.pos.z);
     if (d > RemoteInterp.REPLAY_SNAP_M) {
       s.pos.x = pos.x; s.pos.y = pos.y; s.pos.z = pos.z;
       if (vel) {s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z;}
-      s.yaw = yaw;
     }
   }
 
