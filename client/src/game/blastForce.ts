@@ -315,7 +315,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const fate = stamp.pid ? projWireAt.get(stamp.pid) : undefined;
     if (fate) {stamp.wireAt = fate.at; stamp.wireT = fate.t;}
     stamps.push(stamp);
-    parityStamp('kb-echo');
+    // Offline has no echo lane — stamping 'kb-echo' just reports the
+    // self-shove as a parity miss at expiry; same reason `self` is set.
+    if (kbNm?.isConnected?.() ?? false) {parityStamp('kb-echo');}
     // Settle older stamps: a predicted self-shove the server never echoed
     // back (~700ms past the consume window) was rejected server-side -
     // loud parity miss, not a silent expiry.

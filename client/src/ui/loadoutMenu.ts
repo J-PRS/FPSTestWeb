@@ -1,4 +1,4 @@
-// Loadout bar — the bottom-center chip row of the ESC menu. Custom
+// Loadout bar - the bottom-center chip row of the ESC menu. Custom
 // dropups, not <select>: a native popup is OS chrome and breaks the
 // game-menu illusion. Chip face + styled option list opening upward.
 import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '../entities/Player.js';
@@ -12,7 +12,7 @@ import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
 export interface LoadoutDeps {
   lazyPlayer: () => Player;
-  /** Online only — class picks get announced so the server banks the
+  /** Online only - class picks get announced so the server banks the
    *  same tier swap for respawn. Absent offline. */
   lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void; sendPerkUpdate(perk: string): void } | null;
 }
@@ -29,7 +29,7 @@ const BELT_LABELS: Record<BeltItem, string> = {
   hook: 'Hook', emp: 'EMP Grenade',
 };
 
-// Chip width is measured, not hardcoded — canvas-measure the widest
+// Chip width is measured, not hardcoded - canvas-measure the widest
 // option (uppercased, same font as .lo-opt) + padding + caret so no
 // label ever overflows and no chip is wider than it needs to be.
 const measureCtx = document.createElement('canvas').getContext('2d')!;
@@ -51,7 +51,7 @@ interface BarUi {
 
 type MkDrop = (options: DropOpt[], onPick: (v: string) => void, faceOpts?: DropOpt[], cols2?: boolean) => Drop;
 
-// Panel construction — three labeled groups (ARMOR / WEAPONS / KIT) inside
+// Panel construction - three labeled groups (ARMOR / WEAPONS / KIT) inside
 // one bottom sheet. Class is a tile picker because its tradeoff (speed vs
 // HP) reads at a glance; everything else stays a dropup chip.
 function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
@@ -77,7 +77,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     return cells;
   };
 
-  // --- ARMOR: tile picker, not a dropup — headless like the other
+  // --- ARMOR: tile picker, not a dropup - headless like the other
   // groups; three labeled tiles need no banner to read as armor class.
   const armorCells = mkGroup('ARMOR', false);
   const tiles = document.createElement('div');
@@ -88,7 +88,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     const player = deps.lazyPlayer();
     player.setArmorClass(v as ArmorClass);
     deps.lazyNetworkManager?.()?.sendClassUpdate(v);
-    // Re-flag locks + re-face chips for the tier just picked — the menu
+    // Re-flag locks + re-face chips for the tier just picked - the menu
     // now edits that tier's pending kit (live gun untouched until
     // respawn), so faces show the recalled kit and gates follow it.
     const opts = weaponOptsFor(player.armorClass);
@@ -114,12 +114,12 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // Drop-compatible shim: refreshLoadout drives faces via setValue.
   ui.classDrop = { el: tiles, setValue: (): void => refreshTiles() };
 
-  // --- WEAPONS: one numbered cell per slot. No group head — every cell
+  // --- WEAPONS: one numbered cell per slot. No group head - every cell
   // is already captioned, the banner just ate vertical space. ---
   const weaponCells = mkGroup('WEAPONS', false);
-  // Filter by armorClass — the tier the menu edits (a banked class swap
+  // Filter by armorClass - the tier the menu edits (a banked class swap
   // edits that tier's kit, so its legal picks must show). lazyPlayer can
-  // be unborn at wire-up — default the flag pass to medium.
+  // be unborn at wire-up - default the flag pass to medium.
   const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
   const allWeaponOpts = weaponOpts; // label source for filtered-out picks
   for (let i = 0; i < Player.LOADOUT_SLOTS; i += 1) {
@@ -130,7 +130,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     ui.slotDrops.push(drop);
   }
 
-  // --- KIT: two rows — SIDEARM+BELT up top, PACK+SKILL+PERK under;
+  // --- KIT: two rows - SIDEARM+BELT up top, PACK+SKILL+PERK under;
   // five cells in one nowrap strip overflowed the bar's width. ---
   const kitRowA = mkGroup('KIT', false);
   kitRowA.classList.add('lo-grid2');
@@ -139,7 +139,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const sidearm = mkCellDom(kitRowA);
   ui.sidearmLabel = sidearm.cap;
   ui.sidearmDrop = mkDrop(
-    // The SIDEARM table owns id→wid+label — the menu derives, so a new
+    // The SIDEARM table owns id→wid+label - the menu derives, so a new
     // sidearm is one table entry, not a menu edit.
     Object.entries(PlayerLoadout.SIDEARM).map(([v, s]): { v: string; label: string } => ({ v, label: s.label })),
     (v): void => deps.lazyPlayer().setSidearm(v as SidearmId),
@@ -149,7 +149,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const belt = mkCellDom(kitRowA);
   ui.beltLabel = belt.cap;
   ui.beltDrop = mkDrop(
-    // No descs — every belt item is one throw away from explaining itself.
+    // No descs - every belt item is one throw away from explaining itself.
     BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
     (v): void => deps.lazyPlayer().setBeltItem(v as BeltItem),
   );
@@ -179,7 +179,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
       deps.lazyPlayer().setPerk(v as PerkId);
       deps.lazyNetworkManager?.()?.sendPerkUpdate(v);
     },
-    undefined, true, // 2 cols — 10 perks stack taller than the menu otherwise
+    undefined, true, // 2 cols - 10 perks stack taller than the menu otherwise
   );
   perk.cell.append(ui.perkDrop.el);
 
@@ -188,28 +188,31 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
 
 
 
-// Only equippable weapons list — the class gate hides other tiers'
+// Only equippable weapons list - the class gate hides other tiers'
 // ordnance outright; grayed-out dead options were pure noise.
 function weaponOptsFor(cls: ArmorClass): DropOpt[] {
   return SLOT_DEFS
-    .map((def, wid): { v: string; label: string; sidearm: boolean; disabled: boolean; } => {
+    .map((def, wid): { v: string; label: string; name: string; tier: number; sidearm: boolean; disabled: boolean; } => {
       const tag = TIER_TAG.get(String(wid));
       return {
         v: String(wid),
         label: (tag ? `${tag} ` : '') + def.config.displayName,
+        name: def.config.displayName,
+        tier: tag ? 1 : 0,
         sidearm: Boolean(def.sidearm),
         disabled: Player.lockedForClass(cls, wid),
       };
     })
     .filter((o): boolean => !o.sidearm && !o.disabled)
-    // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
-    // name instead; v stays the wid so picks never reshuffle.
-    .toSorted((a, b): number => a.label.localeCompare(b.label));
+    // SLOT_DEFS order is wire identity (wid = index) - the MENU sorts by
+    // name instead; v stays the wid so picks never reshuffle. Tier-locked
+    // ordnance trails the standard list - [H]/[M]/[L] sort before letters.
+    .toSorted((a, b): number => a.tier - b.tier || a.name.localeCompare(b.name));
 }
 
 
 
-/** Faint-mark weapons already sitting in a sibling slot — one open
+/** Faint-mark weapons already sitting in a sibling slot - one open
  *  list then shows the whole kit at a glance. */
 function markSlotUse(player: Player, slotDrops: Drop[]): void {
   const kit = player.menuKit.map(String);
@@ -251,14 +254,14 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
         const it = document.createElement('div');
         it.className = 'lo-opt';
         if (o.disabled) {it.classList.add('locked');}
-        // 'none' isn't a perk — banner it across both columns.
+        // 'none' isn't a perk - banner it across both columns.
         if (cols2 && o.v === 'none') {it.classList.add('full');}
         const name = document.createElement('span');
         name.className = 'lo-name';
         name.textContent = o.label;
         it.append(name);
         if (o.desc) {
-          // Perks are the only invisible pick — everything else
+          // Perks are the only invisible pick - everything else
           // self-explains in a second of firing it.
           it.classList.add('has-desc');
           const d = document.createElement('span');
@@ -271,7 +274,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
           e.stopPropagation();
           // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
           // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
-          if (o.disabled) {return;} // tier-locked — visible but unshoulderable
+          if (o.disabled) {return;} // tier-locked - visible but unshoulderable
           onPick(o.v);
           el.classList.remove('open');
           openDrop = null;
@@ -292,7 +295,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
       el,
       setValue(v): void {
         currentV = v;
-        // faceOpts resolves labels the filtered list can't — an equipped
+        // faceOpts resolves labels the filtered list can't - an equipped
         // heavy weapon on lighter armor must name itself, not print "6".
         face.textContent = options.find((o): boolean => o.v === v)?.label
           ?? faceOpts?.find((o): boolean => o.v === v)?.label ?? v;
@@ -302,10 +305,10 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
       setOptions(next): void {
         options = next;
         rebuild();
-        // The equipped value may have survived the filter — re-face it.
+        // The equipped value may have survived the filter - re-face it.
         this.setValue(currentV);
       },
-      // 'used' = equipped in a sibling slot — a faint tint reads "already
+      // 'used' = equipped in a sibling slot - a faint tint reads "already
       // in the kit" without competing with this slot's bright .sel.
       markUsed(used): void {
         list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): void => {
@@ -327,7 +330,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
   function refreshLoadout(): void {
     if (!ui) {return;}
     const player = deps.lazyPlayer();
-    // Options gate on armorClass — the tier whose kit is being edited
+    // Options gate on armorClass - the tier whose kit is being edited
     // (a banked heavy pick CAN hold a mortar; it shoulders at respawn).
     // Faces come from menuKit: the pending kit while a swap is banked.
     const opts = weaponOptsFor(player.armorClass);
@@ -345,7 +348,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     if (ui.packLabel) {ui.packLabel.textContent = `PACK (${codeLabel(codeFor('deploy'))})`;}
   }
 
-  // Menu close must not strand an open dropup — resume, then next ESC
+  // Menu close must not strand an open dropup - resume, then next ESC
   // shows a list floating over a face that isn't asking for it.
   function closeDrops(): void {
     openDrop?.classList.remove('open');
@@ -365,9 +368,9 @@ function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanEleme
   return { cell, cap };
 }
 
-// Sidearms are chosen in their own row — a primary slot offering them
+// Sidearms are chosen in their own row - a primary slot offering them
 // would let a loadout double-carry the hold-out tier. Tier-locked
-// ordnance stays listed but tagged [H]/[M]/[L] and grayed out —
+// ordnance stays listed but tagged [H]/[M]/[L] and grayed out -
 // lockedForClass flags it in the list AND gates it in setLoadoutSlot.
 const TIER_TAG = new Map<string, string>([
   ...Player.HEAVY_ONLY.map((w): readonly [string, "[H]"] => [String(w), '[H]'] as const),

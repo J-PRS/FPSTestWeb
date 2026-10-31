@@ -222,6 +222,11 @@ export class HUD {
     this.tsA.textContent = String(a);
     this.tsB.textContent = String(b);
   }
+  /** Solo matches set the strip once and never clear it - call on
+   *  transitions where the mode stops owning the scoreboard. */
+  hideTeamScore(): void {
+    if (this.lastTeamScore !== 'off') {this.lastTeamScore = 'off'; this.teamScore.style.display = 'none';}
+  }
 
   /** ?mode=classic top-center readout — the Unity layout: "score - kills"
    *  over a running-seconds clock. null hides it (non-classic modes). */

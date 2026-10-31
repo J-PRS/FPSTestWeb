@@ -621,9 +621,9 @@ export class NetworkManager {
       this.connected = false; // let the HUD stall-watchdog see the drop
     }
 this.sendDrops += 1;
-    // First drop is loud; repeats get sampled - a dead lane would
-    // otherwise spam the buffer once per position frame.
-    if (this.sendDrops === 1 || (this.sendDrops & 31) === 0) {
+    // Offline solo has no lane by design — jetpack/pos sends drop on the
+    // floor legitimately, so only warn when a lane was ever believed live.
+    if (this.connected && (this.sendDrops === 1 || (this.sendDrops & 31) === 0)) {
       logger.warn(`send dropped x${this.sendDrops} - no live lane`, { lastType: type });
     }
   }
