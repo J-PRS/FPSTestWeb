@@ -145,3 +145,17 @@ duplicates names already in configs) + bot pools. Derivable from markers.
 - DEMO_DEPLOY_KINDS derived from DEPLOY_KINDS (order was already exact).
 - **Remaining**: remoteDeployables spawn chain + server tick chains,
   capFor *_MAX into SpeciesRow, mode descriptor table.
+- **`4455e48f`/`d39b0188`** — REMOTE_SPEC + TICK_SPEC registries: remote
+  spawn chain (6 generic kinds) and the server's 9-branch tick chain
+  both became one-row-per-kind tables. Adding a bolted-down deployable
+  = deployItems row + SEATED row + REMOTE_SPEC row + TICK_SPEC row +
+  entity class (was ~9-11 scattered edits).
+- **`68b00769`** — species alive caps on `SWARM_SPECS[].max`; capFor
+  reads it; 14 *_MAX constants deleted from config.ts.
+- **`9810f8e0`** — `WIRE_SPECIES` registry: {Klass,ctxKey,state} drives
+  the netCrawlers spawn table, hitClaim loop, and playback pairs.
+- **Left deliberately**: entities.ts destructure/exports + NetCrawlersCtx
+  fields (types must exist anyway; bespoke plumbing, low value-per-edit);
+  adopt-methods internals (genuinely different bodies); mode descriptor
+  table (~10 sites, rare adds); botDisposition plant whitelist is a
+  deliberate subset, not duplication.
