@@ -533,6 +533,18 @@ function wireToggleButtons(modes: RenderModes, onBm: () => void, onPp: () => voi
     settings.set('fps-wake', v);
     wakeToggleBtn.classList.toggle('on', v);
   });
+  // Trail-isolation pair — cosmetic flags read per frame by the emit
+  // paths; killing one half of the trail stack names the smearer.
+  for (const [id, key] of [['ptrail-toggle', 'fps-ptrails'], ['rtrail-toggle', 'fps-ribbons'], ['dotrail-toggle', 'fps-dots'], ['wpos-toggle', 'fps-wpos']] as const) {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (!btn) {continue;}
+    btn.classList.toggle('on', settings.get(key));
+    btn.addEventListener('click', (): void => {
+      const v = !settings.get(key);
+      settings.set(key, v);
+      btn.classList.toggle('on', v);
+    });
+  }
   return { bloomToggleBtn, postproToggleBtn };
 }
 

@@ -14,6 +14,7 @@ import { markProbe, registerDiag } from '../core/fxDiag.js';
 import { fxBufferHeight } from '../core/fxViewport.js';
 import { FX_FOG } from '../world/directionalFog.js';
 import { urlParams } from '../core/params.js';
+import { settings } from '../core/settings.js';
 
 const TRAIL_COUNT = 14;
 const TRAIL_INTERVAL = 0.04;
@@ -238,6 +239,7 @@ export class BallTrailDots {
   /** Emit a sparkle when the cadence fires — caller passes the ball's
    *  render pos, radius, and tint (enraged tint swaps handled upstream). */
   emit(dt: number, pos: THREE.Vector3, vel: THREE.Vector3, radius: number, tint: THREE.Color): void {
+    if (!settings.get('fps-dots')) {return;} // DOTS kill switch
     this.timer += dt;
     if (this.timer < this.interval) {return;}
     this.timer = 0;

@@ -8,7 +8,7 @@ import type { PlaybackWorld } from './playbackReconstruction.js';
 import * as sfxWorld from '../core/sfx/world.js';
 
 // Ball/target replay: spawned/seek-rebuilt balls, smooth-snap drift
-// correction, hit flash + debris — everything that reads a TargetEvent.
+// correction, hit flash + debris - everything that reads a TargetEvent.
 
 export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, deadBallIds: Set<number>, seekTime: number): void {
   const { scene, terrain, balls, debrisList, playbackBallById } = world;
@@ -49,32 +49,50 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
   }
 }
 
-const PLAYBACK_HARD_SNAP_DIST = 1.5; // meters — large desync -> hard snap
-const PLAYBACK_SMOOTH_FACTOR = 0.25; // per-event gentle correction for small drift
+const PLAYBACK_HARD_SNAP_DIST = 1.5; // meters - large desync -> hard snap
+// Per-frame blend pull toward the last recorded keyframe - the event
+// stream becomes a moving target instead of a stair-step correction,
+// so motion stays smooth between the ~5-10Hz keyframes.
+const PLAYBACK_BLEND_HZ = 12;
 
 function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number, evx: number, evy: number, evz: number]): void {
   const [ex, ey, ez, evx, evy, evz] = rest;
   const dx = ball.pos.x - ex, dy = ball.pos.y - ey, dz = ball.pos.z - ez;
   const drift = Math.hypot(dx, dy, dz);
+  const pb = ball as Ball & { pbTarget?: THREE.Vector3; pbTargetVel?: THREE.Vector3 };
+  pb.pbTarget ??= new THREE.Vector3();
+  pb.pbTargetVel ??= new THREE.Vector3();
+  pb.pbTarget.set(ex, ey, ez);
+  pb.pbTargetVel.set(evx, evy, evz);
   if (drift >= PLAYBACK_HARD_SNAP_DIST) {
+    // Route the snap through renderOffset like live corrections - _rpos
+    // blends back over ~0.5s so the trail driver sees a sweep, not a
+    // teleport jump-cut that segments the ribbon every event.
+    ball.renderOffset.set(ball.pos.x - ex, ball.pos.y - ey, ball.pos.z - ez);
     ball.pos.set(ex, ey, ez);
     ball.vel.set(evx, evy, evz);
-    // A big correction in a recording is usually a leash teleport —
+    // A big correction in a recording is usually a leash teleport -
     // sell the re-arrival like the live one instead of a silent cut.
     if (drift >= 25) {
       ball.spawnPopT = SPAWN_POP_S;
       ball.retireRibbons();
       ball.trails.burst(12, ball.pos, ball.radius, ball.color);
     }
-  } else {
-    const a = PLAYBACK_SMOOTH_FACTOR;
-    ball.pos.x += (ex - ball.pos.x) * a;
-    ball.pos.y += (ey - ball.pos.y) * a;
-    ball.pos.z += (ez - ball.pos.z) * a;
-    ball.vel.x += (evx - ball.vel.x) * a;
-    ball.vel.y += (evy - ball.vel.y) * a;
-    ball.vel.z += (evz - ball.vel.z) * a;
   }
+  // Small drift: no positional write - the per-frame blend converges
+  // pos/vel onto pbTarget smoothly instead of a 25% nudge per event.
+}
+
+/** Continuous keyframe smoothing - call every playback tick after the
+ *  ball's own sim update. pos/vel pull toward the last recorded keyframe
+ *  at PLAYBACK_BLEND_HZ; the sim keeps collisions/bounces, the blend
+ *  eats drift so the track never stairs between events. */
+export function blendPlaybackBall(ball: Ball, dt: number): void {
+  const pb = ball as Ball & { pbTarget?: THREE.Vector3; pbTargetVel?: THREE.Vector3 };
+  if (!pb.pbTarget || !pb.pbTargetVel || ball.dead) {return;}
+  const k = 1 - Math.exp(-PLAYBACK_BLEND_HZ * dt);
+  ball.pos.lerp(pb.pbTarget, k);
+  ball.vel.lerp(pb.pbTargetVel, k);
 }
 
 function spawnPlaybackBall(world: PlaybackWorld, ev: TargetEvent): void {
@@ -84,7 +102,7 @@ function spawnPlaybackBall(world: PlaybackWorld, ev: TargetEvent): void {
   if (existing && !existing.dead) {
     // Id reuse (allocator wrap, or a synthetic+real pair straddling a
     // clip boundary): re-keying the map while pushing a second Ball would
-    // orphan the old one — updated by nothing, frozen in the scene.
+    // orphan the old one - updated by nothing, frozen in the scene.
     existing.pos.set(ev.posX, ev.posY, ev.posZ);
     existing.vel.set(ev.velX, ev.velY, ev.velZ);
     if (ev.health > 0) {existing.health = ev.health;}
@@ -92,7 +110,7 @@ function spawnPlaybackBall(world: PlaybackWorld, ev: TargetEvent): void {
     return;
   }
   if (existing) {
-    // Dead corpse still fading — re-keying would orphan it out of the
+    // Dead corpse still fading - re-keying would orphan it out of the
     // map (never ticked = frozen ghost). Hard-remove; the fade is lost
     // but a frozen ghost is worse.
     existing.dispose();
@@ -132,12 +150,12 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
     ball.pos.set(ev.posX, ev.posY, ev.posZ);
     ball.vel.set(ev.velX, ev.velY, ev.velZ);
     // Flash the ball and then sync to the recorded post-hit health
-    ball.takeDamage(1); // health is force-synced from the event — amount is cosmetic
+    ball.takeDamage(1); // health is force-synced from the event - amount is cosmetic
     ball.health = ev.health;
     ball.dead = ball.health <= 0;
     ball.update(0, terrain, playerPos);
     world.damageNumberManager.spawn(ball.pos, 1, '#ffffff', world.camera);
-    // Dead stays mapped — updateBallsPlayback ticks updateBallDead (trail
+    // Dead stays mapped - updateBallsPlayback ticks updateBallDead (trail
     // fade, slot free) and splices on `disposed`. Unmapping here freezes
     // the corpse midair.
   } else if (ev.eventType === TargetEventType.Destroyed) {
