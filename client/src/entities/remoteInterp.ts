@@ -262,7 +262,11 @@ export class RemoteInterp {
     this.targetRotation.pitch = targetRotation.pitch;
     // Records are the replay sim's reconciliation checkpoints - a
     // >3m drift means a lost edge or an impulse the edge stream can't
-    // express (knockback, teleport); resync, don't drift.
+    // express (knockback, teleport); resync, don't drift. A live record
+    // stream IS the liveness signal: edges are change-only, so a remote
+    // holding jet for seconds sends nothing - without this refresh the
+    // freshness gate would flip a mid-flight body back to interp.
+    if (this.replay) {this.replay.freshUntil = Date.now() + 1500;}
     this.reconcileReplay(this.targetPosition, serverVelocity ? this.h.serverVelocity : undefined, targetRotation.yaw);
 
     // Push onto the snapshot buffer - it also tracks arrival jitter and
