@@ -2,23 +2,24 @@ import * as THREE from 'three';
 import { getHeightmapData, getHeightfield, getWorldScale, getHeightScale, sampleHeight, sampleNormal, sampleHeightVisual } from './heightmap.js';
 import { registerDiag } from '../core/fxDiag.js';
 import { terrainVert, terrainFrag } from './terrainShaders.js';
+import { mkTerrainOccluder } from './terrainWire.js';
 import { urlParams } from '../core/params.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
 import { clipmapSurfaceHeight, type ClipmapSurfaceLevel } from './clipmapSurface.js';
 
-// Heightmap loading/sampling + the shared Heightfield live in heightmap.ts —
+// Heightmap loading/sampling + the shared Heightfield live in heightmap.ts -
 // re-export so existing '../world/terrain.js' imports stay valid.
 export { getHeightfield } from './heightmap.js';
 
 const HSCALE = TERRAIN_HEIGHT_SCALE;
 const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
 
-// F1 overlay for the DRAWN clipmap — flat cyan lines, no shading, so a
+// F1 overlay for the DRAWN clipmap - flat cyan lines, no shading, so a
 // divergent visual surface reads at a glance. Must mirror the solid
 // frag's two visibility cuts or every ring's coarse interior sheet
 // renders over the finer levels: the inner-hole discard (finer ring
 // owns that region) and the outermost level's world-edge dissolve.
-// Wire verts ride the SAME displacement — depthTest is off on the wire
+// Wire verts ride the SAME displacement - depthTest is off on the wire
 // material, so no lift hack is needed; lines sit exactly on the surface.
 const TERRAIN_WIRE_VERT = terrainVert;
 const TERRAIN_WIRE_FRAG = /* glsl */`
@@ -134,7 +135,7 @@ function createFlatGridGeometry(divisions: number, borderCells = 1): THREE.Buffe
 }
 
 export class Terrain {
-  /** Alt+Q terrainDiv probe target — set at construction. */
+  /** Alt+Q terrainDiv probe target - set at construction. */
   static dbg: Terrain | null = null;
   private scene: THREE.Scene;
   private levels: ClipmapLevel[] = [];
@@ -147,7 +148,7 @@ export class Terrain {
   private heightTexture: THREE.DataTexture;
   /** Shared heightfield uniforms for anything else that needs to hug the
    *  terrain GPU-side (instanced blob shadows drape over slopes by
-   *  sampling the same displacement). The OBJECTS are stable — reload/
+   *  sampling the same displacement). The OBJECTS are stable - reload/
    *  rescale mutate `.value` in place, so subscribers bind once. */
   readonly heightU = {
     heightMap: { value: null as THREE.DataTexture | null },
@@ -159,17 +160,17 @@ export class Terrain {
   private scorchList: { x: number; z: number; r: number; intensity: number; ember: number }[] = [];
   private scorchArr = new Float32Array(16 * 4);
   private scorchEmberArr = new Float32Array(16);
-  // Projected ichor stains — tinted cousin of scorch: creature hits and
+  // Projected ichor stains - tinted cousin of scorch: creature hits and
   // deaths drop colored ground stains that linger far longer than char.
   private splatList: Splat[] = [];
   private splatArr = new Float32Array(24 * 4);
   private splatTintArr = new Float32Array(24 * 3);
   private splatDirArr = new Float32Array(24 * 3);
-  // Projected deployable field rings (recharge pad envelope) — shader
+  // Projected deployable field rings (recharge pad envelope) - shader
   // decal slots like scorch; a mesh ring can't survive the clipmap's
   // 5m chord approximation.
   private fieldRingList: FieldRing[] = [];
-  // 32 slots — 8 deployables was the old headroom; a conquest lattice
+  // 32 slots - 8 deployables was the old headroom; a conquest lattice
   // alone wants 25 (5×5 node rings as real terrain decals).
   private fieldRingArr = new Float32Array(32 * 4);
   private fieldYArr = new Float32Array(32);
@@ -204,11 +205,11 @@ export class Terrain {
     const {gridGeo} = this;
     const outerGeo = createFlatGridGeometry(divisions / 2, 1);
     // Wireframe as real LINES (same path as the yellow collider lattice)
-    // — Mesh.wireframe still rasterizes triangles that co-planar-fight
+    // - Mesh.wireframe still rasterizes triangles that co-planar-fight
     // their own fill; line primitives behave like the collider overlay.
     const gridWireGeo = new THREE.WireframeGeometry(gridGeo);
     const outerWireGeo = new THREE.WireframeGeometry(outerGeo);
-    // Real vertex spacing per level — outer rings run the half-division
+    // Real vertex spacing per level - outer rings run the half-division
     // grid, so their lattice is coarser than cfg.spacing claims (20→40,
     // 40→80). The inner-morph shader and the origin snap must use THIS:
     // sampling the inner seam on a 20m grid that doesn't exist, or
@@ -224,10 +225,10 @@ export class Terrain {
 
       const material = new THREE.ShaderMaterial({
         vertexShader: terrainVert,
-        // ?terrainstub=1 — debug escape hatch: flat palette + N·L + fog,
+        // ?terrainstub=1 - debug escape hatch: flat palette + N·L + fog,
         // NO procedural stack. Verified 2026-10-17: swapping the ~73KB
         // procedural frag for this stub takes boot from a 40-70s sync
-        // D3D compile stall to ~1.3s — the fast "is it the shader?" test.
+        // D3D compile stall to ~1.3s - the fast "is it the shader?" test.
         fragmentShader: urlParams.get('terrainstub')
           ? `varying vec3 vNormal; varying vec3 vWorldPos; varying vec3 vCameraPos;
              uniform vec3 sunDir; uniform vec3 sunColor; uniform vec3 ambientColor;
@@ -242,35 +243,35 @@ export class Terrain {
                gl_FragColor = vec4(mix(col, fogColor, f), f >= 1.0 ? 0.0 : 1.0);
              }`
           : terrainFrag,
-        lights: true, // binds sun shadow map/matrices — enables USE_SHADOWMAP
+        lights: true, // binds sun shadow map/matrices - enables USE_SHADOWMAP
         // Outermost ring alpha-dissolves into the sky past ~80% of its
         // extent (edgeHalf). ALL levels are transparent: `opaque` is a
         // three program parameter, so mixing minted a SECOND ~83KB
         // program (~1s serial compile inside the veil) for a one-level
         // difference. alpha=1 fragments blend identically and
-        // depthWrite stays on — the cost is transparent-pass sorting.
+        // depthWrite stays on - the cost is transparent-pass sorting.
         transparent: true,
         // Overlap band (each level's border cell rides under its parent):
         // finer levels must win coincident depth or coarse rings paint
-        // over the seam — graded offset per level, finest closest.
+        // over the seam - graded offset per level, finest closest.
         polygonOffset: true,
         polygonOffsetFactor: -(CLIPMAP_LEVELS.length - 1 - i),
         polygonOffsetUnits: -(CLIPMAP_LEVELS.length - 1 - i),
-        // TERRAIN_PRESET picks the palette at COMPILE time — a runtime
+        // TERRAIN_PRESET picks the palette at COMPILE time - a runtime
         // uniform meant every program compiled all six preset branches.
         defines: { TERRAIN_PRESET: 1 },
         uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
       });
 
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
-      // F1 debug wireframe — same geometry + shared uniforms, so the
+      // F1 debug wireframe - same geometry + shared uniforms, so the
       // cyan lines trace the EXACT displaced surface. Solid fill stays.
       const wireMat = new THREE.ShaderMaterial({
         vertexShader: TERRAIN_WIRE_VERT,
         fragmentShader: TERRAIN_WIRE_FRAG,
         uniforms: material.uniforms,
         // Debug overlay: the solid fill occludes co-planar lines at
-        // grazing angles no matter the lift — draw on top instead.
+        // grazing angles no matter the lift - draw on top instead.
         depthTest: false,
       });
       const wire = new THREE.LineSegments(i >= 2 ? outerWireGeo : gridWireGeo, wireMat);
@@ -282,15 +283,20 @@ export class Terrain {
       wire.updateMatrixWorld(true);
       scene.add(wire);
       this.wireMeshes.push(wire);
+      // Depth-only clone of the displaced surface - F1's occluded
+      // wireframe half (see terrainWire.ts for the why).
+      const occl = mkTerrainOccluder(i >= 2 ? outerGeo : gridGeo, material.uniforms);
+      scene.add(occl);
+      this.occlMeshes.push(occl);
       mesh.receiveShadow = true;
       mesh.frustumCulled = false; // world-space extent is set via uniforms, not mesh transform
-      // Terrain sits in the transparent pass (one shared program — only
+      // Terrain sits in the transparent pass (one shared program - only
       // the edge ring needs alpha) but its fragments are alpha≈1, so any
       // VFX drawn earlier gets OVERPAINTED where they overlap. Draw
-      // before every VFX object instead — depthWrite is on, so
+      // before every VFX object instead - depthWrite is on, so
       // depth-tested VFX still occlude behind ridges correctly.
       mesh.renderOrder = -2;
-      // Clipmap levels never move — geometry does the panning in-shader.
+      // Clipmap levels never move - geometry does the panning in-shader.
       mesh.matrixAutoUpdate = false;
       mesh.matrixWorldAutoUpdate = false;
       mesh.updateMatrixWorld(true);
@@ -324,7 +330,7 @@ export class Terrain {
     }));
   }
 
-  /** Re-aim the baked sun without a rebuild — per-map `atmosphere.timeOfDay`.
+  /** Re-aim the baked sun without a rebuild - per-map `atmosphere.timeOfDay`.
    *  The terrain bakes its own sunDir uniform (it never reads the scene
    *  light), so a sky that moves the sun has to reach it here. */
   setSunDirection(dir: THREE.Vector3): void {
@@ -333,7 +339,7 @@ export class Terrain {
   }
 
   /** Collider field (sampleHeight) vs the drawn chord surface around the
-   *  last-seen player pos — Alt+Q's numeric version of the F1 overlay. */
+   *  last-seen player pos - Alt+Q's numeric version of the F1 overlay. */
   divergenceStats(): Record<string, unknown> {
     const px = this.dbgPx, pz = this.dbgPz;
     const r = 40, step = CLIPMAP_LEVELS[0].spacing;
@@ -356,7 +362,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
 
   /** Hot-swap the heightfield (map change via gameState): re-upload the
    *  displacement texture and point every level's material at it. Positions
-   *  already in flight resolve against the new field on the next sample —
+   *  already in flight resolve against the new field on the next sample -
    *  callers reseat the player right after to avoid a frame under terrain. */
   reloadHeightmap(): void {
     const hm = getHeightmapData();
@@ -378,11 +384,11 @@ n += 1; sum += d; sumAbs += Math.abs(d);
 
   /** Procedural palette (spec.terrainPreset: 0=mixed, 1=desert, 2=grassland,
    *  3=snow, 4=volcanic, 5=badlands, 6=coast, 7=desert hard-sun, 8=canyon,
-   *  9=arcane) — swaps the
+   *  9=arcane) - swaps the
    *  TERRAIN_PRESET
    *  define and rebuilds the program; a preset-pinned program is small,
    *  so the recompile is fast and happens once per map apply. */
-  /** Active palette id — ground FX (ski dust) tint themselves to match. */
+  /** Active palette id - ground FX (ski dust) tint themselves to match. */
   preset = 1;
   setPreset(p: number): void {
     this.preset = p;
@@ -395,7 +401,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     }
   }
 
-  /** Per-map vertical gain (spec.heightScale): uniforms only — the
+  /** Per-map vertical gain (spec.heightScale): uniforms only - the
    *  displacement texture bytes are gain-agnostic, so no re-upload. */
   setHeightScale(worldScale: number): void {
     this.heightU.hScale.value = worldScale;
@@ -405,7 +411,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     }
   }
 
-  /** Sea level in world m — the frag tints submerged ground toward
+  /** Sea level in world m - the frag tints submerged ground toward
    *  waterTint and darkens the wet band above the line. undefined = dry
    *  map (sentinel keeps the shader branch-free). */
   setWaterLevel(level: number | undefined, tint?: [number, number, number]): void {
@@ -415,7 +421,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     }
   }
 
-  /** Per-map tile span (spec.tileSize): the heightmap/albedo UV stretch —
+  /** Per-map tile span (spec.tileSize): the heightmap/albedo UV stretch -
    *  uniforms only, same as the vertical gain. */
   setWorldScale(meters: number): void {
     this.heightU.hmWorldScale.value = meters;
@@ -426,7 +432,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 
   /** Baked albedo (T2 ports carry terrainTex) replaces the procedural
-   *  palette — the fragment shader samples it in heightmap UV space.
+   *  palette - the fragment shader samples it in heightmap UV space.
    *  Ownership: swap callers hand us fresh uploads; disposing the
    *  replaced texture here is what keeps map rotation off GPU memory. */
   private albedoTex: THREE.Texture | null = null;
@@ -439,9 +445,9 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     }
   }
 
-  /** T2 material blend layer — atlas of 256px tiles + packed alpha
+  /** T2 material blend layer - atlas of 256px tiles + packed alpha
    *  weights; the shader modulates the albedo by tile luminance near
-   *  the camera (grain only — the bake keeps its color). Same ownership
+   *  the camera (grain only - the bake keeps its color). Same ownership
    *  rule as setAlbedo: swap hands us fresh uploads, we retire the old. */
   private matsTex: THREE.Texture[] = [];
   setMaterialBlend(tiles: THREE.Texture | null, alphaA: THREE.Texture | null,
@@ -464,7 +470,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     for (let i = 0; i < this.levels.length; i += 1) {
       const level = this.levels[i];
       level.material.uniforms.waterTime.value = t; // caustic phase
-      // Snap grid origin to the vertex lattice (not cfg.spacing — outer
+      // Snap grid origin to the vertex lattice (not cfg.spacing - outer
       // rings are coarser than that) or verts swim through the heightmap
       const ox = Math.round(px / level.spacing) * level.spacing;
       const oz = Math.round(pz / level.spacing) * level.spacing;
@@ -482,7 +488,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
         level.material.uniforms.innerGridOrigin.value.copy(inner.gridOrigin);
       }
 
-      // The seam-morph chord needs the PARENT's snapped origin — compute
+      // The seam-morph chord needs the PARENT's snapped origin - compute
       // it directly (same snap formula) rather than reading a value the
       // parent level won't write until its own iteration.
       if (i + 1 < this.levels.length) {
@@ -544,10 +550,10 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     }
 
     // Dynamic loop bounds keep the decal loops rolled in the compiled
-    // shader — a constant bound invites full unroll even with an early
+    // shader - a constant bound invites full unroll even with an early
     // break (72 iterations of decal math = 33s of sync D3D compile).
     const u0 = this.levels[0]?.material.uniforms;
-    if (u0) { // shared objects — all levels read the same .value slots
+    if (u0) { // shared objects - all levels read the same .value slots
       u0.scorchCount.value = this.scorchList.length;
       u0.splatCount.value = this.splatList.length;
       u0.fieldCount.value = this.fieldRingList.length;
@@ -635,7 +641,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     const mesh = new THREE.Mesh(geometry, this.remotePatchMaterial);
     mesh.receiveShadow = true;
     mesh.frustumCulled = true;
-    // After the clipmap levels (-2) it overlays, before VFX (0+) — same
+    // After the clipmap levels (-2) it overlays, before VFX (0+) - same
     // overpaint rule as the clipmaps: a transparent terrain drawn after
     // a glow paints it out instead of being occluded by depth.
     mesh.renderOrder = -1;
@@ -679,7 +685,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     if (i !== -1) {this.scorchList.splice(i, 1);}
   }
 
-  // Projected ichor stain — same handle contract as addScorch. 24 slots,
+  // Projected ichor stain - same handle contract as addScorch. 24 slots,
   // FIFO evict: in a sustained fight the oldest dried stains vanish first.
   // dx/dz/stretch smear the stain along a landing direction (0 = round pool).
   addSplat(x: number, z: number, r: number, cr: number, cg: number, cb: number, dx = 0, dz = 0, stretch = 0): Splat {
@@ -694,7 +700,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     if (i !== -1) {this.splatList.splice(i, 1);}
   }
 
-  // Projected field-ring decal — same contract as addScorch: mutate the
+  // Projected field-ring decal - same contract as addScorch: mutate the
   // returned handle's intensity/tint to animate, pass it back to release.
   addFieldRing(x: number, z: number, r: number, tint: readonly [number, number, number], domeY?: number): FieldRing {
     const entry: FieldRing = { x, z, r, intensity: 0.5, tint };
@@ -743,37 +749,46 @@ n += 1; sum += d; sumAbs += Math.abs(d);
 
   // ---- F1 debug wireframes: visual clipmap lines + collider lattice ----
   private wireMeshes: THREE.LineSegments[] = [];
+  private occlMeshes: THREE.Mesh[] = [];
   private colliderWire: THREE.LineSegments | null = null;
   private colliderWireCx = Number.NaN;
   private colliderWireCz = Number.NaN;
   private colliderWireField: object | null = null;
   private debugWireOn = false;
-  // Last player pos seen via setDebugWire — feeds the Alt+Q divergence
+  // Last player pos seen via setDebugWire - feeds the Alt+Q divergence
   // census even when the overlay itself is off.
   private dbgPx = 0;
   private dbgPz = 0;
 
   /** F1 debug overlay: cyan lines on the DRAWN clipmap (shared uniforms,
-   *  same displaced verts — the solid fill stays) plus a yellow wire
-   *  patch of the COLLIDER surface — getHeight's bilinear field, the
-   *  ground the sims actually stand on — around the player. Divergence
+   *  same displaced verts - the solid fill stays) plus a yellow wire
+   *  patch of the COLLIDER surface - getHeight's bilinear field, the
+   *  ground the sims actually stand on - around the player. Divergence
    *  between the two colors IS the visual-vs-physics gap. */
   setDebugWire(on: boolean, px = 0, pz = 0): void {
     this.dbgPx = px; this.dbgPz = pz;
     if (on !== this.debugWireOn) {
       this.debugWireOn = on;
-      for (const w of this.wireMeshes) { w.visible = on; }
-      if (this.colliderWire) { this.colliderWire.visible = on; }
+      // The fill goes wireframe (palette lines, occluded by the depth-only
+      // clones) - that IS the drawn-surface wire now, so both x-ray
+      // overlays are noise on top: the cyan clipmap wire AND the yellow
+      // collider patch (its depthTest:false read-through is the whole
+      // point of divergence work). Both still build live and come back
+      // with ?xray.
+      for (const w of this.wireMeshes) { w.visible = on && urlParams.has('xray'); }
+      for (const l of this.levels) { l.material.wireframe = on; }
+      for (const m of this.occlMeshes) { m.visible = on; }
+      if (this.colliderWire) { this.colliderWire.visible = on && urlParams.has('xray'); }
       if (on) { this.colliderWireCx = Number.NaN; } // force rebuild on enable
     }
     if (!on) { return; }
     const hf = getHeightfield();
     if (!hf || !Number.isFinite(px)) { return; }
     // The collider IS the 5m L0 chord now (heightmap.sampleHeight →
-    // shared hmChord) — draw it at that lattice, not texel density:
+    // shared hmChord) - draw it at that lattice, not texel density:
     // finer cells would just re-triangulate the same flat facets.
     const step = CLIPMAP_LEVELS[0].spacing;
-    // Rebuild on a few cells of travel OR a heightfield swap — a stale
+    // Rebuild on a few cells of travel OR a heightfield swap - a stale
     // patch would draw the previous map's collider (reads as the
     // "collider floating above the visual" ghost).
     if (Number.isFinite(this.colliderWireCx)
@@ -796,7 +811,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
         const wz = cz - half + iz * step;
         const o = (iz * (n + 1) + ix) * 3;
         verts[o] = wx;
-        verts[o + 1] = this.getHeight(wx, wz); // depthTest is off — no lift needed; offset would fake divergence
+        verts[o + 1] = this.getHeight(wx, wz); // depthTest is off - no lift needed; offset would fake divergence
         verts[o + 2] = wz;
       }
     }
@@ -827,14 +842,14 @@ n += 1; sum += d; sumAbs += Math.abs(d);
         new THREE.LineBasicMaterial({ color: 0xFF_CC_00, depthTest: false }));
       this.colliderWire.frustumCulled = false;
       this.colliderWire.renderOrder = 901; // above the cyan clipmap wires
-      // The scene ref wasn't kept — borrow a mesh's parent.
+      // The scene ref wasn't kept - borrow a mesh's parent.
       this.levels[0]?.mesh.parent?.add(this.colliderWire);
     }
-    this.colliderWire.visible = this.debugWireOn;
+    this.colliderWire.visible = this.debugWireOn && urlParams.has('xray');
   }
 
   // Visual callers only (debris, dust, birds): 1m-cell memo of the same
-  // bilinear — decoration can't afford exactness but can afford reuse.
+  // bilinear - decoration can't afford exactness but can afford reuse.
   getHeightVisual(wx: number, wz: number): number {
     return sampleHeightVisual(wx, wz);
   }
@@ -851,11 +866,11 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 }
 
-// Plain Alt+Q prints bespoke lines, not registerDiag sections — export
+// Plain Alt+Q prints bespoke lines, not registerDiag sections - export
 // the one-liner for diagDump.ts.
 /** One-line form for the plain (non-verbose) Alt+Q dump. */
 export function terrainDivLine(): string | null {
   const s = Terrain.dbg?.divergenceStats();
   if (!s) {return null;}
-  return `terrainDiv: collider-vs-drawn over ${s['samples']} samples r=40m — signed=${s['meanSigned_m']}m meanAbs=${s['meanAbs_m']}m max=${s['maxAbs_m']}m @(${s['worstAt']}) (signed>0 = collider above visual)`;
+  return `terrainDiv: collider-vs-drawn over ${s['samples']} samples r=40m - signed=${s['meanSigned_m']}m meanAbs=${s['meanAbs_m']}m max=${s['maxAbs_m']}m @(${s['worstAt']}) (signed>0 = collider above visual)`;
 }
