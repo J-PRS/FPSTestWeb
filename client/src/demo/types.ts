@@ -2,6 +2,7 @@
 
 import type { ResultToken } from '../../../shared/resultToken.ts';
 import { SPECIES } from '../../../shared/species.ts';
+import { DEPLOY_KINDS } from '../../../shared/deployables.ts';
 
 export const TARGETTYPE_KILL = 224;
 
@@ -165,7 +166,9 @@ export const TARGETTYPE_DEPLOY_BASE = 128;
 
 export const DEPLOY_ID_FLAG = 0x40_00;
 
-export const DEMO_DEPLOY_KINDS = ['turret', 'mortar', 'cgturret', 'mine', 'station', 'drone', 'shield', 'nugget', 'watersphere', 'beacon', 'tether', 'generator', 'sensor', 'baseturret'] as const;
+// Derived from DEPLOY_KINDS (deployItems.ts key order) — the
+// wire-stable kind index; do not reorder shipped DEPLOY_ITEMS rows.
+export const DEMO_DEPLOY_KINDS = DEPLOY_KINDS;
 
 export function demoDeployKindIndex(kind: string): number {
 
