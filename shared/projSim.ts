@@ -45,6 +45,34 @@ export function segPointDist(a: Vec3, b: Vec3, c: Vec3): number {
   return (dx * dx + dy * dy + dz * dz) ** 0.5;
 }
 
+/** Closest approach of segment [a,b] to the VERTICAL capsule axis at
+ *  (c.x, c.z) spanning [c.y-half, c.y+half]. The old midpoint-sphere
+ *  test (dist-to-center <= radius+half) over-covers vertically: a shot
+ *  ~1m over the helmet or under the feet still registered - a miss that
+ *  hits, violating the shooter's WYSIWYG contract. Standard
+ *  segment-segment closest point with the axis degenerated to {x,z}
+ *  constant. */
+export function segCapsuleDist(a: Vec3, b: Vec3, cx: number, cy0: number, cy1: number, cz: number): number {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const ab2 = abx * abx + aby * aby + abz * abz;
+  const L = Math.max(cy1 - cy0, 1e-9);
+  // Axis P(s) = (cx, cy0 + sL, cz). d = a - P(0).
+  const ex = a.x - cx, ey = a.y - cy0, ez = a.z - cz;
+  const dDotB = abx * ex + aby * ey + abz * ez;
+  // t = (s·L·aby - d·ab)/ab² and s·L = ey + aby·t; solve jointly, then
+  // clamp t and re-derive s (the axis endpoint nearest Q(t)).
+  const denom = ab2 - aby * aby;
+  let t = ab2 > 1e-12
+    ? (denom > 1e-12 ? (aby * ey - dDotB) / denom : -dDotB / ab2)
+    : 0;
+  t = Math.max(0, Math.min(1, t));
+  const s = Math.max(0, Math.min(1, (ey + aby * t) / L));
+  const px = a.x + abx * t - cx;
+  const py = a.y + aby * t - (cy0 + s * L);
+  const pz = a.z + abz * t - cz;
+  return (px * px + py * py + pz * pz) ** 0.5;
+}
+
 /** Closest-approach parameter of segment [a,b] to point c — WHERE along
  *  the beam the near-miss happens. segPointDist says how close; this says
  *  when, which is what a ray discharge needs to order competing hits. */

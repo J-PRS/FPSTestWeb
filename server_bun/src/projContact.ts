@@ -2,7 +2,7 @@ import type { Vec3 } from './types.ts';
 import type { getWeaponStats } from '../../shared/weapons.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { hitRadiusAt } from '../../shared/combat.ts';
-import { segFieldHit, segPointDist, segPointT, bounceOffField } from '../../shared/projSim.ts';
+import { segFieldHit, segPointT, segCapsuleDist, bounceOffField } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
@@ -90,9 +90,10 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
       const back = ghostBack(r, owner, proj.ownerId, pid);
       const tp = rewindPos(target, back, r.field);
-      const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
-      const pd = segPointDist(from, p.pos, pc);
-      if (pd <= capsuleReach(target, reach)) {
+      const cap = classCapsule(target.armorClass);
+      const pc = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
+      const pd = segCapsuleDist(from, p.pos, pc.x, pc.y - cap.half, pc.y + cap.half, pc.z);
+      if (pd <= reach + cap.radius) {
         // Ghost-forensics: how far behind live truth the credited ghost
         // sat — a large delta is the "hit landed where nobody stood" feel.
         const gd = dhypot3(tp.x - target.position.x, tp.y - target.position.y, tp.z - target.position.z);
@@ -235,7 +236,8 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
       const t = segPointT(p.pos, end, center);
-      if (t <= bestT && segPointDist(p.pos, end, center) <= capsuleReach(target, reach)) { bestT = t; hitId = pid; }
+      const cap2 = classCapsule(target.armorClass);
+      if (t <= bestT && segCapsuleDist(p.pos, end, center.x, center.y - cap2.half, center.y + cap2.half, center.z) <= reach + cap2.radius) { bestT = t; hitId = pid; }
     }
     const at: Vec3 = {
       x: p.pos.x + (end.x - p.pos.x) * bestT,

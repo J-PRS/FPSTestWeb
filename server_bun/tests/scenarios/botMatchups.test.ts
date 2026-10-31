@@ -90,7 +90,11 @@ describe('scenario: weapon matchups at near band (10m)', () => {
     // loser's near-gun stopped fighting back.
     for (const d of r.filter((x): boolean => x.w !== '-')) {
       const pool = d.w === 'a' ? 75 : 200; // chaser light (−25) / flanker heavy (+100)
-      expect(d.hp).toBeLessThanOrEqual(pool * 0.55); // plated's hpPlating soaks a few flat pts — contested stands
+      // Capsule hits got honest (axis test, no midpoint sphere): the
+      // phantom near-miss hits that used to bleed the winner stopped
+      // crediting, so survivors keep more hp. Still contested — the
+      // winner bleeds — just less than a padded hitbox produced.
+      expect(d.hp).toBeLessThanOrEqual(pool * 0.8);
     }
   });
 });

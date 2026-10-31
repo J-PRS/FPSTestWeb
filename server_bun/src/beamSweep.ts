@@ -6,7 +6,7 @@
  *  then the player capsule; a creature hit chains to the nearest OTHER
  *  live creature forward of the beam. */
 
-import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
+import { segFieldHit, segPointT, segCapsuleDist } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { LG_CHAIN_RANGE, LG_BOUNCE_RANGE, lgBounceDmgScale } from '../../shared/combat.ts';
@@ -118,7 +118,9 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
       const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid, shooterBound) - targetTransit);
       const tp = rewindPos(t, back, world.field);
       const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
-      if (segPointDist(a, b, c) > cap.radius + 0.2 + cap.half) {continue;}
+      // Capsule test, not midpoint sphere — a beam over the helmet or
+      // under the feet is a visual miss, so it must not register.
+      if (segCapsuleDist(a, b, c.x, c.y - cap.half, c.y + cap.half, c.z) > cap.radius + 0.2) {continue;}
       const tt = segPointT(a, b, c);
       if (tt <= tMin) { tMin = tt; playerId = pid; }
     }
