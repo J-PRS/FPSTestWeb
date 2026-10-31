@@ -1,9 +1,11 @@
 import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type PlaybackWorld } from '../demo/playbackReconstruction.js';
+import { blendPlaybackBall } from '../demo/playbackTargets.js';
 import {type ProjectileEvent, type TargetEvent, RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, TARGETTYPE_KILL, demoSpeciesIndex, creatureDemoId, targetDemoId, ProjectileEventType, TEAM_NAME, CLS_NAME} from '../demo/types.js';
 import type { RemoteSample } from '../demo/DemoRecorder.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import { isBotId } from '../../../shared/botNames.js';
 import { applyStatusVisuals, applyTeamTint } from './remotes.js';
+import { WIRE_SPECIES } from './netCrawlers.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
 import { applyMapFog, applyWeather, applyAtmosphere, applyTerrain } from './net/mapAssets.js';
 import type { DemoManager } from '../demo/index.js';
@@ -86,11 +88,11 @@ interface DemoLifecycleCtx extends DemoLifecycleDeps {
   playbackRemotes: Map<number, RemotePlayer>;
   frozenWarn: { n: number };
   seekReconstructing: { on: boolean };
-  /** flagMarkers/nodeMarkers entries playback minted — cleared with the
+  /** flagMarkers/nodeMarkers entries playback minted - cleared with the
    *  clip so live markers don't inherit replayed state. */
   playbackFlagTeams: Set<string>;
   playbackNodeIds: Set<number>;
-  /** wid currently mirrored onto the viewmodel — -1 means "not applied yet". */
+  /** wid currently mirrored onto the viewmodel - -1 means "not applied yet". */
   playbackWid: number;
   /** Restores the live heightmap after a clip's embedded terrain was
    *  injected for playback; null while the real map is up. */
@@ -98,7 +100,7 @@ interface DemoLifecycleCtx extends DemoLifecycleDeps {
 }
 
 function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
-  // Fade playback rail beams — pooled alongside the projectiles that spawn them.
+  // Fade playback rail beams - pooled alongside the projectiles that spawn them.
   for (let i = d.playbackWorld.beams.length - 1; i >= 0; i -= 1) {
     const b = d.playbackWorld.beams[i];
     b.life -= dt;
@@ -132,10 +134,11 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
   const player = d.lazyPlayer();
   let frozenCount = 0;
   // playbackBallById keys the DEMO's targetId, not the ball's client-side
-  // nextTargetId() — checking has(b.id) matched nothing and every playback
+  // nextTargetId() - checking has(b.id) matched nothing and every playback
   // ball froze at its spawn pos. Iterate the map's own instances instead.
   for (const [demoId, b] of d.playbackBallById) {
     b.update(dt, terrain, player.pos);
+    blendPlaybackBall(b, dt);
     // Detect frozen balls (near-zero velocity, not dead, not on ground resting)
     if (!b.dead && b.vel.lengthSq() < 0.01) {
 frozenCount += 1;
@@ -158,7 +161,7 @@ d.frozenWarn.n += 1;
   }
   updatePlaybackCreatures(d.playbackWorld, dt);
   updatePlaybackFlags(d.playbackWorld);
-  // HUD flag diamonds — the proxy already re-pins to the carrier each
+  // HUD flag diamonds - the proxy already re-pins to the carrier each
   // frame, so pointing marker.wirePos at the proxy rides the carrier too.
   for (const [id, proxy] of d.playbackWorld.playbackFlags) {
     const team = (id & 0xF) === 1 ? 'bravo' : 'alpha';
@@ -175,7 +178,7 @@ d.frozenWarn.n += 1;
     }
     d.world.flagStates[team] = PB_FLAG_STATE[proxy.userData.state as number] ?? 'home';
   }
-  // Conquest node pins — recorded marker state decoded verbatim; the
+  // Conquest node pins - recorded marker state decoded verbatim; the
   // nodeMarkers projection tick (kept alive in playback mode) pins it.
   const NODE_OWNER = ['neutral', 'alpha', 'bravo'] as const;
   for (const [id, n] of d.playbackWorld.playbackNodes) {
@@ -190,7 +193,7 @@ d.frozenWarn.n += 1;
     m.core = Boolean(n.meta & 4); m.gx = n.gx; m.gz = n.gz;
     m.show = Boolean(n.meta & 8); m.hot = Boolean(n.meta & 16);
   }
-  // Nodes whose playback lane went quiet leave their pin behind — reap.
+  // Nodes whose playback lane went quiet leave their pin behind - reap.
   for (const id of d.playbackNodeIds) {
     if (!d.playbackWorld.playbackNodes.has(id)) {
       d.world.nodeMarkers.delete(id);
@@ -204,12 +207,12 @@ const PB_FLAG_STATE = ['home', 'carried', 'dropped'] as const;
 
 // Shared cleanup: dispose live + playback transient objects
 const _pbMark = { x: 0, y: 0, z: 0 };
-// Playback tint/weapon dedupe — per-clip memory like the live lastTintOf.
+// Playback tint/weapon dedupe - per-clip memory like the live lastTintOf.
 const pbTintOf = new Map<string, string>();
 const pbWidOf = new Map<number, number>();
 function clearTransientObjects(d: DemoLifecycleCtx): void {
   for (const rp of d.playbackRemotes.values()) {rp.dispose();}
-  // Loop audio outlives the replica — each 'pb:' voice must release its
+  // Loop audio outlives the replica - each 'pb:' voice must release its
   // remoteMoveAudio slot or a stopped replay drones on.
   for (const idx of d.playbackRemotes.keys()) {
     sfxWorld.remoteMoveAudioGone(`pb:${idx}`);
@@ -219,7 +222,7 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
   d.world.playbackRemotePlayers.clear();
   d.world.playbackPlayers.clear();
   pbTintOf.clear(); pbWidOf.clear();
-  // Playback-owned flag markers — remove so live flags reclaim the lane.
+  // Playback-owned flag markers - remove so live flags reclaim the lane.
   for (const team of d.playbackFlagTeams) {
     d.world.flagMarkers.delete(team as 'alpha' | 'bravo');
     d.lazyHud().removePlayerIndicator(`flag:${team}`);
@@ -262,12 +265,12 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
     releasePlaybackBeam(d.playbackWorld, b);
   }
   d.playbackWorld.beams.length = 0;
-  // Module-global swipe ribbons — not owned by any entity in `d`, so the
+  // Module-global swipe ribbons - not owned by any entity in `d`, so the
   // per-entity passes above can't reach them.
   disposeSwings();
 }
 
-// Snapshot existing alive balls into the demo recording — needed when recording
+// Snapshot existing alive balls into the demo recording - needed when recording
 // starts after balls are already in the scene (they have no Spawned event yet).
 function snapshotExistingBallsForRecording(d: DemoLifecycleCtx, onBallRecorded?: (ball: Ball) => void): void {
   const dm = d.lazyDemoManager();
@@ -287,7 +290,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       d.seekReconstructing.on = false;
       return;
     }
-    // Muzzle kick rides the same Fired events that spawn the projectiles —
+    // Muzzle kick rides the same Fired events that spawn the projectiles -
     // the recorded weapon in frame and the shot stay in sync because they
     // share one timestamp stream. Only the LOCAL player's shots kick:
     // remote-owned Fired events carry shooter rosterIdx+1 in targetId, and
@@ -299,7 +302,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       }
     }
     applyPlaybackEvents(d.playbackWorld, events);
-    // Kill feed — TARGETTYPE_KILL carries victim rosterIdx, shooter
+    // Kill feed - TARGETTYPE_KILL carries victim rosterIdx, shooter
     // rosterIdx+1 in peakPosX, weapon in health. Teams aren't in the
     // roster stream; leave them neutral rather than guessing.
     for (const ev of events.targets) {
@@ -316,14 +319,14 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     if (demoManager.isPlaying) {
       const player = d.lazyPlayer();
       player.pos.set(state.posX, state.posY, state.posZ);
-      noteLocalSnap(); // replayed trajectory isn't a physics snap — scrubbing included
+      noteLocalSnap(); // replayed trajectory isn't a physics snap - scrubbing included
       player.vel.set(state.velX, state.velY, state.velZ);
       player.yaw = state.yaw;
       player.pitch = state.pitch;
-      // HUD bars replay the recorded body — v≤7 files carry 0s, so leave
+      // HUD bars replay the recorded body - v≤7 files carry 0s, so leave
       // the live values alone rather than pinning them to zero.
       if (state.health || state.armor) {player.health = state.health; player.armor = state.armor;}
-      // Mirror the recorded held weapon onto the viewmodel — switchWeapon
+      // Mirror the recorded held weapon onto the viewmodel - switchWeapon
       // takes the wire weaponType (the same ids frames carry), NOT a
       // loadout slot. Unknown ids (a weapon deleted since recording)
       // fall back to the stock launcher.
@@ -335,21 +338,21 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     }
   };
 
-  // Demo playback ends — just pause, keep objects visible (frozen)
+  // Demo playback ends - just pause, keep objects visible (frozen)
   demoManager.onPlaybackEnd = (): void => {
-    // No cleanup — objects stay visible as if user pressed pause.
+    // No cleanup - objects stay visible as if user pressed pause.
     // Cleanup happens when user explicitly stops playback via ESC.
     demoManager.finishExportIfArmed();
   };
 
-  // User explicitly stops playback (ESC, UI stop button) — full cleanup
+  // User explicitly stops playback (ESC, UI stop button) - full cleanup
   demoManager.onPlaybackStop = (): void => {
     d.world.playbackMode = false;
     // Re-arm so the next replay re-applies its own weapon instead of
     // inheriting whatever the previous clip left selected.
     d.playbackWid = -1;
     for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(false);}
-    // Hand the live sky/haze back — the clip's atmo was a guest.
+    // Hand the live sky/haze back - the clip's atmo was a guest.
     if (demoManager.player.demoData?.atmo) {
       const ctx = { deps: d } as never;
       const live = d.world.lastAtmo;
@@ -365,25 +368,25 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     if (document.pointerLockElement === d.rendererCanvas) {
       document.exitPointerLock();
     }
-    // Feed mode owns the screen — the menu must never resurface there.
+    // Feed mode owns the screen - the menu must never resurface there.
     if (!feedMode.on) {
       d.overlay.style.display = 'flex';
-      document.body.classList.add('menu-open'); // hides the HUD layer — same as overlayInput.setOverlay
+      document.body.classList.add('menu-open'); // hides the HUD layer - same as overlayInput.setOverlay
     }
     demoManager.fetchCoolShotsFromServer();
-    // Hand the live map back before recording resumes — a clip's embedded
+    // Hand the live map back before recording resumes - a clip's embedded
     // grid must never leak into the next recording's HMAP trailer.
     if (d.hmRestore) {d.hmRestore(); d.hmRestore = null; applyHeightfieldScale(d.lazyTerrain()); d.lazyTerrain().reloadHeightmap();}
-    // Resume recording for new cool shots — the feed never records.
+    // Resume recording for new cool shots - the feed never records.
     if (!feedMode.on) {demoManager.startRecording();}
     onPlaybackStop();
   };
 
   // Clear live game objects when playback starts so they don't hang frozen in the scene
   demoManager.onPlaybackStart = (): void => {
-    // The replay is its own world — the live wire must not fight it
+    // The replay is its own world - the live wire must not fight it
     d.world.playbackMode = true;
-    // SECTION_ATMO: replay the recorded map look — without it a rimrock
+    // SECTION_ATMO: replay the recorded map look - without it a rimrock
     // clip rendered on caldera's map inherits the wrong haze/sky. Restored
     // to world.lastAtmo on stop.
     const atmo = demoManager.player.demoData?.atmo;
@@ -396,7 +399,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       applyTerrain(ctx, (a.terrain ?? null) as never, a.terrainTex as never, a.sky as never, a.heightScale as never, a.tileSize as never, a.terrainPreset as never)
         .catch((): void => undefined);
     }
-    // v5 HMAP: the clip carries its terrain — use it when the live field
+    // v5 HMAP: the clip carries its terrain - use it when the live field
     // is absent or doesn't match the recorded action; the live map wins
     // when it checks out against the embedded fingerprint.
     const emb = demoManager.player.demoData?.heightmap;
@@ -406,18 +409,18 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
         d.hmRestore = injectHeightmapBytes(emb.data, emb.gridN, emb.heightScale, emb.worldScale);
         applyHeightfieldScale(d.lazyTerrain());
         d.lazyTerrain().reloadHeightmap();
-        demoManager.ui.setStatus(live ? 'map mismatch — embedded terrain' : 'embedded terrain');
+        demoManager.ui.setStatus(live ? 'map mismatch - embedded terrain' : 'embedded terrain');
         logger.warn(live
-          ? 'demo heightmap disagrees with live map — playing on embedded grid'
-          : 'no live heightmap — playing on embedded grid');
+          ? 'demo heightmap disagrees with live map - playing on embedded grid'
+          : 'no live heightmap - playing on embedded grid');
       }
     }
-    // Cool-shot clicks come from the overlay menu — a replay behind an
+    // Cool-shot clicks come from the overlay menu - a replay behind an
     // open menu is invisible. Close it and grab pointer lock (the click
     // is a user gesture, so the request is legal).
     d.overlay.style.display = 'none';
     document.body.classList.remove('menu-open');
-    // The feed plays clips without a user gesture — pointer lock would
+    // The feed plays clips without a user gesture - pointer lock would
     // throw (and is meaningless there: no aiming, no input).
     if (!feedMode.on) {d.rendererCanvas.requestPointerLock()?.catch?.((): void => { return; });}
     // Live remote players would otherwise stand ghosted inside the replay
@@ -436,7 +439,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     // Clear live projectiles
     for (const r of d.world.projectiles) {r.dispose();}
     d.world.projectiles.length = 0;
-    // All live species are game objects too — dispose so they don't hang
+    // All live species are game objects too - dispose so they don't hang
     // frozen in the scene during playback
     for (const m of d.mines) {m.onDetonate = undefined;} // teardown isn't a detonation
     type DisposableTarget = Targetable & { dispose(): void };
@@ -457,7 +460,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     clearTransientObjects(d);
   };
 
-  // Recorded remote players — states arrive already interpolated at demo
+  // Recorded remote players - states arrive already interpolated at demo
   // time; RemotePlayer's own snapshot buffer gets them as live updates,
   // so replica smoothing is literally the production netcode path.
   demoManager.onRemotePlayback = (states, dt): void => {
@@ -475,7 +478,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       rp.tick(dt, d.lazyCamera().position);
       const dead = (s.flags & RemoteFrameFlags.Dead) !== 0;
       rp.setStaleHidden(dead);
-      // Overhead chevron — playback remotes bypass net/remotes.ts where
+      // Overhead chevron - playback remotes bypass net/remotes.ts where
       // the live HUD marker updates, so without this replayed bodies
       // walk around unmarked. Same renderLift anchor as the live path.
       const indId = `pb:${s.rosterIdx}`;
@@ -495,7 +498,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       else {
         _pbMark.x = rp.position.x; _pbMark.y = rp.position.y + rp.renderLift; _pbMark.z = rp.position.z;
         const rid = roster[s.rosterIdx] ?? indId;
-        // Roster-keyed mirrors — health bars read playback actors through
+        // Roster-keyed mirrors - health bars read playback actors through
         // the same maps the wire roster feeds them live.
         d.world.playbackRemotePlayers.set(rid, rp);
         d.world.playbackPlayers.set(rid, { position: pos, isDead: dead, health: s.hp, team: teamName });
@@ -507,14 +510,14 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
         });
       }
       // Playback remotes bypass net/remotes.ts, which is where jet/ski
-      // audio normally fires — replay the same positional loop decision.
+      // audio normally fires - replay the same positional loop decision.
       // No wireJet bit in the recording, so the powered-climb heuristic
       // stands in for it; the ski bit IS recorded.
       sfxWorld.remoteMoveAudio(`pb:${s.rosterIdx}`, rp.position, rp.vel.length(),
         !dead && s.velY > 4.5, !dead && (s.flags & RemoteFrameFlags.Ski) !== 0,
         rp.vel, rp.armorClass ?? 'medium');
     }
-    // Roster players absent at this time keep their replica but hidden —
+    // Roster players absent at this time keep their replica but hidden -
     // e.g. they joined after the seek target or hadn't spawned yet.
     for (const [idx, rp] of d.playbackRemotes) {
       if (!seen.has(idx)) {
@@ -533,13 +536,13 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   d.playbackWorld.playbackMatchMeta = (ev): void => {
     d.world.teamScores = { alpha: ev.peakPosX, bravo: ev.peakPosY };
     // Deadline in wall-clock = remaining-ms minus demo time elapsed
-    // since the event — scrubbing backward re-arms honestly.
+    // since the event - scrubbing backward re-arms honestly.
     d.world.matchEndsAt = Date.now() + ev.health - ((demoManager.currentTime ?? ev.timestamp) - ev.timestamp) * 1000;
   };
 
   // Recording source: every remote player the world knows about. Bot
-  // entries ('bot:'-prefixed) ride along too — they're in the same map.
-  // The sample buffer + objects are reused between calls — the recorder
+  // entries ('bot:'-prefixed) ride along too - they're in the same map.
+  // The sample buffer + objects are reused between calls - the recorder
   // consumes them synchronously, and ~160 allocs/s of throwaway structs
   // was the recorder's last GC churn.
   const remoteSampleBuf: RemoteSample[] = [];
@@ -558,7 +561,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       s.velX = rp.vel.x; s.velY = rp.vel.y; s.velZ = rp.vel.z;
       s.yaw = rp.rotation.yaw; s.pitch = rp.rotation.pitch;
       s.dead = rp.isDead; s.ski = false;
-      // Meta lives on the wire state, not the replica — same fields the
+      // Meta lives on the wire state, not the replica - same fields the
       // live HUD indicator lane reads.
       const w = wire.get(id);
       s.team = w?.team; s.health = w?.health; s.held = w?.held;
@@ -570,7 +573,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     return out;
   });
 
-  // Live target sweep — every ball + creature the world renders. Clip
+  // Live target sweep - every ball + creature the world renders. Clip
   // extraction rebuilds baseline spawns from the recorder's event ring,
   // and an entity whose lifecycle edges aged out (spawned >30s ago,
   // quiet since) is invisible to it: the demo then silently drops it.
@@ -581,23 +584,15 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     for (const b of d.balls) {
       if (b.dead) {continue;}
       // Net balls keep their client id in the 0x40xx namespace while every
-      // recorded edge keys on the wire netId — emit the wire id or the
+      // recorded edge keys on the wire netId - emit the wire id or the
       // baseline pass resurrects a phantom second ball.
       yield { targetId: targetDemoId(b), targetType: b.variant, pos: b.pos, vel: b.vel, health: b.health };
     }
-    for (const { list, species } of [
-      { list: d.crawlers, species: 'crawler' },
-      { list: d.scarabs, species: 'scarab' },
-      { list: d.rakks, species: 'rakk' },
-      { list: d.rollers, species: 'roller' },
-      { list: d.gnats, species: 'gnat' },
-      { list: d.snakes, species: 'snake' },
-      { list: d.banelings, species: 'baneling' },
-      { list: d.totems, species: 'totem' },
-    ]) {
+    for (const [species, w] of Object.entries(WIRE_SPECIES)) {
+      const list = d[w.ctxKey] as { netId: number; pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number } | null }[];
       const tt = TARGETTYPE_CREATURE_BASE + demoSpeciesIndex(species);
       for (const c of list) {
-        if (c.netId <= 0) {continue;} // local sims aren't wire entities — the offline lane doesn't record them either
+        if (c.netId <= 0) {continue;} // local sims aren't wire entities - the offline lane doesn't record them either
         yield { targetId: creatureDemoId(c.netId), targetType: tt, pos: c.pos, vel: c.vel ?? zeroVel, health: 0 };
       }
     }
@@ -648,7 +643,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     playbackProjectileById,
     playbackBallById,
     playbackProjectileOrigin,
-    // Recorded remote players replayed as real RemotePlayer replicas — their
+    // Recorded remote players replayed as real RemotePlayer replicas - their
     // snapshot buffer smooths the 20Hz samples exactly like live net code.
     playbackRemotes: playbackRemotesMap,
     frozenWarn: { n: 0 },
