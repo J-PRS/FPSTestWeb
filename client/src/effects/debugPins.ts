@@ -16,7 +16,7 @@ const wposDiag = { conns: 0, bad: 0, worst: 0 };
  *  is a small octahedron (wireframe-sphere read at debug scale) that
  *  fades over ~4s, so you can compare where a body actually WAS vs
  *  where its trail skeleton claims it was. */
-interface Pin { x: number; y: number; z: number; t: number; }
+interface Pin { x: number; y: number; z: number; t: number; ev?: boolean; }
 
 const LIFE_MS = 1000;   // total lifetime
 const HOLD_MS = 700;    // fully bright ~0.7s, fades out over the last 0.3s
@@ -84,7 +84,10 @@ const leashList: { x1: number; y1: number; z1: number; x2: number; y2: number; z
  *  unexplained-jump alert that fires on a tight-arc correction. */
 /** `expectJump` kept for signature compat; breaks are event-driven via
  *  breakDropDebugPin - the owner knows teleports, no guessing needed. */
-export function dropDebugPin(owner: object, p: { x: number; y: number; z: number }, spacingM = 4, expectJump = false): void {
+/** `ev` marks terrain-contact event pins (bounce/lunge/etc) - a conn
+ *  needs an event endpoint to be hideable: teleports only happen at
+ *  terrain, so air→air segments can never be flagged. */
+export function dropDebugPin(owner: object, p: { x: number; y: number; z: number }, spacingM = 4, expectJump = false, ev = false): void {
   if (!wposOn()) {return;}
   let lp = livePos.get(owner);
   if (!lp) {lp = { x: 0, y: 0, z: 0 }; livePos.set(owner, lp);}
@@ -113,7 +116,7 @@ export function dropDebugPin(owner: object, p: { x: number; y: number; z: number
   angAcc.set(owner, 0);
   const now = performance.now();
   if (pins.length >= MAX_PINS) {pins.shift();}
-  const pin = { x: p.x, y: p.y, z: p.z, t: now };
+  const pin = { x: p.x, y: p.y, z: p.z, t: now, ev };
   pins.push(pin);
   const prev = lastPin.get(owner);
   if (prev) {
@@ -135,7 +138,9 @@ export function dropDebugPin(owner: object, p: { x: number; y: number; z: number
     let bad = breakNext.delete(owner);
     let log = gapLog.get(owner);
     if (!log) {log = []; gapLog.set(owner, log);}
-    if (!bad && log.length >= 4 && d > 1e-4) {
+    // Air→air conns can never hide: teleports happen at terrain, and
+    // terrain-contact pins are the event-marked ones.
+    if (!bad && (prev.ev || pin.ev) && log.length >= 4 && d > 1e-4) {
       // (a) length outlier: >30x the mean of the last 10 gaps
       const avg = log.reduce((a, g): number => a + g, 0) / log.length;
       // (b) direction outlier: >12° off the ball's last movement step
@@ -170,7 +175,7 @@ export function forceDropDebugPin(owner: object, p: { x: number; y: number; z: n
   distAcc.set(owner, 0);
   angAcc.set(owner, 0);
   lastDir.delete(owner);
-  dropDebugPin(owner, p, 0, true); // event pin: the caller KNOWS this is a jump - hide, don't alert
+  dropDebugPin(owner, p, 0, true, true); // terrain-contact event pin
 }
 
 /** Teleport/break event pin: same as forceDrop plus a per-owner flag
@@ -239,18 +244,27 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
     pos[w] = x; pos[w + 1] = y; pos[w + 2] = z;
     col[w] = b; col[w + 1] = red ? 0 : b * 0.4; col[w + 2] = 0; w += 3; // orange (red when flagged)
   };
-  for (const c of conns) {
-    if (c.bad) {continue;} // discontinuity links render nothing - breaks, not trail
-    const b = Math.min(1, (LIFE_MS - (now - c.t)) / (LIFE_MS - HOLD_MS));
-    put(c.x1, c.y1, c.z1, b * 0.6); put(c.x2, c.y2, c.z2, b * 0.6);
+  // 1px conn spine is a debug skeleton - F1 only. WPOS-alone mode is
+  // trail-only: quads carry the visuals, no wire overlay.
+  if (urlParams.debug) {
+    for (const c of conns) {
+      if (c.bad) {continue;} // discontinuity links render nothing - breaks, not trail
+      const b = Math.min(1, (LIFE_MS - (now - c.t)) / (LIFE_MS - HOLD_MS));
+      put(c.x1, c.y1, c.z1, b * 0.6); put(c.x2, c.y2, c.z2, b * 0.6);
+    }
   }
   // Live leash: body → its last pin, brighter than the recorded path.
   leashList.length = 0;
   for (const o of liveOwners) {
     const lp = livePos.get(o), lp2 = lastPin.get(o);
     if (lp && lp2) {
-      put(lp.x, lp.y, lp.z, 0.9); put(lp2.x, lp2.y, lp2.z, 0.9);
-      leashList.push({ x1: lp.x, y1: lp.y, z1: lp.z, x2: lp2.x, y2: lp2.y, z2: lp2.z });
+      // Same hide rule as conns: a >8m leash means the body snapped to
+      // somewhere far from its last pin - drawing it paints a chord.
+      const d = Math.hypot(lp.x - lp2.x, lp.y - lp2.y, lp.z - lp2.z);
+      if (d < 8) {
+        if (urlParams.debug) {put(lp.x, lp.y, lp.z, 0.9); put(lp2.x, lp2.y, lp2.z, 0.9);}
+        leashList.push({ x1: lp.x, y1: lp.y, z1: lp.z, x2: lp2.x, y2: lp2.y, z2: lp2.z });
+      }
     }
   }
   liveOwners.clear();
@@ -300,10 +314,9 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
       }
       for (let i = 1; i < n; i += 1) {
         const i0 = (i - 1) * 3, i1 = i * 3;
-        // Segment-length cap inside the run: a >12m pair can't fan out
-        // no matter what slipped past the conn-level checks.
-        const segDx = RP[i1]! - RP[i0]!, segDy = RP[i1 + 1]! - RP[i0 + 1]!, segDz = RP[i1 + 2]! - RP[i0 + 2]!;
-        if (segDx * segDx + segDy * segDy + segDz * segDz > 144) {continue;}
+        // No length cap: conn.bad already breaks runs at real
+        // discontinuities; a long legit hop (fast ball, sparse pins)
+        // must draw or the trail eats midair segments.
         const w0 = RW[i - 1]! * mult, w1 = RW[i]! * mult;
         const b0 = RB[i - 1]!, b1 = RB[i]!;
         const ax = RP[i0]! - RS[i0]! * w0, ay = RP[i0 + 1]! - RS[i0 + 1]! * w0, az = RP[i0 + 2]! - RS[i0 + 2]! * w0;

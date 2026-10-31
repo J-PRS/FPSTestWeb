@@ -512,7 +512,10 @@ export class Ball {
       this.retireRibbons();
       this.spawnPopT = SPAWN_POP_S;
       this.trails.burst(12, this.pos, this.radius, this.color);
-      breakDropDebugPin(this, this._rpos); // declared break - WPOS ends the strip here
+      // Pin at the NEW pos, not _rpos (which still holds the pre-jump
+      // spot until writeBallInstance runs) - the conn old→new is what
+      // gets marked bad; a stale pin would mark the wrong conn.
+      breakDropDebugPin(this, this.pos);
       this.onBounce?.(this.pos.clone(), this.vel.clone());
       return;
     }

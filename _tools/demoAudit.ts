@@ -157,6 +157,30 @@ const targetTypeName = (t: number) =>
         : t === TARGETTYPE_KILL ? 'kill'
           : t === TARGETTYPE_FLAG ? 'flag'
             : t >= TARGETTYPE_PICKUP_BASE ? `pickup(${t - TARGETTYPE_PICKUP_BASE})` : `?(${t})`;
+// ---- kinematic: teleport-class displacement on continuous edges ---------
+// Bounce/StateChanged keyframes claim the body kept simulating — a >40m
+// jump between them means a re-seat (respawn/id-reuse) was flattened into
+// a motion edge, which playback renders as a midair streak, not a pop.
+const byTarget = new Map<string, typeof demo.targetEvents>();
+for (const e of demo.targetEvents) {
+  if (e.targetType === TARGETTYPE_KILL) continue;
+  const k = `${e.targetType}:${e.targetId}`;
+  let a = byTarget.get(k); if (!a) { a = []; byTarget.set(k, a); }
+  a.push(e);
+}
+let teleportEdges = 0;
+for (const [k, es] of byTarget) {
+  for (let i = 1; i < es.length; i++) {
+    const a = es[i - 1]!, b = es[i]!;
+    if (b.eventType !== TargetEventType.Bounce && b.eventType !== TargetEventType.StateChanged) continue;
+    if (a.eventType === TargetEventType.Destroyed) continue;
+    const d = Math.hypot(b.posX - a.posX, b.posY - a.posY, b.posZ - a.posZ);
+    if (d > 40 && ++teleportEdges <= 5) {
+      bad('kinematic', `target ${k} ${b.eventType === 1 ? 'Bounce' : 'StateChanged'} jumped ${d.toFixed(0)}m @t=${b.timestamp.toFixed(1)} (re-seat recorded as motion edge — plays back as a streak)`);
+    }
+  }
+}
+
 const spawned = new Set<string>();
 let midClipOrphans = 0;
 for (const e of demo.targetEvents) {
@@ -189,7 +213,7 @@ for (const f of demo.remoteFrames) {
 console.log(`demoAudit ${file}`);
 console.log(`  fmt v${demo.header.formatVersion} dur=${demo.header.duration.toFixed(1)}s room=${demo.header.room || '?'} mode=${demo.header.mode || '?'}`);
 console.log(`  frames=${demo.frames.length} remotes=${demo.remoteFrames.length} projs=${demo.projectileEvents.length} targets=${demo.targetEvents.length} roster=${demo.roster.length}`);
-console.log(`  kinematic: speedViolations=${speedViol} velMismatch=${velMismatch} pinnedAxis=${stuckAxes} targetOrphans=${midClipOrphans}`);
+console.log(`  kinematic: speedViolations=${speedViol} velMismatch=${velMismatch} pinnedAxis=${stuckAxes} teleportEdges=${teleportEdges} targetOrphans=${midClipOrphans}`);
 if (issues.length === 0) {
   console.log('AUDIT PASS — no structural/kinematic/lifecycle violations');
   process.exit(0);

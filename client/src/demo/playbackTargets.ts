@@ -4,6 +4,7 @@ import { Ball } from '../entities/balls.js';
 import { BallDebris } from '../effects/debris.js';
 import { fastForward } from './playbackFF.js';
 import { SPAWN_POP_S } from '../entities/ballVisual.js';
+import { breakDropDebugPin } from '../effects/debugPins.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';
 import * as sfxWorld from '../core/sfx/world.js';
 
@@ -65,19 +66,27 @@ function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number
   pb.pbTarget.set(ex, ey, ez);
   pb.pbTargetVel.set(evx, evy, evz);
   if (drift >= PLAYBACK_HARD_SNAP_DIST) {
-    // Route the snap through renderOffset like live corrections - _rpos
+    // Re-seat class: wire 'teleport' segments land here as Bounce edges.
+    // Live snaps instantly (hard segment); blending through renderOffset
+    // would sweep the mesh hundreds of meters midair — a flight the ball
+    // never flew. Jump the render pos too: no offset, no sweep.
+    if (drift >= 25) {
+      ball.pos.set(ex, ey, ez);
+      ball.vel.set(evx, evy, evz);
+      ball.renderOffset.set(0, 0, 0);
+      ball._rpos.copy(ball.pos);
+      ball.spawnPopT = SPAWN_POP_S;
+      ball.retireRibbons();
+      ball.trails.burst(12, ball.pos, ball.radius, ball.color);
+      breakDropDebugPin(ball, ball.pos); // declared break - the strip ends at the old spot
+      return;
+    }
+    // Mid-size corrections route through renderOffset like live - _rpos
     // blends back over ~0.5s so the trail driver sees a sweep, not a
     // teleport jump-cut that segments the ribbon every event.
     ball.renderOffset.set(ball.pos.x - ex, ball.pos.y - ey, ball.pos.z - ez);
     ball.pos.set(ex, ey, ez);
     ball.vel.set(evx, evy, evz);
-    // A big correction in a recording is usually a leash teleport -
-    // sell the re-arrival like the live one instead of a silent cut.
-    if (drift >= 25) {
-      ball.spawnPopT = SPAWN_POP_S;
-      ball.retireRibbons();
-      ball.trails.burst(12, ball.pos, ball.radius, ball.color);
-    }
   }
   // Small drift: no positional write - the per-frame blend converges
   // pos/vel onto pbTarget smoothly instead of a 25% nudge per event.
@@ -154,6 +163,12 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
     ball.health = ev.health;
     ball.dead = ball.health <= 0;
     ball.update(0, terrain, playerPos);
+    // A killing Hit bursts like a Destroyed — without debris the body
+    // loses its swarm slot instantly and only the trail wisp remains,
+    // which reads as "the ball vanished" on midair kills.
+    if (ball.dead) {
+      world.debrisList.push(new BallDebris(world.scene, terrain, ball.pos, ball.color, ball.scale));
+    }
     world.damageNumberManager.spawn(ball.pos, 1, '#ffffff', world.camera);
     // Dead stays mapped - updateBallsPlayback ticks updateBallDead (trail
     // fade, slot free) and splices on `disposed`. Unmapping here freezes

@@ -43,9 +43,9 @@ const mkFired = (targetId: number): ProjectileEvent => ({
 
 const noop = (): void => { /* stubbed dep */ };
 
-const CLIP = resolve(dirname(fileURLToPath(import.meta.url)),
+const CLIP = process.env.DEMO_CLIP ?? resolve(dirname(fileURLToPath(import.meta.url)),
   '../../../demos_out/midair_BoltLauncher_0.35s_henge.demo');
-const CLIP2 = resolve(dirname(fileURLToPath(import.meta.url)),
+const CLIP2 = process.env.DEMO_CLIP2 ?? resolve(dirname(fileURLToPath(import.meta.url)),
   '../../../demos_out/midair_Cannon_4.60s_crossfire.demo');
 
 const flatTerrain = {
@@ -331,6 +331,9 @@ describe('playback audit — corpse lifecycle', (): void => {
       posX: 0, posY: 80, posZ: 0,
     })] });
     expect(ball.dead).toBe(true);
+    // Killing Hit drops the same debris a Destroyed does — otherwise the
+    // body vanishes instantly and only the trail wisp remains.
+    expect(rig.world.debrisList.length).toBeGreaterThan(0);
     // Mapped while fading — unmapping here is the frozen-corpse regression.
     expect(rig.world.playbackBallById.has(50_000)).toBe(true);
     drain(rig);
@@ -603,6 +606,22 @@ describe('cross-lane id aliasing', (): void => {
     expect(entries.some((e): boolean => e.targetType === 0)).toBe(true);
     expect(entries.some((e): boolean => e.targetType === TARGETTYPE_FLAG)).toBe(true);
   });
+});
+
+// A recorded re-seat (wire 'teleport' arrives as a Bounce edge) must cut
+// instantly like the live hard segment — not sweep the mesh through a
+// renderOffset blend across hundreds of meters.
+it('teleport-class keyframes snap instantly — no renderOffset sweep', (): void => {
+  const rig = makePlaybackRig();
+  spawnedBall(rig.world, 88_000, new THREE.Vector3(0, 80, 0));
+  const ball = rig.world.playbackBallById.get(88_000)!;
+  applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+    eventType: TargetEventType.Bounce, targetId: 88_000,
+    posX: 400, posY: 60, posZ: 300, velX: -10, velY: 30, velZ: 5,
+  })] });
+  expect(ball.pos.x).toBe(400);
+  expect(ball.renderOffset.lengthSq()).toBe(0);
+  expect(ball._rpos.x).toBe(400);
 });
 
 // A re-fired Spawned at a live id (id wrap, or synthetic+real pair at a
