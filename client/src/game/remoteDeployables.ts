@@ -5,6 +5,7 @@
 // base-asset visuals grew past the ~900-line file ceiling.
 
 import * as THREE from 'three';
+import type { Terrain } from '../world/terrain.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DeployTurret } from '../entities/DeployTurret.js';
 import { DeployMortar } from '../entities/DeployMortar.js';
@@ -78,6 +79,26 @@ const _aim = new THREE.Vector3();
 const _aim2 = new THREE.Vector3();
 const _zero = new THREE.Vector3();
 
+
+/** Remote-kind registry - one row per kind whose remote visual is just
+ *  "make it, seat it, tick it" (the generic Item shape). scans = its
+ *  update() also reads the enemies list for cosmetic aiming. Bespoke
+ *  kinds (beacon/base-assets/mine/drone/station) keep their own
+ *  branches below - forcing them through this table would be worse. */
+type RemoteBody = { pos: THREE.Vector3; health: number; armor: number; maxHealth: number;
+  unfoldDone(): void; update(dt: number, foes?: unknown): void; dispose(scene: THREE.Scene): void };
+const REMOTE_SPEC: Partial<Record<DeployKind, {
+  make: (scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) => RemoteBody;
+  scans?: boolean;
+}>> = {
+  shield:      { make: (s, t, p) => new DeployShield(s, t, p) },
+  turret:      { make: (s, t, p) => new DeployTurret(s, t, p),      scans: true },
+  mortar:      { make: (s, t, p) => new DeployMortar(s, t, p),      scans: true },
+  cgturret:    { make: (s, t, p) => new DeployCg(s, t, p),          scans: true },
+  tether:      { make: (s, t, p) => new DeployTether(s, t, p) },
+  watersphere: { make: (s, t, p) => new DeployWatersphere(s, t, p) },
+};
+
 export class RemoteDeployables {
   private remote = new Map<number, Item>();
   /** Server id → item for our OWN plants - deploySpawn echoes back to the
@@ -136,78 +157,20 @@ export class RemoteDeployables {
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
     // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
     let item!: Item;
-    if (kind === 'shield') {
-      // The dome IS the deployable - no proxy sphere for this kind; the
-      // field must be visible or enemies can't read what ate their shell.
-      const s = new DeployShield(this.deps.scene, terrain, at);
-      s.unfoldDone();
-      if (hp !== undefined) { s.health = hp; s.armor = armor ?? 0; }
+    const rspec = REMOTE_SPEC[kind];
+    if (rspec) {
+      const b = rspec.make(this.deps.scene, terrain, at);
+      b.unfoldDone();
+      if (hp !== undefined) { b.health = hp; b.armor = armor ?? 0; }
       item = {
-        kind, candId: `rdep:${id}`, pos: s.pos, dead: false,
-        hurt: (): void => { return; },
-        update: (dt): void => s.update(dt),
-        dispose: (): void => s.dispose(this.deps.scene),
-        v: s, owner, flash: (): void => s.flash(),
-      };
-    } else if (kind === 'turret') {
-      const t = new DeployTurret(this.deps.scene, terrain, at);
-      t.unfoldDone();
-      if (hp !== undefined) { t.health = hp; t.armor = armor ?? 0; }
-      item = {
-        kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
+        kind, candId: `rdep:${id}`, pos: b.pos, dead: false,
         hurt: (): void => { return; }, // server owns its lifetime - deployGone removes it
-        // Remote sentries still scan and aim - pure cosmetics, no firing.
-        update: (dt) => t.update(dt, this.enemies()),
-        dispose: (): void => t.dispose(this.deps.scene),
-        v: t, owner,
-      };
-    } else if (kind === 'mortar') {
-      const m = new DeployMortar(this.deps.scene, terrain, at);
-      m.unfoldDone();
-      if (hp !== undefined) { m.health = hp; m.armor = armor ?? 0; }
-      item = {
-        kind, candId: `rdep:${id}`, pos: m.pos, dead: false,
-        hurt: (): void => { return; }, // server owns it - deployGone removes
-        // Cosmetic slew only - the server's mortarShot broadcast paints shells.
-        update: (dt): void => { m.update(dt, this.enemies()); },
-        dispose: (): void => m.dispose(this.deps.scene),
-        v: m, owner,
-      };
-    } else if (kind === 'cgturret') {
-      const c = new DeployCg(this.deps.scene, terrain, at);
-      c.unfoldDone();
-      if (hp !== undefined) { c.health = hp; c.armor = armor ?? 0; }
-      item = {
-        kind, candId: `rdep:${id}`, pos: c.pos, dead: false,
-        hurt: (): void => { return; },
-        update: (dt): void => { c.update(dt, this.enemies()); },
-        dispose: (): void => c.dispose(this.deps.scene),
-        v: c, owner,
+        update: (dt): void => b.update(dt, rspec.scans ? this.enemies() : undefined),
+        dispose: (): void => b.dispose(this.deps.scene),
+        v: b, owner, flash: (b as { flash?: () => void }).flash?.bind(b),
       };
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);
-    } else if (kind === 'tether') {
-      const t = new DeployTether(this.deps.scene, this.deps.lazyTerrain(), at);
-      t.unfoldDone();
-      if (hp !== undefined) { t.health = hp; t.armor = armor ?? 0; }
-      item = {
-        kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
-        hurt: (): void => { return; },
-        update: (dt): void => t.update(dt),
-        dispose: (): void => t.dispose(this.deps.scene),
-        v: t, owner,
-      };
-    } else if (kind === 'watersphere') {
-      const w = new DeployWatersphere(this.deps.scene, this.deps.lazyTerrain(), at);
-      w.unfoldDone();
-      if (hp !== undefined) { w.health = hp; w.armor = armor ?? 0; }
-      item = {
-        kind, candId: `rdep:${id}`, pos: w.pos, dead: false,
-        hurt: (): void => { return; },
-        update: (dt): void => w.update(dt),
-        dispose: (): void => w.dispose(this.deps.scene),
-        v: w, owner,
-      };
     } else if (kind === 'generator' || kind === 'sensor' || kind === 'baseturret') {
       item = this.baseAssetItem(kind, at, hp, armor, team);
       item.owner = owner;
@@ -481,7 +444,7 @@ export class RemoteDeployables {
     // spawns, so world yaw is the head yaw.
     if (it.head) {it.aimYaw = Math.atan2(_aim.x - it.pos.x, _aim.z - it.pos.z);}
     this.rockets.spawn(_aim2.copy(it.pos).setY(it.pos.y + 2.2), { pos: _aim.clone(), vel: _zero, alive: true }, 1, it.owner, it.team);
-    sfx.shotAt(it.pos, WeaponType.RocketLauncher);
+    sfx.shotAt(it.pos, WeaponType.MissileLauncher);
   }
 
   /** deployHp broadcast - server is the vitals authority; the local
@@ -606,7 +569,7 @@ export class RemoteDeployables {
       return;
     }
     this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target, 1, item.owner);
-    sfx.shotAt(item.pos, WeaponType.RocketLauncher);
+    sfx.shotAt(item.pos, WeaponType.MissileLauncher);
   }
 
   /** Base sentry bolt - the blast lands at the wire aim point, not on a
@@ -617,7 +580,7 @@ export class RemoteDeployables {
     if (!item) {return;}
     const target = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), alive: true };
     this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 2.2, 0)), target, 1, owner);
-    sfx.shotAt(item.pos, WeaponType.RocketLauncher);
+    sfx.shotAt(item.pos, WeaponType.MissileLauncher);
   }
 
   /** Mortar turret fired - the wire carries the solved launch velocity;
