@@ -47,7 +47,7 @@ export class TickLoop {
 
   // Tick-bandwidth metrics -- aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
-  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, recordsCapped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, tickErrors: 0, windowStart: 0, tickMsSum: 0, tickMsMax: 0, tickSamples: 0 };
+  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, recordsCapped: 0, recordsScanned: 0, scanNs: 0, frameNs: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, tickErrors: 0, windowStart: 0, tickMsSum: 0, tickMsMax: 0, tickSamples: 0 };
   /** Which phase threw when a room tick dies -- the catch sites one level
    *  up can't see inside tickRoom otherwise. */
   private errPhase = '?';
@@ -79,7 +79,7 @@ export class TickLoop {
   }
   /** Last completed 10s rollup -- surfaced on /metrics, null until a
    *  window closes (needs a connected player to accumulate). */
-  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; cappedPerSec: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; sendsPerSec: number; sendUsPerCall: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number }; worstTicks?: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] } | null = null;
+  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; cappedPerSec: number; scansPerSec: number; scanMs: number; frameMs: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; sendsPerSec: number; sendUsPerCall: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number }; worstTicks?: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] } | null = null;
   /** Worst ticks this rollup window -- a bare tickMsMax never says WHICH
    *  phase held the spike, and "code vs GC/deschedule" is the whole
    *  question: a 200ms tick whose spans sum to 2ms is a runtime pause,
@@ -408,6 +408,10 @@ this.metrics.ticks += 1;
         suppressedPerSec: Number((m.recordsSuppressed / secs).toFixed(0)),
         tierSkippedPerSec: Number((m.recordsTierSkipped / secs).toFixed(0)),
         cappedPerSec: Number((m.recordsCapped / secs).toFixed(0)),
+        scansPerSec: Number((m.recordsScanned / secs).toFixed(0)),
+        // Inside fanout: gather+eval vs encode+send, ms per tick each.
+        scanMs: Number((m.scanNs / secs / 20 / 1e6).toFixed(2)),
+        frameMs: Number((m.frameNs / secs / 20 / 1e6).toFixed(2)),
         tickFramesDroppedPerSec: Number((m.tickFramesDropped / secs).toFixed(0)),
         tickFramesHeldPerSec: Number((m.tickFramesHeld / secs).toFixed(0)),
         // Actual ws.send count + µs/call inside flushOutboxes -- the
@@ -425,6 +429,9 @@ this.metrics.ticks += 1;
       logger.debug('Tick bandwidth', Object.assign({}, this.lastBw, {players: playerCount}));
       m.tickErrors = 0; m.recordsIdleReaped = m.tickErrors; m.recordsSuppressed = m.recordsIdleReaped; m.recordsBuilt = m.recordsSuppressed; m.ticks = m.recordsBuilt;
         m.recordsCapped = m.ticks;
+        m.recordsScanned = m.ticks;
+        m.scanNs = m.ticks;
+        m.frameNs = m.ticks;
         m.tickFramesDropped = m.tickErrors;
         m.tickFramesHeld = m.tickFramesDropped;
         m.bytesSent = m.tickFramesHeld;

@@ -222,6 +222,9 @@ try {
     sendsPerSec: (bw as { sendsPerSec?: number } | undefined)?.sendsPerSec,
     sendUsPerCall: (bw as { sendUsPerCall?: number } | undefined)?.sendUsPerCall,
     cappedPerSec: (bw as { cappedPerSec?: number } | undefined)?.cappedPerSec,
+    scansPerSec: (bw as { scansPerSec?: number } | undefined)?.scansPerSec,
+    scanMs: (bw as { scanMs?: number } | undefined)?.scanMs,
+    frameMs: (bw as { frameMs?: number } | undefined)?.frameMs,
     phaseMs: bw?.phaseMs,
     worstTicks: (bw as { worstTicks?: unknown } | undefined)?.worstTicks,
     // Per-thread CPU ms deltas (Linux /proc only) -- splits the JS loop

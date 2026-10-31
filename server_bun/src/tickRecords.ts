@@ -59,6 +59,15 @@ function mintWireId(room: Room): number {
   return (((room.nextWireId += 1) - 1) % 0xFF_FF) + 1;
 }
 
+/** Deterministic 0-7 phase for a recipient's far-emit tick -- spreads
+ *  the far-scan work evenly across ticks instead of one seq%8 spike
+ *  doing N^2 every 400ms. */
+function staggerOf(pid: string): number {
+  let h = 0;
+  for (let i = 0; i < pid.length; i += 1) {h = (h + pid.charCodeAt(i)) | 0;}
+  return h & 7;
+}
+
 /** Kth-smallest of `a` (0-indexed k) -- quickselect on a copy so the
  *  candidate order stays stable for the emit filter. Linear expected
  *  time; only runs for recipients whose roster exceeds the cap. */
@@ -99,6 +108,16 @@ export interface FanoutMetrics {
   /** Records dropped by the K-nearest per-recipient cap -- egress bound,
    *  not loss: the culled ghosts are the farthest by definition. */
   recordsCapped: number;
+  /** Candidate records distance-tested per tick across all recipients
+   *  (near-circle + every-tick list) -- the O(N^2) term the spatial
+   *  index bounds. recordsScanned / recipients ≈ candidates/seat. */
+  recordsScanned: number;
+  /** Per-tick ns split inside fanoutRecords: candidate gather+eval vs
+   *  cap-filter + frame encode + send -- decides where the next lever
+   *  lives (index already cut the scan; if encode dominates, the
+   *  fanout phase is frame assembly, not interest math). */
+  scanNs: number;
+  frameNs: number;
 }
 
 export class TickFanout {
@@ -149,10 +168,49 @@ export class TickFanout {
    *  still ride reliable events, and forced (hit/knockback) + intro
    *  records are exempt since they carry truth a cap can't defer. */
   private static readonly MAX_RECORDS = 32;
-  /** Cap candidates: variant + dSq pairs that compete for MAX_RECORDS
+  /** Cap candidates: variant + score pairs that compete for MAX_RECORDS
    *  slots (exempt traffic pushed straight into `others`). */
   private readonly candRecs: Uint8Array[] = [];
-  private readonly candDist: number[] = [];
+  private readonly candScore: number[] = [];
+  /** Spatial index (Replication-Graph shape): records bucketed by map
+   *  cell once per tick so a recipient distance-tests only its own
+   *  engagement volume instead of the whole roster -- the measured
+   *  O(N^2) fanout phase at 370 seats. */
+  private readonly cells = new Map<number, TickRecord[]>();
+  /** Records evaluated every tick regardless of distance: fast movers
+   *  (5m-travel-budget tier) and forced records (hit-window sends +
+   *  staggered fulls) -- both carry truth that can't wait for the
+   *  far-scan tick. Slow far records are evaluated only on the seq%8
+   *  emit tick their tier could ever fire on. */
+  private readonly fastRecords: TickRecord[] = [];
+  /** Per-recipient candidate list -- rebuilt each recipient, holds
+   *  near-circle + fast records. */
+  private readonly candList: TickRecord[] = [];
+  /** Cells a recipient's near circle actually included this tick --
+   *  the far emit iterates every OTHER cell. */
+  private readonly nearCellKeys = new Set<number>();
+  /** Engagement cell size + span: recipients gather cells whose CENTER
+   *  sits inside ~950m (covers the 600m outer tier x 1.15 hysteresis
+   *  plus a cell's half-diagonal). A box span was too fat on a 2km
+   *  map -- the corner cells alone held a third of the roster. */
+  private static readonly CELL = 350;
+  private static readonly CELL_SPAN = 3;
+  private static readonly NEAR_CELL_SQ = 950 * 950;
+  /** Score far-cell emits compete under -- they always lose to anything
+   *  in-engagement (that's the point of a cap), so an honest ordering
+   *  inside the far set is unnecessary. */
+  private static readonly FAR_SCORE = 1e9;
+  private cellKey(x: number, z: number): number {
+    return (Math.floor(x / TickFanout.CELL) + 4096) * 8192 + Math.floor(z / TickFanout.CELL) + 4096;
+  }
+  /** Aim-cone engagement boost (the 500m rule): a record inside the
+   *  recipient's +-45deg view sector scores CONE_BOOST x its true
+   *  distance-squared -- 500m in-cone competes like ~100m, so a live
+   *  target survives the cap over nearer bystanders it can't hurt.
+   *  Halo-style engagement priority; pure distance alone would cull
+   *  the sniper you're trading with. */
+  private static readonly CONE_HALF = Math.PI / 4;
+  private static readonly CONE_BOOST = 0.04;
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -437,6 +495,24 @@ this.metrics.recordsIdleReaped += 1;
    *  smoothness on targets that are visually specks anyway. */
   fanoutRecords(room: Room, players: Players, records: TickRecord[]): void {
     const seq = room.tickSeq;
+    // Replication-Graph move: the roster is pre-bucketed into cells +
+    // an every-tick list once -- each recipient then distance-tests
+    // only its own engagement circle instead of the whole roster. The
+    // far-sparse tier could only ever emit on seq%8 anyway; instead of
+    // one N^2 sweep on that tick, each recipient emits far-cell records
+    // on its own staggered 8th-tick phase (same cadence, no spike).
+    for (const c of this.cells.values()) {c.length = 0;}
+    this.fastRecords.length = 0;
+    for (const r of records) {
+      // Every-tick list: fast movers (travel-budget tier) AND forced
+      // records (hit-window + staggered fulls) -- both carry truth
+      // that can't wait for a far-emit phase.
+      if ((r.spd ?? 0) > 12 || r.force) {this.fastRecords.push(r); continue;}
+      const key = this.cellKey(r.pos.x, r.pos.z);
+      let bucket = this.cells.get(key);
+      if (!bucket) {bucket = []; this.cells.set(key, bucket);}
+      bucket.push(r);
+    }
     for (const [recipientId, rp] of players) {
       // Grace-period entries have no socket -- record filtering for them
       // is wasted work
@@ -460,11 +536,62 @@ this.metrics.recordsIdleReaped += 1;
       // rides an ordinary playerJoined on the wire; nothing says it waited.
       const pending = room.admitPending.get(recipientId);
       if (pending) {this.drainAdmits(room, recipientId, pending);}
+      const tScan = process.hrtime.bigint();
       const others = this.scratchOthers;
       others.length = 0;
       const cands = this.candRecs;
-      const {candDist} = this;
-      for (const r of records) {
+      const {candScore} = this;
+      // Candidate set: cells whose center overlaps the ~950m engagement
+      // circle (covers 600m outer tier x hysteresis + half-diagonal)
+      // plus every fast/forced mover. The box is a center-distance test,
+      // not a square span -- corner cells on a 2km map held a third of
+      // the roster.
+      const list = this.candList;
+      list.length = 0;
+      for (const r of this.fastRecords) {list.push(r);}
+      const nearKeys = this.nearCellKeys;
+      nearKeys.clear();
+      const ccx = Math.floor(rx / TickFanout.CELL);
+      const ccz = Math.floor(rz / TickFanout.CELL);
+      const SPAN = TickFanout.CELL_SPAN;
+      for (let cx = ccx - SPAN; cx <= ccx + SPAN; cx += 1) {
+        for (let cz = ccz - SPAN; cz <= ccz + SPAN; cz += 1) {
+          const dxc = (cx + 0.5) * TickFanout.CELL - rx;
+          const dzc = (cz + 0.5) * TickFanout.CELL - rz;
+          if (dxc * dxc + dzc * dzc > TickFanout.NEAR_CELL_SQ) {continue;}
+          const key = (cx + 4096) * 8192 + cz + 4096;
+          nearKeys.add(key);
+          const bucket = this.cells.get(key);
+          if (bucket !== undefined) {for (const r of bucket) {list.push(r);}}
+        }
+      }
+      // Staggered far emit (tier-8 cadence, per-recipient phase): cells
+      // wholly outside the near circle emit sparse records straight to
+      // the cap pool -- the cell boundary already proves far-ness, so
+      // no dSq, no tier math. Stopped far records emit nothing, same
+      // rule as before.
+      if ((seq + staggerOf(recipientId)) % 8 === 0) {
+        for (const [key, bucket] of this.cells) {
+          if (nearKeys.has(key)) {continue;}
+          for (const r of bucket) {
+            if (r.playerId === recipientId || pending?.has(r.playerId)) {continue;}
+            if ((r.spd ?? 0) <= 12) {
+              this.metrics.recordsTierSkipped += 1;
+              this.metrics.recordsStopped += 1;
+              continue;
+            }
+            if (r.sparseTick !== seq) {
+              const pr = r as PooledRecord;
+              pr.encSparse ??= tickEncodeScratch();
+              r.sparse = sparseV4Record(r.data, pr.encSparse);
+              r.sparseTick = seq;
+            }
+            cands.push(r.sparse!); candScore.push(TickFanout.FAR_SCORE);
+          }
+        }
+      }
+      for (const r of list) {
+        this.metrics.recordsScanned += 1;
         if (r.playerId === recipientId) {continue;}
         // Un-admitted seats don't exist for this conn yet -- their records
         // wait for the paced playerJoined (their hit/kill EDGES still ride
@@ -539,27 +666,43 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
             }
             variant = r.sparse!;
           } else {variant = intro && r.full !== undefined ? r.full : r.data;}
-          // Exempt traffic emits directly; everything else competes for
-          // the K-nearest cap below.
-          if (introFull || r.force) {others.push(variant);}
-          else {cands.push(variant); candDist.push(dSq);}
+          // Forced traffic emits directly; everything else competes for
+          // the scored cap below (intro seats included -- an intro seat
+          // needs full VARIANTS of the K it gets, not the whole roster
+          // at once; join bursts were shipping ~300-record frames).
+          if (r.force) {others.push(variant);}
+          else {
+            // Engagement score: nearer wins, but a record inside the
+            // recipient's +-45deg aim sector fights at CONE_BOOST x
+            // its distance -- a 500m target in your sights outranks
+            // bystanders (the 500m-engagement rule; cull least-relevant,
+            // not farthest).
+            let score = dSq;
+            if (dSq > 22_500) {
+              let d = Math.atan2(dx, dz) - rp.rotation.yaw;
+              if (d > Math.PI) {d -= 2 * Math.PI;} else if (d < -Math.PI) {d += 2 * Math.PI;}
+              if (d < TickFanout.CONE_HALF && d > -TickFanout.CONE_HALF) {score *= TickFanout.CONE_BOOST;}
+            }
+            cands.push(variant); candScore.push(score);
+          }
         }
         else {this.metrics.recordsTierSkipped += 1;}
       }
-      // K-nearest cap: bound each recipient's frame at MAX_RECORDS.
-      // A quickselect pass finds the cutoff distance; ties at the edge
+      // Scored cap: bound each recipient's frame at MAX_RECORDS.
+      // A quickselect pass finds the cutoff score; ties at the edge
       // stop at the cap itself so the bound is exact.
       if (cands.length > TickFanout.MAX_RECORDS) {
-        const cutoff = kthSmallest(candDist, TickFanout.MAX_RECORDS);
+        const cutoff = kthSmallest(candScore, TickFanout.MAX_RECORDS);
         let kept = 0;
         for (let i = 0; i < cands.length && kept < TickFanout.MAX_RECORDS; i++) {
-          if (candDist[i]! <= cutoff) {others.push(cands[i]!); kept += 1;}
+          if (candScore[i]! <= cutoff) {others.push(cands[i]!); kept += 1;}
         }
         this.metrics.recordsCapped += cands.length - kept;
       } else {
         for (const c of cands) {others.push(c);}
       }
-      cands.length = 0; candDist.length = 0;
+      cands.length = 0; candScore.length = 0;
+      const tFrame = process.hrtime.bigint();
       // Always send -- even an empty frame. The client's loss telemetry
       // keys on tick-frame ARRIVAL cadence (a silent link reads as 100%
       // loss), and ackSeq rides this frame: a quiet room would starve
@@ -594,6 +737,8 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
       }
       if (st === 'backlogged') {this.metrics.tickFramesDropped += 1;}
       else if (st === 'held') {this.metrics.tickFramesHeld += 1;}
+      this.metrics.scanNs += Number(tFrame - tScan);
+      this.metrics.frameNs += Number(process.hrtime.bigint() - tFrame);
     }
     // tierMem is keyed by live recipients -- a departed player's map
     // would otherwise linger (and a rejoiner gets a fresh one anyway).
