@@ -331,7 +331,7 @@ export function updateProjectileMesh(
   mesh.position.copy(pos);
   if (glowMesh) {updateGlowMesh(glowMesh, pos, vel, config, { age, hitRadius, fuseAge });}
 
-  mesh.scale.setScalar(rampInScale(config, age));
+  mesh.scale.setScalar(rampInScale(config, age) * (config.meshScale ?? 1));
   orientProjectileMesh(mesh, pos, vel, tumble, dt, config);
 
   syncProjectileInstance(mesh);

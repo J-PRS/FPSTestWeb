@@ -3,7 +3,7 @@ import { WeaponType } from '../../../../shared/weapons.js';
 import { getMuzzleFlashTexture } from '../../effects/glowTexture.js';
 import { mkPlasmaCannon, mkPlasmaGun, mkSprinkler, mkRailgun, mkLightningGun, mkShocklance } from './weaponsGeoEnergy.js';
 import { mkPistol, mkRevolver, mkRepair, mkBlaster } from './weaponsGeoSidearm.js';
-import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv, mkBombard, mkGonne, mkBasilisk } from './weaponsGeoBallistic.js';
+import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv, mkBombard, mkGonne, mkBasilisk, mkRocketLauncher } from './weaponsGeoBallistic.js';
 import { darkMat } from './weaponKit.js';
 
 // Procedural weapon geometry — every viewmodel gun built from primitives.
@@ -31,6 +31,7 @@ export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.Shotgun, mkShotgun],
   [WeaponType.Cannon, mkCannon],
   [WeaponType.MissileLauncher, mkRpg],
+  [WeaponType.RocketLauncher, mkRocketLauncher],
   [WeaponType.Pistol, mkPistol],
   [WeaponType.Revolver, mkRevolver],
   [WeaponType.Sticky, mkSticky],
@@ -68,7 +69,6 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: (wt: number) => 
     muzzleNodes.set(wt, mz);
   }
   weapons.set(WeaponType.Implodisc, weapons.get(WeaponType.Disc)!);
-  weapons.set(WeaponType.RocketLauncher, weapons.get(WeaponType.BoltLauncher)!);
   const pullMz = new THREE.Object3D();
   pullMz.position.z = muzzleZ(WeaponType.Implodisc);
   weapons.get(WeaponType.Disc)!.add(pullMz);

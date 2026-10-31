@@ -302,7 +302,7 @@ export class BotRoster {
         if (want === 'ldefense') {
           const lo = this.loadouts.get(donor);
           if (lo) {
-            const slowFar = new Set([WeaponType.Mortar, WeaponType.RocketLauncher, WeaponType.PlasmaCannon]);
+            const slowFar = new Set([WeaponType.Mortar, WeaponType.MissileLauncher, WeaponType.PlasmaCannon]);
             const closeNear = new Set([WeaponType.Shotgun, WeaponType.Flak, WeaponType.HealBeam]);
             const far = slowFar.has(lo.far) ? WeaponType.Railgun : lo.far;
             // Beam over spray: tracking a jinking carrier favors the

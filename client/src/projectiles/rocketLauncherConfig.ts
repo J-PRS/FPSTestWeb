@@ -10,8 +10,8 @@ import type { ProjectileConfig } from './types.js';
 // RPG missile: flat-trajectory, deliberately slow, big warhead boom.
 // Smoke-column trail is the whole read — a rocket announces itself.
 export const RKT_CONFIG: ProjectileConfig = {
-  name: 'rocketLauncher',
-  displayName: 'Rocket Launcher',
+  name: 'missileLauncher',
+  displayName: 'Missile Launcher',
   weaponType: 15,
   speed: WEAPONS[15].speed,
   gravity: WEAPONS[15].gravity,

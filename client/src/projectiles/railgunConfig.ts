@@ -7,7 +7,7 @@ import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
 
-// Quake railgun: a hypervelocity slug (450 m/s — hitscan in practice at any
+// Quake railgun: a hypervelocity slug (400 m/s — hitscan in practice at any
 // sane range, but it rides the normal projectile/track/claim path, so no
 // new server plumbing). Small AOE on impact so near-misses still pop.
 // Visual: white-hot core + cyan 3-lane ribbon = the corkscrew read.
