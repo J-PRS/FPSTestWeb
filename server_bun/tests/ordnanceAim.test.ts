@@ -21,10 +21,13 @@ describe('ordnanceAimY — EV ordnance aim', () => {
     expect(ordnanceAimY(aim, 10, 40, WeaponType.RocketLauncher)).toBe(30);
   });
   it('a lifted-but-reachable target still eats the ground shot', () => {
-    // 4m off the deck vs a 14m blast: the envelope reaches, and at 40m
-    // the direct odds are too thin to justify the body shot.
+    // MissileLauncher is the ordnance shell - 0.5m proxy cap means the
+    // direct read stays thin at 40m while the 14m blast reaches. (RL
+    // genuinely picks direct here: a 120 m/s bolt with an 8m-growing
+    // wake is a good body shot - the ground-vs-direct split lives on
+    // the slow lobbers.)
     const aim = { x: 0, y: 14, z: 0 };
-    expect(ordnanceAimY(aim, 10, 40, WeaponType.RocketLauncher)).toBe(10.5);
+    expect(ordnanceAimY(aim, 10, 40, WeaponType.MissileLauncher)).toBe(10.5);
   });
   it('a huge blast still reaches a target 10m up', () => {
     // Mortar: 18m envelope — 10m of lift stays inside the radius edge

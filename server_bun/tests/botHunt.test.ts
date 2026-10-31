@@ -37,13 +37,13 @@ describe('scanVisible', () => {
     expect(r.player?.id).toBe('p:1');
   });
 
-  it('a hoarder out-pulls a nearer empty pocket — the bounty read', () => {
-    const fat = foe(76, 0, 'p:fat'); (fat as BotEnemy).held = 30;
+  it('a hoarder out-pulls a nearer empty pocket - the bounty read', () => {
+    const fat = foe(76, 0, 'p:fat'); (fat as BotEnemy).held = 10;
     const lean = foe(40, 0, 'p:lean'); // nearer, but empty pockets
-    // effD: fat reads 76*(1-.24)=57.8 vs lean's 40 → lean still wins
+    // effD: fat reads 76*(1-.30)=53.2 vs lean's 40 → lean still wins
     expect(scanVisible(flat({ enemies: [fat, lean] }), P, 100, 100).player?.id).toBe('p:lean');
-    // Push the hoarder — at 60+ held the cap doubles his pull
-    (fat as BotEnemy).held = 80;
+    // Push the hoarder - at 30 held his pocket reads ~7m, out-pulling the brawl
+    (fat as BotEnemy).held = 30;
     expect(scanVisible(flat({ enemies: [fat, lean] }), P, 100, 100).player?.id).toBe('p:fat');
   });
 
@@ -55,24 +55,24 @@ describe('scanVisible', () => {
 
   it('flags home: mid-field figits lose to stand-shadow hostiles', () => {
     // Offense pressing the enemy stand at (160,0): a passerby at 40m is
-    // nearer in raw meters but reads 3x — the stand-side hostile wins.
+    // nearer in raw meters but reads 3x - the stand-side hostile wins.
     const figit = foe(40, 0, 'p:figit');
-    const defender = foe(95, 0, 'p:def'); // 65m off the objective — in its ring
+    const defender = foe(95, 0, 'p:def'); // 65m off the objective - in its ring
     const ctx = flat({ enemies: [figit, defender], flagsHome: true,
       objective: { x: 160, y: 0, z: 0 } });
     expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:def');
-    // Same scene with a flag moving (or a posted defender) — figit wins again.
+    // Same scene with a flag moving (or a posted defender) - figit wins again.
     ctx.flagsHome = false;
     expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:figit');
     ctx.flagsHome = true; ctx.posted = 60;
     expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:figit');
-    // …unless the defender is a sweatlord — comp-pub discipline extends
+    // …unless the defender is a sweatlord - comp-pub discipline extends
     // the no-figit read to posted roles too.
     ctx.sweat = 0.9;
     expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:def');
   });
 
-  it('no-figit keeps the brawl reflex — 20m is a reflex, not a duel', () => {
+  it('no-figit keeps the brawl reflex - 20m is a reflex, not a duel', () => {
     const face = foe(20, 0, 'p:face');
     const defender = foe(95, 0, 'p:def');
     const ctx = flat({ enemies: [face, defender], flagsHome: true,
@@ -102,7 +102,7 @@ describe('pickHunt', () => {
     expect(st.hunt?.id).toBe('b:biter');
   });
 
-  it('sight line acquires at Tribes range — 90m hunts, beyond sight does not', () => {
+  it('sight line acquires at Tribes range - 90m hunts, beyond sight does not', () => {
     const st = newHuntState(P);
     pickHunt(st, flat({ enemies: [foe(90, 0)] }), P, 0, mood, () => {});
     expect(st.hunt?.id).toBe('p:1'); // inside the 300m sight band
@@ -117,7 +117,7 @@ describe('pickHunt', () => {
     pickHunt(st, c, P, 60_000, mood, () => {});
     expect(st.hunt?.id).toBe('p:spotted');
     // Blind callout: no eye line ever confirmed it, so there's nothing
-    // fresh to aim at — the posted defender does NOT hose a frozen point.
+    // fresh to aim at - the posted defender does NOT hose a frozen point.
     expect(st.lastSeenAt).toBe(0);
     expect(pickFire(st, 0.1, c, P, 60_000, mood)).toBeUndefined();
   });
@@ -149,12 +149,12 @@ describe('nemesis', () => {
     expect(dreadOf(st2, 'p:1')).toBeCloseTo(0.25, 3);
   });
 
-  it('a nemesis is invisible to acquisition — the brawl-range foe is not', () => {
+  it('a nemesis is invisible to acquisition - the brawl-range foe is not', () => {
     const st = newHuntState(P);
     scar(st, 'p:nem');
     pickHunt(st, flat({ enemies: [foe(40, 0, 'p:nem'), foe(50, 0, 'p:2')] }), P, 0, mood, () => {});
     expect(st.hunt?.id).toBe('p:2');
-    // Inside brawl range nobody gets ignored — dread can't stand down
+    // Inside brawl range nobody gets ignored - dread can't stand down
     // a fight that's already on top of the bot.
     const st2 = newHuntState(P);
     scar(st2, 'p:nem');
@@ -171,7 +171,7 @@ describe('nemesis', () => {
 
   it('a plain grudge (hits, no deaths) stays engaged', () => {
     const st = newHuntState(P);
-    noteFoeHit(st, 'p:1', 0); // 0.25 < 2 — annoyance, not fear
+    noteFoeHit(st, 'p:1', 0); // 0.25 < 2 - annoyance, not fear
     pickHunt(st, flat({ enemies: [foe(40, 0, 'p:1')] }), P, 0, mood, () => {});
     expect(st.hunt?.id).toBe('p:1');
   });
@@ -185,10 +185,10 @@ describe('anticipation', () => {
     runner.vel = { x: 20, y: 0, z: 0 };
     pickHunt(st, flat({ enemies: [runner] }), P, 0, mood, () => {});
     expect(st.hunt?.id).toBe('p:run');
-    // LOS breaks — no enemy in the next ctx. The pickup sits at the end
+    // LOS breaks - no enemy in the next ctx. The pickup sits at the end
     // of the heading line, so the ghost should land on it.
     st.lastSeenAt = 900;
-    const pack = { x: 54, y: 0, z: 0 }; // 30 + 20*1.2 = 54 — on the money
+    const pack = { x: 54, y: 0, z: 0 }; // 30 + 20*1.2 = 54 - on the money
     pickHunt(st, flat({ pickup: pack, now: 2000 }), P, 2000, mood, () => {});
     expect(st.hunt?.pos.x).toBeCloseTo(54, 3);
     // Without the attractor the same ghost rides pure momentum.
@@ -204,7 +204,7 @@ describe('anticipation', () => {
 });
 
 describe('difficulty tiers', () => {
-  it('harder bands roll a sharper population — mean aim and speed rise', () => {
+  it('harder bands roll a sharper population - mean aim and speed rise', () => {
     const mean = (tier: 'easy' | 'medium' | 'impossible') => {
       let aim = 0, move = 0, jit = 0;
       const N = 60;
@@ -239,13 +239,13 @@ describe('pickFire', () => {
     const st = newHuntState(P);
     expect(pickFire(st, 0.1, flat(), P, 0, mood)).toBeUndefined();
     st.hunt = foe(20, 0);
-    st.lastSeenAt = -4000; // past PURSUE_MS — the ghost is forgotten
+    st.lastSeenAt = -4000; // past PURSUE_MS - the ghost is forgotten
     expect(pickFire(st, 0.1, flat(), P, 0, mood)).toBeUndefined();
   });
 
   it('LOS memory: past the sight window the ghost still eats suppression', () => {
     const st = armed();
-    // Sighting 2s ago — inside the pursuit window but past STALE_MS:
+    // Sighting 2s ago - inside the pursuit window but past STALE_MS:
     // the shot goes at the drifting ghost, not nothing.
     st.lastSeenAt = -2000;
     st.hunt!.pos = { x: 24, y: 0, z: 0 }; // ghost walked +x with the model
@@ -257,7 +257,7 @@ describe('pickFire', () => {
 
   it('leads a moving target along its velocity', () => {
     const st = armed();
-    // The lagged opponent model is what leads shots now — lastSeenVel
+    // The lagged opponent model is what leads shots now - lastSeenVel
     // only feeds aim-error sizing.
     st.leadVel = { x: 10, y: 0, z: 0 }; // running +x
     st.lastSeenVel = { x: 10, y: 0, z: 0 };
@@ -273,7 +273,7 @@ describe('pickFire', () => {
     botRng(() => 0.5);
     const c = flat({ weaponSpeed: () => 60, weaponGravity: () => true });
     const f = pickFire(st, 1, c, P, 0, mood);
-    // ground clamp vs falling target — aim ends up clamped to terrain here,
+    // ground clamp vs falling target - aim ends up clamped to terrain here,
     // the point is the gravity shell drop is folded in.
     expect(f).toBeDefined();
   });

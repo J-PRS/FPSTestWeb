@@ -9,7 +9,7 @@ import type { Room } from './Room.ts';
 import { classCapsule, classCanFire } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST, payShotCost } from '../../shared/weapons.ts';
-import { SELF_SPLASH_MAX,aoeDamageAt } from '../../shared/combat.ts';
+import { SELF_SPLASH_MAX,aoeDamageAt, hitRadiusAt } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import { hmHeight, hmChord } from '../../shared/heightfield.ts';
@@ -37,7 +37,10 @@ export function ordnanceAimY(aim: BotVec, gY: number, dist: number, wt: number):
   if (!ORDNANCE_EV) {return aim.y - gY <= 4 ? gY + 0.5 : aim.y;}
   const tImpact = dist / (st.speed || 1);
   const reachR = Math.min(20, 4 * tImpact * tImpact); // ±accel² wobble on the led point
-  const pDirect = Math.min(1, (Math.max(1, st.hitMax || 1) / Math.max(1, reachR)) ** 2);
+  // Direct odds use the wake proxy grown to IMPACT time, not hitMax:
+  // hitMax is the lifetime cap - an 8m-cap bolt reads 100% hit at 0.3s
+  // where its real proxy is ~1m, and the whole ground-shot branch died.
+  const pDirect = Math.min(1, (hitRadiusAt(wt, tImpact) / Math.max(1, reachR)) ** 2);
   const eDirect = (st.directDamage || 0) * pDirect;
   const gap = Math.max(0, aim.y - gY - 0.5);
   // A feet shot at a grounded target is direct-or-splash, not splash-only:

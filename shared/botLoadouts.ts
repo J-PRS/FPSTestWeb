@@ -262,6 +262,12 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
     // play). Dist-scaled so the rule fades in as the foe closes.
     const aoe = getWeaponStats(w).aoeRadius;
     if (aoe > 0 && nonAoeOnly) {continue;}
+    // Arming-fuse shells in the deep dead zone: flat flight under ~60%
+    // of the arm window means even a bounce-armed pop sails meters past
+    // the splash ring - a mortar at 43m phases through, thuds off, and
+    // pops 20m downrange. At standoff the second hop still catches.
+    const stW = getWeaponStats(w);
+    if (stW.armTime && stW.speed > 0 && dist / stW.speed < stW.armTime * 0.6) {continue;}
     // Floor, not a rule: band fit decays to 0 one band out, which made a
     // bot NEVER draw its best gun off-band - chaingun was un-drawable at
     // 40m despite still converting there (force-matrix band data). 0.08
