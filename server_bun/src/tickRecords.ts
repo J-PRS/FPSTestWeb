@@ -601,6 +601,23 @@ this.metrics.recordsIdleReaped += 1;
         const dy = r.pos.y - ry;
         const dz = r.pos.z - rz;
         const dSq = dx * dx + dy * dy + dz * dz;
+        // Lazy eval: the effective emit cadence (distance tier min the
+        // speed bump) gates the expensive part -- off-tick candidates
+        // that CANNOT have upgraded skip tier+hysteresis entirely.
+        // dSq stays cheap-every-tick so an inward crossing is still
+        // discovered instantly; the bound keys on the distance tier.
+        const mem = tiers.get(r.playerId);
+        const spd0 = r.spd ?? 0;
+        let emitEvery = mem ?? 1;
+        if (spd0 > 12) {
+          const st = Math.max(1, Math.floor((5 / spd0) / 0.05));
+          if (st < emitEvery) {emitEvery = st;}
+        }
+        if (!introFull && !r.force && seq % emitEvery !== 0
+          && dSq >= (mem === 2 ? 22_500 : mem === 3 ? 160_000 : mem === 8 || mem === undefined ? 360_000 : 0)) {
+          this.metrics.recordsTierSkipped += 1;
+          continue;
+        }
         // Tier 4 (200ms spacing) read as mini-warps even through the
         // interpolation buffer -- a skiing bot covers ~8m between records.
         // 150ms is the worst a body ever gets; hits/kills ride reliable
@@ -616,7 +633,6 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         // boundary -- a target orbiting the line would otherwise flip
         // send cadence every tick and the receiver's arrival-interval
         // EMA oscillates instead of settling.
-        const mem = tiers.get(r.playerId);
         if (mem !== undefined && tier > mem) {
           const bound = mem === 1 ? 22_500 : mem === 2 ? 160_000 : 360_000;
           if (dSq < bound * 1.15) {tier = mem;}
