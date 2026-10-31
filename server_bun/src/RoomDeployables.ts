@@ -1,10 +1,10 @@
 /**
- * RoomDeployables — server-authoritative placed structures (sentry turret,
+ * RoomDeployables - server-authoritative placed structures (sentry turret,
  * proximity mine, resupply station, patrol drone). The client owns aiming
  * and FX; the server owns existence: a `deploy` claim registers the object,
  * the room broadcasts it, and the sim enforces per-player caps, TTL, and
  * teardown on death/leave/match-reset. Without this layer a cheater could
- * carpet the map — there was previously no server record at all.
+ * carpet the map - there was previously no server record at all.
  */
 import type { Vec3, ClaimVerdict, ServerMessage, PlayerState } from './types.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload, rosterRow } from '../../shared/worldModel.ts';
@@ -16,6 +16,21 @@ import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MUL
 import { tickCg, tickDrone, tickMine, tickMortar, tickSensor, tickSentry, tickStation, tickTurret, tickWatersphere, losClear } from './deployTicks.ts';
 
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
+/** Per-kind tick registry - tick fn + `standsDown` flag (true = the
+ *  kind freezes while players are invulnerable/intermission; support
+ *  kinds keep healing/pinging). One row per tickable kind. */
+const TICK_SPEC: Record<string, { tick: (room: RoomDeployables, d: Deployed, dt: number) => void; standsDown?: boolean }> = {
+  turret:      { tick: (r, d, dt) => tickTurret(r, d, dt),      standsDown: true },
+  mine:        { tick: (r, d, dt) => tickMine(r, d, dt),        standsDown: true },
+  station:     { tick: (r, d, dt) => tickStation(r, d, dt) },
+  drone:       { tick: (r, d, dt) => tickDrone(r, d, dt),       standsDown: true },
+  sensor:      { tick: (r, d, dt) => tickSensor(r, d, dt) },
+  baseturret:  { tick: (r, d, dt) => tickSentry(r, d, dt),      standsDown: true },
+  mortar:      { tick: (r, d, dt) => tickMortar(r, d, dt),      standsDown: true },
+  cgturret:    { tick: (r, d, dt) => tickCg(r, d, dt),          standsDown: true },
+  watersphere: { tick: (r, d, dt) => tickWatersphere(r, d, dt) },
+};
+
 import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
 import type { StructureCollider } from '../../shared/ballCollide.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
@@ -25,12 +40,12 @@ import type { TeamId } from '../../shared/teams.ts';
 export type { DeployKind } from '../../shared/deployables.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
 const MAX_PER_PLAYER = DEPLOY_MAX;
-// Thrown nugget mints a pickup that can't be grabbed for a beat — the
+// Thrown nugget mints a pickup that can't be grabbed for a beat - the
 // gem needs to leave the thrower's grab radius before anyone banks it.
 const NUGGET_ARM_S = 0.2;
 // Plants near the action are legit; plants across the map are not.
 const MAX_PLANT_DIST = 40;
-// A claim's y is trusted within this band of the surface beneath it —
+// A claim's y is trusted within this band of the surface beneath it -
 // the pod lands on ground or a structure top, never floating mid-air.
 const PLANT_FLOAT = 3;
 
@@ -42,10 +57,10 @@ export interface Deployed {
   ttl: number;
   fireCd: number;
   hp: number;
-  /** Overcharge layer from repair beams — soaks damage before hp, caps
+  /** Overcharge layer from repair beams - soaks damage before hp, caps
    *  at REPAIR_ARMOR_MULT × base hp. The technician's payoff. */
   armor: number;
-  /** Map-authored base asset — owner is the virtual `base:<team>` id,
+  /** Map-authored base asset - owner is the virtual `base:<team>` id,
    *  it never decays, and destruction puts it on RESPAWN_S rather than
    *  removing it. `team` is authoritative for targeting (no player row
    *  exists for the owner id). */
@@ -55,20 +70,20 @@ export interface Deployed {
   respawnT: number;
 }
 
-// A downed base asset comes back on its own after this — a repair tech
+// A downed base asset comes back on its own after this - a repair tech
 // can beat the clock by welding it back up early.
 const RESPAWN_S = 120;
 
-// Blast-only durability — splash damage clears a stand's defenses the
+// Blast-only durability - splash damage clears a stand's defenses the
 // Tribes way (mortar/disc spam opens the approach). Hitscan has no
 // deployable collision, so these are AOE-sweep budgets, not bullet HP.
 const HP = DEPLOY_HP;
 
-// Barrier dome — a sphere centered on the emitter (the half-buried read
+// Barrier dome - a sphere centered on the emitter (the half-buried read
 // conforms to any slope). Hostile shells detonate on entry; friendly
-// fire passes. The emitter itself eats blast damage like any stand —
+// fire passes. The emitter itself eats blast damage like any stand -
 // shelling the dome is the intended counterplay.
-// Combat envelopes derive from DEPLOY_ITEMS — one fact table for both
+// Combat envelopes derive from DEPLOY_ITEMS - one fact table for both
 // ends; the old per-side copies drifted (mine life 45 vs ttl 120 meant
 // clients hid a mine the server still exploded for 75s).
 export const SHIELD_RADIUS = DEPLOY_ITEMS.shield.shieldRadius!;
@@ -89,7 +104,7 @@ export const STATION_RANGE = DEPLOY_ITEMS.station.range!;
 export const STATION_HP_RATE = DEPLOY_ITEMS.station.healRate!;
 export const STATION_HEAL_CD = DEPLOY_ITEMS.station.fireInterval!;
 
-/** First t∈[0,1] where the segment enters the sphere — quadratic solve,
+/** First t∈[0,1] where the segment enters the sphere - quadratic solve,
  *  null on a miss. A segment already inside returns 0 (blocked at once). */
 function segSphereEnter(from: Vec3, to: Vec3, c: Vec3, r: number): number | null {
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
@@ -108,7 +123,7 @@ function segSphereEnter(from: Vec3, to: Vec3, c: Vec3, r: number): number | null
 export class RoomDeployables {
   items = new Map<number, Deployed>();
   private nextId = 1;
-  /** Live solid hulls for moveSim — the Room hands this array to the
+  /** Live solid hulls for moveSim - the Room hands this array to the
    *  SolidWorld ONCE; every add/remove rewrites it in place so bodies
    *  can't walk through gear that appeared mid-match. Drones and
    *  nuggets are unsolid (mobile / never an item). */
@@ -129,21 +144,21 @@ export class RoomDeployables {
   }
 
   /** Client claims a plant. Validates kind, per-player cap, and that the
-   *  drop point is near the planter — the deploy anim throws the pod a few
+   *  drop point is near the planter - the deploy anim throws the pod a few
    *  meters, not across the map. */
   handleDeploy(playerId: string, kind: string, pos: Vec3, vel?: Vec3): ClaimVerdict {
     const player = this.room.players.getPlayer(playerId);
     if (!player || player.isDead) {return 'gone';}
     if (!KINDS.has(kind as DeployKind)) {return 'badkind';}
     const k = kind as DeployKind;
-    // cap-0 kinds are map-authored only — a client can't plant a generator.
-    // world:'empty' rooms skip the deploy sim — a planted item would
+    // cap-0 kinds are map-authored only - a client can't plant a generator.
+    // world:'empty' rooms skip the deploy sim - a planted item would
     // broadcast a spawn then never tick/fire/decay: a dead prop lying to
     // every observer. Refuse the claim honestly instead.
     if (this.room.modeSpec?.world === 'empty') {return 'nomode';}
     if (DEPLOY_ITEMS[k].cap === 0) {return 'badkind';}
     if (!Number.isFinite(pos.x + pos.y + pos.z)) {return 'badpos';}
-    // Pack gear costs belt charges — the same nugget pool the throws drink
+    // Pack gear costs belt charges - the same nugget pool the throws drink
     // from, so a builder pays real economy for every stand it fortifies.
     if (player.beltCharges < DEPLOY_ITEMS[k].cost) {
       logger.debug('Deploy blocked: dry belt', { owner: playerId, kind: k });
@@ -153,18 +168,18 @@ export class RoomDeployables {
     if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) {return 'toofar';}
     const p2 = Object.assign({}, pos, { y: this.groundY(pos)});
     player.beltCharges -= DEPLOY_ITEMS[k].cost;
-    // Nugget: no planted item — the claim mints a grabbable gem where the
+    // Nugget: no planted item - the claim mints a grabbable gem where the
     // pod lands. Net sink of one charge (costs 2, pays 1 back), and the
-    // grab is first-come — a fast enemy can steal the thrower's change.
+    // grab is first-come - a fast enemy can steal the thrower's change.
     if (k === 'nugget') {
-      // Thrown pod: the claim now carries the lob velocity at release —
+      // Thrown pod: the claim now carries the lob velocity at release -
       // the pickup sim owns the flight and settles to truth itself.
       // The old landing-claim path (no vel) still mints in place.
       this.room.pickups?.spawn(vel ? Object.assign({}, pos) : Object.assign({}, p2), 'gem', NUGGET_ARM_S, 1, undefined, 0, vel);
       return true;
     }
     const owned = [...this.items.values()].filter((d): boolean => d.owner === playerId && d.kind === k);
-    // At cap: recycle the oldest rather than refuse — Tribes remote-arms
+    // At cap: recycle the oldest rather than refuse - Tribes remote-arms
     // behavior, keeps the feel without an unbounded pile.
     if (owned.length >= MAX_PER_PLAYER[k]) {
       owned.sort((a, b): number => a.ttl - b.ttl);
@@ -177,7 +192,7 @@ export class RoomDeployables {
     else if (k === 'cgturret') {armDelay = DEPLOY_ITEMS.cgturret.armS!;}
     else if (k === 'mine') {armDelay = MINE_ARM_S;}
     else if (k === 'station') {armDelay = STATION_HEAL_CD;}
-    // Team stamps at plant time — the spawn edge carries this value, so
+    // Team stamps at plant time - the spawn edge carries this value, so
     // the hash lane must too (a live owner-team lookup desyncs the moment
     // the planter switches sides). Gear fights for its planting team.
     this.items.set(id, { id, owner: playerId, kind: k, pos: Object.assign({}, p2), ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0, team: player.team });
@@ -190,10 +205,10 @@ export class RoomDeployables {
 
   /** The surface a planted item should rest on: highest structure top
    *  under the claimed point, else terrain. A claim floating more than
-   *  PLANT_FLOAT above it is pulled down — "server decides" applies to
+   *  PLANT_FLOAT above it is pulled down - "server decides" applies to
    *  the landing spot too, and the replica echoes this y verbatim. */
   private groundY(pos: Vec3): number {
-    // Chord-augmented floor — the replica renders on the drawn mesh, so
+    // Chord-augmented floor - the replica renders on the drawn mesh, so
     // "terrain" here must mean the surface the client draws, not the
     // smooth field under it (same law as nuggets/flags/bot shadows).
     const floor = this.room.field ? Math.max(hmHeight(this.room.field, pos.x, pos.z), hmChord(this.room.field, pos.x, pos.z)) : pos.y;
@@ -204,14 +219,14 @@ export class RoomDeployables {
     );
     const support = hit ? hit.y : floor;
     if (pos.y > support + PLANT_FLOAT) {return support;}
-    if (pos.y < support - PLANT_FLOAT) {return support;} // buried claim — lift to the surface
+    if (pos.y < support - PLANT_FLOAT) {return support;} // buried claim - lift to the surface
     return pos.y;
   }
 
-  /** Map-authored base assets — the mission's generator, base turrets,
+  /** Map-authored base assets - the mission's generator, base turrets,
    *  sensor mast. Owner is a virtual `base:<team>` id so nothing in the
    *  player lifecycle can orphan them; the respawn clock replaces ttl.
-   *  Idempotent per room open — call once after construction. */
+   *  Idempotent per room open - call once after construction. */
   seedBase(entries: readonly { kind: string; pos: Vec3; team?: TeamId }[]): void {
     for (const e of entries) {
       const k = e.kind as DeployKind;
@@ -225,10 +240,10 @@ export class RoomDeployables {
     this.refreshSolids();
   }
 
-  /** Owner death clears their field — no orphaned turrets farming kills
+  /** Owner death clears their field - no orphaned turrets farming kills
    *  for a corpse. Match reset and player leave use the same path. */
   clearOwner(ownerId: string): void {
-    // Map iteration survives deletes — no snapshot needed.
+    // Map iteration survives deletes - no snapshot needed.
     for (const d of this.items.values()) {
       if (d.owner === ownerId) {this.remove(d.id);}
     }
@@ -240,14 +255,14 @@ export class RoomDeployables {
     }
   }
 
-  /** The item's effective team — authored assets carry their own, field
+  /** The item's effective team - authored assets carry their own, field
    *  plants inherit the owner's current side. */
   teamOf(d: Deployed): TeamId | undefined {
     return d.team ?? this.room.players.getPlayer(d.owner)?.team;
   }
 
   /** Generator economy: while a team's generator is down, its OTHER base
-   *  assets go dormant — turrets stop scanning, pads stop healing. Field
+   *  assets go dormant - turrets stop scanning, pads stop healing. Field
    *  plants and generator-less teams are always powered. */
   powered(d: Deployed): boolean {
     if (!d.base || !d.team || d.kind === 'generator') {return true;}
@@ -257,7 +272,7 @@ export class RoomDeployables {
     return true;
   }
 
-  /** Is a team's base grid live? Structure shields gate on this — a dead
+  /** Is a team's base grid live? Structure shields gate on this - a dead
    *  generator drops the gate field, a team with no generator is always
    *  powered. */
   teamPowered(team: TeamId): boolean {
@@ -269,7 +284,7 @@ export class RoomDeployables {
 
   clearAll(): void {
     // Field plants die with the round; base assets survive a match reset
-    // and come back repaired — the compound outlives the scoreboard.
+    // and come back repaired - the compound outlives the scoreboard.
     for (const id of this.items.keys()) {
       const d = this.items.get(id)!;
       if (!d.base) {this.remove(id);}
@@ -281,7 +296,7 @@ export class RoomDeployables {
     return [...this.items.values()].map((d) => rosterRow(WORLD_MODEL.deploy!, 'id', d.id, { owner: d.owner, kind: d.kind, pos: Object.assign({}, d.pos), hp: d.hp, armor: d.armor, team: this.teamOf(d) }) as { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: TeamId });
   }
 
-  /** Creature-sim candidates — `dep:N` ids mirror the client species
+  /** Creature-sim candidates - `dep:N` ids mirror the client species
    *  targeting table so wildlife raze stands on dedicated rooms too. */
   creatureTargets(): { id: string; pos: Vec3 }[] {
     const out: { id: string; pos: Vec3 }[] = [];
@@ -295,7 +310,7 @@ export class RoomDeployables {
   }
 
   /** Shield sweep: does this shell's frame segment enter an ENEMY dome?
-   *  Returns the earliest entry t∈[0,1], or null — the caller detonates
+   *  Returns the earliest entry t∈[0,1], or null - the caller detonates
    *  the shell at that point. Friendly fire sails through: the owner and
    *  teammates (when a team is known) are exempt. */
   shieldBlock(from: Vec3, to: Vec3, shooterId: string): number | null {
@@ -303,7 +318,7 @@ export class RoomDeployables {
     const shooterTeam = this.room.players.getPlayer(shooterId)?.team;
     for (const d of this.items.values()) {
       if (d.kind !== 'shield' || d.owner === shooterId) {continue;}
-      if (!this.powered(d)) {continue;} // generator down — dome is off
+      if (!this.powered(d)) {continue;} // generator down - dome is off
       const domeTeam = this.room.players.getPlayer(d.owner)?.team;
       if (domeTeam !== undefined && shooterTeam !== undefined && domeTeam === shooterTeam) {continue;}
       const t = segSphereEnter(from, to, d.pos, SHIELD_RADIUS);
@@ -314,7 +329,7 @@ export class RoomDeployables {
 
   /** Is this point inside a powered ENEMY dome? Blasts use it as
    *  occlusion: a shell detonating at the shield's edge splashes into
-   *  the dome without it — the victim inside must read immune. Same
+   *  the dome without it - the victim inside must read immune. Same
    *  owner/team exemptions as shieldBlock. */
   shieldedPoint(pos: Vec3, shooterId: string, blastPos: Vec3): boolean {
     const shooterTeam = this.room.players.getPlayer(shooterId)?.team;
@@ -326,10 +341,10 @@ export class RoomDeployables {
       if (domeTeam !== undefined && shooterTeam !== undefined && domeTeam === shooterTeam) {continue;}
       const dx = pos.x - d.pos.x, dy = pos.y - d.pos.y, dz = pos.z - d.pos.z;
       if (dx * dx + dy * dy + dz * dz > r2) {continue;} // victim outside this dome
-      // A blast already inside the dome still hurts its occupants —
+      // A blast already inside the dome still hurts its occupants -
       // only fire from OUTSIDE is walled off. The entry-point detonation
       // sits ON the boundary (dist == r), so "inside" needs real depth,
-      // not a boundary epsilon — 0.5m in is a grenade thrown in, not a
+      // not a boundary epsilon - 0.5m in is a grenade thrown in, not a
       // shell popped at the wall.
       const bx = blastPos.x - d.pos.x, by = blastPos.y - d.pos.y, bz = blastPos.z - d.pos.z;
       if (bx * bx + by * by + bz * bz <= (SHIELD_RADIUS - 0.5) ** 2) {continue;}
@@ -338,7 +353,7 @@ export class RoomDeployables {
     return false;
   }
 
-  /** A creature's bite lands on a deployable — same durability pool the
+  /** A creature's bite lands on a deployable - same durability pool the
    *  blast sweep drains, so gnawing and shelling clear gear alike. */
   gnaw(depId: string, dmg: number): void {
     const d = this.items.get(Number(depId.slice(4)));
@@ -356,7 +371,7 @@ export class RoomDeployables {
       d.armor -= soaked;
       left -= soaked;
     }
-    if (d.hp <= 0) {return;} // downed base hulk — hits are noise, not damage
+    if (d.hp <= 0) {return;} // downed base hulk - hits are noise, not damage
     d.hp -= left;
     this.sendHp(d);
     if (d.hp <= 0) {
@@ -364,7 +379,7 @@ export class RoomDeployables {
         d.respawnT = RESPAWN_S;
         this.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'deployDown', 'id', d.id, { kind: d.kind, team: d.team, respawnS: RESPAWN_S }) as ServerMessage);
         logger.info('Base asset down', { id: d.id, kind: d.kind, team: d.team, by });
-        if (d.kind === 'generator') {this.room.refreshPowerStructures();} // grid drops — gate fields go dark
+        if (d.kind === 'generator') {this.room.refreshPowerStructures();} // grid drops - gate fields go dark
       } else {
         logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by });
         this.remove(d.id);
@@ -372,7 +387,7 @@ export class RoomDeployables {
     }
   }
 
-  /** A downed base asset stands back up — timer expiry or a repair tech
+  /** A downed base asset stands back up - timer expiry or a repair tech
    *  beating the clock. Fresh hp, no armor (armor is welded on after). */
   private revive(d: Deployed): void {
     d.hp = HP[d.kind];
@@ -385,17 +400,17 @@ export class RoomDeployables {
   }
 
   private sendHp(d: Deployed, src?: string): void {
-    // src is the welder's id on a heal tick — other clients draw their
+    // src is the welder's id on a heal tick - other clients draw their
     // repair beam off it; damage ticks carry no src.
     this.room.broadcast(verbPayload(WORLD_MODEL.deploy!, 'update', 'id', d.id, { hp: Math.max(0, Math.round(d.hp)), armor: Math.round(d.armor), src }) as ServerMessage);
   }
 
-  // Repair claims are rate-limited per shooter+target — a client can pace
+  // Repair claims are rate-limited per shooter+target - a client can pace
   // its beam ticks but can't bank a year's worth in a burst.
   private lastRepair = new Map<string, number>();
 
   /** Friendly only: own gear always; teammates' gear when teams exist.
-   *  Base assets belong to the team, not a body — same-side weld only. */
+   *  Base assets belong to the team, not a body - same-side weld only. */
   private weldable(p: PlayerState, d: Deployed, playerId: string): boolean {
     if (d.base) {return !d.team || p.team === d.team;}
     if (p.team && d.owner !== playerId) {
@@ -405,7 +420,7 @@ export class RoomDeployables {
   }
 
   /** Beam-intent target: the weldable deployable the ray actually
-   *  touches — same padded-sphere pick as the client's repairHit
+   *  touches - same padded-sphere pick as the client's repairHit
    *  (r=1.1, body-center +0.7), nearest entry wins. Lets the
    *  shotFired intent replace the per-tick repair claim: the server
    *  names the target too. */
@@ -413,10 +428,10 @@ export class RoomDeployables {
     const p = this.room.players.getPlayer(playerId);
     if (!p || p.isDead) {return null;}
     // Weld assist: the beam bends ~5° toward the weldable nearest the
-    // crosshair — a thin antenna on a sensor at 40m is a pixel-wide
+    // crosshair - a thin antenna on a sensor at 40m is a pixel-wide
     // target under a flat 1.1m capsule. Direct capsule hits still win;
     // cone candidates pick the smallest angular offset.
-    const CONE_SIN = 0.0872; // sin(5°) — ang off-axis the beam bends
+    const CONE_SIN = 0.0872; // sin(5°) - ang off-axis the beam bends
     let bestDirect: number | null = null;
     let bestDirectT = range;
     let bestCone: number | null = null;
@@ -432,7 +447,7 @@ export class RoomDeployables {
         if (entry < bestDirectT) { bestDirectT = entry; bestDirect = d.id; }
         continue;
       }
-      const ang = perp2 / (proj * proj); // sin²θ — cone test needs no sqrt
+      const ang = perp2 / (proj * proj); // sin²θ - cone test needs no sqrt
       if (ang < bestConeAng && ang < CONE_SIN * CONE_SIN) { bestConeAng = ang; bestCone = d.id; }
     }
     return bestDirect ?? bestCone;
@@ -440,7 +455,7 @@ export class RoomDeployables {
 
   /** Repair-tool beam tick on a friendly deployable: heal to base, then
    *  overcharge armor to REPAIR_ARMOR_MULT×. Server re-derives distance,
-   *  LOS, team and the heal amount — the claim names a target, nothing
+   *  LOS, team and the heal amount - the claim names a target, nothing
    *  else. */
   repair(playerId: string, targetId: number): ClaimVerdict {
     const d = this.items.get(targetId);
@@ -455,7 +470,7 @@ export class RoomDeployables {
     if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) {return 'cooldown';}
     this.lastRepair.set(key, now);
     const hpCap = HP[d.kind];
-    // A hulk welds back from zero — blast overkill digs hp far negative,
+    // A hulk welds back from zero - blast overkill digs hp far negative,
     // and making a tech excavate it would gate revival on the kill shot's
     // size instead of the weld time.
     if (d.base && d.hp < 0) {d.hp = 0;}
@@ -470,12 +485,12 @@ export class RoomDeployables {
   remove(id: number): void {
     const gone = this.items.get(id);
     if (!this.items.delete(id)) {return;}
-    // Dead ids must drop their rate-limit keys — otherwise every planted
+    // Dead ids must drop their rate-limit keys - otherwise every planted
     // and destroyed item leaves a permanent entry in lastRepair.
     for (const k of this.lastRepair.keys()) {
       if (k.endsWith(`:${id}`)) {this.lastRepair.delete(k);}
     }
-    // A dying water sphere must leave nobody wading — the domes are
+    // A dying water sphere must leave nobody wading - the domes are
     // sticky state on the move shadows, not a query.
     if (gone?.kind === 'watersphere') {
       for (const pid of this.room.moveSim.shadowIds()) {this.room.moveSim.setWaterDome(pid, undefined);}
@@ -484,12 +499,12 @@ export class RoomDeployables {
     this.refreshSolids();
   }
 
-  /** AOE blast sweep — every deployable inside the radius eats scaled
+  /** AOE blast sweep - every deployable inside the radius eats scaled
    *  splash (same falloff curve as players). Own gear is exempt: your
    *  own blast can't raze your own stand. */
   applyBlast(center: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[], weapon?: number, splash?: number): void {
     if (this.items.size === 0) {return;}
-    // Sticky launcher is the breaching tool — 2x to structures/base
+    // Sticky launcher is the breaching tool - 2x to structures/base
     // assets gives the otherwise-purposeless gun a siege job.
     const mult = weapon === WeaponType.Sticky ? 2 : 1;
     const aoe = splash ?? damage;
@@ -497,7 +512,7 @@ export class RoomDeployables {
       const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
       const dist = (dx * dx + dy * dy + dz * dz) ** 0.5;
       if (dist > radius) {continue;}
-      // Friendly fire: no teammate's blast damages our gear — and your
+      // Friendly fire: no teammate's blast damages our gear - and your
       // OWN blast exempts your OWN gear too (a mortaring engie shouldn't
       // raze his stand; player self-splash staying legal is a body rule,
       // not a gear rule). Base assets resolve the shooter's team from
@@ -510,11 +525,11 @@ export class RoomDeployables {
       if (deployTeam !== undefined && shooterTeam !== undefined && deployTeam === shooterTeam) {
         continue;
       }
-      // Contact hit — the blast center landed inside the item's body
+      // Contact hit - the blast center landed inside the item's body
       // radius (a sticky glued ON the turret): pays the direct line, no
       // falloff. Outside it, splash does its normal aoe scale.
       const direct = dist <= DEPLOY_ITEMS[d.kind].bodyR;
-      // Static gear can't dodge — a bolt landing inside the envelope does
+      // Static gear can't dodge - a bolt landing inside the envelope does
       // at least half its base splash, so clearing a stand costs a few
       // well-placed lobs instead of a dozen grazed edges.
       const dmg = (direct ? damage : Math.max(aoeDamage(aoe, dist, radius, scales), Math.round(aoe * 0.5))) * mult;
@@ -524,15 +539,15 @@ export class RoomDeployables {
     }
   }
 
-  /** Tether snare — one pass over every player rather than per tether, so a
+  /** Tether snare - one pass over every player rather than per tether, so a
    *  tether that expires or is recycled can't leave a stale snare on a shadow
    *  (the early-out below would skip that cleanup). `held` tracks the hold a
    *  body built up inside a ring; breaking out of it zaps jet energy. */
   private readonly held = new Map<string, number>();
-  /** Currently snared body → the tether holding it — lets bot combat
+  /** Currently snared body → the tether holding it - lets bot combat
    *  answer "what do I shoot to get free" instead of polling items. */
   private readonly snaredBy = new Map<string, Deployed>();
-  /** The tether holding this player, if any — read by bot combat so a
+  /** The tether holding this player, if any - read by bot combat so a
    *  caught bot can blast its way out instead of waiting out the drag. */
   snareOf(pid: string): Deployed | undefined { return this.snaredBy.get(pid); }
   private tickTethers(): void {
@@ -580,23 +595,16 @@ export class RoomDeployables {
         d.ttl -= dt;
         if (d.ttl <= 0) { this.remove(d.id); continue; }
       }
-      if (!this.powered(d)) {continue;} // generator down — base goes dark
-      // Intermission godmode: weapons-grade deployables stand down too —
+      if (!this.powered(d)) {continue;} // generator down - base goes dark
+      // Intermission godmode: weapons-grade deployables stand down too -
       // a sentry can't kill anyway (applyDamage is gated) but it still
       // paints tracers/knockback over the scoreboard. Station keeps
       // healing, sensor keeps pinging, watersphere keeps sloshing.
       const standDown = this.room.players.invulnerable;
-      if (d.kind === 'turret') {if (!standDown) {tickTurret(this, d, dt);}}
-      else if (d.kind === 'mine') {if (!standDown) {tickMine(this, d, dt);}}
-      else if (d.kind === 'station') {tickStation(this, d, dt);}
-      else if (d.kind === 'drone') {if (!standDown) {tickDrone(this, d, dt);}}
-      else if (d.kind === 'sensor') {tickSensor(this, d, dt);}
-      else if (d.kind === 'baseturret') {if (!standDown) {tickSentry(this, d, dt);}}
-      else if (d.kind === 'mortar') {if (!standDown) {tickMortar(this, d, dt);}}
-      else if (d.kind === 'cgturret') {if (!standDown) {tickCg(this, d, dt);}}
-      else if (d.kind === 'watersphere') {tickWatersphere(this, d, dt);}
+      const spec = TICK_SPEC[d.kind];
+      if (spec && (!spec.standsDown || !standDown)) {spec.tick(this, d, dt);}
     }
-    // Sentry bolts in flight — the blast lands where the bolt does, so a
+    // Sentry bolts in flight - the blast lands where the bolt does, so a
     // sidestepping capper genuinely outruns it (non-homing by design).
     for (let i = this.bolts.length - 1; i >= 0; i -= 1) {
       const b = this.bolts[i]!;
@@ -607,7 +615,7 @@ export class RoomDeployables {
     }
   }
 
-  /** Scheduled sentry-bolt impacts — see tickSentry. */
+  /** Scheduled sentry-bolt impacts - see tickSentry. */
   readonly bolts: { at: Vec3; ttl: number; owner: string; dmg: number; rad: number; kb: number }[] = [];
 
 }
