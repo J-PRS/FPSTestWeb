@@ -1,5 +1,5 @@
 /**
- * DeployAdopter — pod-landed entity → Item wiring. Each adopt* method
+ * DeployAdopter - pod-landed entity → Item wiring. Each adopt* method
  * closes over its entity and produces the uniform Item record
  * (update/hurt/dispose/owner) Deployables ticks and kills. Split out so
  * deployables.ts stays about pods, net mirrors, and the item list.
@@ -15,6 +15,7 @@ import type { DeployTether } from '../entities/DeployTether.js';
 import type { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import type { DeployMortar } from '../entities/DeployMortar.js';
 import type { DeployCg } from '../entities/DeployCg.js';
+import type { DeployKind } from '../../../shared/deployables.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { MORTAR_CONFIG } from '../projectiles/mortarConfig.js';
 import { CHAINGUN_CONFIG } from '../projectiles/chaingunConfig.js';
@@ -44,28 +45,37 @@ export class DeployAdopter {
     private readonly host: AdoptHost,
   ) {}
 
-  adoptTurret(t: DeployTurret, owner?: DeployOwner): void {
+  /** Shared adoption ceremony: the Item literal + the dead-sync hurt
+   *  wrapper + the push. Mine keeps its own (hits detonate, not hurt).
+   *  Kinds pass a body with candId/pos/takeDamage/dead/dispose and their
+   *  bespoke update body. */
+  private mkItem<T extends { candId: string; pos: THREE.Vector3; dead: boolean; health: number; armor: number; maxHealth: number;
+    takeDamage(dmg: number): void; dispose(scene: THREE.Scene): void }>(
+    kind: DeployKind, body: T, owner: DeployOwner | undefined, update: Item['update'], extra?: Partial<Item>,
+  ): void {
     const item: Item = {
-      kind: 'turret', candId: t.candId, pos: t.pos, dead: false,
-      hurt: (dmg): void => t.takeDamage(dmg),
-      v: t,
-      update: (dt): void => {
-        const shot = t.update(dt, this.host.foesFor(owner));
-        if (!shot) {return;}
-        this.rockets.spawn(shot.muzzle, shot.target, 1, owner?.id);
-        sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher); // thump + whoosh
-      },
-      dispose: (): void => t.dispose(this.deps.scene),
-      owner: owner?.id,
-      team: owner?.team,
+      kind, candId: body.candId, pos: body.pos, dead: false,
+      hurt: (dmg): void => body.takeDamage(dmg),
+      v: body, update,
+      dispose: (): void => body.dispose(this.deps.scene),
+      owner: owner?.id, team: owner?.team,
+      ...extra,
     };
-    // Keep item.dead in step with the entity's — gnaw damage lands on `t`.
     const {hurt} = item;
-    item.hurt = (dmg): void => { hurt(dmg); if (t.dead) {this.host.killItem(item);} };
+    item.hurt = (dmg): void => { hurt(dmg); if (body.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
-  /** Escort drone — follows the owner's head, plinks enemies with weaker
+  adoptTurret(t: DeployTurret, owner?: DeployOwner): void {
+    this.mkItem('turret', t, owner, (dt): void => {
+      const shot = t.update(dt, this.host.foesFor(owner));
+      if (!shot) {return;}
+      this.rockets.spawn(shot.muzzle, shot.target, 1, owner?.id);
+      sfx.shotAt(shot.muzzle, WeaponType.MissileLauncher); // thump + whoosh
+    });
+  }
+
+  /** Escort drone - follows the owner's head, plinks enemies with weaker
    *  mini-rockets (60% sentry damage). Same dep: targeting rules. */
   adoptDrone(d: DeployDrone, owner?: DeployOwner): void {
     const p = this.deps.lazyPlayer();
@@ -74,11 +84,11 @@ export class DeployAdopter {
       hurt: (dmg): void => d.takeDamage(dmg),
       v: d,
       update: (dt): void => {
-        // Anchor is the plant owner — a bot's drone chases the bot.
+        // Anchor is the plant owner - a bot's drone chases the bot.
         const shot = d.update(dt, owner?.pos ?? p.pos, owner ? owner.yaw() : p.yaw, this.host.foesFor(owner));
         if (!shot) {return;}
         this.rockets.spawn(shot.muzzle, shot.target, 0.6, owner?.id);
-        sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher);
+        sfx.shotAt(shot.muzzle, WeaponType.MissileLauncher);
       },
       dispose: (): void => d.dispose(this.deps.scene),
       owner: owner?.id,
@@ -89,21 +99,17 @@ export class DeployAdopter {
     this.items.push(item);
   }
 
-  /** Mortar turret — lobs the REAL player-mortar shell (arming fuse,
+  /** Mortar turret - lobs the REAL player-mortar shell (arming fuse,
    *  thud-bounce, 18m splash) at hostiles in its [minRange, range] band.
    *  Offline the local Projectile carries the blast through the normal
-   *  funnel; connected the server owns the shot — the mortarShot wire
+   *  funnel; connected the server owns the shot - the mortarShot wire
    *  event paints the same arc as a replica. */
   adoptMortar(m: DeployMortar, owner?: DeployOwner): void {
-    const item: Item = {
-      kind: 'mortar', candId: m.candId, pos: m.pos, dead: false,
-      hurt: (dmg): void => m.takeDamage(dmg),
-      v: m,
-      update: (dt): void => {
+    this.mkItem('mortar', m, owner,       (dt): void => {
         const shot = m.update(dt, this.host.foesFor(owner));
         if (!shot || this.deps.lazyNetworkManager().isConnected()) {return;}
         const p = new Projectile(this.deps.scene, shot.muzzle, _shotDir.copy(shot.vel).normalize(), _zeroVel, MORTAR_CONFIG);
-        p.vel.copy(shot.vel); // exact solved arc — ctor's inherit math is for held weapons
+        p.vel.copy(shot.vel); // exact solved arc - ctor's inherit math is for held weapons
         p.shooterId = owner?.id ?? null;
         p.shooterTeam = owner?.team ?? null;
         if (owner) { // a bot-owned shell can hit the local player; your own can't (same law as bot lobs)
@@ -112,26 +118,15 @@ export class DeployAdopter {
         }
         this.deps.world.projectiles.push(p);
         sfx.shotAt(shot.muzzle, WeaponType.Mortar);
-      },
-      dispose: (): void => m.dispose(this.deps.scene),
-      owner: owner?.id,
-      team: owner?.team,
-    };
-    const {hurt} = item;
-    item.hurt = (dmg): void => { hurt(dmg); if (m.dead) {this.host.killItem(item);} };
-    this.items.push(item);
+      });
   }
 
-  /** Chaingun turret — real CG bolts (weapon row 3) at ~7/s over a
+  /** Chaingun turret - real CG bolts (weapon row 3) at ~7/s over a
    *  LOS-gated envelope. Offline each bolt carries the honest sweep;
    *  connected the server's turretShot pulse owns damage and paints a
    *  tracer burst instead (remoteDeployables branches on kind). */
   adoptCg(c: DeployCg, owner?: DeployOwner): void {
-    const item: Item = {
-      kind: 'cgturret', candId: c.candId, pos: c.pos, dead: false,
-      hurt: (dmg): void => c.takeDamage(dmg),
-      v: c,
-      update: (dt): void => {
+    this.mkItem('cgturret', c, owner,       (dt): void => {
         const shot = c.update(dt, this.host.foesFor(owner));
         if (!shot || this.deps.lazyNetworkManager().isConnected()) {return;}
         const p = new Projectile(this.deps.scene, shot.muzzle, _shotDir.copy(shot.vel).normalize(), _zeroVel, CHAINGUN_CONFIG);
@@ -143,14 +138,7 @@ export class DeployAdopter {
           p.localClass = (): string | undefined => this.deps.lazyPlayer().appliedClass;
         }
         this.deps.world.projectiles.push(p);
-      },
-      dispose: (): void => c.dispose(this.deps.scene),
-      owner: owner?.id,
-      team: owner?.team,
-    };
-    const {hurt} = item;
-    item.hurt = (dmg): void => { hurt(dmg); if (c.dead) {this.host.killItem(item);} };
-    this.items.push(item);
+      });
   }
 
   adoptMine(m: Mine, owner?: DeployOwner): void {
@@ -161,7 +149,7 @@ export class DeployAdopter {
         mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xFF_AA_44));
       sfx.explosionAt(mine.pos, true);
       screenShake.blast(mine.pos, 2.5, player.pos);
-      // Friendly mine — creatures + enemy bots take the blast, not you.
+      // Friendly mine - creatures + enemy bots take the blast, not you.
       for (const c of this.deps.targets) {
         if (c.dead) {continue;}
         const d = c.pos.distanceTo(mine.pos);
@@ -173,7 +161,7 @@ export class DeployAdopter {
       for (const b of this.host.foesFor(owner)) {
         if (!b.playerId) {continue;} // creatures take the blast via targets above
         const d = b.pos.distanceTo(mine.pos);
-        // 'local' resolves through the same hit funnel — it routes to
+        // 'local' resolves through the same hit funnel - it routes to
         // hurtLocal on the TeamBots side.
         if (b.alive && d < mine.blastRadius) {
           const dmg = Math.round(MINE_DAMAGE_MAX * (1 - d / mine.blastRadius));
@@ -197,7 +185,7 @@ export class DeployAdopter {
           const d2 = b.pos.distanceToSquared(m.pos);
           if (d2 < bd) { bd = d2; bx = b.pos.x; by = b.pos.y; bz = b.pos.z; }
         }
-        if (bd === Infinity) {return;} // nothing hostile alive — stay dormant
+        if (bd === Infinity) {return;} // nothing hostile alive - stay dormant
         nearest.set(bx, by, bz);
         m.update(dt, nearest);
         if (m.dead) {this.host.killItem(item);}
@@ -209,7 +197,7 @@ export class DeployAdopter {
     this.items.push(item);
   }
 
-  /** Recharge pad — standing in the envelope refills energy fast and
+  /** Recharge pad - standing in the envelope refills energy fast and
    *  health slowly. Aggro bait by design: it's a dep: candidate, so the
    *  wildlife gnaws it while it works. */
   adoptStation(s: DeployStation, owner?: DeployOwner): void {
@@ -219,7 +207,7 @@ export class DeployAdopter {
       hurt: (dmg): void => s.takeDamage(dmg),
       v: s,
       update: (dt): void => {
-        // Field owner gets the charge — a bot's pad heals the bot.
+        // Field owner gets the charge - a bot's pad heals the bot.
         const who = owner ?? p;
         if (!s.update(dt, who.pos)) {return;}
         if (owner) {
@@ -239,7 +227,7 @@ export class DeployAdopter {
     this.items.push(item);
   }
 
-  /** Targeting beacon — no behavior of its own; the item record exists so
+  /** Targeting beacon - no behavior of its own; the item record exists so
    *  caps/TTL/blasts manage it while Deployables reads its pos for the
    *  mortar-arc HUD reticle. */
   adoptBeacon(b: DeployBeacon, owner?: DeployOwner): void {
@@ -258,41 +246,19 @@ export class DeployAdopter {
     this.items.push(item);
   }
 
-  /** Tether snare — the item only owns the visual; the drag and the energy
+  /** Tether snare - the item only owns the visual; the drag and the energy
    *  zap are judged by the shared sim and the server, not by this record. */
   adoptTether(t: DeployTether, owner?: DeployOwner): void {
-    const item: Item = {
-      kind: 'tether', candId: t.candId, pos: t.pos, dead: false,
-      hurt: (dmg): void => t.takeDamage(dmg),
-      v: t,
-      update: (dt): void => t.update(dt),
-      dispose: (): void => t.dispose(this.deps.scene),
-      owner: owner?.id,
-      team: owner?.team,
-    };
-    const {hurt} = item;
-    item.hurt = (dmg): void => { hurt(dmg); if (t.dead) {this.host.killItem(item);} };
-    this.items.push(item);
+    this.mkItem('tether', t, owner, (dt): void => t.update(dt));
   }
 
-  /** Watersphere — the item only owns the dome visual; the wade-drag is
+  /** Watersphere - the item only owns the dome visual; the wade-drag is
    *  judged by the shared sim and the server, not by this record. */
   adoptWatersphere(w: DeployWatersphere, owner?: DeployOwner): void {
-    const item: Item = {
-      kind: 'watersphere', candId: w.candId, pos: w.pos, dead: false,
-      hurt: (dmg): void => w.takeDamage(dmg),
-      v: w,
-      update: (dt): void => w.update(dt),
-      dispose: (): void => w.dispose(this.deps.scene),
-      owner: owner?.id,
-      team: owner?.team,
-    };
-    const {hurt} = item;
-    item.hurt = (dmg): void => { hurt(dmg); if (w.dead) {this.host.killItem(item);} };
-    this.items.push(item);
+    this.mkItem('watersphere', w, owner, (dt): void => w.update(dt));
   }
 
-  /** Barrier dome — the emitter is a plain dep: destructible like any
+  /** Barrier dome - the emitter is a plain dep: destructible like any
    *  other; the FIELD blocks hostile shells via the shieldObstacles
    *  sweep (deployables.ts), not through this item's update. */
   adoptShield(s: DeployShield, owner?: DeployOwner): void {
