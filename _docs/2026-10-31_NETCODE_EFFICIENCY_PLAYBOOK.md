@@ -167,13 +167,27 @@ visible).
 
 ### P1 — Priority-scored fill, not just K-nearest
 
-**What:** upgrade the cap from pure nearest-32 to a Halo-style score:
-`score = f(dist) + f(1/spd?) + boosts(combatant, recentHit, flag)`.
+**Hard constraint (user, 2026-10-31): long-range engagement must
+stay real — a 500m+ enemy is a live target, not a speck.** Pure
+K-nearest would cull a distant sniper in a dense fight even though
+they're hittable and shooting back. Distance can't be the whole
+score.
 
-**Why:** nearest-32 is right 95% of the time but blind to the 5% that
-matters: a far player who just shot you, the flag carrier crossing
-mid, a fast mover arcing into view. Halo's special-case boosts exist
-precisely because pure distance loses important edges.
+**What:** upgrade the cap from pure nearest-32 to a Halo-style score:
+`score = f(dist) + boosts(engagement)`. The boosts are the point:
+
+- **aim-cone bonus** — records inside the recipient's view/aim sector
+  get boosted even at range (Torque already weighted "perpendicular
+  to view vector"; we have the recipient's yaw). A 500m target in
+  your sights outranks a 40m bystander behind you.
+- **mutual-engagement bonus** — anyone who recently damaged you,
+  is aiming at you (their projectile trajectories cross your cell),
+  or is carrying/interacting with the flag outranks distance-equivalent
+  bystanders. `r.force` already covers the hit-window part.
+- **minimum engagement visibility** — within the outer tier boundary
+  a record can degrade to sparse, never vanish entirely when it can
+  hurt you. The cap culls the *least relevant* of what's left, not
+  "the farthest".
 
 **How:** candidate records already carry `r.spd` + pos + we know
 recent combat (hit-window `r.force`, flag carrier status). Score each
