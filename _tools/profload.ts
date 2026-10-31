@@ -1,9 +1,9 @@
-/** profload — one-command server CPU profile under real-socket load.
+/** profload -- one-command server CPU profile under real-socket load.
  *
  *  Why this exists: every prior profile round leaked netBot/server
  *  zombies that contaminated the next measurement, and `--cpu-prof`
  *  needed a graceful shutdown to flush. This runner tracks every child
- *  it spawns and kills them in `finally` — zombies are impossible.
+ *  it spawns and kills them in `finally` -- zombies are impossible.
  *
  *  Usage:
  *    bun _tools/devin_scratch/profload.ts --bots 64 --rooms prof1,prof2
@@ -21,7 +21,7 @@ const arg = (k: string, d = ''): string => {
   return i !== -1 ? process.argv[i + 1] ?? '1' : d;
 };
 // Port: explicit --port pins (preflight kills its holders). Default is a
-// free port scanned from 8100 — a run can NEVER race a pre-existing dev
+// free port scanned from 8100 -- a run can NEVER race a pre-existing dev
 // server on :8000 or a leftover profload server on :8001.
 const PINNED = arg('port', '');
 const BOTS = Number.parseInt(arg('bots', '64'), 10);
@@ -51,7 +51,7 @@ function portHolders(port: number): number[] {
   return [...new Set([...out.matchAll(new RegExp(`:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`, 'g'))].map(m => +m[1]!))];
 }
 
-// Run identity: the spawned server echoes this token on /health — a
+// Run identity: the spawned server echoes this token on /health -- a
 // stale listener answering the port can never pass as ours.
 const BOOT = `pl${process.pid.toString(36)}${Math.floor(Math.random() * 46656).toString(36)}`;
 // Port list: --port pins one; default scans 8100+ (netstat misses
@@ -60,7 +60,7 @@ const BOOT = `pl${process.pid.toString(36)}${Math.floor(Math.random() * 46656).t
 let PORT = ATTACH ? Number.parseInt(arg('attach', '8001'), 10)
   : PINNED ? Number.parseInt(PINNED, 10) : 0;
 
-/** Track a spawned child + log mid-run exits — a crashed bot/server
+/** Track a spawned child + log mid-run exits -- a crashed bot/server
  *  was previously invisible (players quietly drained to 0). */
 let DONE = false;
 function track(p: ReturnType<typeof Bun.spawn>, tag: string): void {
@@ -100,7 +100,7 @@ async function wireKinds(port: number): Promise<{ rx: Record<string, number> | n
   } catch { return null; }
 }
 
-/** Server CPU% of one core over `secs` wall — (CPU time delta)/wall.
+/** Server CPU% of one core over `secs` wall -- (CPU time delta)/wall.
  *  Aborts when the measured process dies mid-window: a dead server's
  *  delta reads as a negative/garbage number, not a measurement. */
 async function cpuPct(pid: number, secs: number, srv?: ReturnType<typeof Bun.spawn>): Promise<number> {
@@ -112,7 +112,7 @@ async function cpuPct(pid: number, secs: number, srv?: ReturnType<typeof Bun.spa
   const deadline = secs * 1000;
   const t0 = Date.now();
   while (Date.now() - t0 < deadline) {
-    if (srv && srv.exitCode !== null) {throw new Error(`server exited ${srv.exitCode} mid-measurement — see ${serverLog}`);}
+    if (srv && srv.exitCode !== null) {throw new Error(`server exited ${srv.exitCode} mid-measurement -- see ${serverLog}`);}
     await sleep(250);
   }
   const b = cpuOf(pid);
@@ -122,7 +122,7 @@ async function cpuPct(pid: number, secs: number, srv?: ReturnType<typeof Bun.spa
 const serverLog = `_tools/devin_scratch/profload_server.log`;
 
 /** `--sweep`: kill every lingering netBot bun process AND every server
- *  holding a port in the run range (8100-8199) — zombies from sessions
+ *  holding a port in the run range (8100-8199) -- zombies from sessions
  *  that died without finally. :8000 dev servers are out of range by
  *  construction and never touched. */
 if (process.argv.includes('--sweep')) {
@@ -142,7 +142,7 @@ let measured = -1;
 let srv: ReturnType<typeof Bun.spawn> | null = null;
 try {
   if (!ATTACH) {
-    // Preflight on a PINNED port only — holders are stale servers from
+    // Preflight on a PINNED port only -- holders are stale servers from
     // prior rounds. An auto-picked port is already free by construction.
     if (PINNED) {
       for (const pid of portHolders(PORT)) {
@@ -153,11 +153,11 @@ try {
     }
 
     const argv = [BUN, ...(CPUPROF ? ['--cpu-prof'] : []), ...(arg('preload', '') ? ['--preload', arg('preload')] : []), 'src/server.ts'];
-    // Retry on successive ports — a holder that slips between the scan
+    // Retry on successive ports -- a holder that slips between the scan
     // and the bind (or a TIME_WAIT ghost netstat misses) is skipped, not fatal.
     for (let p = PORT || 8100; p < 8200; p++) {
       PORT = p;
-      // Per-port log — a shared file clobbers the failed attempt's exit
+      // Per-port log -- a shared file clobbers the failed attempt's exit
       // reason (observed: 8100 died code=1, its log was never preserved).
       const attemptLog = serverLog.replace(/\.log$/, `_${p}.log`);
       try { unlinkSync(attemptLog); } catch { /* none yet */ }
@@ -173,18 +173,18 @@ try {
       );
       track(srv, 'server');
       serverPid = srv.pid;
-      log(`server pid=${serverPid} (cpuprof=${CPUPROF}, port=${PORT}) — waiting for /health`);
+      log(`server pid=${serverPid} (cpuprof=${CPUPROF}, port=${PORT}) -- waiting for /health`);
       const t0 = Date.now();
       while (!(await healthOk(PORT, BOOT))) {
         if (srv.exitCode !== null) {break;}
-        if (Date.now() - t0 > 20000) {throw new Error('server never came up — see ' + attemptLog);}
+        if (Date.now() - t0 > 20000) {throw new Error('server never came up -- see ' + attemptLog);}
         await sleep(500);
       }
       if (await healthOk(PORT, BOOT)) {break;}
-      if (!PINNED) {log(`port ${PORT} failed (server exited ${srv.exitCode}) — trying next`); continue;}
-      throw new Error(`server exited ${srv.exitCode} — see ${attemptLog}`);
+      if (!PINNED) {log(`port ${PORT} failed (server exited ${srv.exitCode}) -- trying next`); continue;}
+      throw new Error(`server exited ${srv.exitCode} -- see ${attemptLog}`);
     }
-    if (!(await healthOk(PORT, BOOT))) {throw new Error('no bindable port — see _tools/devin_scratch/profload_server_*.log');}
+    if (!(await healthOk(PORT, BOOT))) {throw new Error('no bindable port -- see _tools/devin_scratch/profload_server_*.log');}
     log('server up');
   } else {
     serverPid = portHolders(PORT)[0] ?? 0;
@@ -199,13 +199,13 @@ try {
       '--seconds', String(SETTLE + SECS + 30), '--pace', '5', '--join-parallel', JOINPAR, '--url', `ws://localhost:${PORT}/ws`, '--roombase', ROOMS[0] ?? 'prof'],
     { cwd: 'server_bun', stdout: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stderr: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stdin: 'ignore' },
   ), 'netBot');
-  log(`${BOTS} bots across ${ROOMS.length} rooms — settling ${SETTLE}s`);
+  log(`${BOTS} bots across ${ROOMS.length} rooms -- settling ${SETTLE}s`);
   await sleep(SETTLE * 1000);
 
   const m0 = await metrics(PORT);
   const players = (m0 as { players?: number } | null)?.players ?? 0;
-  if (players < Math.ceil(BOTS * 0.75)) {log(`WARNING players=${players} < expected ${BOTS} — bots died or never joined (see profload_*.log); measurement is suspect`);}
-  log(`players=${players} — measuring ${SECS}s`);
+  if (players < Math.ceil(BOTS * 0.75)) {log(`WARNING players=${players} < expected ${BOTS} -- bots died or never joined (see profload_*.log); measurement is suspect`);}
+  log(`players=${players} -- measuring ${SECS}s`);
   measured = await cpuPct(serverPid, SECS, srv);
   const m1 = await metrics(PORT);
 
@@ -221,9 +221,10 @@ try {
     held: bw?.tickFramesHeldPerSec,
     sendsPerSec: (bw as { sendsPerSec?: number } | undefined)?.sendsPerSec,
     sendUsPerCall: (bw as { sendUsPerCall?: number } | undefined)?.sendUsPerCall,
+    cappedPerSec: (bw as { cappedPerSec?: number } | undefined)?.cappedPerSec,
     phaseMs: bw?.phaseMs,
     worstTicks: (bw as { worstTicks?: unknown } | undefined)?.worstTicks,
-    // Per-thread CPU ms deltas (Linux /proc only) — splits the JS loop
+    // Per-thread CPU ms deltas (Linux /proc only) -- splits the JS loop
     // from native helper threads (GC/JIT/io) that cpuPct lumps together.
     threadCpu: ((): unknown => {
       const a = (m0 as { threadCpu?: { tid: number; comm: string; cpuMs: number }[] } | null)?.threadCpu;
@@ -240,12 +241,12 @@ try {
   if (CPUPROF && !ATTACH) {
     try {
       await fetch(`http://127.0.0.1:${PORT}/dev/shutdown?key=${KEY}`, { signal: AbortSignal.timeout(3000) });
-      // Wait for actual exit — the cpuprofile flushes on process end, and a
+      // Wait for actual exit -- the cpuprofile flushes on process end, and a
       // fixed window raced killAll below (observed: boot-only profiles).
       for (let i = 0; i < 75 && srv && srv.exitCode === null; i++) {await sleep(200);}
       const profs = readdirSync('server_bun').filter(f => f.endsWith('.cpuprofile')).sort();
       log(`profile: server_bun/${profs[profs.length - 1]}`);
-    } catch { /* shutdown raced the kill below — non-fatal */ }
+    } catch { /* shutdown raced the kill below -- non-fatal */ }
   }
   DONE = true;
   if (!KEEP) {killAll('done');}

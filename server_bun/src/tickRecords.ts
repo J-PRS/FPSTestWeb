@@ -1,5 +1,5 @@
 /**
- * TickFanout — the per-tick record family for TickLoop: which players
+ * TickFanout -- the per-tick record family for TickLoop: which players
  * earn a record this tick (skip/reap/suppress), the server-owned health
  * and charge echoes that ride along, and the distance-tiered fanout to
  * each recipient. TickLoop owns the timers/metrics rollup; this owns
@@ -27,17 +27,17 @@ import { wallNow , wallMs} from './wallClock.ts';
 type Players = ReturnType<Room['players']['getAllPlayers']>;
 type PooledRecord = TickRecord & { enc: TickEncodeScratch; enc2?: TickEncodeScratch; encSparse?: TickEncodeScratch; sparseTick?: number; spd?: number };
 
-/** A retired wireId is reissued only after this much dead time — any
+/** A retired wireId is reissued only after this much dead time -- any
  *  plausible cross-lane reorder window (reliable roster edge vs binary
  *  frames) is sub-second; 60s is paranoia, not measurement. */
 const WIRE_ID_QUIET_MS = 60_000;
 
-/** Dev-only frame-loss repro — see the drop site in fanoutRecords. */
+/** Dev-only frame-loss repro -- see the drop site in fanoutRecords. */
 const DROP_PCT = Number(process.env.FPS_DROP_PCT ?? 0) || 0;
 
 /** Mint a u16 record id: prefer a retired id that's been quiet long
  *  enough, else extend the counter. The naive `nextWireId++` walked into
- *  the u16 wrap at 65536 total mints — setUint16 mods silently and the
+ *  the u16 wrap at 65536 total mints -- setUint16 mods silently and the
  *  new player's records would resolve to a *live teammate's* binding. */
 function mintWireId(room: Room): number {
   const now = wallNow();
@@ -45,21 +45,41 @@ function mintWireId(room: Room): number {
     if (now - at >= WIRE_ID_QUIET_MS) { room.wireIdRetired.delete(id); return id; }
   }
   if (room.nextWireId <= 0xFF_FF) {return ((room.nextWireId += 1) - 1);}
-  // Space exhausted with nothing quiet enough — take the eldest retired
+  // Space exhausted with nothing quiet enough -- take the eldest retired
   // id anyway; strictly better than a silent modulo-wrap.
   const eldest = room.wireIdRetired.keys().next().value;
   if (eldest !== undefined) {
-    logger.error('wireId space full — recycling before the quiet window', { room: room.name, id: eldest });
+    logger.error('wireId space full -- recycling before the quiet window', { room: room.name, id: eldest });
     room.wireIdRetired.delete(eldest);
     return eldest;
   }
-  // 65536 simultaneously-bound ids — the room has bigger problems than
+  // 65536 simultaneously-bound ids -- the room has bigger problems than
   // this collision, but fail loud rather than aliasing silently.
-  logger.error('wireId space exhausted — live collision', { room: room.name });
+  logger.error('wireId space exhausted -- live collision', { room: room.name });
   return (((room.nextWireId += 1) - 1) % 0xFF_FF) + 1;
 }
 
-/** Counters the loop's metrics rollup reads — shared object so a second
+/** Kth-smallest of `a` (0-indexed k) -- quickselect on a copy so the
+ *  candidate order stays stable for the emit filter. Linear expected
+ *  time; only runs for recipients whose roster exceeds the cap. */
+function kthSmallest(a: number[], k: number): number {
+  const b = a.slice();
+  const ki = k - 1;
+  let lo = 0, hi = b.length - 1;
+  while (lo < hi) {
+    const pivot = b[(lo + hi) >> 1]!;
+    let i = lo, j = hi;
+    while (i <= j) {
+      while (b[i]! < pivot) {i++;}
+      while (b[j]! > pivot) {j--;}
+      if (i <= j) {const t = b[i]!; b[i] = b[j]!; b[j] = t; i++; j--;}
+    }
+    if (ki <= j) {hi = j;} else if (ki >= i) {lo = i;} else {return b[ki]!;}
+  }
+  return b[ki]!;
+}
+
+/** Counters the loop's metrics rollup reads -- shared object so a second
  *  writer (this family) lands in the same rollup window. */
 export interface FanoutMetrics {
   recordsBuilt: number;
@@ -67,58 +87,72 @@ export interface FanoutMetrics {
   recordsIdleReaped: number;
   recordsSent: number;
   recordsTierSkipped: number;
-  /** Stop-tier verdicts — far+static records replicated nothing (the
+  /** Stop-tier verdicts -- far+static records replicated nothing (the
    *  sparse cadence record carries no truth a 0-vel ghost lacks). */
   recordsStopped: number;
   bytesSent: number;
   tickFramesDropped: number;
-  /** Frames held at the intro gate (join burst still draining) — NOT
+  /** Frames held at the intro gate (join burst still draining) -- NOT
    *  loss: the client can't decode them yet either. Tracked separately
    *  so join storms don't masquerade as shed. */
   tickFramesHeld: number;
+  /** Records dropped by the K-nearest per-recipient cap -- egress bound,
+   *  not loss: the culled ghosts are the farthest by definition. */
+  recordsCapped: number;
 }
 
 export class TickFanout {
   /** Scratch array: same array every tick, zero allocation on the hot
-   *  path — encodeTickFrame consumes it before the next recipient
+   *  path -- encodeTickFrame consumes it before the next recipient
    *  iterates. */
   private readonly scratchOthers: Uint8Array[] = [];
   // Record pool: build→fanout is synchronous within one tick, so the
-  // array, its wrappers, and their encode buffers all recycle — fresh
+  // array, its wrappers, and their encode buffers all recycle -- fresh
   // allocations per room per tick were the last steady-state allocs in
   // the fanout path.
   private readonly scratchRecords: PooledRecord[] = [];
-  /** Per-recipient tier memory (recipient → target playerId → tier) —
+  /** Per-recipient tier memory (recipient → target playerId → tier) --
    *  boundary orbits need hysteresis or the send cadence flaps 20↔10Hz
    *  tick-to-tick. Increases require 15% past the boundary; decreases
-   *  (closer) always apply immediately — fresh data is never wrong. */
+   *  (closer) always apply immediately -- fresh data is never wrong. */
   private readonly tierMem = new Map<string, Map<string, number>>();
-  /** Scratch basis for per-recipient intro fulls — NEVER the shared
+  /** Scratch basis for per-recipient intro fulls -- NEVER the shared
    *  v4Last ring (a second encode against it would double-step the basis
    *  receivers actually hold). forceFull makes every call fresh, so the
-   *  basis contents don't matter — it's a parameter-shape dummy. */
+   *  basis contents don't matter -- it's a parameter-shape dummy. */
   private readonly introLast = v4Last();
-  /** Scratch fields object for encodeTickPlayerV4 — read synchronously
+  /** Scratch fields object for encodeTickPlayerV4 -- read synchronously
    *  inside the call and never retained, so one shared object replaces a
    *  per-record-per-tick allocation (the last hot-loop garbage left). */
   private readonly scratchFields: WireTickPlayer =
     { playerId: '', position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false, ping: undefined, ski: 0, jet: 0, status: 0, sheep: 0 };
 
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
-  /** v4 masks delta against last-encoded state — a masked field a lost
+  /** v4 masks delta against last-encoded state -- a masked field a lost
    *  frame carried stays stale until it changes again or this forces a
    *  full record (15 ticks = 750ms worst-case drift on a torn link). */
   private static readonly FULL_RECORD_EVERY = 15;
   /** First ticks of a joiner's intro window get every record every tick
-   *  — the decode baseline must punch through loss fast. The window's
+   *  -- the decode baseline must punch through loss fast. The window's
    *  tail keeps sending the full VARIANT but at normal tier cadence:
    *  stacked intros in a join burst otherwise each pay full-cadence +
    *  full-copies for a whole second (measured: join-phase CPU ~2.2x
    *  settled, profload --settle 3). */
   private static readonly INTRO_CADENCE_TICKS = 5;
-  /** Seats a joiner's world admits per fanout tick — 4/tick drains a
+  /** Seats a joiner's world admits per fanout tick -- 4/tick drains a
    *  30-seat roster in ~350ms (the burst becomes a trickle). */
   private static readonly ADMIT_PER_TICK = 4;
+  /** Hard bound on records per recipient per tick. Without it egress is
+   *  ~quadratic in roster: every seat gets everything its interest
+   *  tiers admit, so a 500-seat room ships ~roster-sized frames to every
+   *  seat. Culled records are by definition the farthest -- hits/kills
+   *  still ride reliable events, and forced (hit/knockback) + intro
+   *  records are exempt since they carry truth a cap can't defer. */
+  private static readonly MAX_RECORDS = 32;
+  /** Cap candidates: variant + dSq pairs that compete for MAX_RECORDS
+   *  slots (exempt traffic pushed straight into `others`). */
+  private readonly candRecs: Uint8Array[] = [];
+  private readonly candDist: number[] = [];
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -130,14 +164,14 @@ export class TickFanout {
     // Two clocks, two domains: `now` is wallNow (socket silence,
     // suppression windows, echo stamps); simT gates the sim-owned
     // fields (regen/dd/forceSendUntil, chargeT) which are all written
-    // with simNow — mixing them desyncs the moment simNow ≠ wall.
+    // with simNow -- mixing them desyncs the moment simNow ≠ wall.
     const simT = simNow();
     let recN = 0;
-    // Lazily minted only when a new wireId binds — a fresh {} per tick
+    // Lazily minted only when a new wireId binds -- a fresh {} per tick
     // was steady-state garbage for a delta that almost never fires.
     let roster: Record<number, string> | null = null;
     let rosterDirty = false;
-    // Age-sweep the intro windows — a departed or settled seat must not
+    // Age-sweep the intro windows -- a departed or settled seat must not
     // keep forcing rec.full encodes forever.
     for (const [pid, at] of room.introPlayers) {
       if (room.tickSeq - at >= 20 || !players.has(pid) && !room.spectators.has(pid)) {room.introPlayers.delete(pid);}
@@ -147,7 +181,7 @@ export class TickFanout {
       if (this.skipRecord(room, playerId, p, now)) {continue;}
       this.tickServerHeals(room, playerId, p, now, simT);
       this.tickChargeEcho(room, playerId, p, now, simT);
-      // forceSendUntil is WallMs (hit-window bookkeeping, types.ts:105) —
+      // forceSendUntil is WallMs (hit-window bookkeeping, types.ts:105) --
       // comparing it to simT only coincides while both clocks read
       // Date.now(): a warped sim clock would never lapse the window and
       // a frozen one never engages it.
@@ -163,9 +197,9 @@ export class TickFanout {
         | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
       if (lastSent && !forceSend && recordSuppressed(p, lastSent, now, sheep, wireStatus)) {
 this.metrics.recordsSuppressed += 1;
-        continue; // Skip — within extrapolation tolerance
+        continue; // Skip -- within extrapolation tolerance
       }
-      // Mutate the snapshot in place — a fresh object per record per tick
+      // Mutate the snapshot in place -- a fresh object per record per tick
       // was the last steady-state alloc in this loop.
       let snap = lastSent;
       if (!snap) {
@@ -180,12 +214,12 @@ this.metrics.recordsSuppressed += 1;
         + p.rotation.yaw + p.rotation.pitch + p.health),
         () => ({ id: playerId, pos: p.position, hp: p.health }));
       // Coherence, not just representation: a row claiming alive at
-      // hp<=0 is a lie even when every field is finite — the dead
+      // hp<=0 is a lie even when every field is finite -- the dead
       // write pairs are atomic. (No upper bound: seeded/superbot pools
       // legitimately sit over class max.)
       inv('wire-row-coherent', p.isDead || p.health > 0,
         () => ({ id: playerId, hp: p.health, dead: p.isDead }));
-      // Cross-field law: a dead row carries no channels and no held keys —
+      // Cross-field law: a dead row carries no channels and no held keys --
       // death strips all three at the kill edge, so a corpse claiming
       // cloak/jet/ski means a write path re-armed them post-mortem.
       inv('corpse-no-channels', !p.isDead || (p.status === 0 && p.skiing === 0 && p.jetting === 0),
@@ -214,24 +248,24 @@ this.metrics.recordsSuppressed += 1;
       }
       rec.playerId = playerId;
       rec.pos = p.position;
-      // spd only feeds the >12 m/s travel-budget gate — squared-compare
+      // spd only feeds the >12 m/s travel-budget gate -- squared-compare
       // skips the hypot on everyone parked (Math.hypot is ~10x sqrt).
       const vsq = p.velocity.x * p.velocity.x + p.velocity.y * p.velocity.y + p.velocity.z * p.velocity.z;
       rec.spd = vsq > 144 ? Math.sqrt(vsq) : 0;
       // The delta basis is per-wireId and shared across recipients, but
-      // fanout skips records per-recipient by distance tier — a field the
+      // fanout skips records per-recipient by distance tier -- a field the
       // far client never received stays stale in its decode pool FOREVER
       // (masked-out groups emit the retained slot value). A skipped full
       // would leave that drift unbounded, so forced fulls must bypass
       // tier skipping like hit-window forced sends.
       // introSeq window (tickNack reseed): EVERY client's basis may be
-      // corrupt — records go room-wide full for ~1s. Per-joiner fulls
+      // corrupt -- records go room-wide full for ~1s. Per-joiner fulls
       // ride rec.full below instead, so a fresh seat doesn't poison the
       // shared delta stream.
       const fullRecord = freshWireId || room.tickSeq - room.introSeq < 20
         || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0;
       rec.force = forceSend || fullRecord;
-      // Delta basis follows the wireId, never the slot — a slot-carried
+      // Delta basis follows the wireId, never the slot -- a slot-carried
       // `last` encodes this player's mask against whoever held the slot
       // last tick after every roster shuffle.
       let last = room.v4Last.get(wireId);
@@ -240,10 +274,10 @@ this.metrics.recordsSuppressed += 1;
         room.v4Last.set(wireId, last);
       }
       // Delta-masked v4 record: field groups that changed since the
-      // K-deep basis ride the wire — a field changed once is resent
+      // K-deep basis ride the wire -- a field changed once is resent
       // V4_BASIS_DEPTH times, healing short datagram bursts; a periodic
       // full record bounds whatever longer loss leaves behind.
-      // Stagger fulls by wireId — keying on tickSeq alone synced every
+      // Stagger fulls by wireId -- keying on tickSeq alone synced every
       // record into one egress spike per window; spreading them keeps
       // the same 750ms drift bound with a flat send curve. A fresh
       // mint always fulls: a quiet-window-reissued wireId's `last`
@@ -256,7 +290,7 @@ this.metrics.recordsSuppressed += 1;
       fields.velocity = p.velocity;
       fields.health = p.health;
       fields.isDead = p.isDead;
-      // Only advertise a proven ping — stale heartbeats above would
+      // Only advertise a proven ping -- stale heartbeats above would
       // otherwise broadcast the default 0 for ghosts that never
       // reported (renders them with a bogus "0ms" ping).
       fields.ping = p.ping > 0 ? p.ping : undefined;
@@ -266,7 +300,7 @@ this.metrics.recordsSuppressed += 1;
       fields.sheep = sheep;
       rec.data = encodeTickPlayerV4(wireId, fields, rec.enc, last, fullRecord);
       // Joiner side-channel: while any seat is in its intro window, a
-      // second FULL copy rides rec.full — the fanout swaps it in only
+      // second FULL copy rides rec.full -- the fanout swaps it in only
       // for recipients still lacking this wireId's decode basis.
       if (introPending) {
         rec.enc2 ??= tickEncodeScratch();
@@ -281,14 +315,14 @@ this.metrics.recordsBuilt += 1;
   }
 
   /** Every reason a player contributes no record this tick, in order:
-   *  grace entries (owned by their removal timeout — reaping here would
+   *  grace entries (owned by their removal timeout -- reaping here would
    *  double playerLeft), idle reap (before the ghost check or unreported
-   *  dead sockets linger forever), humans that never reported (menu/lobby —
+   *  dead sockets linger forever), humans that never reported (menu/lobby --
    *  their record renders a frozen ghost at the spawn default; bots exempt
-   *  since the sim writes their position), and the stale heartbeat —
+   *  since the sim writes their position), and the stale heartbeat --
    *  silent sockets get a 0.5Hz record so clients' stored state (health,
    *  isDead) still converges; gated on THAT player's lastSent, not a shared
-   *  clock — a shared timestamp meant only the first stale player in map
+   *  clock -- a shared timestamp meant only the first stale player in map
    *  order ever heartbeat. */
   private skipRecord(room: Room, playerId: string, p: PlayerState, now: number): boolean {
     if (room.sessions?.state(playerId) === 'grace') {return true;}
@@ -300,7 +334,7 @@ this.metrics.recordsBuilt += 1;
     }
     const silenceMs = now - p.lastSeen;
     // Idle reap FIRST: a menu-sitter's dead socket must still be collected
-    // — checking hasReceivedPosition before this left unreported ghosts
+    // -- checking hasReceivedPosition before this left unreported ghosts
     // sitting in the roster forever.
     if (this.reapIdle(room, playerId, p, silenceMs)) {return true;}
     if (!p.isBot && !p.hasReceivedPosition) {return true;}
@@ -308,7 +342,7 @@ this.metrics.recordsBuilt += 1;
     return silenceMs > 5000 && lastSent !== undefined && now - lastSent.t < 2000;
   }
 
-  /** Human silence past IDLE_KICK_MS gets reaped — close the live socket
+  /** Human silence past IDLE_KICK_MS gets reaped -- close the live socket
    *  (onClose runs the grace path) or remove directly when it's already
    *  dead. Returns true when the player was reaped. */
   private reapIdle(room: Room, playerId: string, p: PlayerState, silenceMs: number): boolean {
@@ -326,13 +360,13 @@ this.metrics.recordsIdleReaped += 1;
 
   /** Health channels the server owns: medkit channel (flag), regenerator
    *  perk (passive), regen powerup (timed). All cap at the perk max.
-   *  Server-owned heals never reach the owner — self is excluded from
-   *  tickUpdate — so a low-rate yourHealth echo keeps their hp from
+   *  Server-owned heals never reach the owner -- self is excluded from
+   *  tickUpdate -- so a low-rate yourHealth echo keeps their hp from
    *  drifting until the next discrete event. */
   private tickServerHeals(room: Room, playerId: string, p: PlayerState, now: number, simT: number): void {
     let heal = healPerTick(p, simT); // regenUntil is sim domain
     // Headhunt hoard-drip: held tokens trickle hp/armor/belt, but only
-    // 8s+ after the last hit — HELD_BUFF.graceMs keeps it sustain, not
+    // 8s+ after the last hit -- HELD_BUFF.graceMs keeps it sustain, not
     // tanking. Belt accumulates fractionally until a charge lands.
     const hb = heldBuffRates(p.heldTokens, simT - p.lastDamageAt);
     heal += hb.hp / CONFIG.tickRate;
@@ -347,7 +381,7 @@ this.metrics.recordsIdleReaped += 1;
     }
     if (heal <= 0 && hb.armor <= 0) {return;}
     healPool(p, heal);
-    // Capping out always echoes — the channel ends here, so the final
+    // Capping out always echoes -- the channel ends here, so the final
     // converged hp would otherwise wait on the next discrete event.
     // Armor rides free: remote armor already ships via sim records, the
     // carrier is the one replica that can't see itself.
@@ -358,7 +392,7 @@ this.metrics.recordsIdleReaped += 1;
   }
 
   /** The carrier is the one client that can't see the CHARGED status bit
-   *  (own records are excluded from fanout) — echo their decayed bank at
+   *  (own records are excluded from fanout) -- echo their decayed bank at
    *  0.5Hz so a walking bomb can hear itself crackle. A final 0 lands the
    *  moment the bank drains so the warning doesn't linger. */
   private tickChargeEcho(room: Room, playerId: string, p: PlayerState, now: number, simT: number): void {
@@ -371,7 +405,7 @@ this.metrics.recordsIdleReaped += 1;
     room.connections.sendToPlayer(playerId, { type: 'yourCharge', charge: p.chargeEchoed });
   }
 
-  /** Admit up to ADMIT_PER_TICK pending seats to one conn — the same
+  /** Admit up to ADMIT_PER_TICK pending seats to one conn -- the same
    *  playerJoined payload a mid-match join broadcasts, sent direct. */
   private drainAdmits(room: Room, recipientId: string, pending: Set<string>): void {
     let n = TickFanout.ADMIT_PER_TICK;
@@ -379,7 +413,7 @@ this.metrics.recordsIdleReaped += 1;
     for (const pid of pending) {
       const p = roster.get(pid);
       pending.delete(pid);
-      if (!p) {continue;} // left mid-pacing — drop silently
+      if (!p) {continue;} // left mid-pacing -- drop silently
       room.connections.sendToPlayer(recipientId, spawnPayload(WORLD_MODEL.player!, p.id, 'playerId', {
         name: p.name,
         internalId: p.internalId,
@@ -404,7 +438,7 @@ this.metrics.recordsIdleReaped += 1;
   fanoutRecords(room: Room, players: Players, records: TickRecord[]): void {
     const seq = room.tickSeq;
     for (const [recipientId, rp] of players) {
-      // Grace-period entries have no socket — record filtering for them
+      // Grace-period entries have no socket -- record filtering for them
       // is wasted work
       if (room.sessions?.state(recipientId) === 'grace') {continue;}
       // Server bots are seats, not clients: no socket ever drains a frame.
@@ -416,21 +450,23 @@ this.metrics.recordsIdleReaped += 1;
       const rx = rp.position.x, ry = rp.position.y, rz = rp.position.z;
       let tiers = this.tierMem.get(recipientId);
       if (!tiers) {tiers = new Map(); this.tierMem.set(recipientId, tiers);}
-      // Intro recipients decode from zero — they get the per-socket FULL
+      // Intro recipients decode from zero -- they get the per-socket FULL
       // copy of every record at full cadence for the window.
       const intro = room.introPlayers.has(recipientId);
-      // markIntro stamps at the seat's tickSeq — delta <= N covers the
+      // markIntro stamps at the seat's tickSeq -- delta <= N covers the
       // first N fanout ticks after the mark.
       const introFull = intro && room.tickSeq - (room.introPlayers.get(recipientId) ?? -100) <= TickFanout.INTRO_CADENCE_TICKS;
-      // Spawn pacing: admit a few pending seats per tick — a paced admit
+      // Spawn pacing: admit a few pending seats per tick -- a paced admit
       // rides an ordinary playerJoined on the wire; nothing says it waited.
       const pending = room.admitPending.get(recipientId);
       if (pending) {this.drainAdmits(room, recipientId, pending);}
       const others = this.scratchOthers;
       others.length = 0;
+      const cands = this.candRecs;
+      const {candDist} = this;
       for (const r of records) {
         if (r.playerId === recipientId) {continue;}
-        // Un-admitted seats don't exist for this conn yet — their records
+        // Un-admitted seats don't exist for this conn yet -- their records
         // wait for the paced playerJoined (their hit/kill EDGES still ride
         // the reliable broadcast; a damage event is never admission-gated).
         if (pending?.has(r.playerId)) {continue;}
@@ -439,10 +475,10 @@ this.metrics.recordsIdleReaped += 1;
         const dz = r.pos.z - rz;
         const dSq = dx * dx + dy * dy + dz * dz;
         // Tier 4 (200ms spacing) read as mini-warps even through the
-        // interpolation buffer — a skiing bot covers ~8m between records.
+        // interpolation buffer -- a skiing bot covers ~8m between records.
         // 150ms is the worst a body ever gets; hits/kills ride reliable
         // events either way.
-        // Egress is quadratic in roster — the far-field past 600m is a
+        // Egress is quadratic in roster -- the far-field past 600m is a
         // speck on screen, so it earns a record only every 8th tick while
         // the 400-600m band keeps the 150ms worst-case cadence.
         let tier = 8;
@@ -450,7 +486,7 @@ if (dSq < 22_500) {tier = 1;}
 else if (dSq < 160_000) {tier = 2;}
 else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         // Hysteresis: stepping OUT a tier requires 15% past the
-        // boundary — a target orbiting the line would otherwise flip
+        // boundary -- a target orbiting the line would otherwise flip
         // send cadence every tick and the receiver's arrival-interval
         // EMA oscillates instead of settling.
         const mem = tiers.get(r.playerId);
@@ -458,15 +494,15 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
           const bound = mem === 1 ? 22_500 : mem === 2 ? 160_000 : 360_000;
           if (dSq < bound * 1.15) {tier = mem;}
         }
-        // Map write only on change — an unconditional set was a churn
+        // Map write only on change -- an unconditional set was a churn
         // write per recipient×record×tick in the cpuprofile hot loop.
         if (mem !== tier) {tiers.set(r.playerId, tier);}
-        // Travel-budget tier (ephemeral — sits AFTER hysteresis so a
+        // Travel-budget tier (ephemeral -- sits AFTER hysteresis so a
         // slowed bot falls back to its distance tier immediately): no
         // remote may cover >5m between records. At ~50ms/tick that's
         // spd-dependent: 60m/s → every tick, 30m/s → tier 2, 20m/s →
         // tier 4, <12m/s → distance tier wins. Measured against the
-        // record's own speed, not a guessed constant — the dual-diff
+        // record's own speed, not a guessed constant -- the dual-diff
         // showed 24m/gap ghosts on 2.5Hz far tiers, and the client
         // can't render truth inside a gap that big by any technique.
         const spd = r.spd ?? 0;
@@ -475,14 +511,14 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
           if (speedTier < tier) {tier = speedTier;}
         }
         // force = hit/knockback window: real positions must reach every
-        // observer at full rate while they extrapolate the knockback —
+        // observer at full rate while they extrapolate the knockback --
         // sparse never substitutes there (vel IS the payload).
         if (introFull || r.force || seq % tier === 0) {
-          // Stopped (far AND under ~12m/s): zero replication — the
+          // Stopped (far AND under ~12m/s): zero replication -- the
           // receiver dead-reckons a ~0-vel ghost either way, so every
           // sparse record was paying wire cost for no new truth. The
           // staggered FULLS keep flowing through r.force below, so the
-          // conn's decode basis still reseats every ~750ms — an un-stop
+          // conn's decode basis still reseats every ~750ms -- an un-stop
           // needs nothing: the next masked delta decodes against a
           // fresh basis. Nothing on the wire says a record stopped.
           if (tier === 8 && !r.force && !intro && spd <= 12) {
@@ -490,7 +526,8 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
             this.metrics.recordsStopped += 1;
             continue;
           }
-          // Far tier (>600m, 2.5Hz): pos+vitals only — the speck
+          let variant: Uint8Array;
+          // Far tier (>600m, 2.5Hz): pos+vitals only -- the speck
           // dead-reckons its retained vel/rot and the staggered fulls
           // reseat it every ~750ms. ~40% off the dominant egress class.
           if (tier === 8 && !r.force && !intro) {
@@ -500,32 +537,50 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
               r.sparse = sparseV4Record(r.data, pr.encSparse);
               r.sparseTick = seq;
             }
-            others.push(r.sparse!);
-          } else {others.push(intro && r.full !== undefined ? r.full : r.data);}
+            variant = r.sparse!;
+          } else {variant = intro && r.full !== undefined ? r.full : r.data;}
+          // Exempt traffic emits directly; everything else competes for
+          // the K-nearest cap below.
+          if (introFull || r.force) {others.push(variant);}
+          else {cands.push(variant); candDist.push(dSq);}
         }
         else {this.metrics.recordsTierSkipped += 1;}
       }
-      // Always send — even an empty frame. The client's loss telemetry
+      // K-nearest cap: bound each recipient's frame at MAX_RECORDS.
+      // A quickselect pass finds the cutoff distance; ties at the edge
+      // stop at the cap itself so the bound is exact.
+      if (cands.length > TickFanout.MAX_RECORDS) {
+        const cutoff = kthSmallest(candDist, TickFanout.MAX_RECORDS);
+        let kept = 0;
+        for (let i = 0; i < cands.length && kept < TickFanout.MAX_RECORDS; i++) {
+          if (candDist[i]! <= cutoff) {others.push(cands[i]!); kept += 1;}
+        }
+        this.metrics.recordsCapped += cands.length - kept;
+      } else {
+        for (const c of cands) {others.push(c);}
+      }
+      cands.length = 0; candDist.length = 0;
+      // Always send -- even an empty frame. The client's loss telemetry
       // keys on tick-frame ARRIVAL cadence (a silent link reads as 100%
       // loss), and ackSeq rides this frame: a quiet room would starve
       // stateHistory pruning entirely. ~10B × 20Hz is free.
       const frame = encodeTickFrame(
         room.players.getLastSeq(recipientId),
         seq,
-        // Tick-set confirm: highest inputMove seq the shadow consumed —
+        // Tick-set confirm: highest inputMove seq the shadow consumed --
         // the client prunes its input journal and sees a starving stream.
         room.moveSim.inputSeqOf(recipientId),
         others,
         WIRE_TICK_V4,
-        // Per-conn arena — the queued view survives until flush; a shared
+        // Per-conn arena -- the queued view survives until flush; a shared
         // one aliases every queued frame to the last-encoded.
         room.connections.frameArenaFor(recipientId),
       );
-      // Dropped frames surface as tickSeq gaps client-side — count them
+      // Dropped frames surface as tickSeq gaps client-side -- count them
       // here so a consumer that can't drain reads as rising loss, not
       // as an unexplained stutter nobody can attribute.
       // Dev-only WAN-loss repro (FPS_DROP_PCT): dropping whole frames is
-      // exactly what cadence loss looks like to a receiver — interp
+      // exactly what cadence loss looks like to a receiver -- interp
       // starves, DR episodes run long, tickSeq gaps surface as loss.
       // Not sim code, so Math.random is fine; soaks set it on the spawn.
       if (DROP_PCT > 0 && Math.random() * 100 < DROP_PCT) {continue;}
@@ -540,22 +595,22 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
       if (st === 'backlogged') {this.metrics.tickFramesDropped += 1;}
       else if (st === 'held') {this.metrics.tickFramesHeld += 1;}
     }
-    // tierMem is keyed by live recipients — a departed player's map
+    // tierMem is keyed by live recipients -- a departed player's map
     // would otherwise linger (and a rejoiner gets a fresh one anyway).
     for (const rid of this.tierMem.keys()) {if (!players.has(rid)) {this.tierMem.delete(rid);}}
-    // Spectators have no viewpoint for interest tiers — they get the
+    // Spectators have no viewpoint for interest tiers -- they get the
     // full record set every tick.
     if (room.spectators.size > 0) {
-      // Shared scratch like the player path — a fresh map() per spectator
+      // Shared scratch like the player path -- a fresh map() per spectator
       // per tick was the only allocation left in fanout.
       const all = this.scratchOthers;
       all.length = 0;
       for (const r of records) {all.push(r.data);}
-      // `all` is shared scratch — track which variant it currently holds
+      // `all` is shared scratch -- track which variant it currently holds
       // so mixed intro/established spectator rosters each get their copy.
       let allFulls = false;
       for (const id of room.spectators) {
-        // Same per-recipient intro contract as players — a fresh spectator
+        // Same per-recipient intro contract as players -- a fresh spectator
         // decodes from zero and needs the full copies for the window.
         const intro = room.introPlayers.has(id);
         if (intro !== allFulls) {
@@ -563,7 +618,7 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
           for (const r of records) {all.push(intro && r.full !== undefined ? r.full : r.data);}
           allFulls = intro;
         }
-        // Same ackSeq contract as player frames — a spectator who spawns
+        // Same ackSeq contract as player frames -- a spectator who spawns
         // mid-session must not carry a synthetic seq into history pruning.
         const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all, WIRE_TICK_V4, room.connections.frameArenaFor(id));
         this.metrics.bytesSent += frame.byteLength;

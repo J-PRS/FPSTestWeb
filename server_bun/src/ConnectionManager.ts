@@ -6,26 +6,26 @@ import { wireTx, wireClose, BIN_KIND } from './wireMeter.ts';
 import { encodeBatch, encodeWireJson, tickFrameScratch, isEvScratch, type TickFrameScratch } from '../../shared/wire.ts';
 
 /** Tick frames are drop-safe (peers extrapolate), so a socket that can't
- *  drain must not queue them unboundedly — a stalled connection otherwise
+ *  drain must not queue them unboundedly -- a stalled connection otherwise
  *  grows memory while the player sees a worse-than-lossy feed. Above this
  *  backlog the frame is dropped before it hits the send queue. Only the
  *  tick hot path is gated; reliable control/ball traffic still queues. */
 const MAX_TICK_BACKLOG = 256 * 1024;
-/** Sparse keepalive on backlogged sockets — every 4th tick rides through
+/** Sparse keepalive on backlogged sockets -- every 4th tick rides through
  *  (~5Hz at 20Hz) instead of all-or-nothing silence. A congested-but-
  *  draining link keeps remotes alive at degrade cadence (interest
  *  philosophy: degrade, never cull); a truly dead reader still feeds the
  *  drown clock and closes on the same schedule. */
 const SHED_KEEPALIVE = 4;
 /** Intro-gate grace: ~3s at 20Hz. A join burst legitimately takes
- *  seconds to drain on a slow link — 'held' is honest while it does.
+ *  seconds to drain on a slow link -- 'held' is honest while it does.
  *  Past the grace it's a socket that never drains: degrade to the
  *  sparse lane rather than starving the client silently forever. */
 const HELD_GRACE_TICKS = 60;
 
 /** Join-burst hold: a freshly seated client's outbox carries gameState +
  *  rosters + wireIds (often >256KB) while its main thread is still busy
- *  loading the world — every tick frame queued behind that burst is
+ *  loading the world -- every tick frame queued behind that burst is
  *  delivered stale or shed at the cap, and the seq gaps pollute loss
  *  telemetry with a pattern that isn't loss. Until the outbox first
  *  drains below this floor, tick frames are held (counted separately,
@@ -35,7 +35,7 @@ const INTRO_DRAIN_FLOOR = 32 * 1024;
 
 /** Drowned-client drain: tick frames shed at 256KB, but reliable frames
  *  (joins, kills, chat, handshakes) queue into the transport buffer
- *  unconditionally — a reader that never drains parks megabytes of
+ *  unconditionally -- a reader that never drains parks megabytes of
  *  stale truth per socket with no one watching. Past this mark we start
  *  the clock; a socket still drowned after SLOW_FOR_MS is closed so the
  *  client reconnects through grace instead of buffering seconds-old
@@ -43,18 +43,18 @@ const INTRO_DRAIN_FLOOR = 32 * 1024;
 const DROWN_BYTES = 4 * 1024 * 1024;
 const SLOW_FOR_MS = 5000;
 
-/** Transient cues — a muzzle flash, a jump, a knockback shove. A reclaiming
+/** Transient cues -- a muzzle flash, a jump, a knockback shove. A reclaiming
  *  socket replays the journal after possibly seconds of grace; a stale cue
  *  replays as a phantom effect, while skipping it costs nothing because the
  *  reclaim's gameState reseeds every truth these could feed. State events
- *  (joins, kills, flag/deploy/pickup edges, chat) always replay — they carry
+ *  (joins, kills, flag/deploy/pickup edges, chat) always replay -- they carry
  *  durable fact a snapshot gap would lose. */
 const VOLATILE_TYPES = new Set([
   'playerShot', 'jump', 'jetpack', 'knockback', 'playerHit',
   'projectileCreated', 'projectileDestroyed', 'claimAck',
 ]);
 
-/** Periodic single-recipient echoes — journaled, each one burns a slot of
+/** Periodic single-recipient echoes -- journaled, each one burns a slot of
  *  the fixed 1024-frame replay window for a truth only one player needs.
  *  At a full roster (~2Hz echo each) they'd churn the whole window in
  *  ~8-16s and evict broadcast truth (kills, flag edges, chat) a reclaimer
@@ -63,15 +63,15 @@ const VOLATILE_TYPES = new Set([
 // stateHash joins the periodic-echo ban for a second reason: replaying
 // a seconds-old hash against a replica that kept moving reads as a
 // phantom desync + a spurious heal request, and the probe self-repeats
-// every 2s — nothing a reclaim needs journaled. ping/pong too: each
+// every 2s -- nothing a reclaim needs journaled. ping/pong too: each
 // replayed ping earns a client pong (a reclaim burst tripped the
 // rate limiter) and a stale echo would poison the transit EMA.
 // gameState too: it's the largest frame type and a reclaimer's stale
-// copy is always superseded by the fresh one sent right after replay —
+// copy is always superseded by the fresh one sent right after replay --
 // journaling it spends roster-sized replay bytes for nothing.
 const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'stateHash', 'ping', 'pong', 'srvPing', 'gameState']);
 const VOLATILE_TTL_MS = 3000;
-/** FPS_WIRESPY=1 — emit-time wire forensics (which pids a keepalive/
+/** FPS_WIRESPY=1 -- emit-time wire forensics (which pids a keepalive/
  *  broadcast actually targets). Hoisted once: env reads on a per-frame
  *  hot path cost a map lookup every send. */
 const WIRESPY = Boolean(process.env.FPS_WIRESPY);
@@ -79,22 +79,22 @@ const WIRESPY = Boolean(process.env.FPS_WIRESPY);
 export class ConnectionManager {
   /** uWS native fanout: identical payloads (reliable broadcasts, ball
    *  batches, proj edges) build the frame once and publish to every
-   *  subscribed socket — ~88% of send calls on a combat room collapse
+   *  subscribed socket -- ~88% of send calls on a combat room collapse
    *  into one `server.publish` per frame. Set once in server.ts after
    *  Bun.serve; absent in tests → the per-conn path stands. */
   static publishFn: ((topic: string, data: string | Uint8Array) => void) | undefined;
   /** UDP volatile lane (native-shell clients): returns true when the
-   *  tick frame rode out over the bound datagram lane — the ws path is
+   *  tick frame rode out over the bound datagram lane -- the ws path is
    *  skipped entirely (control/reliable traffic never touches this).
    *  Set once in server.ts when FPS_UDP_PORT is live. */
   static udpSend: ((playerId: string, data: Uint8Array) => boolean) | undefined;
-  /** Session-end hook — unbinds the udp lane so a stale token dies with
+  /** Session-end hook -- unbinds the udp lane so a stale token dies with
    *  the session. Set alongside udpSend. */
   static onUnreg: ((playerId: string) => void) | undefined;
   /** Lane-alive probe for emit-time display ('ws+udp' scoreboard tier). */
   static udpLive: ((playerId: string) => boolean) | undefined;
   private topic?: string;
-  /** Pids whose socket took a subscribe (real uWS ws) — adapters (wt/rtc
+  /** Pids whose socket took a subscribe (real uWS ws) -- adapters (wt/rtc
    *  lanes) never join the topic and keep per-conn sends. */
   private readonly pubbed = new Set<string>();
 
@@ -103,22 +103,22 @@ export class ConnectionManager {
   /** Per-conn tick coalescing: between beginCollect/flushOutboxes every
    *  outbound frame queues per recipient; the flush ships ONE ws.send
    *  per conn carrying [in-tick events..., tick frame] as a WIRE_BATCH.
-   *  Outside the window sends stay immediate — no latency change for
+   *  Outside the window sends stay immediate -- no latency change for
    *  async events (joins, reclaims, timers). The batch framing bytes
    *  (~4B/subframe) aren't metered; per-frame kind detail is kept by
    *  metering at queue time, not at the merged send. */
   private collecting = false;
-  /** Armed by the first tick — volatile cues arriving between flushes
+  /** Armed by the first tick -- volatile cues arriving between flushes
    *  queue into the NEXT flush's batch instead of a send each (the
    *  cpuprofile's top line was per-event ws.send fanout). Non-ticking
    *  harnesses never arm it and keep the immediate path. */
   private ticksRunning = false;
   private readonly outbox = new Map<string, Uint8Array[]>();
-  /** Batch-encode scratch — ws.send consumes the bytes synchronously, so
+  /** Batch-encode scratch -- ws.send consumes the bytes synchronously, so
    *  one growable buffer serves every conn's batch (per-conn arenas are
    *  for frames that OUTLIVE their encode, the batch doesn't). */
   private batchScratch = new Uint8Array(64 * 1024);
-  /** Per-conn tick-frame arena — the outbox RETAINS the encoded view
+  /** Per-conn tick-frame arena -- the outbox RETAINS the encoded view
    *  until flush, so every conn needs its own buffer: a shared arena
    *  aliases every queued frame to the last-encoded one (the fanout
    *  encodes recipient A, queues the view, then recipient B's encode
@@ -133,7 +133,7 @@ export class ConnectionManager {
   beginCollect(): void { this.collecting = true; this.ticksRunning = true; }
   private push(pid: string, frame: Uint8Array): void {
     // evScratch views are only valid until the ring wraps (128 encodes)
-    // — a queued frame would otherwise flush as a DIFFERENT event
+    // -- a queued frame would otherwise flush as a DIFFERENT event
     // (a playerHit arriving as a knock: the missing-damage class).
     // Copy only what needs retention; immediate ws.send consumes the
     // scratch synchronously and stays alloc-free.
@@ -142,7 +142,7 @@ export class ConnectionManager {
     if (!q) {q = []; this.outbox.set(pid, q);}
     q.push(frame);
   }
-  /** Send-cost telemetry — counts actual ws.send calls + elapsed inside
+  /** Send-cost telemetry -- counts actual ws.send calls + elapsed inside
    *  flush so the per-call cost is measured, not guessed. Folded into
    *  room metrics; cleared on read. */
   sendsCount = 0;
@@ -150,7 +150,7 @@ export class ConnectionManager {
   flushOutboxes(): void {
     this.collecting = false;
     for (const [pid, q] of this.outbox) {
-      // Persistent queue — the array survives the flush (length reset),
+      // Persistent queue -- the array survives the flush (length reset),
       // so a steady fleet allocates zero outbox objects per tick.
       if (q.length > 0) {
         const ws = this.connections.get(pid);
@@ -170,7 +170,7 @@ export class ConnectionManager {
     }
   }
 
-  /** Register→intro-gate-open span — how long the join burst takes to
+  /** Register→intro-gate-open span -- how long the join burst takes to
    *  drain under load (the "playable" point, not just first gameState). */
   private introAt = new Map<string, number>();
   /** Fires once per seat when the intro gate opens; room folds it into
@@ -178,19 +178,19 @@ export class ConnectionManager {
   onIntroDrained?: (playerId: string, ms: number) => void;
 
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
-  /** Pids whose post-join outbox has drained once — the tick intro gate
+  /** Pids whose post-join outbox has drained once -- the tick intro gate
    *  holds frames until the join burst clears, not just on first seat. */
   private tickDrained: Set<string> = new Set();
 
   /** Inbound flood control (Bun 1.4 ws.pause): a tripped rate-limit
-   *  socket stops dispatching entirely — the kernel buffers its frames,
+   *  socket stops dispatching entirely -- the kernel buffers its frames,
    *  zero parse/validate cost for the window. resume() fires on the
    *  live check only; a socket that died mid-pause is simply gone. */
   private floodTimers = new Map<string, ReturnType<typeof setTimeout>>();
   floodPause(playerId: string, ms: number): void {
     const ws = this.connections.get(playerId);
     if (!ws) {return;}
-    // Bun ≥1.4 runtime API — the installed bun-types predates it, and
+    // Bun ≥1.4 runtime API -- the installed bun-types predates it, and
     // adapters/test fakes may not carry it at all.
     const sock = ws as unknown as { pause?: () => void; resume?: () => void };
     const resume = sock.resume?.bind(sock);
@@ -207,32 +207,32 @@ export class ConnectionManager {
   // Offset cursor (Socket.IO connection-state-recovery shape): every
   // reliable JSON frame carries a room-scoped `ev` seq, and the last N
   // frames sit in a journal. A reclaim presents the last seq it processed
-  // and we replay only what its dead socket missed — cheaper than a blind
+  // and we replay only what its dead socket missed -- cheaper than a blind
   // resnapshot and it preserves event causality. Binary lanes (ticks,
   // ball segments) skip the journal: ticks are drop-safe and the reclaim's
   // gameState+ballRoster already reseeds ball truth.
   private outSeq = 0;
   /** JSON frames AND opt-in binary events share the journal + one ev seq
-   *  space — replay preserves causal order regardless of lane. */
+   *  space -- replay preserves causal order regardless of lane. */
   private journal: { seq: number; data: string | Uint8Array; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
   static readonly JOURNAL_MAX = 2048;
   /** splice(0,1) per push at saturation memmoves the whole journal every
-   *  frame — evict in chunks so the copy amortizes. Cap is a steady-state
+   *  frame -- evict in chunks so the copy amortizes. Cap is a steady-state
    *  target, not a hard bound; replay ordering and oldest-seq lookup are
    *  unchanged. */
   static readonly JOURNAL_EVICT_CHUNK = 128;
   /** Frames evicted from the journal before any in-flight reclaim could
-   *  replay them — a gap the reclaiming client can never see again, so a
+   *  replay them -- a gap the reclaiming client can never see again, so a
    *  nonzero count means a silent desync happened. The room folds this
    *  into its health counters; the owner can bump a tag on each wrap. */
   journalDropped = 0;
   onJournalWrap?: (dropped: number) => void;
-  /** Frames a reclaim asked for that were already evicted — the client
+  /** Frames a reclaim asked for that were already evicted -- the client
    *  gets gameState truth but loses event history (kills, flag edges,
    *  chat). Counted so an undersized journal is visible, not silent. */
   reclaimGap = 0;
   onReclaimGap?: (playerId: string, missed: number) => void;
-  /** Sockets closed by the drown drain — room health counts each via the
+  /** Sockets closed by the drown drain -- room health counts each via the
    *  callback so a pathological client shows up in the counters, not
    *  just the close log. */
   onDrowned?: (playerId: string) => void;
@@ -243,7 +243,7 @@ export class ConnectionManager {
   reliableDropped = 0;
   onReliableDropped?: (playerId: string) => void;
 
-  /** Raw buffered-amount sample per reliable send — the room folds it
+  /** Raw buffered-amount sample per reliable send -- the room folds it
    *  into a bufMax gauge. Drown only fires past the cap; this surfaces
    *  the approach (a socket drowning for seconds before it dies). */
   onBuffered?: (playerId: string, bytes: number) => void;
@@ -251,11 +251,11 @@ export class ConnectionManager {
   /** Reliable-lane sends all funnel through here on the way to a socket.
    *  A transient spike (reclaim replay burst) just starts the clock and
    *  drains under the hysteresis; a dead reader holds the mark and gets
-   *  closed — skip sending into a socket already past the mark so the
+   *  closed -- skip sending into a socket already past the mark so the
    *  buffered byte count doesn't balloon while the clock runs. */
   private drownCheck(playerId: string, ws: ServerWebSocket<WebSocketData>): 'ok' | 'drowned' {
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
-    // Sockets without a data slot (test mocks) can't carry the mark —
+    // Sockets without a data slot (test mocks) can't carry the mark --
     // buffered is also 0 there, so there's nothing to track anyway.
     if (!ws.data) {return 'ok';}
     if (buffered > 0) {this.onBuffered?.(playerId, buffered);}
@@ -266,7 +266,7 @@ export class ConnectionManager {
     const since = ws.data.slowSince;
     if (since === undefined) {
       ws.data.slowSince = wallNow();
-      return 'ok'; // first sighting — could be the reclaim burst
+      return 'ok'; // first sighting -- could be the reclaim burst
     }
     if (wallNow() - since < SLOW_FOR_MS) {return 'drowned';}
     logger.warn('closing drowned socket', { playerId, buffered, slowMs: wallNow() - since });
@@ -276,7 +276,7 @@ export class ConnectionManager {
   }
 
   /** Reliable-lane send with status check. `send()` returns >0 sent,
-   *  -1 queued under backpressure, 0 DROPPED — and a dropped reliable
+   *  -1 queued under backpressure, 0 DROPPED -- and a dropped reliable
    *  frame is the exact "pickup/damage silently missing" bug: the
    *  socket stays open while events vanish, and the journal only
    *  replays on reclaim. A drop means this socket can't be trusted:
@@ -288,7 +288,7 @@ export class ConnectionManager {
     if (status === 0) {
       this.reliableDropped += 1;
       this.onReliableDropped?.(playerId);
-      logger.warn('reliable frame dropped by transport — closing to force reclaim', { playerId });
+      logger.warn('reliable frame dropped by transport -- closing to force reclaim', { playerId });
       try { ws.close(1011, 'reliable drop'); } catch { /* already closing */ }
     }
   }
@@ -296,7 +296,7 @@ export class ConnectionManager {
   private frame(msg: ServerMessage, only?: string, exclude?: string): { data: string; kind: string } {
     this.outSeq += 1;
     const seq = this.outSeq;
-    // Stamp in place — every call site passes a fresh literal, so the
+    // Stamp in place -- every call site passes a fresh literal, so the
     // Object.assign({msg, ev}) clone was a throwaway per send (~1-2K/s).
     (msg as { ev?: number }).ev = seq;
     const data = JSON.stringify(msg);
@@ -313,13 +313,13 @@ export class ConnectionManager {
     return { data, kind: `j:${(msg as { type: string }).type}` };
   }
 
-  /** Binary events opt INTO the journal at call time (playerHit etc —
+  /** Binary events opt INTO the journal at call time (playerHit etc --
    *  they're the combat stream a reclaim must replay; ticks/ball segs
    *  stay drop-safe and skip). Shares the ev seq space so replay order
    *  matches live order. */
   private journalBinary(data: Uint8Array, only?: string, exclude?: string, volatile_ = false): void {
     this.outSeq += 1;
-    // slice() — emit-time frames live in the shared evScratch ring and
+    // slice() -- emit-time frames live in the shared evScratch ring and
     // recycle after ~128 encodes; the journal retains until replay.
     this.journal.push({ seq: this.outSeq, data: data.slice(), only, exclude, volatile: volatile_, at: wallNow() });
     if (this.journal.length > ConnectionManager.JOURNAL_MAX + ConnectionManager.JOURNAL_EVICT_CHUNK) {
@@ -330,7 +330,7 @@ export class ConnectionManager {
     }
   }
 
-  /** Reclaim replay — frames addressed to everyone or to this player that
+  /** Reclaim replay -- frames addressed to everyone or to this player that
    *  arrived after their last processed seq. Runs before the handshake
    *  reply so gameState remains the final word on truth. */
   replayTo(playerId: string, ws: ServerWebSocket<WebSocketData>, fromSeq: number): number {
@@ -342,9 +342,9 @@ export class ConnectionManager {
       this.reclaimGap += missed;
       this.onReclaimGap?.(playerId, missed);
     }
-    // Cork the burst: replay fires up to ~1024 sends back-to-back —
+    // Cork the burst: replay fires up to ~1024 sends back-to-back --
     // batching them costs one flush instead of one syscall each.
-    // (Test mocks have no cork — flush unbatched there.)
+    // (Test mocks have no cork -- flush unbatched there.)
     const stale = (e: (typeof this.journal)[number]): boolean =>
       e.volatile === true && now - e.at > VOLATILE_TTL_MS;
     const eligible = (e: (typeof this.journal)[number]): boolean =>
@@ -355,12 +355,12 @@ export class ConnectionManager {
         if (e.seq <= fromSeq) {continue;}
         if (stale(e)) {skippedStale += 1; continue;}
         if (!eligible(e)) {continue;}
-        // Replay rides the same backpressure path as live sends — a
+        // Replay rides the same backpressure path as live sends -- a
         // drowning socket gets its clock started (or closed) instead of
         // being re-flooded and silently dropping frames.
         if (this.drownCheck(playerId, ws) !== 'ok') {
           // The un-replayed tail was eligible for this recipient but never
-          // sent — count it as a reclaim gap or the client's seq watermark
+          // sent -- count it as a reclaim gap or the client's seq watermark
           // silently jumps past kills/chat it never saw.
           for (const rest of this.journal) {
             if (rest.seq < e.seq || !eligible(rest)) {continue;}
@@ -408,14 +408,14 @@ export class ConnectionManager {
       const ft = this.floodTimers.get(playerId);
       if (ft) {clearTimeout(ft); this.floodTimers.delete(playerId);}
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
-      wireClose(playerId); // drop the /wire conn entry — ghosts otherwise list forever
+      wireClose(playerId); // drop the /wire conn entry -- ghosts otherwise list forever
       ConnectionManager.onUnreg?.(playerId);
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }
   }
 
   sendToPlayer(playerId: string, msg: ServerMessage): void {
-    // Journal BEFORE delivery — a frame aimed at a dead/grace socket is
+    // Journal BEFORE delivery -- a frame aimed at a dead/grace socket is
     // exactly what reclaim replay must find later.
     const f = this.frame(msg, playerId);
     if (this.collecting || (this.ticksRunning && VOLATILE_TYPES.has((msg as { type: string }).type))) {
@@ -432,12 +432,12 @@ export class ConnectionManager {
     }
   }
 
-  /** Binary hot-path frames (tickUpdate) — no JSON.stringify. On WS
+  /** Binary hot-path frames (tickUpdate) -- no JSON.stringify. On WS
    *  this is the single TCP stream; on WT the adapter routes ticks to
    *  stream-2 (reliable, HoL-isolated) once the binLane caps handshake
-   *  lands — measured ~33% seq loss on the QUIC datagram lane makes it
+   *  lands -- measured ~33% seq loss on the QUIC datagram lane makes it
    *  unfit as the primary state lane (see _docs/2026-10-18_NETCODE_DEEP_DIVE_3). */
-  /** Returns 'sent' | 'held' | 'backlogged' | 'sparse' | 'gone' — 'held'
+  /** Returns 'sent' | 'held' | 'backlogged' | 'sparse' | 'gone' -- 'held'
    *  is the intro gate (counted separately, not a loss); 'backlogged' is
    *  a real shed; 'sparse' is the 1-in-SHED_KEEPALIVE keepalive that still
    *  rode through on a backlogged socket (sent, but the socket is
@@ -447,14 +447,14 @@ export class ConnectionManager {
     if (!ws || ws.readyState !== 1) {return 'gone';}
     const buffered = this.bufferedOf(playerId, ws);
     // UDP-bound session: volatile tick frames ride the datagram lane
-    // outright — before the outbox/collect path so they never queue
+    // outright -- before the outbox/collect path so they never queue
     // behind the reliable batch.
     if (ConnectionManager.udpSend?.(playerId, data) === true) {return 'sent';}
     if (!this.tickDrained.has(playerId)) {
       if (buffered > INTRO_DRAIN_FLOOR) {
         const h = (this.heldPhase.get(playerId) ?? 0) + 1;
         this.heldPhase.set(playerId, h);
-        // Held PAST the grace isn't a fresh join catching up — it never
+        // Held PAST the grace isn't a fresh join catching up -- it never
         // drains at all. Pinning it at 'held' starves the client of every
         // tick AND never starts the drown clock (the bigSoak alive-but-
         // stalled signature): degrade it to the sparse lane like a backlog.
@@ -462,7 +462,7 @@ export class ConnectionManager {
         return 'held';
       }
       this.heldPhase.delete(playerId);
-      this.tickDrained.add(playerId); // first clean sample — gate opens
+      this.tickDrained.add(playerId); // first clean sample -- gate opens
       const introT0 = this.introAt.get(playerId);
       if (introT0 !== undefined) {this.introAt.delete(playerId); this.onIntroDrained?.(playerId, wallNow() - introT0);}
     }
@@ -475,7 +475,7 @@ export class ConnectionManager {
 
   /** Over-cap lane: SHED_KEEPALIVE-1 of N frames shed, the Nth rides
    *  through at degrade cadence. Backlogged sockets ALSO feed the drown
-   *  clock — the cap sheds frames but a reader that never drains must
+   *  clock -- the cap sheds frames but a reader that never drains must
    *  still be closed, or a tick-only client lingers below DROWN_BYTES. */
   private sparseOrShed(playerId: string, ws: ServerWebSocket<WebSocketData>, data: Uint8Array): 'backlogged' | 'sparse' {
     this.drownCheck(playerId, ws);
@@ -487,21 +487,21 @@ export class ConnectionManager {
     return 'sparse';
   }
 
-  /** Correctness-critical binary (ball segments) — always the reliable
+  /** Correctness-critical binary (ball segments) -- always the reliable
    *  lane. A dropped segment is a resync the client free-runs blind for
    *  ~1.2s, which is exactly the rubberband pattern; a dropped tick frame
    *  is just interpolation noise. At ~50B × ~10/s per ball this is cheap.
    *  Still rides the drown check: a stalled reader otherwise queues
-   *  segments forever and — since ticks ride the capped lane — a
+   *  segments forever and -- since ticks ride the capped lane -- a
    *  binary-only client would never even start the drain clock. The
    *  reclaim's ballRoster reseeds ball truth, so the skip is honest. */
   /** Pubbed sockets skip per-conn sends, but the drown clock still needs
-   *  a buffered sample — once per DROWN_SWEEP_MS per conn, not per frame
+   *  a buffered sample -- once per DROWN_SWEEP_MS per conn, not per frame
    *  (a native getBufferedAmount per broadcast×conn was a hot remnant). */
   private drownSweepAt = new Map<string, number>();
-  /** getBufferedAmount is a native call — sampling it per send frame was
+  /** getBufferedAmount is a native call -- sampling it per send frame was
    *  a cpuprofile line at 1k conns. Cached while `collecting` (the batched
-   *  tick window, ≤50ms — the shed/held gates tolerate that staleness;
+   *  tick window, ≤50ms -- the shed/held gates tolerate that staleness;
    *  outside the window every read is fresh, per the intro-gate tests). */
   private bufSampleAt = new Map<string, number>();
   private bufSampleVal = new Map<string, number>();
@@ -516,10 +516,10 @@ export class ConnectionManager {
     this.bufSampleVal.set(pid, v);
     return v;
   }
-  /** Per-conn shed phase — counts backlogged ticks so every SHED_KEEPALIVE-th
+  /** Per-conn shed phase -- counts backlogged ticks so every SHED_KEEPALIVE-th
    *  still rides through (sparse keepalive); reset on unregister. */
   private shedPhase = new Map<string, number>();
-  /** Per-conn held-gate streak — the intro burst's grace is counted in
+  /** Per-conn held-gate streak -- the intro burst's grace is counted in
    *  calls (~ticks), not wall time; a conn that drains resets to zero. */
   private heldPhase = new Map<string, number>();
   private static DROWN_SWEEP_MS = 250;
@@ -532,9 +532,9 @@ export class ConnectionManager {
 
   broadcastBinaryReliable(data: Uint8Array, journaled: boolean | 'volatile' = false, exclude?: string): void {
     const kind = BIN_KIND[data[1]!]!;
-    if (journaled) {this.journalBinary(data, undefined, exclude, journaled === 'volatile');} // combat events replay on reclaim — 'volatile' carries the same 3s staleness window the JSON version had
+    if (journaled) {this.journalBinary(data, undefined, exclude, journaled === 'volatile');} // combat events replay on reclaim -- 'volatile' carries the same 3s staleness window the JSON version had
     if (this.collecting || (this.ticksRunning && journaled === 'volatile')) {
-      // Ring views get one shared copy for the whole broadcast — push()
+      // Ring views get one shared copy for the whole broadcast -- push()
       // would otherwise slice the same bytes once per recipient.
       const owned = isEvScratch(data) ? data.slice() : data;
       for (const pid of this.connections.keys()) {
@@ -543,14 +543,14 @@ export class ConnectionManager {
       }
       return;
     }
-    // publish() can't exclude a socket — an excluded broadcast pays the
+    // publish() can't exclude a socket -- an excluded broadcast pays the
     // per-conn path like the JSON version does.
     const pub = ConnectionManager.publishFn;
     if (exclude === undefined && pub && this.topic && this.pubbed.size > 0) {pub(this.topic, data);}
     this.connections.forEach((ws, pid): void => {
       if (pid === exclude) {return;}
       if (exclude === undefined && this.pubbed.has(pid)) {
-        // Published — keep the drown clock fed anyway: a dead reader on
+        // Published -- keep the drown clock fed anyway: a dead reader on
         // the topic lane queues the same bytes without a per-conn drop
         // signal to catch it early.
         wireTx(pid, data.byteLength, kind);
@@ -561,7 +561,7 @@ export class ConnectionManager {
     });
   }
 
-  /** Single-recipient reliable binary (knockback etc) — journalled with
+  /** Single-recipient reliable binary (knockback etc) -- journalled with
    *  `only` so a reclaim replays it to the victim alone. */
   sendBinToPlayerReliable(playerId: string, data: Uint8Array, journaled: boolean | 'volatile' = false): void {
     if (journaled) {this.journalBinary(data, playerId, undefined, journaled === 'volatile');}
@@ -605,7 +605,7 @@ export class ConnectionManager {
     });
   }
 
-  /** Intro-gate probe — false while a fresh seat's outbox still holds
+  /** Intro-gate probe -- false while a fresh seat's outbox still holds
    *  tick frames (its seq gaps are by design; its nacks are noise). */
   drainedForTicks(playerId: string): boolean {
     return this.tickDrained.has(playerId);
@@ -625,7 +625,7 @@ export class ConnectionManager {
   }
 
   /** Graceful teardown: a real close frame (not a severed socket) tells
-   *  the client WHY the session ended — 1001 'going away' reads as
+   *  the client WHY the session ended -- 1001 'going away' reads as
    *  'server restarting' on the reconnect banner instead of a mystery
    *  drop that looks like their own connection died. */
   closeAll(code: number, reason: string): void {
