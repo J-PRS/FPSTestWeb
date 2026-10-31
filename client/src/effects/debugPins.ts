@@ -83,7 +83,7 @@ const leashList: { x1: number; y1: number; z1: number; x2: number; y2: number; z
  *  the conn still hides (it's a chord visually) but skips the
  *  unexplained-jump alert that fires on a tight-arc correction. */
 /** `expectJump` kept for signature compat; breaks are event-driven via
- *  breakDropDebugPin — the owner knows teleports, no guessing needed. */
+ *  breakDropDebugPin - the owner knows teleports, no guessing needed. */
 export function dropDebugPin(owner: object, p: { x: number; y: number; z: number }, spacingM = 4, expectJump = false): void {
   if (!wposOn()) {return;}
   let lp = livePos.get(owner);

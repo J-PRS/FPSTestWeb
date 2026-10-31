@@ -1,9 +1,9 @@
-// gunlab previews — creature, pickup, and deployable builders for the
+// gunlab previews - creature, pickup, and deployable builders for the
 // lab rail. Creature previews are a REAL species instance, not a mesh
 // copy: the lab gets a flat-terrain stub + the actual SpeciesSwarm, so
 // the preview IS the in-game instanced renderer (writeInstances pose,
 // instanceColor tints, TerrainFoot skirt, blob shadow, head tracking
-// the camera). The returned Group is a proxy — the body draws through
+// the camera). The returned Group is a proxy - the body draws through
 // the swarm's InstancedMeshes in the lab scene; an invisible bounds box
 // gives inspect's Box3 fit something to frame.
 import { ballParts } from '../entities/balls.js';
@@ -36,7 +36,7 @@ import { PlayerDebris } from '../effects/debris.js';
 import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT, type AnimationState } from '../entities/playerClips.js';
 import { CLASS_MODEL_SCALE, classCapsule, type ArmorClass } from '../../../shared/botClasses.js';
 
-// The one live-body tick — whichever preview proxy is parked owns it.
+// The one live-body tick - whichever preview proxy is parked owns it.
 // gunlab's render loop reads it through this holder so proxy builders
 // can install/clear it without reaching into the main module.
 import { mkBastion, mkBaseTower, mkWallRun, mkWallGate, mkGenDome, mkLandingPad, mkCommsMast, mkKataStand, mkBunker, mkFlagTower, mkPillar, mkObelisk, mkArch, mkShard } from '../structures/structures.js';
@@ -47,7 +47,7 @@ import bastionJson from '../../../maps/bastion.json';
 export const previewLive: { tick: ((dt: number) => void) | null } = { tick: null };
 
 // Camera world position is what creature AI and deployable tracking
-// aim at — installed once by initPreviews since the tables below are
+// aim at - installed once by initPreviews since the tables below are
 // built lazily, possibly before a camera exists.
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
 let cam!: THREE.Camera;
@@ -56,7 +56,7 @@ export function initPreviews(camera: THREE.Camera): void { cam = camera; }
 const _camW = new THREE.Vector3();
 const _zero = new THREE.Vector3();
 let swarmsReady = false;
-// All instanced creature rendering parents under ONE layer — swarm
+// All instanced creature rendering parents under ONE layer - swarm
 // InstancedMeshes, blob shadows, bolt meshes, TerrainFoot, trail dots.
 // Whichever proxy currently owns the layer owns the creature, so inspect
 // recentring and FPS placement carry the real body instead of leaving it
@@ -69,7 +69,7 @@ const LAB_TERRAIN = {
   getRenderedHeight: (): number => 0,
   getNormal: (): THREE.Vector3 => new THREE.Vector3(0, 1, 0),
   // Swarm blob shadows + terrainBlend read the SAME uniform objects a
-  // real Terrain exposes — a flat 1×1 zero field keeps the stub honest.
+  // real Terrain exposes - a flat 1×1 zero field keeps the stub honest.
   heightU: (() => {
     const hmap = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
     hmap.needsUpdate = true;
@@ -79,7 +79,7 @@ const LAB_TERRAIN = {
       hScale: { value: 60 },
     };
   })(),
-  // Decal APIs the deployables call when seating — a real handle object
+  // Decal APIs the deployables call when seating - a real handle object
   // so intensity tweens still land somewhere; there's just no clipmap
   // shader on the other end.
   addFieldRing: (x: number, z: number, r: number, tint: readonly number[]): { x: number; z: number; r: number; intensity: number; tint: readonly number[]; } => ({ x, z, r, intensity: 0.5, tint }),
@@ -90,7 +90,7 @@ const LAB_TERRAIN = {
 
 function ensureSwarms(): void {
   if (swarmsReady) {return;}
-  // The full live registry, shrunk to single-specimen buffers — a new
+  // The full live registry, shrunk to single-specimen buffers - a new
   // species shows up in the lab the moment it's registered, no lab edit.
   const labSpecs = Object.fromEntries(
     Object.entries(SWARM_SPECS).map(([k, s]) => [k, Object.assign({}, s, {capacity: 8})]),
@@ -103,23 +103,23 @@ function creatureProxy(spawn: () => LabEntity): THREE.Group {
   ensureSwarms();
   const c = spawn();
   const proxy = new THREE.Group();
-  // Invisible bounds sized off the entity's gameplay radius — gives
+  // Invisible bounds sized off the entity's gameplay radius - gives
   // inspect's Box3 fit something sane to frame for overlord or gnat alike.
   const r = Math.max(c.radius, 0.4);
   const bounds = new THREE.Mesh(new THREE.BoxGeometry(r * 2.6, r * 2.2, r * 2.6), new THREE.MeshBasicMaterial());
   bounds.visible = false;
   bounds.position.y = r * 0.9;
   proxy.add(bounds, creatureLayer);
-  // Live-body anchor — the swarm's instances sit wherever the creature
+  // Live-body anchor - the swarm's instances sit wherever the creature
   // crawled, so the invisible bounds box can't be trusted to frame it.
   proxy.userData.liveFocus = (): THREE.Vector3 => c.pos;
-  // Explicit dispose, NOT a 'removed' listener — inspect re-parents this
+  // Explicit dispose, NOT a 'removed' listener - inspect re-parents this
   // proxy (vm.group → scene) and 'removed' fires on every reparent,
   // which would slaughter the creature on each mode toggle.
   proxy.userData.disposeCreature = (): void => { c.dispose(); previewLive.tick = null; };
   // Feed playerPos in PROXY space, not world space: inspect mode
   // recentres/rotates the proxy, so a world-space camera pos would leave
-  // the AI aiming at a phantom — the barrel misses you by exactly the
+  // the AI aiming at a phantom - the barrel misses you by exactly the
   // recentre offset. Local space keeps aim honest under any placement.
   previewLive.tick = (dt): void => {
     proxy.updateMatrixWorld();
@@ -128,7 +128,7 @@ function creatureProxy(spawn: () => LabEntity): THREE.Group {
   return proxy;
 }
 
-// Every species that can spawn under the shared ctor is a lab button —
+// Every species that can spawn under the shared ctor is a lab button -
 // plus the ambient buzzard kettle, a whole boid system rather than one
 // species instance (shrunk to lab scale or it orbits past the horizon).
 export const CREATURES: [label: string, build: () => THREE.Group][] = [
@@ -155,13 +155,13 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
   }],
   // Material lineup on the real ball geometry: default toon+hull first,
   // then alternates. Transmission needs scene.environment (baked in
-  // gunlab boot). The reversed-hull DOES fail on transparent fills —
+  // gunlab boot). The reversed-hull DOES fail on transparent fills -
   // its BackSide shell shades over the core; 'glass+hull' proves it.
   ['ballmats', (): THREE.Group<THREE.Object3DEventMap> => {
     const g = new THREE.Group();
     const geo = ballParts()[0]!.geometry;
     // The lab mounts the game's AtmosphericSky + bakes it into
-    // scene.environment — a transmissive ball shows the sky through
+    // scene.environment - a transmissive ball shows the sky through
     // and around it, no fake studio needed.
     const mkBall = (mat: THREE.Material, hull: boolean, x: number, label: string): void => {
       const b = new THREE.Mesh(geo, mat);
@@ -176,7 +176,7 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       }
     };
     const toon = ballParts()[0]!.material; // the real ramp material
-    const hue = new THREE.MeshToonMaterial({ color: 0xFF4040, gradientMap: (toon as THREE.MeshToonMaterial).gradientMap });
+    const hue = new THREE.MeshToonMaterial({ color: 0xFF_40_40, gradientMap: (toon as THREE.MeshToonMaterial).gradientMap });
     mkBall(hue, true, -7, 'default');
     const glass = (): THREE.MeshPhysicalMaterial => new THREE.MeshPhysicalMaterial({
       color: 0xFF_FF_FF, transmission: 1, roughness: 0.08, metalness: 0,
@@ -204,7 +204,7 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       roughness: 0.1, metalness: 0.1, envMapIntensity: 1.4,
       emissive: 0x22_44_66, emissiveIntensity: 0.3,
     }), false, 6.9, 'cheap fake');
-    // Fresnel rim shell: grazing-angle glow over the glass — the edge
+    // Fresnel rim shell: grazing-angle glow over the glass - the edge
     // reads like the toon hull but occludes nothing (additive + no
     // depth write). This is the transparent-safe outline.
     {
@@ -220,7 +220,7 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       rim.scale.setScalar(1.08);
       g.add(rim);
     }
-    // Semi-transparent hull: the toon recipe with alpha — the band
+    // Semi-transparent hull: the toon recipe with alpha - the band
     // outline survives but the core shows through. Cheap fallback.
     {
       mkBall(glass(), false, 11.5, 'glass+hull α');
@@ -231,39 +231,39 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       h.scale.setScalar(1.12);
       g.add(h);
     }
-    // Iridescence: thin-film interference — soap-bubble/oil-slick
+    // Iridescence: thin-film interference - soap-bubble/oil-slick
     // rainbow riding on a transmissive shell. Needs the env bake.
     mkBall(new THREE.MeshPhysicalMaterial({
       color: 0xFF_FF_FF, transmission: 0.85, roughness: 0.1, metalness: 0,
       ior: 1.4, thickness: 0.8,
       iridescence: 1, iridescenceIOR: 1.3, iridescenceThicknessRange: [100, 400],
     }), false, 13.8, 'iridescent');
-    // Frosted glass: transmission + high roughness — the background
+    // Frosted glass: transmission + high roughness - the background
     // blurs instead of bending; milk-glass read.
     mkBall(new THREE.MeshPhysicalMaterial({
       color: 0xFF_FF_FF, transmission: 0.9, roughness: 0.55, metalness: 0,
       ior: 1.5, thickness: 1.2,
     }), false, 16.1, 'frosted');
-    // Candy coat: clearcoat lacquer over a colored base — car paint.
+    // Candy coat: clearcoat lacquer over a colored base - car paint.
     mkBall(new THREE.MeshPhysicalMaterial({
       color: 0xC8_18_18, roughness: 0.35, metalness: 0.1,
       clearcoat: 1, clearcoatRoughness: 0.08,
     }), false, 18.4, 'candy');
-    // Chrome: no color — pure env reflection. The mirror ball.
+    // Chrome: no color - pure env reflection. The mirror ball.
     mkBall(new THREE.MeshStandardMaterial({
       color: 0xFF_FF_FF, roughness: 0.05, metalness: 1, envMapIntensity: 1.5,
     }), false, 20.7, 'chrome');
-    // Neon: emissive carries the read — no lighting needed at all.
+    // Neon: emissive carries the read - no lighting needed at all.
     mkBall(new THREE.MeshStandardMaterial({
       color: 0x11_00_22, emissive: 0xFF_20_C0, emissiveIntensity: 2.2,
       roughness: 0.4, metalness: 0,
     }), false, 23, 'neon');
-    // Velvet: sheen retroreflects at grazing — the cloth/felt look.
+    // Velvet: sheen retroreflects at grazing - the cloth/felt look.
     mkBall(new THREE.MeshPhysicalMaterial({
       color: 0x30_28_80, roughness: 0.9, metalness: 0,
       sheen: 1, sheenColor: new THREE.Color(0x80_70_FF), sheenRoughness: 0.4,
     }), false, 25.3, 'velvet');
-    // Toon family — gradientMap texels ARE the shade. Gray ramps give
+    // Toon family - gradientMap texels ARE the shade. Gray ramps give
     // the usual cel bands; an RGB ramp tints each band (duotone).
     const ramp = (rgb: number[]): THREE.DataTexture => {
       const px = new Uint8Array(rgb.length / 3 * 4);
@@ -273,24 +273,24 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       return d;
     };
     const gray = (g: number[]): number[] => g.flatMap((v): number[] => [v, v, v]);
-    // Hard 2-band anime — light or shadow, no mid. (Dark bands stay
+    // Hard 2-band anime - light or shadow, no mid. (Dark bands stay
     // readable: 60-90% of diffuse, not near-black.)
     mkBall(new THREE.MeshToonMaterial({ color: 0xFF_50_50, gradientMap: ramp(gray([130, 255])) }),
       true, 27.6, 'toon2');
-    // 5-step — still cel, but reads rounder.
+    // 5-step - still cel, but reads rounder.
     mkBall(new THREE.MeshToonMaterial({ color: 0x50_80_FF, gradientMap: ramp(gray([110, 140, 175, 215, 255])) }),
       true, 29.9, 'toon5');
-    // Duotone sunset — RGB ramp paints shade bands navy → orange.
+    // Duotone sunset - RGB ramp paints shade bands navy → orange.
     mkBall(new THREE.MeshToonMaterial({ color: 0xFF_FF_FF,
       gradientMap: ramp([60, 50, 130, 200, 100, 40, 255, 190, 70]) }), false, 32.2, 'duotone');
-    // Halftone-ish — a noisy ramp dithers the bands (screenprint read).
+    // Halftone-ish - a noisy ramp dithers the bands (screenprint read).
     {
       const nz = new Uint8Array(24 * 3);
       for (let i = 0; i < 24; i += 1) {const v = i < 12 ? 120 : 255; nz.set([v, v, v], i * 3);}
       for (let i = 0; i < 60; i += 1) {const j = Math.floor(Math.random() * 24) * 3; nz[j] = nz[j + 1] = nz[j + 2] = 140 + (Math.random() * 115);}
       mkBall(new THREE.MeshToonMaterial({ color: 0xFF_C0_40, gradientMap: ramp([...nz]) }), false, 34.5, 'halftone');
     }
-    // Ink — pale fill, BLACK hull: the comic-ink outline instead of glow.
+    // Ink - pale fill, BLACK hull: the comic-ink outline instead of glow.
     mkBall(new THREE.MeshToonMaterial({ color: 0xE8_E0_D0, gradientMap: ramp(gray([180, 255])) }),
       false, 36.8, 'ink');
     {
@@ -299,12 +299,12 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       h.scale.setScalar(1.12);
       g.add(h);
     }
-    // Shader tier — the cool stuff the stock materials can't do. All
+    // Shader tier - the cool stuff the stock materials can't do. All
     // are plain ShaderMaterial, no textures, no lights needed.
     const timeMats: THREE.ShaderMaterial[] = [];
     const _v = `varying vec3 vN; varying vec3 vV; varying vec3 vP;
       void main() { vN = normalMatrix * normal; vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = -mv.xyz; vP = position; gl_Position = projectionMatrix * mv; }`;
-    // Hologram — scanlines + fresnel rim + flicker, additive: the
+    // Hologram - scanlines + fresnel rim + flicker, additive: the
     // sci-fi projection. uTime ticks via previewLive.
     {
       const mat = new THREE.ShaderMaterial({
@@ -323,7 +323,7 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       timeMats.push(mat);
       mkBall(mat, false, 39.1, 'hologram');
     }
-    // X-ray — INVERTED fresnel: brightest where the face points at you,
+    // X-ray - INVERTED fresnel: brightest where the face points at you,
     // dark at the silhouette (the depth-read of a medical scan).
     {
       const mat = new THREE.ShaderMaterial({
@@ -337,7 +337,7 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       });
       mkBall(mat, false, 41.4, 'x-ray');
     }
-    // Pearl — matcap from a radial-gradient DataTexture: the soft
+    // Pearl - matcap from a radial-gradient DataTexture: the soft
     // porcelain/abalone read with zero env cost.
     {
       const px = new Uint8Array(64 * 64 * 4);
@@ -351,10 +351,10 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       mc.needsUpdate = true;
       mkBall(new THREE.MeshMatcapMaterial({ matcap: mc, color: 0xFF_F0_E8 }), false, 43.7, 'pearl');
     }
-    // Normals — MeshNormalMaterial paints world normals as RGB.
+    // Normals - MeshNormalMaterial paints world normals as RGB.
     // Psychedelic, free, and secretly useful for normal debugging.
     mkBall(new THREE.MeshNormalMaterial(), false, 46, 'normals');
-    // Edge-glow trio — the wear vertex attribute IS edge distance, so
+    // Edge-glow trio - the wear vertex attribute IS edge distance, so
     // real geometry edges can carry the glow (no texture, no post).
     mkBall(new THREE.MeshBasicMaterial({ color: 0x40_E8_FF, wireframe: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }),
       false, 48.3, 'wireglow');
@@ -407,16 +407,16 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
   })],
 ];
 
-// Pickup previews — every kind is the same tumbling gem body (mesh +
+// Pickup previews - every kind is the same tumbling gem body (mesh +
 // additive halo sprite) sold by its PICKUP_ACCENT tint, so the table
 // builds straight off that map: new kinds appear here automatically.
-const NUGGET_R = 0.3; // Nugget.ts NUGGET_RADIUS — keep in step
+const NUGGET_R = 0.3; // Nugget.ts NUGGET_RADIUS - keep in step
 function buildNugget(kind: PickupKind): () => THREE.Group {
   return (): THREE.Group<THREE.Object3DEventMap> => {
     const g = new THREE.Group();
     const base = new THREE.Color(PICKUP_ACCENT[kind]);
     const emit = base.clone().lerp(new THREE.Color(0xFF_FF_FF), 0.33).multiplyScalar(EMIT_GAIN);
-    // Diegetic kinds get the real pickupParts body+accent — the same
+    // Diegetic kinds get the real pickupParts body+accent - the same
     // shapes/materials Nugget builds in-game. Null parts keep the plain
     // gem (gem kind itself).
     const parts = pickupParts(kind);
@@ -442,7 +442,7 @@ function buildNugget(kind: PickupKind): () => THREE.Group {
     // Glow-behind trick: the billboard is coplanar with the model's
     // center, so wherever the surface falls behind that plane the sprite
     // crops the silhouette. Each frame park it just past the body on the
-    // far side of the camera (proxy-local space — inspect recentres and
+    // far side of the camera (proxy-local space - inspect recentres and
     // rotates the proxy, so a world-space offset would drift).
     previewLive.tick = (): void => {
       g.updateMatrixWorld();
@@ -456,11 +456,11 @@ function buildNugget(kind: PickupKind): () => THREE.Group {
 export const PICKUPS: [label: string, build: () => THREE.Group][] =
   (Object.keys(PICKUP_ACCENT) as PickupKind[]).map((k): [PickupKind, () => THREE.Group] => [k, buildNugget(k)]);
 
-// Base structures — the structKit compositions, real builders straight
+// Base structures - the structKit compositions, real builders straight
 // out of structures.ts. Big pieces: liveFocus parks the camera framing
 // on the compound center rather than the group origin.
 export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
-  // The deployed map verbatim — same bastion.json + resolveMapSpec +
+  // The deployed map verbatim - same bastion.json + resolveMapSpec +
   // KIT_BUILDERS path the game renders, so the lab can never show a
   // stale layout. Flat terrain here (no seatKits): authored y stands.
   ['[MAP] bastion', (): THREE.Group<THREE.Object3DEventMap> => {
@@ -485,7 +485,7 @@ export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
         g.add(pane);
       }
     }
-    // Frame alpha's compound — the authored cluster center.
+    // Frame alpha's compound - the authored cluster center.
     g.userData.liveFocus = (): THREE.Vector3 => new THREE.Vector3(-500, 40, 60);
     return g;
   }],
@@ -510,7 +510,7 @@ export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
   ['shard',    (): THREE.Group<THREE.Object3DEventMap> => mkShard()],
 ];
 
-// Deployable previews — real entity instances (real .group, real update
+// Deployable previews - real entity instances (real .group, real update
 // loop) parked on the lab terrain stub. The group's own bounds feed
 // inspect's Box3 fit, so no invisible proxy mesh is needed.
 interface LabItem {
@@ -534,8 +534,8 @@ function itemProxy(spawn: () => LabItem): THREE.Group {
   return proxy;
 }
 export const ITEMS: [label: string, build: () => THREE.Group][] = [
-  // Flag on its floor plate — the flagrun pad + the shared flag mesh,
-  // the in-game pair previewed as one piece — plus each half alone.
+  // Flag on its floor plate - the flagrun pad + the shared flag mesh,
+  // the in-game pair previewed as one piece - plus each half alone.
   ['flag', (): THREE.Group<THREE.Object3DEventMap> => {
     const g = new THREE.Group();
     g.add(mkFlagPlate(TEAM_COLORS.alpha));
@@ -567,10 +567,10 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
       d.unfoldDone(); return { group: d.group, update: (dt): void => d.update(dt), dispose: (s): void => d.dispose(s) }; })],
 ];
 
-// Class lineup — all three armor classes at once (only three exist, a
+// Class lineup - all three armor classes at once (only three exist, a
 // picker would be ceremony). REAL PlayerModel instances on the class
 // bodies (scifisoldier/cybersoldier/polyart GLBs) so the silhouette,
-// fit scale and idle animation are the shipping ones — same trick the
+// fit scale and idle animation are the shipping ones - same trick the
 // old classlineup page did by hand, but through the real pipeline.
 const CLASS_LINEUP: [cls: ArmorClass, x: number, labelY: number][] = [
   ['light',  -1.9, 2.1],
@@ -598,26 +598,26 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
   return (): THREE.Group<THREE.Object3DEventMap> => {
     const proxy = new THREE.Group();
     const models: PlayerModel[] = [];
-    // Gib preview — the real PlayerDebris pulverize (posed body parts +
+    // Gib preview - the real PlayerDebris pulverize (posed body parts +
     // impulse burst) then the body respawns ~1.6s later.
     const debris: { d: PlayerDebris; t: number; s: number }[] = [];
     const flashes: { m: THREE.Mesh; l: THREE.PointLight; t: number; s: number; j?: boolean }[] = [];
     // Flat marks + rings: dust dies fast, scorch outlives the chunks.
     const decals: { m: THREE.Mesh; t: number; s: number; life: number; grow: number }[] = [];
     const downAt = new Map<PlayerModel, { t: number; s: number }>();
-    // Verlet ragdolls — body stays VISIBLE and flops; same respawn clock.
+    // Verlet ragdolls - body stays VISIBLE and flops; same respawn clock.
     const ragdolls = new Map<PlayerModel, { r: VerletRagdoll; t: number; s: number }>();
     const gunDrops: { g: GunDrop; s: number }[] = [];
-    // Deferred death beats — flash-first juicy gib staging.
+    // Deferred death beats - flash-first juicy gib staging.
     const pending: { at: number; fn: () => void }[] = [];
     let elapsed = 0;
-    // Last picked team tint/outline — reapplied per body as GLBs resolve
+    // Last picked team tint/outline - reapplied per body as GLBs resolve
     // (setOutline's hull clone needs the skinned meshes loaded first).
     let teamSel = 'neutral';
     let markSel = 'none';
     let sideSel = 'enemy';
     const TEAM_HEX: Record<string, number> = { red: 0xC0_30_30, blue: 0x30_60_C0 };
-    // Mark palette — enemy: Overwatch scarlet (TF2 brick 0xB8_38_3B if
+    // Mark palette - enemy: Overwatch scarlet (TF2 brick 0xB8_38_3B if
     // too loud). ally: squad green (OW's light-blue ally ~0x66_A3_FF is
     // the other classic). neutral: plain white mark.
     const SIDE_HEX: Record<string, number> = { enemy: 0xF0_4A_4A, ally: 0x44_CC_55, neutral: 0xDD_DD_DD };
@@ -630,7 +630,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
     };
     for (const [variant, x, label, ly, capsule, matRev, scale, yaw] of entries) {
       const pm = new PlayerModel(LAB_SCENE, variant, matRev);
-      // The gizmo defaults to the generic capsule — without the class
+      // The gizmo defaults to the generic capsule - without the class
       // sizes the collider wireframe would lie about light/heavy.
       pm.setColliderCapsule(classCapsule(capsule));
       pm.load().then((): void => {
@@ -641,7 +641,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
         // inspect camera sits at +Z, so those entries pass yaw:Math.PI.
         pm.setRotation(yaw ?? 0, 0);
         // Barrel-direction arrow (posedump's ?gunArrow=1, always on in the
-        // lineup) — mounted guns have drifted 180° before without it.
+        // lineup) - mounted guns have drifted 180° before without it.
         // Parented to the model root, NOT the gun group: the mount can
         // hold the cached gun template, so meshes added there leak into
         // every PlayerModel that shares it afterwards (arrows in-game).
@@ -665,7 +665,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
       proxy.add(sprite);
     }
     proxy.add(creatureLayer); // PlayerModel.scene = LAB_SCENE = creatureLayer
-    // Invisible bounds for inspect's Box3 fit — the GLB resolves async,
+    // Invisible bounds for inspect's Box3 fit - the GLB resolves async,
     // so without a synchronous volume the fit lands on the label sprite
     // and parks the camera inside the body. Wide box for lineups, a
     // body-sized column for solos.
@@ -677,32 +677,32 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
     bounds.position.set(boundsW > 0 ? boundsX : 0, spanH / 2, 0);
     proxy.add(bounds);
     proxy.userData.liveFocus = (): THREE.Vector3 => new THREE.Vector3(focusX, 1.4, 0);
-    // Anim rail hook — gunlab's right panel drives all bodies in
+    // Anim rail hook - gunlab's right panel drives all bodies in
     // lockstep so a state flaw (ski tuck, strafe stride) shows at once.
     proxy.userData.anims = {
       set: (s: AnimationState): void => { for (const m of models) {m.forceAnimationState(s);} },
       dir: (f: number, side: number): void => { for (const m of models) {m.setLocomotionVector(f, side);} },
       cur: (): AnimationState => models[0]?.animationState,
-      // Authored rest pose — the T-pose the builder/skeleton bind to.
+      // Authored rest pose - the T-pose the builder/skeleton bind to.
       bind: (): void => { for (const m of models) {m.setBindPose();} },
-      // Weapon picker — swaps each body's hand prop to the real weapon
+      // Weapon picker - swaps each body's hand prop to the real weapon
       // silhouette so scale reads against the lineup.
       weapon: (wt: number): void => { for (const m of models) {m.setWeapon(wt);} },
-      // Team paint preview — neutral restores; red/blue tint the bodies.
+      // Team paint preview - neutral restores; red/blue tint the bodies.
       team: (t: string): void => { teamSel = t; for (const m of models) {applyTeam(m);} },
-      // Enemy-mark overlay — outline hull / fresnel rim / both, combined
+      // Enemy-mark overlay - outline hull / fresnel rim / both, combined
       // with whatever tint is picked.
       mark: (t: string): void => { markSel = t; for (const m of models) {applyTeam(m);} },
-      // Mark color side — enemy/ally/neutral.
+      // Mark color side - enemy/ally/neutral.
       side: (t: string): void => { sideSel = t; for (const m of models) {applyTeam(m);} },
-      // The real kill effect — posed body parts + debris burst + impulse,
+      // The real kill effect - posed body parts + debris burst + impulse,
       // same path gibVictim takes on the wire.
       gib: (speed = 1): void => {
         for (const m of models) {
           let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
           try { parts = m.deathParts() ?? undefined; } catch { /* generic chunks */ }
           // Shards parent under creatureLayer (re-parented into the
-          // active proxy for inspect) while part.pos bakes are world —
+          // active proxy for inspect) while part.pos bakes are world -
           // convert BOTH into layer space or the layer's transform
           // double-applies and the burst lands offset from the body.
           const w = (m as unknown as { model?: THREE.Group }).model
@@ -712,14 +712,14 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
           if (parts) {
             for (const p of parts) {LAB_SCENE.worldToLocal(p.pos);}
           }
-          // Blast from below + ahead like a disc landing at the feet —
+          // Blast from below + ahead like a disc landing at the feet -
           // the upward geyser is what reads "pulverized", a flat push
           // just scatters gravel. Team-vivid color sells "that was a
           // body", neutral grey reads as concrete rubble.
           debris.push({ d: new PlayerDebris(LAB_SCENE, LAB_TERRAIN,
             { x: cx, y: cy, z: cz }, new THREE.Color(0x55_AA_FF),
             { parts, impulseDir: new THREE.Vector3(0, 1, -0.3).normalize().multiplyScalar(0.15) }), t: elapsed, s: speed });
-          // Cheap stand-in for the game's explosion flash — expanding
+          // Cheap stand-in for the game's explosion flash - expanding
           // additive shell + light, dies in ~0.35s.
           const flash = new THREE.Mesh(
             new THREE.IcosahedronGeometry(0.4, 1),
@@ -733,7 +733,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
           downAt.set(m, { t: elapsed, s: speed });
         }
       },
-      // Juicy gib — staged: flash WHILE the body is still up (~90ms of
+      // Juicy gib - staged: flash WHILE the body is still up (~90ms of
       // anticipation), then the model hides as wave 1 of its real chunks
       // flies, wave 2 lands ~50ms later. The flash is the cover for the
       // body→pieces swap; the stagger reads as tearing, not teleport.
@@ -743,7 +743,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
             ?.getWorldPosition(new THREE.Vector3()) ?? new THREE.Vector3();
           const c = LAB_SCENE.worldToLocal(w.clone());
           const cx = c.x, cy = c.y + 1, cz = c.z;
-          // Strobing flash — the Nuclear Throne black/white flicker; a
+          // Strobing flash - the Nuclear Throne black/white flicker; a
           // steady glow doesn't cover the swap half as hard.
           const flash = new THREE.Mesh(
             new THREE.IcosahedronGeometry(0.4, 1),
@@ -755,14 +755,14 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
           flashes.push({ m: flash, l: light, t: elapsed, s: speed, j: true });
           // Anticipation = flash + strobes only; squash read as weird
           // on a skinned body (the rig fights scale edits mid-anim).
-          // Dust ring — communicates the burst's direction; dies fast.
+          // Dust ring - communicates the burst's direction; dies fast.
           const ring = new THREE.Mesh(
             new THREE.RingGeometry(0.3, 1, 24),
             new THREE.MeshBasicMaterial({ color: 0xBB_AA_88, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
           ring.rotation.x = -Math.PI / 2; ring.position.set(cx, 0.06, cz);
           LAB_SCENE.add(ring);
           decals.push({ m: ring, t: elapsed, s: speed, life: 0.4, grow: 6 });
-          // Scorch mark — the kill earns a spot on the ground for ~5s.
+          // Scorch mark - the kill earns a spot on the ground for ~5s.
           const scorch = new THREE.Mesh(
             new THREE.CircleGeometry(0.9, 20),
             new THREE.MeshBasicMaterial({ color: 0x11_11_11, transparent: true, opacity: 0.55, depthWrite: false }));
@@ -787,7 +787,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
           } });
         }
       },
-      // Verlet ragdoll — same sim RemotePlayer.playDeath drives. The body
+      // Verlet ragdoll - same sim RemotePlayer.playDeath drives. The body
       // stays on screen and flops under the point constraints.
       ragdoll: (speed = 1): void => {
         for (const m of models) {
@@ -796,7 +796,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
           const r = new VerletRagdoll(collectBones(inner), new THREE.Vector3(0, 1.2, -1).multiplyScalar(speed));
           if (!r.valid) {continue;}
           ragdolls.set(m, { r, t: elapsed, s: speed });
-          // Same drop as playDeath — the held gun detaches and arcs free.
+          // Same drop as playDeath - the held gun detaches and arcs free.
           const gun = (m as unknown as { gunCtl?: { group?: THREE.Object3D } }).gunCtl?.group;
           if (gun) {gunDrops.push({ g: new GunDrop(gun, LAB_SCENE, r ? new THREE.Vector3(0, 1.2, -1).multiplyScalar(speed) : new THREE.Vector3()), s: speed });}
         }
@@ -826,7 +826,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
         } else {
           f.m.scale.setScalar(1 + k * 5);
           const o = 0.9 * (1 - k);
-          // Juicy strobes alternate bright/dim — the flicker IS the effect.
+          // Juicy strobes alternate bright/dim - the flicker IS the effect.
           (f.m.material as THREE.MeshBasicMaterial).opacity = f.j ? o * (Math.floor(k * 6) % 2 === 0 ? 1 : 0.15) : o;
           f.l.intensity = 60 * (1 - k);
         }
@@ -849,7 +849,7 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
       for (const g of gunDrops) {g.g.step(dt * g.s, LAB_TERRAIN);}
       for (const [m, e] of ragdolls) {
         e.r.step(dt * e.s, LAB_TERRAIN); e.r.apply(); // after m.update so our writes win
-        if (e.r.still > 0.5) {ragdolls.delete(m);} // settled — freeze on the final pose
+        if (e.r.still > 0.5) {ragdolls.delete(m);} // settled - freeze on the final pose
       }
       for (const [m, d] of downAt) {
         if (elapsed - d.t > 1.6 / d.s) {m.setVisible(true); m.forceAnimationState('idle'); downAt.delete(m);}
@@ -871,7 +871,7 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
   ['juggernaut', mkLineup([['juggernaut' as PlayerModelVariant, SOLO_X, 'juggernaut', 3, 'heavy', false]])],
   ['jugg og', mkLineup([['juggernaut_og' as PlayerModelVariant, SOLO_X, 'jugg og', 3, 'heavy', false]])],
   ['Heavy Lineup', mkLineup([
-    // bld + scp are benched — the Blender sculpts aren't lineup quality.
+    // bld + scp are benched - the Blender sculpts aren't lineup quality.
     [CLASS_BODY_VARIANT.heavy as PlayerModelVariant, -7.7, 'heavy', 3.2, 'heavy', CLASS_BODY_MAT_REV.has('heavy'), CLASS_MODEL_SCALE.heavy],
     ['juggernaut' as PlayerModelVariant, -5.5, 'jugg', 3, 'heavy', false],
     ['juggernaut_og' as PlayerModelVariant, -3.3, 'og', 3, 'heavy', false],
@@ -889,8 +889,8 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
   ['dreadnought', mkLineup([['dreadnought' as PlayerModelVariant, SOLO_X, 'dreadnought', 3, 'heavy', false]])],
   ['brawler', mkLineup([[BRAWLER_ENTRY[0], SOLO_X, 'brawler', 2.4, 'medium', false]])],
   ['scout',  mkLineup([[SCOUT_ENTRY[0], SOLO_X, 'scout', 2, 'light', false]])],
-  // Legacy class bodies — pre-swap rigs kept for side-by-side compare.
-  // The old GLBs face -Z, the M2M rigs +Z — the π yaw keeps fronts to camera.
+  // Legacy class bodies - pre-swap rigs kept for side-by-side compare.
+  // The old GLBs face -Z, the M2M rigs +Z - the π yaw keeps fronts to camera.
   ['legacy', mkLineup([
     ['mannequin' as PlayerModelVariant, -1.9, 'light(mann)', 2.1, 'light', true, undefined, Math.PI],
     ['mannequin' as PlayerModelVariant, 0, 'medium(mann)', 2.5, 'medium', false, undefined, Math.PI],

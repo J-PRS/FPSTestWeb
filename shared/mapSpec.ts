@@ -1,10 +1,10 @@
 /**
- * Declarative match definition — a room named <X> looks for maps/<X>.json
+ * Declarative match definition - a room named <X> looks for maps/<X>.json
  * next to the server and takes its mode + creature population from it.
  * Everything is optional; missing fields fall back to these defaults, so a
  * spec can override one knob without restating the rest.
  *
- * This is the seed of a real map format — spawn anchors, bases and
+ * This is the seed of a real map format - spawn anchors, bases and
  * objectives land here next; the file already decides what a match IS.
  */
 
@@ -22,24 +22,24 @@ export interface BallPopulation {
   max: number;
 }
 
-/** Ambient particle kinds a map may dial — mirrors the client's AmbientKind. */
+/** Ambient particle kinds a map may dial - mirrors the client's AmbientKind. */
 export const WEATHER_KINDS = ['dust', 'embers', 'ash', 'snow'] as const;
 export type WeatherKind = (typeof WEATHER_KINDS)[number];
 /** Per-kind particle intensity: 0 = off, 1 = full, 2 = thick. A kind left
  *  out is off; an absent `weather` block means the engine's default trio. */
 export type WeatherSpec = Partial<Record<WeatherKind, number>>;
-/** Procedural-atmosphere overrides — mirrors the client's
+/** Procedural-atmosphere overrides - mirrors the client's
  *  AtmosphericSkyParams. Absent fields keep the engine SKY_* constants. */
 export interface AtmosphereSpec {
-  /** Rayleigh multiplier — 1 = engine default, >1 deepens/saturates sky. */
+  /** Rayleigh multiplier - 1 = engine default, >1 deepens/saturates sky. */
   rayleigh?: number;
-  /** Mie multiplier — 1 = engine default, >1 hazier/smokier air. */
+  /** Mie multiplier - 1 = engine default, >1 hazier/smokier air. */
   mie?: number;
   /** Night star field brightness (absolute; 0 hides stars). */
   starIntensity?: number;
-  /** Sun radiance multiplier — 1 = engine default, <1 dims/overcast. */
+  /** Sun radiance multiplier - 1 = engine default, <1 dims/overcast. */
   sunIntensity?: number;
-  /** Sun elevation, 0–1: 0 = midnight, .25 = sunrise, .5 = noon,
+  /** Sun elevation, 0-1: 0 = midnight, .25 = sunrise, .5 = noon,
    *  .75 = sunset. Default .38 (mid-morning). Moves the light, so a dusk
    *  value rakes shadows long and reddens the sky. */
   timeOfDay?: number;
@@ -47,13 +47,13 @@ export interface AtmosphereSpec {
   sunAzimuth?: number;
   /** Atmospheric turbidity multiplier (haze thickness). 1 = engine default. */
   turbidity?: number;
-  /** Mie forward-scatter lobe 0–.95 — a sunward glow blob. 0 = isotropic. */
+  /** Mie forward-scatter lobe 0-.95 - a sunward glow blob. 0 = isotropic. */
   mieDirectionalG?: number;
-  /** Rayleigh dipole 0–1 — bright/dim sky sides. 0 = flat. */
+  /** Rayleigh dipole 0-1 - bright/dim sky sides. 0 = flat. */
   rayleighDirectional?: number;
 }
 
-/** Gameplay water — a global sea level the sims treat as a buoyant volume
+/** Gameplay water - a global sea level the sims treat as a buoyant volume
  *  (players/bots slow and float below it), plus the client surface look.
  *  `level` is world Y in the same meters as terrain height (see heightfield);
  *  a map is "under water" wherever its terrain samples below `level`. Absent
@@ -61,11 +61,11 @@ export interface AtmosphereSpec {
 export interface WaterSpec {
   /** Sea-surface height in world meters (terrain space). Required. */
   level: number;
-  /** Near-surface tint [r,g,b] — the shallow look. */
+  /** Near-surface tint [r,g,b] - the shallow look. */
   color?: [number, number, number];
-  /** Deep-water tint [r,g,b] — where the floor is far below. */
+  /** Deep-water tint [r,g,b] - where the floor is far below. */
   deep?: [number, number, number];
-  /** false = decorative water — the surface renders and terrain tints,
+  /** false = decorative water - the surface renders and terrain tints,
    *  but neither sim applies drag/buoy/swim (wading stays full-speed).
    *  Absent = real water. */
   swim?: boolean;
@@ -77,56 +77,56 @@ export interface MapSpec {
   name?: string;
   /** Default mode when the host doesn't pick one. */
   mode?: string;
-  /** Excluded from the menu map list but still joinable by name —
+  /** Excluded from the menu map list but still joinable by name -
    *  test grounds and half-built maps live here. */
   hidden?: boolean;
-  /** Modes this map can host — map = geometry+spawns+bases, mode = the
+  /** Modes this map can host - map = geometry+spawns+bases, mode = the
    *  ruleset on top. Absent = own `mode` + every self-provisioning
    *  ruleset (ctf additionally requires `bases`); declared = exact list,
    *  for maps that need to narrow the default. */
   modes?: string[];
   balls: BallPopulation;
-  /** Spawn anchors — farthest-from-enemies pick among these. Absent = the
+  /** Spawn anchors - farthest-from-enemies pick among these. Absent = the
    *  server's default spawn ring. `r` makes the anchor a sphere: the pick
    *  scatters to a random point inside the radius (T2 SpawnSpheres are
-   *  volumes — without it every spawn lands on the center). `w` is the
+   *  volumes - without it every spawn lands on the center). `w` is the
    *  sphere's authored selection weight. */
   spawns?: SpawnPoint[];
   /** Team-owned spawn spheres (T2 missions group SpawnSpheres under
    *  Team1/Team2). When present for a team, that side spawns only from
    *  its own spheres. */
   teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] };
-  /** Objective anchors per team — flag stands, capture rings, generators.
+  /** Objective anchors per team - flag stands, capture rings, generators.
    *  Generic positions the mode interprets (ctf: flag stands). */
   bases?: { alpha?: Vec3like; bravo?: Vec3like };
-  /** Server-driven filler players — wandering, shootable, team-balanced. */
+  /** Server-driven filler players - wandering, shootable, team-balanced. */
   bots?: number;
   /** Bot-fill floor: keep at least this many total bodies in the room by
    *  spawning/retiring bots as humans come and go. Distinct from `bots`
-   *  (a fixed spawn count) — fill reacts to joins and quits. */
+   *  (a fixed spawn count) - fill reacts to joins and quits. */
   botFill?: number;
-  /** Per-room seat cap — overrides the server-wide maxPlayers for rooms
+  /** Per-room seat cap - overrides the server-wide maxPlayers for rooms
    *  minted on this spec (a 1v1 duel is 2). Absent = global budget. */
   maxPlayers?: number;
   /** Standing lobby: the room mints at boot and never disposes for
-   *  emptiness — always joinable, hibernates while nobody's in it. */
+   *  emptiness - always joinable, hibernates while nobody's in it. */
   standing?: boolean;
-  /** Difficulty band for spawned bots — one tier for the whole lobby, or
+  /** Difficulty band for spawned bots - one tier for the whole lobby, or
    *  {alpha,bravo} to handicap sides differently. Per-bot variance rolls
    *  around the band, so a team's bots aren't clones. */
   botSkill?: BotSkillSpec | { alpha?: BotSkillSpec; bravo?: BotSkillSpec };
-  /** Spawn weights per ball variant [common, mid, large, elite] — default
+  /** Spawn weights per ball variant [common, mid, large, elite] - default
    *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
   ballMix?: number[];
   /** Heightmap filename under maps/ (e.g. "ravine.bin" or
-   *  "t2/escalade/terrain.bin" — one subdir deep) — a different terrain
+   *  "t2/escalade/terrain.bin" - one subdir deep) - a different terrain
    *  for this room's BallSim. Absent = the server's default field. */
   terrain?: string;
-  /** Vertical gain on the room's field — multiplies the base 125m scale
-   *  (0.1–8). Applies to spec.terrain AND the default field alike; the
+  /** Vertical gain on the room's field - multiplies the base 125m scale
+   *  (0.1-8). Applies to spec.terrain AND the default field alike; the
    *  value rides the wire so client prediction and render agree. */
   heightScale?: number;
-  /** Meters one heightmap wrap covers (256–4096) — T2 ports carry their
+  /** Meters one heightmap wrap covers (256-4096) - T2 ports carry their
    *  native 2048m tile so nothing on the map is squished horizontally.
    *  Absent = the engine default 1500. Rides the wire like heightScale. */
   tileSize?: number;
@@ -135,62 +135,62 @@ export interface MapSpec {
    *  swallows the world. `horizon` [r,g,b] overrides the sky's
    *  horizon tint. Absent = engine default haze. Client-only. */
   fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] };
-  /** Gameplay water — one global sea level (see WaterSpec). Absent = dry. */
+  /** Gameplay water - one global sea level (see WaterSpec). Absent = dry. */
   water?: WaterSpec;
-  /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") —
+  /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") -
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
   /** Procedural palette id for the terrain shader (0=mixed, 1=desert,
    *  2=grassland, 3=snow, 4=volcanic, 5=badlands, 6=coast, 7=desert
-   *  hard-sun — desert palette, pure sun·diff² lighting). Client-only;
+   *  hard-sun - desert palette, pure sun·diff² lighting). Client-only;
    *  absent = the shader's default desert. */
   terrainPreset?: number;
-  /** Skybox dir under maps/ containing px/nx/py/ny/pz/nz.png — replaces
+  /** Skybox dir under maps/ containing px/nx/py/ny/pz/nz.png - replaces
    *  the procedural sky when set. Client-only. */
   sky?: string;
-  /** Ambient particle weather — per-kind intensity {dust,embers,ash,snow}.
+  /** Ambient particle weather - per-kind intensity {dust,embers,ash,snow}.
    *  0 = off, 1 = full, >1 thickens. Absent = the engine's default trio
    *  (dust+embers+ash), so pre-weather maps render unchanged. Client-only
-   *  dressing — the sims never read it. */
+   *  dressing - the sims never read it. */
   weather?: WeatherSpec;
   /** Procedural-sky tuning (scattering/haze/star/sun). Overrides the
    *  engine's SKY_* constants for this map; ignored when a baked `sky`
    *  box replaces the procedural dome. Client-only. */
   atmosphere?: AtmosphereSpec;
-  /** Static structures — axis-aligned boxes the server echoes into
+  /** Static structures - axis-aligned boxes the server echoes into
    *  gameState so every client builds the same base compounds/cover.
    *  `kind` selects the renderer; `pos` is the piece's center. */
   structures?: StructureSpec[];
-  /** Authored base assets — live deployables (generator, turret, sensor,
+  /** Authored base assets - live deployables (generator, turret, sensor,
    *  pad) the server seeds at room open instead of waiting for a plant.
-   *  Destructible, repairable, and they respawn on a long fuse — the
+   *  Destructible, repairable, and they respawn on a long fuse - the
    *  Tribes generator economy. `team` makes them faction-owned. */
   deploys?: DeploySpec[];
-  /** Placed interior meshes — converted .dif→.glb buildings. `file` is a
+  /** Placed interior meshes - converted .dif→.glb buildings. `file` is a
    *  bare basename resolved to maps/t2/dif/<name>.glb client-side; `pos` is
    *  already in our meters; `rot` is a raw T2 axis-angle [x,y,z,deg];
    *  `scale` is pre-squashed into our axes. */
   interiors?: InteriorSpec[];
-  /** Arena boundary — a dome centered on {x,z} with this radius. Echoed to
+  /** Arena boundary - a dome centered on {x,z} with this radius. Echoed to
    *  clients for the barrier render; server uses it for out-of-bounds
    *  checks (future: damage/skid-push on contact). */
   arena?: { x: number; z: number; radius: number };
-  /** Kill zone — world Y below which a body dies ("fell out of the
+  /** Kill zone - world Y below which a body dies ("fell out of the
    *  arena"). The heightfield is always there, so a terrainless arena
    *  needs this: drop below the deck and the sim ends you. Absent = no
    *  kill zone and every other map plays exactly as before. */
   killY?: number;
-  /** Ambient species population overrides — { crawler: 0 } silences a
+  /** Ambient species population overrides - { crawler: 0 } silences a
    *  species, { overlord: 4 } makes a boss map. Keys are species names
    *  ('crawler','seeker','rakk','strifer','gnat',...); absent = defaults.
-   *  These are client-side ambience — they don't deal damage or sync. */
+   *  These are client-side ambience - they don't deal damage or sync. */
   ambient?: Record<string, number>;
-  /** Server-authoritative creature population — { crawler: 6 } spawns
+  /** Server-authoritative creature population - { crawler: 6 } spawns
    *  real, replicated, damage-dealing/killable melee species via
    *  CreatureSim (shared/creatureSim.ts). Distinct from `ambient` which
    *  is client-side dressing only. */
   creatures?: Record<string, number>;
-  /** Parse diagnostics — every input resolveMapSpec coerced, clamped, or
+  /** Parse diagnostics - every input resolveMapSpec coerced, clamped, or
    *  dropped, collected at load. mapCatalog logs them so a typo'd field
    *  in a maps/*.json announces itself instead of silently defaulting. */
   warnings?: string[];
@@ -204,33 +204,33 @@ export interface DeploySpec {
 
 export interface StructureSpec {
   /** 'stand' collides like a box but the client's generic box renderer
-   *  skips it — the visual is the real dais mesh; the spec is the hull. */
-  /** 'hull' is collision-only like 'stand' — T2 interior convex-hull
+   *  skips it - the visual is the real dais mesh; the spec is the hull. */
+  /** 'hull' is collision-only like 'stand' - T2 interior convex-hull
    *  boxes emitted by the porter; the real mesh is the visual. */
   /** 'shield' is a team-gated energy pane: collides for everyone EXCEPT
-   *  `team` — allies walk and shoot through, enemies hit a wall. The
+   *  `team` - allies walk and shoot through, enemies hit a wall. The
    *  client renders it as a translucent barrier; a team-less shield is
    *  legal but pointless (blocks everyone, same as a wall). */
   kind: 'box' | 'wall' | 'pillar' | 'ramp' | 'root' | 'stand' | 'hull' | 'kit' | 'shield';
   /** 'kit' pieces render through the structKit builders and collide via
-   *  KIT_HULLS (shared/structKits) — `size` is ignored for them. */
+   *  KIT_HULLS (shared/structKits) - `size` is ignored for them. */
   piece?: string;
   /** 'kit' pieces: uniform world scale applied to the render AND the
-   *  hull expansion — one knob, no parity seam. Default 1. */
+   *  hull expansion - one knob, no parity seam. Default 1. */
   scale?: number;
   pos: Vec3like;
   size: Vec3like;
   /** Y-rotation in radians (ramps/boxes), default 0. */
   rotY?: number;
-  /** Team tint — 'alpha'|'bravo' bases color differently, else neutral. */
+  /** Team tint - 'alpha'|'bravo' bases color differently, else neutral. */
   team?: TeamId;
 }
 
 export type { Vec3like };
 
-/** Spawn anchor — a point, or a sphere volume when `r` > 0. */
+/** Spawn anchor - a point, or a sphere volume when `r` > 0. */
 export interface SpawnPoint extends Vec3like {
-  /** Sphere radius in meters — spawn scatters inside it. */
+  /** Sphere radius in meters - spawn scatters inside it. */
   r?: number;
   /** Authored selection weight (T2 sphereWeight). */
   w?: number;
@@ -247,10 +247,10 @@ export const DEFAULT_MAP_SPEC: MapSpec = {
   balls: { base: 10, perPlayer: 4, max: 40 },
 };
 
-// Parse-warning collector — resolveMapSpec opens the window, every
+// Parse-warning collector - resolveMapSpec opens the window, every
 // parser pushes, the finished spec carries the list as `warnings`.
 // A typo'd maps/*.json used to fall back or clamp SILENTLY (the flag
-// base that snapped to a default, the bots: "8" string that dropped) —
+// base that snapped to a default, the bots: "8" string that dropped) -
 // now every coerced/rejected input reports itself at load.
 let parseWarnings: string[] | null = null;
 const specWarn = (m: string): void => { parseWarnings?.push(m); };
@@ -266,8 +266,8 @@ const clampInt = (v: unknown, lo: number, hi: number, fallback: number, label: s
   return c;
 };
 
-/** Merge a parsed JSON blob over the defaults — never trusts the file. */
-/** Strict-JSON.parse wrapper that tolerates // and block comments —
+/** Merge a parsed JSON blob over the defaults - never trusts the file. */
+/** Strict-JSON.parse wrapper that tolerates // and block comments -
  *  spec files are hand-authored, so inline notes are legitimate. The
  *  regex walks string literals intact, so only real comment tokens are
  *  stripped (a "//" inside a quoted value survives). Single chokepoint
@@ -288,7 +288,7 @@ function parseBallMix(raw: unknown): number[] | undefined {
 
 
 
-/** Validated interior placements — bare .dif basenames only (client maps
+/** Validated interior placements - bare .dif basenames only (client maps
  *  them to t2/dif/*.glb), sane-clamped transforms, cap 256. */
 const isVec = (s: unknown): s is Vec3like =>
   Boolean(s) && typeof s === 'object' &&
@@ -317,7 +317,7 @@ function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
 
 
 
-/** Validated authored-deployable list — kinds restricted to things that
+/** Validated authored-deployable list - kinds restricted to things that
  *  make sense unattended (no nuggets/drones chasing a phantom owner). */
 function parseDeploys(raw: unknown): DeploySpec[] | undefined {
   if (!Array.isArray(raw)) {return undefined;}
@@ -347,7 +347,7 @@ function parseDeploys(raw: unknown): DeploySpec[] | undefined {
 
 
 
-/** Validated structure list — bad entries dropped, sane clamps, cap 256. */
+/** Validated structure list - bad entries dropped, sane clamps, cap 256. */
 function parseStructures(raw: unknown): StructureSpec[] | undefined {
   if (!Array.isArray(raw)) {return undefined;}
   const out: StructureSpec[] = [];
@@ -358,14 +358,14 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
         typeof (s as Record<string, unknown>).kind !== 'string' ||
         !STRUCT_KINDS.has((s as Record<string, unknown>).kind as string) ||
         !isVec((s as Record<string, unknown>).pos) ||
-        // kit pieces carry their own dims — every other kind needs size
+        // kit pieces carry their own dims - every other kind needs size
         (!ok && !isVec((s as Record<string, unknown>).size)) ||
         (ok && (typeof (s as Record<string, unknown>).piece !== 'string' ||
                 !((s as Record<string, unknown>).piece as string in KIT_HULLS)))) {dropped += 1; continue; }
-    // Scale only exists for kit pieces; a bogus value drops the entry —
+    // Scale only exists for kit pieces; a bogus value drops the entry -
     // a silently-coerced wall scale would desync render from collision.
     const sc = (s as Record<string, unknown>).scale;
-    // Sky-arena piers stretch past 4× for the long drops — the cap is a
+    // Sky-arena piers stretch past 4× for the long drops - the cap is a
     // typo guard, not a proportion rule.
     if (sc !== undefined && (!Number.isFinite(Number(sc)) || Number(sc) < 0.25 || Number(sc) > 8)) {dropped += 1; continue; }
     const o = s as Record<string, unknown>;
@@ -407,7 +407,7 @@ function parseArena(raw: unknown): MapSpec['arena'] {
   return { x: a.x as number, z: a.z as number, radius };
 }
 
-/** Kill zone height — a finite world Y in metres. Absent = no zone. */
+/** Kill zone height - a finite world Y in metres. Absent = no zone. */
 function parseKillY(raw: unknown): number | undefined {
   if (raw === undefined) {return undefined;}
   if (typeof raw !== 'number' || !Number.isFinite(raw)) {
@@ -434,7 +434,7 @@ function parseAmbient(raw: unknown): Record<string, number> | undefined {
 function parseBases(raw: unknown): MapSpec['bases'] {
   if (!raw || typeof raw !== 'object') {return undefined;}
   const b = raw as { alpha?: unknown; bravo?: unknown };
-  // A present-but-broken base is an authored intent that failed — a CTF
+  // A present-but-broken base is an authored intent that failed - a CTF
   // spec with a typo'd bravo base silently plays with one flag.
   if (b.alpha !== undefined && !isVec(b.alpha)) {specWarn('bases.alpha: invalid position dropped');}
   if (b.bravo !== undefined && !isVec(b.bravo)) {specWarn('bases.bravo: invalid position dropped');}
@@ -477,7 +477,7 @@ function parseSpawns(raw: unknown): SpawnPoint[] | undefined {
 
 
 
-/** maps/-relative path — word-char dirs, filename must carry the
+/** maps/-relative path - word-char dirs, filename must carry the
  *  extension `tail` requires. No dots in segments => no traversal. */
 function parsePathField(raw: unknown, tail: RegExp, maxDepth = 2, label = 'path'): string | undefined {
   const reject = (): undefined => {
@@ -518,14 +518,14 @@ function parseFog(raw: unknown): MapSpec['fog'] {
   };
 }
 
-/** Gameplay water — `level` is required and finite; tints are optional
+/** Gameplay water - `level` is required and finite; tints are optional
  *  clamped 0..1 triples. A missing/invalid level drops the block entirely
  *  so a map never silently gains a sea at world zero. */
 function parseWater(raw: unknown): MapSpec['water'] {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {return undefined;}
   const w = raw as { level?: unknown; color?: unknown; deep?: unknown };
   if (typeof w.level !== 'number' || !Number.isFinite(w.level)) {
-    specWarn('water.level: required finite number — water block dropped');
+    specWarn('water.level: required finite number - water block dropped');
     return undefined;
   }
   const vec3 = (v: unknown): [number, number, number] | undefined =>
@@ -536,7 +536,7 @@ function parseWater(raw: unknown): MapSpec['water'] {
     swim: (w as { swim?: unknown }).swim === false ? false : undefined };
 }
 
-/** Weather intensities — known kinds only, clamped 0..2. An empty result
+/** Weather intensities - known kinds only, clamped 0..2. An empty result
  *  is undefined so the client falls back to the default trio. */
 function parseWeather(raw: unknown): WeatherSpec | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {return undefined;}
@@ -552,7 +552,7 @@ function parseWeather(raw: unknown): WeatherSpec | undefined {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/** Atmosphere overrides — finite, clamped to ranges the shader stays sane in. */
+/** Atmosphere overrides - finite, clamped to ranges the shader stays sane in. */
 function parseAtmosphere(raw: unknown): AtmosphereSpec | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {return undefined;}
   const o = raw as Record<string, unknown>;
@@ -579,7 +579,7 @@ function parseTileSize(raw: unknown): number | undefined {
 
 
 
-/** Vertical gain — 0.1× (flats) to 8× (spikes). u8 quantization steps grow
+/** Vertical gain - 0.1× (flats) to 8× (spikes). u8 quantization steps grow
  *  with it: past ~4× the 0.49m texel step is readable under skis. */
 function parseHeightScale(raw: unknown): number | undefined {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) {return undefined;}
@@ -609,7 +609,7 @@ function parseMode(raw: unknown): string | undefined {
 
 
 
-/** Display title — printable words only; the wire echoes it verbatim
+/** Display title - printable words only; the wire echoes it verbatim
  *  into HUD text so keep it boring ASCII on purpose. */
 function parseName(raw: unknown): string | undefined {
   return typeof raw === 'string' && /^[\w .&'()/-]{1,48}$/.test(raw) ? raw : undefined;
@@ -617,7 +617,7 @@ function parseName(raw: unknown): string | undefined {
 
 
 
-/** botSkill — a bare tier name, a per-axis mix ({aim:'impossible',
+/** botSkill - a bare tier name, a per-axis mix ({aim:'impossible',
  *  move:'easy'}), or {alpha,bravo} per-side; unknown values fall back
  *  to the room default (medium). */
 function parseBotSkill(raw: unknown): MapSpec['botSkill'] {
@@ -675,7 +675,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     standing: (src as { standing?: unknown }).standing === true ? true : undefined,
     botSkill: parseBotSkill((src as { botSkill?: unknown }).botSkill),
     ballMix: parseBallMix((src as { ballMix?: unknown }).ballMix),
-    // filename-only — the value is resolved under maps/ server-side, so
+    // filename-only - the value is resolved under maps/ server-side, so
     // anything with a slash or dot-traversal is dropped on the floor
     terrain: parseTerrain((src as { terrain?: unknown }).terrain),
     heightScale: parseHeightScale((src as { heightScale?: unknown }).heightScale),
@@ -701,24 +701,24 @@ export function resolveMapSpec(raw: unknown): MapSpec {
 }
 
 /** Modes a spec can legally host: the declared list; else its own mode
- *  plus every ruleset — modes are map-agnostic: spawns fall back to the
+ *  plus every ruleset - modes are map-agnostic: spawns fall back to the
  *  flat pool, rabbit mints its own neutral stand, and ctf auto-places
  *  stands on geometry without authored bases (farthest spawn pair).
  *  A mode-less spec remains "anything" (empty = unconstrained). */
 export function specModes(spec: MapSpec | undefined): string[] {
   if (spec?.modes) {return spec.modes;}
   if (!spec?.mode) {return [];}
-  // Every ruleset in MODES is map-agnostic — the spec's own declared
+  // Every ruleset in MODES is map-agnostic - the spec's own declared
   // mode rides along in case it names something older.
   return [...new Set([spec.mode, ...Object.keys(MODES)])];
 }
 
 const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 'hull', 'kit', 'shield']);
 
-/** Socket top above the flag's home pos — bot goals aimed at a home
+/** Socket top above the flag's home pos - bot goals aimed at a home
  *  flag lift by this so pressers meet the pole, not the dirt. The socket
  *  itself is visual-only (mkFlagStand); a map that wants a platform
- *  authors a stand kit piece (katastand/flagtower — standTop snaps the
+ *  authors a stand kit piece (katastand/flagtower - standTop snaps the
  *  home onto it) or an authored 'stand' box. */
 export const FLAG_STAND_LIFT = 0.85;
 

@@ -1,9 +1,9 @@
 /* oxlint-disable typescript/no-explicit-any -- Manifold WASM + window debug handles */
-// gunlab — live weapon inspection page (/gunlab.html). Left rail = one
+// gunlab - live weapon inspection page (/gunlab.html). Left rail = one
 // button per viewmodel weapon; FPS pose or detached turntable inspect.
 // Live updates: vite HMR re-runs this module on code edits (state parked
 // on window so selection survives), and a HEAD poll on the baked
-// /weapons/*.glb/_ao.png files hot-swaps bake assets in place — no reload.
+// /weapons/*.glb/_ao.png files hot-swaps bake assets in place - no reload.
 import * as THREE from 'three';
 import { AtmosphericSky } from './world/atmosphericSky.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -22,11 +22,11 @@ import { zScan, holeScan, gapScan, volScan } from './gunlab/scans.js';
 
 const CAT_TABLES = { classes: CLASSES, creatures: CREATURES, items: ITEMS, pickups: PICKUPS, structures: STRUCTURES } as const;
 
-// Player-facing lab: served on prod too — the ESC-menu button opens it
+// Player-facing lab: served on prod too - the ESC-menu button opens it
 // on any host, so there is no isDevHost gate on the entry.
 
 // Load profiling: T0 lands after module-eval imports (three, manifold
-// wrapper) finish — that span shows as 'module imports' in the first lap.
+// wrapper) finish - that span shows as 'module imports' in the first lap.
 // nav+ is wall time since navigationStart, the number you feel on F5.
 const T0 = performance.now();
 let lapT = T0;
@@ -51,7 +51,7 @@ const lap = (label: string): void => {
 lap('module imports');
 
 interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; cam?: number[]; tgt?: number[]; fov?: number; z?: boolean; cat?: string; pick?: string; heldWt?: number; heldTeam?: string; heldMark?: string; heldSide?: string }
-// Persisted so noreload-mode F5s come back to the same gun+angle — the
+// Persisted so noreload-mode F5s come back to the same gun+angle - the
 // window park only survives HMR accepts.
 const saved = ((): LabState | undefined => {
   try {
@@ -63,7 +63,7 @@ const state: LabState = saved ?? { wt: 0, inspect: false, yaw: 0.75, pitch: 0 };
 (window as any).__gunlab = state;
 let saveTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 function flushSave(): void {
-  // state IS window.__gunlab — probes bolt `scene` and other live objects
+  // state IS window.__gunlab - probes bolt `scene` and other live objects
   // onto it, and swarm meshes carry deliberately-circular dbg tags, so
   // persist an explicit whitelist rather than stringifying the handle.
   const persist: LabState = {
@@ -78,7 +78,7 @@ function flushSave(): void {
 function saveState(): void {
   state.cam = camera.position.toArray();
   state.tgt = orbit.target.toArray();
-  // Debounced — orbit 'change' can fire per frame while damping settles.
+  // Debounced - orbit 'change' can fire per frame while damping settles.
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flushSave, 500);
 }
@@ -93,7 +93,7 @@ document.body.append(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x25_28_2E);
-// FOV + lights mirror world/viewmodelScene.ts — the game renders the
+// FOV + lights mirror world/viewmodelScene.ts - the game renders the
 // viewmodel in its own pass at FOV 55, so this rig must match or the
 // FPS view judges the gun wider and warmer-lit than in-game.
 const camera = new THREE.PerspectiveCamera(state.fov ?? 55, innerWidth / innerHeight, 0.01, 100);
@@ -104,26 +104,26 @@ scene.add(new THREE.AmbientLight(0x88_99_AA, 0.9));
 const sun = new THREE.DirectionalLight(0xFF_FF_FF, 1.2);
 sun.position.set(0.5, 1, 0.4);
 scene.add(sun);
-// The game's real atmospheric sky — mounted before the env bake so
+// The game's real atmospheric sky - mounted before the env bake so
 // scene.environment IS the sky (transmission/metal reflect it) and the
 // dome itself draws behind every preview. 4km dome scaled inside the
 // camera's 100 far plane; the shader is view-direction based so scale
 // only affects depth, never the gradient.
 new AtmosphericSky(scene);
 (scene.getObjectByName('__sky') as THREE.Mesh).scale.setScalar(60 / 4000);
-// PMREM env bake — physical materials (transmission/metal) are dead
+// PMREM env bake - physical materials (transmission/metal) are dead
 // without something to reflect/refract; same recipe as main.ts.
 {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(scene, 0.06).texture;
   pmrem.dispose();
 }
-// Probes read state.pick AND dump baked attributes off scene — same
+// Probes read state.pick AND dump baked attributes off scene - same
 // object both times: a second assignment here silently dropped the
 // state side once this module finished booting.
 Object.assign((window as any).__gunlab ??= {}, { scene });
 
-// Sketchfab-style orbit rig — the convention everyone copies: LMB
+// Sketchfab-style orbit rig - the convention everyone copies: LMB
 // orbits, wheel dollies, RMB pans. Enabled only in inspect mode; in FPS
 // pose the camera is the rig and a drag is a look-sway instead.
 const orbit = new OrbitControls(camera, renderer.domElement);
@@ -132,16 +132,16 @@ orbit.enabled = false;
 orbit.minDistance = 0.06; // never let the camera into the mesh
 orbit.maxDistance = 8;
 const trackDir = (): void => {
-  // Remember where the camera sits relative to the target — weapon
+  // Remember where the camera sits relative to the target - weapon
   // swaps refit distance along THIS line so the angle never jumps.
   const d = camera.position.clone().sub(orbit.target);
   if (d.lengthSq() > 1e-8) {inspectDir.copy(d.normalize());}
   saveState();
 };
-orbit.addEventListener('change', trackDir); // debounced inside — safe per frame
+orbit.addEventListener('change', trackDir); // debounced inside - safe per frame
 (window as any).__gl = { camera, orbit }; // debug handle
 
-// The geometry lints live in gunlab/scans.ts — the __gl hooks below
+// The geometry lints live in gunlab/scans.ts - the __gl hooks below
 // just run them across every builder for the headless report
 // (_tools/e2e/zfight.ts calls these).
 (window as any).__gl.zcheck = (): { wt: number; pairs: number; at: number[][]; who: string[] }[] => {
@@ -188,7 +188,7 @@ orbit.addEventListener('change', trackDir); // debounced inside — safe per fra
   }
   return results;
 };
-// Info dump — clipboard truth per weapon: mesh/vert/tri census,
+// Info dump - clipboard truth per weapon: mesh/vert/tri census,
 // footprint size, baked attributes present, then the three checks
 // (z-fight pairs, hole rims, floating parts). Alt+Q = ACTIVE weapon
 // (the live viewmodel group, bake swap included); Alt+W = all weapons
@@ -205,7 +205,7 @@ meshes += 1;
     const pos = m.geometry.getAttribute('position');
     verts += pos.count;
     tris += m.geometry.index ? m.geometry.index.count / 3 : pos.count / 3;
-    // Buffer footprint: every attribute + index — the on-GPU weight of
+    // Buffer footprint: every attribute + index - the on-GPU weight of
     // the data as-shown (says nothing about the .glb file's compression).
     for (const k of Object.keys(m.geometry.attributes)) {
       attrs.add(k);
@@ -226,15 +226,15 @@ meshes += 1;
     `w${wt} ${name}: ${meshes} meshes, ${verts}v/${tris}t ` +
     `${kb >= 1024 ? `${(kb / 1024).toFixed(2)}MB` : `${kb.toFixed(1)}KB`}, ` +
     `size ${size.x.toFixed(2)}×${size.y.toFixed(2)}×${size.z.toFixed(2)}, ` +
-    `attrs {${[...attrs].join(',')}} — ` +
+    `attrs {${[...attrs].join(',')}} - ` +
     `z:${z.pairs} holes:${holes.holes} inverted:${vol.inverted} floaters:${gaps.orphans} clusters:${gaps.clusters}${ 
     vol.inverted ? ` INV[${vol.who.join('; ')}]` : '' 
     }${gaps.orphans ? ` [${gaps.who.join('; ')}]` : ''}`
   );
 }
-// Live stats overlay — bottom-left corner census of whatever is on
+// Live stats overlay - bottom-left corner census of whatever is on
 // stage (weapon, preview, inspect anchor). Cheap counts only: the heavy
-// scans (zScan/holes/gaps) stay behind ⓘ info — they recompute geometry
+// scans (zScan/holes/gaps) stay behind ⓘ info - they recompute geometry
 // and would stutter if run per-tick.
 let statOn = false;
 let statEl: HTMLDivElement | null = null;
@@ -286,7 +286,7 @@ function updateStats(): void {
 // --- rail UI ---
 function paintRail(): void {
   rail.innerHTML = '';
-  // Category picker — weapons today, creatures/pickups/etc as they get
+  // Category picker - weapons today, creatures/pickups/etc as they get
   // previewable builds. The select repaints the rail below it.
   const cats: [id: string, label: string][] = [['weapons', 'weapons'], ['classes', 'classes'], ['creatures', 'creatures'], ['items', 'items'], ['pickups', 'pickups'], ['structures', 'structures']];
   const catSel = document.createElement('select');
@@ -320,7 +320,7 @@ function paintRail(): void {
     b.addEventListener('click', (): void => select(wt));
     rail.append(b);
   }
-  // Archive shelf — retired builders, for A/B against the live versions.
+  // Archive shelf - retired builders, for A/B against the live versions.
   if (ARCHIVE_BUILDERS.length > 0) {
     const sep = document.createElement('div');
     sep.className = 'tools';
@@ -360,7 +360,7 @@ function flashStatus(msg: string): void {
 
 
 async function infoDump(all = false): Promise<void> {
-  const lines: string[] = [`gunlab info — ${new Date().toISOString()}`];
+  const lines: string[] = [`gunlab info - ${new Date().toISOString()}`];
   if (all) {
     for (const [wt, mk] of MODEL_BUILDERS) {
       const built = mk() as THREE.Group | { g: THREE.Group };
@@ -369,7 +369,7 @@ async function infoDump(all = false): Promise<void> {
       lines.push(dumpWeapon(wt, root, mk.name || '?'));
     }
   } else {
-    // Active weapon, live state — the procedural bake, swapped GLB, or
+    // Active weapon, live state - the procedural bake, swapped GLB, or
     // an archived build if one's parked in the group.
     if (archiveGroup) {
       lines.push(dumpWeapon(-1, archiveGroup, `${archiveLabel} (archive)`));
@@ -387,7 +387,7 @@ async function infoDump(all = false): Promise<void> {
   flashStatus(all ? 'info (all) → clipboard' : `w${state.wt} info → clipboard`);
   console.log(lines.join('\n'));
 }
-// ⚠z toggle — rebuilds the flagged tris of the ACTIVE weapon into an
+// ⚠z toggle - rebuilds the flagged tris of the ACTIVE weapon into an
 // error-magenta overlay, the way missing-texture pipelines mark broken
 // surfaces. Paints the live weapon (inspect or FPS pose), so it rides
 // along with whatever angle you're inspecting from.
@@ -402,7 +402,7 @@ function zPaint(on: boolean): void {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(flagVerts, 3));
   // depthTest off + late renderOrder: the overlay sits ON the fighting
-  // plane — let it win outright or it becomes the thing it highlights.
+  // plane - let it win outright or it becomes the thing it highlights.
   const mat = new THREE.MeshBasicMaterial({ color: 0xFF_00_FF, side: THREE.DoubleSide, depthTest: false });
   zOverlay = new THREE.Mesh(geo, mat);
   zOverlay.renderOrder = 999;
@@ -418,7 +418,7 @@ const statusEl = document.querySelector('#status')!;
 // --- viewmodel lifecycle (rebuilt on bake-asset change / HMR) ---
 let vm = new ViewModel(camera);
 // Probes need the live viewmodel to drive envelopes (a swing, a punch, a
-// reload) from outside the page — the rail buttons are the manual path, but
+// reload) from outside the page - the rail buttons are the manual path, but
 // a scripted capture wants to step the same instance.
 const exposeVm = (): void => {Object.assign((window as any).__gunlab ??= {}, { vm, renderer, camera });};
 exposeVm();
@@ -428,28 +428,28 @@ lap('viewmodel init');
 
 // Inspect mode parks the ACTIVE weapon group in the scene on a manual
 // orbit; the rest of the viewmodel (hands/flash) stays offstage. The
-// group's viewmodel-space transform is saved and restored on exit —
+// group's viewmodel-space transform is saved and restored on exit -
 // leaving it mutated is what stranded the gun off-screen in FPS view.
 let inspectAnchor: THREE.Object3D | null = null;
 const focus = new THREE.Vector3();
-// Live-focus tracking scratches — the loop applies the focus's frame
+// Live-focus tracking scratches - the loop applies the focus's frame
 // delta so RMB pan's edits to orbit.target survive (see render loop).
 const _camW = new THREE.Vector3();
 const _lastFocus = new THREE.Vector3();
 let liveFocusOn = false;
-// The last orbit direction — weapon swaps and FPS↔inspect toggles keep
+// The last orbit direction - weapon swaps and FPS↔inspect toggles keep
 // this angle; only the fit distance changes.
 const inspectDir = new THREE.Vector3(0.45, 0.3, 0.85).normalize();
-// Wireframe overlay — THREE line children per visible mesh, drawn with
+// Wireframe overlay - THREE line children per visible mesh, drawn with
 // depth-test ON but polygon-offset toward the eye: a blue
 // WireframeGeometry layer paints EVERY triangle edge (coplanar
 // triangulation splits included), a yellow EdgesGeometry layer marks
 // >1° breaks, and a RED layer draws the wear bake's own flagged-edge
-// list (geo.userData.__sharpEdges) — comparing red-vs-wear-line splits
+// list (geo.userData.__sharpEdges) - comparing red-vs-wear-line splits
 // bake misses from shader artifacts. ~1px via LineBasicMaterial.
 let wireOn = false;
 const wireLines: THREE.LineSegments[] = [];
-// toneMapped:false — ACES otherwise crushes the flat line colors into
+// toneMapped:false - ACES otherwise crushes the flat line colors into
 // murk on the dark model; these are debug markup, they should punch.
 const wireMat = new THREE.LineBasicMaterial({
   color: 0xFF_DD_00, depthWrite: false, toneMapped: false,
@@ -461,7 +461,7 @@ const wireFlatMat = new THREE.LineBasicMaterial({
 });
 const wireSharpMat = new THREE.LineBasicMaterial({
   color: 0xFF_33_55, depthWrite: false, toneMapped: false,
-  // Biggest depth pull — the flagged list sits at the same spots as the
+  // Biggest depth pull - the flagged list sits at the same spots as the
   // other two layers' lines, so without a clear offset margin the
   // brighter layers cover the debug red.
   polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
@@ -469,7 +469,7 @@ const wireSharpMat = new THREE.LineBasicMaterial({
 function applyWire(): void {
   for (const l of wireLines) { l.parent?.remove(l); l.geometry.dispose(); }
   wireLines.length = 0;
-  // Previews that own a hit capsule (class lineup) expose colliderWire —
+  // Previews that own a hit capsule (class lineup) expose colliderWire -
   // the ▧ wire toggle shows the sim capsule alongside the tri overlay.
   const cw = (inspectAnchor ?? archiveGroup)?.userData.colliderWire as ((on: boolean) => void) | undefined;
   cw?.(wireOn);
@@ -484,12 +484,12 @@ function applyWire(): void {
     flat.renderOrder = 5;
     m.add(flat);
     wireLines.push(flat);
-    // Yellow overlay: only edges with a >1° dihedral — designed breaks.
+    // Yellow overlay: only edges with a >1° dihedral - designed breaks.
     const l = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 1), wireMat);
     l.renderOrder = 6;
     m.add(l);
     wireLines.push(l);
-    // Red overlay: the wear bake's flagged-edge list verbatim — what the
+    // Red overlay: the wear bake's flagged-edge list verbatim - what the
     // shader was TOLD to line. Gaps here = detection; gaps only in the
     // shaded wear = the barycentric interpolation.
     const flagged = m.geometry.userData.__sharpEdges as Float32Array | undefined;
@@ -535,7 +535,7 @@ function setInspect(on: boolean): void {
   active.rotation.set(0, 0, 0);
   active.userData.inspectPos = active.position.clone(); // kick delta rides THIS, not home
   const dist = Math.max(size * 0.75, 0.25);
-  // Structures and lineup previews are tens of meters across — the
+  // Structures and lineup previews are tens of meters across - the
   // weapon-scale 8m cap makes them impossible to frame from outside.
   orbit.maxDistance = Math.max(8, size * 2.5);
   orbit.target.copy(focus.set(0, 0, 0));
@@ -576,7 +576,7 @@ function selectArchive(label: string, mk: () => THREE.Group): void {
   archiveGroup.visible = true;
   archiveGroup.name = `archive:${label}`;
   archiveLabel = label;
-  state.pick = label; // survives F5 — same slot the weapon pick uses
+  state.pick = label; // survives F5 - same slot the weapon pick uses
   saveState();
   vm.group.add(archiveGroup);
   if (state.inspect) { setInspect(false); setInspect(true); }
@@ -598,7 +598,7 @@ function rebuild(): void {
   exposeVm();
   vm.switchWeapon(state.wt);
   for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
-  // A creature/pickup/archive pick died with the old group — respawn it.
+  // A creature/pickup/archive pick died with the old group - respawn it.
   if (state.pick) {
     const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES, ...ITEMS].find(([l]): boolean => l === state.pick);
     if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
@@ -617,7 +617,7 @@ function rebuild(): void {
 // wear. Toggles the group between unioned shell and authored parts.
 let unionOn = false;
 let unioned: { mesh: THREE.Mesh; hidden: THREE.Object3D[] } | null = null;
-// Manifold (WASM) — guaranteed-watertight booleans, unlike three-bvh-csg
+// Manifold (WASM) - guaranteed-watertight booleans, unlike three-bvh-csg
 // which shreds on coplanar/sliver inputs. Loaded lazily on first toggle.
 let maniMod: any = null;
 async function mani(): Promise<any> {
@@ -627,7 +627,7 @@ async function mani(): Promise<any> {
   }
   return maniMod;
 }
-// Collect a group's lit meshes as Manifold solids in GROUP space —
+// Collect a group's lit meshes as Manifold solids in GROUP space -
 // shared input for both the union preview and the shell carve.
 async function manifoldParts(g: THREE.Group): Promise<{ Manifold: any; parts: THREE.Mesh[]; manis: any[]; rejected: number; inV: number; inT: number }> {
   const { Manifold, Mesh: MMesh } = await mani();
@@ -642,7 +642,7 @@ async function manifoldParts(g: THREE.Group): Promise<{ Manifold: any; parts: TH
   const kept: THREE.Mesh[] = [];
   let inV = 0, inT = 0, rejected = 0;
   for (const m of parts) {
-    // Strip baked attrs BEFORE welding — mergeVertices only merges verts
+    // Strip baked attrs BEFORE welding - mergeVertices only merges verts
     // whose whole attribute set matches, and per-vertex AO/wear differs,
     // so nothing welded and every part read as non-manifold.
     const stripped = m.geometry.clone().applyMatrix4(inv.clone().multiply(m.matrixWorld));
@@ -668,7 +668,7 @@ rejected += 1;
 }
 
 // Manifold mesh → BufferGeometry (group space). Keeps Manifold's shared
-// vertex pool INDEXED — going non-indexed forces flat facet normals, and
+// vertex pool INDEXED - going non-indexed forces flat facet normals, and
 // curved tubes (mkTube/cylinders) shade faceted. toCreasedNormals then
 // splits only at real creases: tube segments smooth, box edges stay hard.
 function maniToGeo(om: any): THREE.BufferGeometry {
@@ -678,7 +678,7 @@ function maniToGeo(om: any): THREE.BufferGeometry {
   const ni = new THREE.BufferGeometry();
   ni.setAttribute('position', new THREE.BufferAttribute(verts, 3));
   ni.setIndex(new THREE.BufferAttribute(new Uint32Array(om.triVerts), 1));
-  return toCreasedNormals(ni, Math.PI / 3); // 60° — tube facets (~20-36°) smooth, 90° edges hard
+  return toCreasedNormals(ni, Math.PI / 3); // 60° - tube facets (~20-36°) smooth, 90° edges hard
 }
 
 async function unionToggle(): Promise<void> {
@@ -703,14 +703,14 @@ async function unionToggle(): Promise<void> {
     if (solid.isEmpty()) { console.warn('[union] empty result'); return; }
   } catch (error) { console.warn('[union] manifold failed:', error); return; }
   const om = solid.getMesh();
-  console.log(`[union] w${state.wt}: ${parts.length} parts (${rejected} rejected) — ${inV}v/${inT}t in → ${om.numVert}v/${om.triVerts.length / 3}t out, ${(performance.now() - t0).toFixed(0)}ms`);
+  console.log(`[union] w${state.wt}: ${parts.length} parts (${rejected} rejected) - ${inV}v/${inT}t in → ${om.numVert}v/${om.triVerts.length / 3}t out, ${(performance.now() - t0).toFixed(0)}ms`);
   const ni = maniToGeo(om);
   for (const mm of manis) {mm.delete?.();}
   solid.delete?.();
-  // Clone material — shared bodyMat's wearTex must not be retargeted —
+  // Clone material - shared bodyMat's wearTex must not be retargeted -
   // and run the wear/grunge/edge bake so the shell matches the parts.
   const umat = (parts[0]!.material as THREE.Material).clone();
-  // clone() copies userData — including __grunge, which would make
+  // clone() copies userData - including __grunge, which would make
   // enhanceWeaponMaterial skip injecting the procedural shader.
   delete umat.userData.__grunge;
   const out = new THREE.Mesh(ni, umat);
@@ -727,10 +727,10 @@ async function unionToggle(): Promise<void> {
 }
 
 // --- shell: the fake union ---
-// Subtract every other part from each part (part_i − union(rest)) — the
+// Subtract every other part from each part (part_i − union(rest)) - the
 // intersection curves become REAL verts, so the bake's merged occluder
 // reads like the union shell while every part keeps its own material
-// and geometry identity. Toggle restores the authored buffers — no
+// and geometry identity. Toggle restores the authored buffers - no
 // rebake needed, the originals kept their bake.
 let shellOn = false;
 const shelled = new Map<THREE.Mesh, THREE.BufferGeometry>();
@@ -757,7 +757,7 @@ async function shellToggle(): Promise<void> {
     rest.delete?.();
     const om = cut.getMesh();
     cut.delete?.();
-    if (om.numVert === 0) {continue;} // fully buried part — keep it authored
+    if (om.numVert === 0) {continue;} // fully buried part - keep it authored
     // Manifold works in group space; swap back into this mesh's local
     // frame so its own transform keeps applying.
     const geo = maniToGeo(om);
@@ -770,14 +770,14 @@ carved += 1;
   for (const mm of manis) {mm.delete?.();}
   if (carved === 0) {return;}
   shellOn = true;
-  // Occluder is now the trimmed surface — union-quality AO on authored
+  // Occluder is now the trimmed surface - union-quality AO on authored
   // parts. Rejected/non-manifold parts stay as-is in the merge.
   bakeVertexAO(g);
   console.log(`[shell] w${state.wt}: carved ${carved}/${manis.length} parts (${rejected} rejected) → ${outT}t, ${(performance.now() - t0).toFixed(0)}ms`);
 }
 
 // --- metal: procMetal A/B ---
-// Swaps the active pick's Lambert bodies for the metalMat recipe —
+// Swaps the active pick's Lambert bodies for the metalMat recipe -
 // Lambert can't show specular, so this is the whole point of the toggle.
 // Fresh Standard mats get the wear/grunge shader re-injected (that's
 // what sells worn metal vs flat plastic). Stash + restore like shell.
@@ -789,7 +789,7 @@ function metalFor(src: THREE.Material): THREE.MeshStandardMaterial {
   if (!m) {
     const l = src as THREE.MeshLambertMaterial;
     m = metalMat(l.color?.getHex() ?? 0x3A_40_48);
-    if (l.emissive) {m.emissive.copy(l.emissive);} // Lambert fakes ambient via emissive — carry it
+    if (l.emissive) {m.emissive.copy(l.emissive);} // Lambert fakes ambient via emissive - carry it
     enhanceWeaponMaterial(m);
     metalCache.set(src, m);
   }
@@ -817,11 +817,11 @@ n += 1;
 }
 
 // --- right rail: anim states, when the preview exposes a driver ----
-// A preview parks `userData.anims = { set(state), dir?(f,side) }` — the
+// A preview parks `userData.anims = { set(state), dir?(f,side) }` - the
 // classes lineup drives all three bodies in lockstep through it.
 const animRail = document.getElementById('animrail')!;
 const ANIM_STATES: AnimationState[] = ['idle', 'walk', 'run', 'jump', 'ski', 'jet', 'shoot', 'throw', 'hit', 'death'];
-// Facing-frame (fwd, side) — same convention as PlayerModel.setLocomotionVector.
+// Facing-frame (fwd, side) - same convention as PlayerModel.setLocomotionVector.
 const DIR_BTNS: [label: string, v: [number, number]][] = [
   ['FL', [0.7, -0.7]], ['F', [1, 0]], ['FR', [0.7, 0.7]],
   ['L', [0, -1]], ['·', [0, 0]], ['R', [0, 1]],
@@ -831,9 +831,9 @@ interface AnimHook { set: (s: AnimationState) => void; dir?: (f: number, s: numb
 let animSel: AnimationState | '' = '';
 let bindHeld = false;
 
-// Held-weapon picker — same builders the viewmodel rail uses (+ the
+// Held-weapon picker - same builders the viewmodel rail uses (+ the
 // chaingun's ballistic builder) so hand props match real silhouettes.
-// heldWt persists across F5 — the lineup rebuilds every reload, so
+// heldWt persists across F5 - the lineup rebuilds every reload, so
 // re-applying the saved pick is the only way it stays armed.
 function mkWeaponSel(hook: AnimHook): HTMLSelectElement {
   const wsel = document.createElement('select');
@@ -855,7 +855,7 @@ function mkWeaponSel(hook: AnimHook): HTMLSelectElement {
   return wsel;
 }
 
-// Team paint preview — neutral/red/blue, persisted like heldWt.
+// Team paint preview - neutral/red/blue, persisted like heldWt.
 function mkTeamSel(hook: AnimHook): HTMLSelectElement {
   const tsel = document.createElement('select');
   tsel.className = 'wsel';
@@ -874,7 +874,7 @@ function mkTeamSel(hook: AnimHook): HTMLSelectElement {
   return tsel;
 }
 
-// Enemy-mark overlay — outline hull / fresnel rim / both; independent of
+// Enemy-mark overlay - outline hull / fresnel rim / both; independent of
 // the team tint so they combine freely.
 function mkMarkSel(hook: AnimHook): HTMLSelectElement {
   const msel = document.createElement('select');
@@ -894,7 +894,7 @@ function mkMarkSel(hook: AnimHook): HTMLSelectElement {
   return msel;
 }
 
-// Mark color side — enemy scarlet / ally green / neutral white.
+// Mark color side - enemy scarlet / ally green / neutral white.
 function mkSideSel(hook: AnimHook): HTMLSelectElement {
   const ssel = document.createElement('select');
   ssel.className = 'wsel';
@@ -925,7 +925,7 @@ function paintAnimRail(): void {
     b.addEventListener('click', (): void => { animSel = s; bindHeld = false; hook.set(s); paintAnimRail(); });
     animRail.append(b);
   }
-  // Rest-pose button last — clears animSel, bones snap to the authored T.
+  // Rest-pose button last - clears animSel, bones snap to the authored T.
   if (hook.bind) {
     const b = document.createElement('button');
     b.textContent = 'tpose';
@@ -981,16 +981,16 @@ function select(wt: number): void {
     archiveGroup.parent?.remove(archiveGroup);
     if (inspectAnchor === archiveGroup) {inspectAnchor = null;}
     archiveGroup = null; archiveLabel = '';
-    paintAnimRail(); // weapons expose no anim driver — rail hides
+    paintAnimRail(); // weapons expose no anim driver - rail hides
   }
   state.pick = undefined;
   vm.switchWeapon(wt);
   for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // skip the holster dip
-  // Re-anchor whatever just became active — inspect mode follows the
+  // Re-anchor whatever just became active - inspect mode follows the
   // pick; setInspect refits along the tracked inspectDir, so the view
   // angle survives the swap.
   if (state.inspect) { setInspect(false); setInspect(true); }
-  if (zOverlay) {zPaint(true);} // flag the new pick — old overlay's tris are gone
+  if (zOverlay) {zPaint(true);} // flag the new pick - old overlay's tris are gone
   applyWire();
   paintRail();
   saveState();
@@ -1001,7 +1001,7 @@ function select(wt: number): void {
 function paintTools(): void {
   const tools = document.createElement('div');
   tools.className = 'tools';
-  // FOV slider FIRST — it shapes the FPS view, which is what the lab is
+  // FOV slider FIRST - it shapes the FPS view, which is what the lab is
   // for. Game viewmodel runs at 55, but per-weapon judgement sometimes
   // wants tighter/wider. Persisted like the rest of the lab state.
   const fovWrap = document.createElement('label');
@@ -1027,7 +1027,7 @@ function paintTools(): void {
   });
   fovWrap.append('fov ', fovIn, fovVal);
   tools.append(fovWrap);
-  // Side-by-side button pairs — same visual as the rows, half the rail.
+  // Side-by-side button pairs - same visual as the rows, half the rail.
   const row = (labels: [label: string, fn: () => void][]): HTMLButtonElement[] => {
     const div = document.createElement('div');
     div.className = 'btnrow';
@@ -1041,7 +1041,7 @@ function paintTools(): void {
     tools.append(div);
     return bs;
   };
-  // Procedural is the default — ?bake opts INTO the GLB swap (vmBaked
+  // Procedural is the default - ?bake opts INTO the GLB swap (vmBaked
   // reads the same flag). View+gun survive the reload via the saved pose.
   const baked = new URLSearchParams(window.location.search).has('bake');
   const [, bakeB] = row([
@@ -1059,10 +1059,10 @@ function paintTools(): void {
     ['⚠ z', (): void => { zPaint(!zOverlay); state.z = Boolean(zOverlay); saveState(); paintRail(); }],
   ]);
   zB!.classList.toggle('active', Boolean(zOverlay));
-  // Wear-mask debug — paints R=final wear / G=grime / B=edge flag instead
+  // Wear-mask debug - paints R=final wear / G=grime / B=edge flag instead
   // of shading. It's a shader define, so it needs a reload like ?bake.
   const wearViz = new URLSearchParams(window.location.search).has('wearviz');
-  // union (rendered weld) and shell (per-part carve) share one row —
+  // union (rendered weld) and shell (per-part carve) share one row -
   // they're the same question asked two ways.
   const [unionB, shellB, metalB] = row([
     ['⛛ union', (): void => { unionToggle().then(paintRail).catch((): void => undefined); }],
@@ -1113,7 +1113,7 @@ async function copyBuilderSrc(): Promise<void> {
       if (src[i] === '{') {depth += 1;}
       else if (src[i] === '}' && (depth -= 1) === 0) { end = i + 1; break; }
     }
-    // Grab the comment block above it too — the "why" matters.
+    // Grab the comment block above it too - the "why" matters.
     let start = at;
     const before = src.slice(0, at);
     const m = before.match(/(?:\n\s*\/\/[^\n]*)+\s*$|\n\/\*[\s\S]*?\*\/\s*$/);
@@ -1144,14 +1144,14 @@ function shotSheet(): void {
     g2.textAlign = 'center';
     g2.fillText(label, cx * cell + cell / 2, cy * cell + 42);
   };
-  // FPS cell first — weapon still in viewmodel pose, camera at the eye.
+  // FPS cell first - weapon still in viewmodel pose, camera at the eye.
   // Keep the canvas's real aspect: squashing to square shrinks the
-  // horizontal FOV and shoves REST_POS out to the corner — nothing like
+  // horizontal FOV and shoves REST_POS out to the corner - nothing like
   // the in-game frame. Center-crop the wide buffer into the cell instead.
   if (wasInspect) {setInspect(false);}
   camera.position.set(0, 0, 0);
   camera.rotation.set(0, 0, 0);
-  // A single update only lerps partway to REST_POS — settle the pose
+  // A single update only lerps partway to REST_POS - settle the pose
   // like rebuild() does or the gun floats wherever inspect left it.
   for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
   renderer.render(scene, camera);
@@ -1159,7 +1159,7 @@ function shotSheet(): void {
     const buf = renderer.domElement;
     const crop = Math.min(buf.width, buf.height);
     // Right-anchored crop: REST_POS holds the gun on the right of the
-    // frame — a centered crop clips it at the cell edge.
+    // frame - a centered crop clips it at the cell edge.
     g2.drawImage(buf, buf.width - crop, (buf.height - crop) / 2, crop, crop,
       cell, cell, cell, cell);
     g2.fillStyle = '#8f8';
@@ -1169,7 +1169,7 @@ function shotSheet(): void {
   }
   camera.aspect = 1;
   camera.updateProjectionMatrix();
-  // External cells — park the weapon centered at origin like inspect does.
+  // External cells - park the weapon centered at origin like inspect does.
   setInspect(true);
   const box = new THREE.Box3().setFromObject(inspectAnchor!);
   // Fit the bounding sphere inside the frustum: half-diagonal is the
@@ -1192,7 +1192,7 @@ function shotSheet(): void {
   camera.position.copy(keepPos);
   camera.quaternion.copy(keepQuat);
   if (!wasInspect) {setInspect(false);}
-  // dataURL park for the /gunsheet middleware — it polls window for this
+  // dataURL park for the /gunsheet middleware - it polls window for this
   // rather than scraping the canvas (toBlob is async either way).
   (window as unknown as { __sheetPNG?: string }).__sheetPNG = comp.toDataURL('image/png');
   comp.toBlob((b): void => {
@@ -1201,7 +1201,7 @@ function shotSheet(): void {
     // client/shots/ so agents can read it without a download dance.
     const name = `w${state.wt}_sheet.png`;
     navigator.clipboard?.write?.([new ClipboardItem({ 'image/png': b })])
-      .catch((): void => flashStatus('clipboard blocked — file still saved'));
+      .catch((): void => flashStatus('clipboard blocked - file still saved'));
     fetch(`/shot?name=${name}`, { method: 'POST', body: b });
   });
   flashStatus(`w${state.wt} sheet → clipboard + shots/`);
@@ -1210,26 +1210,26 @@ function shotSheet(): void {
 
 
 // 4-up reference sheet: side / top / front-¾ / first-person in one PNG.
-// Each shot renders full-frame then gets blitted into a composite cell —
+// Each shot renders full-frame then gets blitted into a composite cell -
 // the drawing buffer is only guaranteed valid within the same task, so
 // every render+drawImage pair runs synchronously.
-// cell layout — `up` pins the camera roll: without it lookAt rolls
+// cell layout - `up` pins the camera roll: without it lookAt rolls
 // arbitrarily and "top" ends up tilted on two axes instead of one.
 const shotDir: Record<string, { d: THREE.Vector3; up?: THREE.Vector3 }> = {
   side:  { d: new THREE.Vector3(1, 0.05, 0) },
-  // up=-X puts the muzzle (-Z) to screen-right — same heading as the
+  // up=-X puts the muzzle (-Z) to screen-right - same heading as the
   // side cell, just seen from above.
   top:   { d: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(-1, 0, 0) },
   front: { d: new THREE.Vector3(-0.55, 0.25, -0.78) }, // gunner-facing ¾
 };
 
-// Copy the active weapon's builder source — import.meta.glob pulls
+// Copy the active weapon's builder source - import.meta.glob pulls
 // every .ts under viewmodel/ as raw text, so new builder files are
 // picked up with zero wiring. fn.name survives bundling here because
 // vite dev serves the modules unminified.
 const GEO_SOURCES = import.meta.glob('./entities/viewmodel/*.ts', { query: '?raw', import: 'default' });
 
-// Retired-model preview — archive builders spawn straight into
+// Retired-model preview - archive builders spawn straight into
 // vm.group so inspect/zcheck/gapcheck treat them like any weapon.
 let archiveGroup: THREE.Group | null = null;
 let archiveLabel = '';
@@ -1253,16 +1253,16 @@ async function pollBakes(): Promise<void> {
       const prev = watched.get(url);
       watched.set(url, sig);
       if (prev !== undefined && prev !== sig) { flashStatus(`${url.split('/').pop()} changed`); rebuild(); return; }
-    } catch { /* dev-server blip — retry next tick */ }
+    } catch { /* dev-server blip - retry next tick */ }
   }
 }
-// Only armed under ?bake — procedural mode has no bake files to watch.
+// Only armed under ?bake - procedural mode has no bake files to watch.
 const pollTimer = new URLSearchParams(window.location.search).has('bake')
   ? setInterval(pollBakes, 1500)
   : 0;
 
 // --- drag look (FPS pose sway). Inspect-mode dragging is owned by
-// OrbitControls on the canvas — these listeners only feed the sway. ---
+// OrbitControls on the canvas - these listeners only feed the sway. ---
 let dragging = false, lastX = 0, lastY = 0;
 let lookDX = 0, lookDY = 0;
 addEventListener('mousedown', (e: MouseEvent): void => {
@@ -1321,7 +1321,7 @@ function pickPiece(cx: number, cy: number): void {
   const root: THREE.Object3D = state.inspect && inspectAnchor ? inspectAnchor : vm.group;
   pickNDC.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
   raycaster.setFromCamera(pickNDC, camera);
-  // Raycaster doesn't honor visible=false — skip hits inside a hidden
+  // Raycaster doesn't honor visible=false - skip hits inside a hidden
   // subtree (the non-active weapons parked invisible in vm.group).
   const hit = raycaster.intersectObject(root, true)
     .find((h): boolean => { for (let o: THREE.Object3D | null = h.object; o && o !== root.parent; o = o.parent) {if (!o.visible) {return false;}} return true; });
@@ -1341,7 +1341,7 @@ function pickPiece(cx: number, cy: number): void {
   // hit.point is the exact surface point the ray touched (world space);
   // the second tuple is relative to the weapon's own center.
   const rel = hit.point.clone().sub(hit.object.getWorldPosition(new THREE.Vector3()));
-  // Part fingerprint: world-space bbox center + size — "the 0.05-wide box
+  // Part fingerprint: world-space bbox center + size - "the 0.05-wide box
   // at (…)" survives child-index reshuffles and names the piece for real.
   const mesh = hit.object as THREE.Mesh;
   let fp = '';
@@ -1354,10 +1354,10 @@ function pickPiece(cx: number, cy: number): void {
   const label = `${WeaponType[state.wt] ?? state.wt} › ${segs.join(' › ')} hit(${hit.point.x.toFixed(3)}, ${hit.point.y.toFixed(3)}, ${hit.point.z.toFixed(3)}) rel(${rel.x.toFixed(3)}, ${rel.y.toFixed(3)}, ${rel.z.toFixed(3)})${fp}`;
   navigator.clipboard?.writeText(label);
   flashStatus(`copied: ${label}`);
-  // Flash the picked mesh — the piece materials are SHARED across the
+  // Flash the picked mesh - the piece materials are SHARED across the
   // gun, so flash by swapping this mesh's material, not by mutating one.
   // A re-click during the window must not capture the flash mat as the
-  // "original" — that would restore TO flash, i.e. permanent highlight.
+  // "original" - that would restore TO flash, i.e. permanent highlight.
   if (!mesh.isMesh) {return;}
   if (mesh.userData.flashTimer) {clearTimeout(mesh.userData.flashTimer as number);}
   if (mesh.material !== pickFlashMat) {mesh.userData.origMat = mesh.material;}
@@ -1386,7 +1386,7 @@ addEventListener('resize', (): void => {
 
 paintRail();
 lap('rail paint');
-// Snapshot the saved pose FIRST — selectArchive/setInspect both end in
+// Snapshot the saved pose FIRST - selectArchive/setInspect both end in
 // saveState, which would write the refit camera over state.cam/tgt
 // before the restore below could read them.
 const savedCam = state.cam ? [...state.cam] : null;
@@ -1398,7 +1398,7 @@ if (state.pick) {
   if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   else {state.pick = undefined;}
 }
-// Restore the parked view — same gun, same angle, across reloads. Runs
+// Restore the parked view - same gun, same angle, across reloads. Runs
 // here, after every declaration, not beside the vm init (TDZ).
 if (state.inspect) {
   setInspect(true);
@@ -1408,12 +1408,12 @@ if (state.inspect) {
     orbit.update();
     flashStatus(`restored w${state.wt} view`);
   } else {
-    flashStatus(`restored w${state.wt} (default angle — no saved pose)`);
+    flashStatus(`restored w${state.wt} (default angle - no saved pose)`);
   }
 }
-if (state.z) {zPaint(true);} // remembered ⚠z — after inspect restore (TDZ)
+if (state.z) {zPaint(true);} // remembered ⚠z - after inspect restore (TDZ)
 lap(`restore pick=${state.pick ?? '-'} inspect=${Boolean(state.inspect)} z=${Boolean(state.z)}`);
-// First painted frame ≈ interactive — module eval + init + first render.
+// First painted frame ≈ interactive - module eval + init + first render.
 requestAnimationFrame((): void => {
   const tti = performance.now().toFixed(0);
   console.log(`[gunlab] interactive: nav+${tti}ms${reloadGap === null ? '' : ` f5-total ${Date.now() - Number(localStorage.getItem('gunlab.unloadAt'))}ms`}`);
@@ -1423,13 +1423,13 @@ renderer.setAnimationLoop((): void => {
   const now = performance.now();
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
-  // vm.update always ticks: inspect needs it too — kickAmount, the bow
+  // vm.update always ticks: inspect needs it too - kickAmount, the bow
   // draw envelope, barrel spins all live on the weapon group's children.
   vm.update(dt, lookDX * 0.002, lookDY * 0.002, zeroVel, camera);
   if (state.inspect && inspectAnchor) {
-    orbit.update(); // damping settles between frames — must tick
+    orbit.update(); // damping settles between frames - must tick
     // The anchor is parked in the scene outside vm.group, so the pose
-    // delta (kick + throw/switch dips + sway) never reaches it — mirror
+    // delta (kick + throw/switch dips + sway) never reaches it - mirror
     // the full post-write delta so detached weapons do everything.
     const ip = inspectAnchor.userData.inspectPos as THREE.Vector3 | undefined;
     if (ip) {
@@ -1439,11 +1439,11 @@ renderer.setAnimationLoop((): void => {
   }
   previewLive.tick?.(dt); // creature previews tick real species sim (aim/track)
   // Creature anchor: the live body crawls (it aims at the camera), so the
-  // orbit target follows IT — the frame never loses the critter.
+  // orbit target follows IT - the frame never loses the critter.
   const liveFocus = inspectAnchor?.userData.liveFocus as (() => THREE.Vector3) | undefined;
   if (liveFocus && state.inspect) {
     focus.copy(liveFocus()); focus.y += 0.5; // mid-body, not feet
-    // Apply only the focus's frame DELTA — overwriting orbit.target
+    // Apply only the focus's frame DELTA - overwriting orbit.target
     // clobbered RMB pan (its edits live in target). A crawling creature
     // still drags the frame along; a static lineup pans normally.
     if (!liveFocusOn) {_lastFocus.copy(focus); liveFocusOn = true;}
@@ -1457,7 +1457,7 @@ renderer.setAnimationLoop((): void => {
   renderer.render(scene, camera);
 });
 
-// HMR: a code edit re-imports this module — the fresh ViewModel above
+// HMR: a code edit re-imports this module - the fresh ViewModel above
 // picks up the new geo builders, state survives on window. dispose()
 // tears down THIS instance or every accept would stack renderers/pollers.
 if (import.meta.hot) {

@@ -53,6 +53,9 @@ const GRANDFATHERED: Record<string, number> = {
   // Procedural map toolkit — gen mutations accumulate here; pinned,
   // still alarms at +15%.
   'client/src/maplab/gen.ts': 966,
+  // Crossed via the ballmats material lineup — a lab file that
+  // legitimately accumulates preview variants. Pinned; +15% alarms.
+  'client/src/gunlab/previews.ts': 901,
 };
 
 function* walk(dir: string): Generator<string> {

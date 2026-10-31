@@ -1,11 +1,11 @@
 /**
- * BotHunt — the combat half of BotBrain, pulled out so the brain file
+ * BotHunt - the combat half of BotBrain, pulled out so the brain file
  * stays readable: line-of-sight (terrain march + structure solids with a
  * cell-keyed memo), target acquisition (scanVisible/pickHunt), the
  * killzone position pick (pickFightPos/scorePos), volley cadence + the
  * ballistic-lead aim (pickFire), and the retreat destination.
  *
- * All of it runs on a HuntState bag the brain owns — free functions
+ * All of it runs on a HuntState bag the brain owns - free functions
  * rather than a second class because there's exactly one state per bot.
  */
 
@@ -18,90 +18,90 @@ import { dist3, distSqXZ, dirXZ } from './botVec.ts';
 import { segSolidHit } from './solidWorld.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 
-// LOS lives in botLos.ts — re-export so botBrain's public surface stays put.
+// LOS lives in botLos.ts - re-export so botBrain's public surface stays put.
 export { losClear, losMemoReset, BOT_EYE } from './botLos.ts';
 export const BOT_FIRE_RANGE = 45;
-// Default aim offset from the eye position to a medium's capsule center —
+// Default aim offset from the eye position to a medium's capsule center -
 // hosts that don't report per-target aimY still land center-mass.
 const CENTER_AIM_Y = -0.9;
-// Creatures are big, slow, and fly — a human plinks them past the normal
+// Creatures are big, slow, and fly - a human plinks them past the normal
 // duel range, so the farming reach runs longer (3D distance still applies:
 // a beast parked 80m overhead is out of reach until it swoops).
 const CREATURE_FIRE_RANGE = 65;
 // Non-economy rooms don't farm, but a swarm gnawing the bot's legs is a
-// threat in every mode — creatures inside this radius are always huntable.
+// threat in every mode - creatures inside this radius are always huntable.
 const CREATURE_DEFENSE_M = 30;
 const THREAT_M = 55; // a player inside this radius always outranks farming
-// A creature literally on top of the bot beats even a close player —
+// A creature literally on top of the bot beats even a close player -
 // answer what's biting before what's shooting.
 const CREATURE_URGENT_M = 14;
 const ORBIT_FAR = 22;    // orbit the target inside this ring distance
 const ORBIT_TOO_CLOSE = 12;
 export const STALE_MS = 1200;   // last-seen older than this = stop firing blind
-// Pursuit: breaking LOS shouldn't instantly reset to the goal ladder —
+// Pursuit: breaking LOS shouldn't instantly reset to the goal ladder -
 // a human chases a leaker's last heading for a few seconds. Capped by
 // both window and reach so a stale ghost never forms a cross-map hunt.
 const PURSUE_MS = 3500;
-/** How far the eye line honestly reaches on open terrain — the
+/** How far the eye line honestly reaches on open terrain - the
  *  acquisition bound, not a firing range. Tribes sightlines are long
  *  (a skier two hills out is a visible contact); 160m left the fleet
  *  blind at the ~260m median foe spacing big maps actually produce. */
 const SIGHT_M = 300;
 const PURSUE_M = 200;
 
-// Orbit/goal reach is horizontal — shared distSqXZ keeps that distinct
+// Orbit/goal reach is horizontal - shared distSqXZ keeps that distinct
 // from the 3D distSq, which would read a ledge gap as distance left.
 
 // ---- Hunt state: everything the fire/position decisions mutate ----
 
 export interface HuntState {
-  /** Current target — the one last-seen the senses keep fresh. */
+  /** Current target - the one last-seen the senses keep fresh. */
   hunt: BotEnemy | null;
-  /** Every enemy the last scanVisible actually verified — the squad
+  /** Every enemy the last scanVisible actually verified - the squad
    *  spot board's report. Reusing the scan's own LOS work keeps the
    *  board from paying a second march per enemy per think. */
   seenEnemies: BotEnemy[];
   lastSeen: BotVec;
   lastSeenVel: BotVec;
   /** The opponent model: a low-pass of the target's observed velocity.
-   *  Instantaneous vel would track a jink perfectly — a human predictor
+   *  Instantaneous vel would track a jink perfectly - a human predictor
    *  lags it, so leads miss where the strafe turns. Blended on each
    *  sighting; the ghost and the lead point both fly this. */
   leadVel: BotVec;
-  /** Which enemy the model is tracking — a new face snaps the estimate
+  /** Which enemy the model is tracking - a new face snaps the estimate
    *  (first read is the model), an old one only drifts it. */
   leadId: string;
   lastSeenAt: number;
-  /** Aim offset of the target at last sighting — class geometry moves
+  /** Aim offset of the target at last sighting - class geometry moves
    *  the capsule center, so the lead point remembers where it was. */
   lastAimY: number;
   /** Volley pacing: fireT is the cooldown, burstLeft counts the burst. */
   fireT: number;
   burstLeft: number;
-  /** Combat spot from the last replan — null means "hold and shoot". */
+  /** Combat spot from the last replan - null means "hold and shoot". */
   fightPos: BotVec | null;
-  /** Thinks left on the fightPos commitment — a held spot wins outright
+  /** Thinks left on the fightPos commitment - a held spot wins outright
    *  until the window lapses; score margins alone can't stop near-tied
    *  LOS flips from churning the dest every think. */
   fightHold: number;
-  /** Aim humanization state — reaction delay stamps per target id in
+  /** Aim humanization state - reaction delay stamps per target id in
    *  think-ticks (the brain's own cadence, so sim-time harnesses see
-   *  the same delay as wall-clock play — 1-2 pickHunt cycles ≈ human
+   *  the same delay as wall-clock play - 1-2 pickHunt cycles ≈ human
    *  reaction time; flickered re-acquires keep their original stamp).
    *  lastHitAt feeds the flinch error spike. */
   acquiredAt: Map<string, number>;
   /** Per-target blacklist: prey the escape kit can't reach (a roof
-   *  camper the bot grinds a wall under) is ignored for a window —
+   *  camper the bot grinds a wall under) is ignored for a window -
    *  otherwise the next think's LOS scan re-acquires the same target
    *  and the pin is permanent. Cleared entries are a filter, not a
    *  wallhack change: the enemy is still shootable, just not chased. */
   unreachUntil: Map<string, number>;
-  /** Per-foe scorecard — who keeps landing hits on / killing this bot.
+  /** Per-foe scorecard - who keeps landing hits on / killing this bot.
    *  takeHit tallies hits by attacker id; markDeath attributes the death
    *  to whoever hit it last inside the window. Feeds the dread filter:
    *  a nemesis stops being someone this bot volunteers to duel. */
   foeScore: Map<string, { hits: number; deaths: number }>;
-  /** Who landed the most recent hit + when — the death-attribution
+  /** Who landed the most recent hit + when - the death-attribution
    *  channel (markDeath runs at corpse sighting, after the last hit). */
   lastHitBy: { id: string; at: number } | null;
   huntTick: number;
@@ -112,7 +112,7 @@ export interface HuntState {
   readonly temper: number;   // per-bot fire-cadence scale
   readonly orbitFar: number;
   readonly orbitClose: number;
-  /** The skill matrix — rolled once, drifts via form. Weapon pick and
+  /** The skill matrix - rolled once, drifts via form. Weapon pick and
    *  aim error both read it, so a chaingun phenom draws the chaingun
    *  and lands it. */
   readonly skill: BotSkill;
@@ -142,7 +142,7 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
     huntTick: 0,
     lastHitAt: -1e9,
     // Personality rolls ride the skill's spawn-seeded private stream, not
-    // botRand — construction-time botRand draws run before a harness can
+    // botRand - construction-time botRand draws run before a harness can
     // install a seeded stream, which made same-seed rooms diverge.
     reactTicks: Math.max(1, Math.round((1 + Math.round(skill.rng())) * m.react)),
     leadSkew: 0.9 + skill.rng() * 0.2,
@@ -153,7 +153,7 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
   };
 }
 
-/** Nearest visible enemy of each class — no wallhack: only acquire
+/** Nearest visible enemy of each class - no wallhack: only acquire
  *  what the eye line can actually see; an occluded enemy clears the
  *  hunt entirely so breaking LOS shakes pursuit like a human's. */
 export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRange: number, seenAll?: BotEnemy[]): { player: BotEnemy | null; beast: BotEnemy | null; playerD: number; beastD: number } {
@@ -163,11 +163,11 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
     if (!e.alive) {continue;}
     const d = dist3(pos, e.pos);
     // Cheapest gate first: an out-of-range enemy never earns the LOS
-    // march — it was paying a ~dist/6-probe walk for a guaranteed discard.
+    // march - it was paying a ~dist/6-probe walk for a guaranteed discard.
     if (d >= (e.id.startsWith('b:') ? beastRange : range)) {continue;}
     // Hoard beacon: a purple-tier carrier (27+) can't hide behind a
-    // ridge — the crown marks him the way the flag thief's beacon does.
-    // HUD markers mean everyone is nominally visible — high-carriers
+    // ridge - the crown marks him the way the flag thief's beacon does.
+    // HUD markers mean everyone is nominally visible - high-carriers
     // stay acquirable through walls like a player's eye on the diamond.
     if (!losClear(ctx, pos, e.pos) && (e.held ?? 0) < 10) {continue;}
     seenAll?.push(e);
@@ -175,15 +175,15 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
       if (d < beastD) { beastD = d; beast = e; }
     } else {
       // Bounty read: a hoarder's effective range shrinks 0.8%/token,
-      // floored at 10% — a 100-token vault reads 8x closer from 200m
+      // floored at 10% - a 100-token vault reads 8x closer from 200m
       // without letting value override the brawl at the muzzle.
-      // Bounty pricing: each held token shrinks effective distance 3% —
+      // Bounty pricing: each held token shrinks effective distance 3% -
       // a 15-gizmo carrier at 50m contests a weakling at 28m, so the
       // leader pulls hunts instead of being a second-class contact.
       let effD = d * Math.max(0.1, 1 - (e.held ?? 0) * 0.03);
       // No-figit (PUG guide: both flags home → enemy offense is
       // ignorable). Route roles still pressing the stand price a
-      // mid-field passerby 3x farther — the spot is worth more than
+      // mid-field passerby 3x farther - the spot is worth more than
       // the duel. Two exemptions keep it honest: the man at brawl
       // range is a reflex, and hostiles shadowing the objective ARE
       // the stand-clearing work.
@@ -198,9 +198,9 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
 }
 
 /** Target acquisition + fight-position replan, on the slow think
- *  cadence — the ring eval is the expensive part (LOS per candidate
+ *  cadence - the ring eval is the expensive part (LOS per candidate
  *  per enemy) and 3Hz is plenty for position keeping. */
-/** Dread: how much this foe owns the bot — deaths dominate, repeated
+/** Dread: how much this foe owns the bot - deaths dominate, repeated
  *  hits count before a death lands. The score is a filter threshold,
  *  not a continuum: past ~2 the bot stops volunteering for the duel. */
 export function dreadOf(st: HuntState, id: string): number {
@@ -208,7 +208,7 @@ export function dreadOf(st: HuntState, id: string): number {
   return f ? f.deaths * 1.5 + f.hits * 0.25 : 0;
 }
 
-/** A hit or a death attribution — foes get remembered, not forgotten.
+/** A hit or a death attribution - foes get remembered, not forgotten.
  *  Cap at 8 entries: the lobby's repeat offenders, not a census. */
 export function noteFoeHit(st: HuntState, id: string, now: number): void {
   const f = st.foeScore.get(id) ?? { hits: 0, deaths: 0 };
@@ -225,7 +225,7 @@ export function noteFoeDeath(st: HuntState, now: number): void {
   if (f) {f.deaths += 1;}
 }
 
-/** Lost-LOS extrapolation: momentum lead plus one anticipation step —
+/** Lost-LOS extrapolation: momentum lead plus one anticipation step -
  * a runner heading at a pack is going to the pack, so when the lead
  * point lands near the sensed pickup the ghost snaps onto it. */
 function ghostPos(st: HuntState, ctx: BrainCtx, now: number): BotVec {
@@ -239,7 +239,7 @@ function ghostPos(st: HuntState, ctx: BrainCtx, now: number): BotVec {
   return g;
 }
 
-/** Nearest squad-spotted enemy inside committing reach — callouts
+/** Nearest squad-spotted enemy inside committing reach - callouts
  *  don't summon cross-map hunts, just the leaker two hills over. */
 function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
   let best: BotEnemy | null = null, bd = PURSUE_M;
@@ -253,7 +253,7 @@ function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
 
 
 
-/** The beacon-marked flag carrier, when it's in committing range —
+/** The beacon-marked flag carrier, when it's in committing range -
  *  beacon range (80m) or any clear eye line. */
 function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
   const t = ctx.thief;
@@ -272,11 +272,11 @@ function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | n
   st.fightPos = null;
   // A runner's route owns his feet: a capper that orbits every midfield
   // contact dies at ~130m out without ever arriving (soak: hunt pulls
-  // ate every approach leg). He still FIRES off st.hunt — only the
+  // ate every approach leg). He still FIRES off st.hunt - only the
   // position commitment shrinks to point-blank threats he can't
   // out-ski, and the objective goal keeps refreshing so the run
   // resumes the tick the fight ends.
-  // Wave members get the same committed feet — a tasked push/escort
+  // Wave members get the same committed feet - a tasked push/escort
   // dueling every midfield contact is the soak's "wave never arrives"
   // defect (d530m, near0%): suppression travels WITH the flood, not
   // instead of it.
@@ -298,19 +298,19 @@ function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | n
 
 export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number, mood: { hero: boolean; fearing: boolean }, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
   const { hero, fearing } = mood;
-  // Armament reach widens acquisition for siege weapons — a mortar heavy
+  // Armament reach widens acquisition for siege weapons - a mortar heavy
   // engages at ~95m where a chaingun medium still holds the duel band.
   // A Tribes eye line reaches across a midfield: bots acquire contacts
   // far past their duel band and close to it, like a human spotting a
-  // skier two hills out. Commitment stays in pickDest — seeing isn't
+  // skier two hills out. Commitment stays in pickDest - seeing isn't
   // chasing.
   const base = Math.max(BOT_FIRE_RANGE, ctx.engageRange ?? 0);
   const range = Math.max(hero ? base * 1.4 : base, SIGHT_M);
   const beastRange = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
   // Blacklist filter: prey that defeated the escape kit is invisible to
-  // acquisition for its window — chasing it again is the wall-grind
+  // acquisition for its window - chasing it again is the wall-grind
   // loop this map exists to break. Dread sits next to it: a nemesis is
-  // equally invisible to *acquisition* — not to defense. Two exemptions
+  // equally invisible to *acquisition* - not to defense. Two exemptions
   // keep it honest: brawl range (nobody ignores the man in their face)
   // and hero (the desperate last stand doesn't pick its opponent).
   const BRAWL_M = 25;
@@ -327,22 +327,22 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ectx, pos, range, beastRange, seenAll);
   st.seenEnemies = seenAll;
   // In economy rooms, only an actual nearby player threat outranks
-  // the harvest — otherwise the bot keeps farming past a firefight
+  // the harvest - otherwise the bot keeps farming past a firefight
   // across the map like a human focused on the score. In any mode a
   // creature on top of the bot is urgent: deal with what's biting.
   const best = bestBeast && (!player || bestD > THREAT_M || bestBeastD < CREATURE_URGENT_M) ? bestBeast : player;
   // The flag thief is the fallback hunt: a beacon-marked carrier is
   // legally trackable without LOS, but a bot only commits when it's
-  // close enough to matter — farther out the objective goal still
+  // close enough to matter - farther out the objective goal still
   // walks it toward the carrier without it firing blind.
   const thief = best ? null : thiefBeacon(ctx, pos);
-  // Squad spot-report: a teammate's callout — commit to the nearest
+  // Squad spot-report: a teammate's callout - commit to the nearest
   // fresh spot in reach, the same "beacon without LOS" the thief
   // already gets. Eye-line contacts outrank it either way.
   const spotted = best || thief ? null : nearestSpot(ctx, pos);
   const next = best ?? thief ?? spotted;
   // Nothing in the eye line but the last contact is still fresh: chase
-  // its last-seen spot for a few seconds — the ghost carries lastSeen,
+  // its last-seen spot for a few seconds - the ghost carries lastSeen,
   // not the live pos, so it stays as legal as a human's memory. Dead
   // targets never ghost (their corpse stops moving but the chase
   // shouldn't follow it to the respawn).
@@ -354,7 +354,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   st.hunt = next ?? ghost;
 
 st.huntTick += 1;
-  // New contact starts the reaction clock — a human doesn't shoot the
+  // New contact starts the reaction clock - a human doesn't shoot the
   // instant a target enters the eye line. Stamped per id so losing the
   // eye line for a tick doesn't reset the nerves.
   if (next && !st.acquiredAt.has(next.id)) {
@@ -362,7 +362,7 @@ st.huntTick += 1;
     if (st.acquiredAt.size > 6) {st.acquiredAt.delete(st.acquiredAt.keys().next().value!);}
   }
   // Eye-line + the flag beacon refresh the fire memory; a squad callout
-  // only commits the hunt — otherwise a lingering spot refreshes
+  // only commits the hunt - otherwise a lingering spot refreshes
   // lastSeenAt forever and the bot hoses a frozen point through cover
   // (soak: posted defenders firing one hillside spot "for no reason").
   const seen = best ?? thief;
@@ -371,7 +371,7 @@ st.huntTick += 1;
     st.lastSeenVel = Object.assign({}, seen.vel);
     st.lastSeenAt = now;
     st.lastAimY = seen.aimY ?? CENTER_AIM_Y;
-    // Opponent-model update — the tracker's running estimate drifts
+    // Opponent-model update - the tracker's running estimate drifts
     // toward the newest read,never snaps to it.
     const blend = st.leadId === seen.id ? 0.2 : 0.55;
     st.leadId = seen.id;
@@ -388,7 +388,7 @@ st.huntTick += 1;
  *  0 with an inertia bonus, so a good spot is kept instead of orbiting
  *  for orbit's sake. Returns null to hold position. */
 export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEnemy, prev?: BotVec | null): BotVec | null {
-  // Fight where the drawn gun is lethal — a Flak brawler's ring closes
+  // Fight where the drawn gun is lethal - a Flak brawler's ring closes
   // to ~10m, a rail holds its orbit. Weapon-blind hosts keep the
   // generic midpoint (Flak's ~60% FFA acc was an orbit at 17m where
   // the cone barely covers a capsule).
@@ -405,10 +405,10 @@ export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEn
     const py = ctx.groundY(prev.x, prev.z);
     if (py - g0 <= 4) {
       // Commitment rule: the held spot must be clearly beaten to be
-      // abandoned — a marginal challenger isn't worth a move (feet
+      // abandoned - a marginal challenger isn't worth a move (feet
       // churn, treadmill pins, shots interrupted). The margin is sized
       // to real score swings: LOS flips score ±3.5, range-band drift
-      // ~0.8 over 10m — under 1.5 nothing meaningful changed.
+      // ~0.8 over 10m - under 1.5 nothing meaningful changed.
       const s = scorePos(ctx, pos, { x: prev.x, y: py + BOT_EYE, z: prev.z }, t, mid, py) + 1.5;
       if (s > bs) { bs = s; bx = prev.x; bz = prev.z; }
     }
@@ -429,9 +429,9 @@ export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEn
 
 /** Is this prey geometrically un-chaseable right now? Two shapes:
  *  - a perch above the jet-climb envelope (roof campers on bastion's
- *    towers — 20+m of sheer face the escape-jet can't scale);
+ *    towers - 20+m of sheer face the escape-jet can't scale);
  *  - a solid between us and the prey (wall, or a shield gate the
- *    OTHER team holds — passTeam honors who the pane lets through).
+ *    OTHER team holds - passTeam honors who the pane lets through).
  *  Called only after the escape streaks prove the pin, so the cheap
  *  answer just has to be right in the already-stuck case. */
 export function preyUnreachable(ctx: BrainCtx, pos: BotVec, prey: BotVec): boolean {
@@ -446,7 +446,7 @@ export function preyUnreachable(ctx: BrainCtx, pos: BotVec, prey: BotVec): boole
 /** Volley pick: burst cadence + sloppy ballistic lead at lastSeen. */
 export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, now: number, mood: { hero: boolean; fearing: boolean }): BrainOut['fire'] {
   const { hero, fearing } = mood;
-  // LOS memory: past STALE_MS the shot isn't blind amnesia — a human
+  // LOS memory: past STALE_MS the shot isn't blind amnesia - a human
   // keeps suppressing where the runner was heading. Fire stays legal on
   // the extrapolated ghost until the pursuit window itself expires,
   // with aim decaying by how long the eye line has been broken.
@@ -457,14 +457,14 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   if (acq !== undefined && st.huntTick - acq < st.reactTicks) {return undefined;}
   const d = dist3(pos, memS > 0 ? st.hunt.pos : st.lastSeen);
   // Reach gate: a beam at 100m is a guaranteed whiff the ledger counts
-  // — humans close instead of hosing air (FFA: LG acc 6.6% was mostly
+  // - humans close instead of hosing air (FFA: LG acc 6.6% was mostly
   // shots past its 60m ray). Suppression-at-memory still fires.
   const reach = ctx.weaponRange?.(d);
   if (memS <= 0 && reach !== undefined && d > reach) { st.fireT = 0.5; return undefined; }
   st.fireT -= dt;
   if (st.fireT > 0) {return undefined;}
   // The trigger finger follows the gun: a chaingun streams long bursts,
-  // a mortar picks its moments — same cadence rules the client enforces.
+  // a mortar picks its moments - same cadence rules the client enforces.
   const interval = ctx.fireInterval?.(d) ?? 0.45;
   if (st.burstLeft <= 0) {st.burstLeft = Math.max(2, Math.min(12, Math.round(3 / interval)));}
 st.burstLeft -= 1;
@@ -472,43 +472,43 @@ st.burstLeft -= 1;
     ? Math.max(interval, 0.25) + botRand() * 0.15
     : 0.8 + botRand() * 0.5) / st.temper
     * (hero ? 0.65 : fearing ? 0.9 : 1);
-  // Suppressive fire is deliberately sloppy — noise, not hits. Hero
+  // Suppressive fire is deliberately sloppy - noise, not hits. Hero
   // aim just stops being sloppy.
   const ws = ctx.weaponSpeed?.(d);
-  // Hitscan (speed 0 — the lightning beam) has zero flight: no lead,
-  // no flight-time error. Leading a beam is pure miss — soak showed
+  // Hitscan (speed 0 - the lightning beam) has zero flight: no lead,
+  // no flight-time error. Leading a beam is pure miss - soak showed
   // 2.5% FFA accuracy where Quake pros hold ~35% and Tribes-speed
   // tracking should run higher. The 60m/s fallback only exists for
   // hosts that can't report which gun is drawn.
-  // Fuse-carriers (MRV) detonate at their clock, not on the body — the
+  // Fuse-carriers (MRV) detonate at their clock, not on the body - the
   // waypoint IS the fuse pop, so lead and loft solve for where both the
   // shell and the target are at fuse time, not the crossing. A plain
   // intercept aim sends the carrier 40m past a close target and the
   // rain lands on empty ground.
   const fuse = ctx.weaponFuse?.(d);
   const flight = ws === 0 ? 0 : (fuse ?? d / (ws && ws > 0 ? ws : 60));
-  // Scatter grows with how far ahead the bot must predict — the lead
+  // Scatter grows with how far ahead the bot must predict - the lead
   // distance itself (target speed × shell flight), not speed alone:
   // a 30m/s skier crosses 54m during a disc's 1.8s flight, and human
   // lead error scales as a fraction of that (soak: disc splash grazes
-  // counted 48% "accurate" at 120-200m — every transit lane was a
+  // counted 48% "accurate" at 120-200m - every transit lane was a
   // kill envelope because AoE covered the whole miss budget).
   const leadDist = Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z) * flight;
   let err = 0.5 + leadDist * 0.28 + d * 0.015 + flight * 0.4;
   // A held beam is a tracking task, not a snap: the error is a slow
-  // drift off the target, not a fresh scatter per pull — half the
+  // drift off the target, not a fresh scatter per pull - half the
   // snap-aim budget (19% FFA acc at full scatter vs ~35% pro norms).
   if (ws === 0) {err *= 0.5;}
   err *= hero ? 0.3 : fearing ? 1.8 : 1;
   err *= st.jitter;
   // The skill matrix: hosts that know which weapon will actually fire
-  // report it via aimSkill — a snap phenom threads rails, a mortar
+  // report it via aimSkill - a snap phenom threads rails, a mortar
   // artist plants the stand, a potato sprays and prays.
   if (ctx.aimSkill) {err /= ctx.aimSkill(d, Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z));}
   // The shooter's own motion: projectile velocity inheritance makes
   // shots ACROSS your line of travel the hardest (the impact point
   // drags sideways with you), while firing along your velocity is
-  // actually easier — the shell inherits the speed and the lead
+  // actually easier - the shell inherits the speed and the lead
   // shrinks. Movement-phenom bots handle their own speed better.
   if (ctx.vel) {
     const ax = st.lastSeen.x - pos.x, az = st.lastSeen.z - pos.z;
@@ -517,35 +517,35 @@ st.burstLeft -= 1;
     const along = ctx.vel.x * ad.x + ctx.vel.z * ad.z;
     err *= 1 + (perp * 0.05) / Math.max(0.6, st.skill.movement) - Math.max(0, along) * 0.01;
   }
-  // Getting shot throws the aim off — decaying spike, not a toggle.
+  // Getting shot throws the aim off - decaying spike, not a toggle.
   const hitAgo = now - st.lastHitAt;
   if (hitAgo < 800) {err *= 1 + (1 - hitAgo / 800) * 0.9;}
-  // Humans under- and over-lead differently — per-bot skew on the
+  // Humans under- and over-lead differently - per-bot skew on the
   // intercept so tracers don't all converge on the same math.
   const leadFlight = flight * st.leadSkew;
   // Memory shots aim at the drifting ghost (pickHunt keeps it walking
-  // the lead model), not the frozen sighting point — and the error
+  // the lead model), not the frozen sighting point - and the error
   // budget grows with every second the target stays unseen.
   const aimPos = memS > 0 ? st.hunt.pos : st.lastSeen;
   err *= 1 + memS;
   // Ballistic intercept: the target keeps falling while the shell
-  // travels — a skier mid-air arcs down, and a flat lead overshoots
+  // travels - a skier mid-air arcs down, and a flat lead overshoots
   // high. Clamp at terrain so a grounded runner isn't predicted
   // under the map.
-  // Lead off the opponent model, not the live velocity — a jinking
+  // Lead off the opponent model, not the live velocity - a jinking
   // target's instant vel is already gone by the time the shell flies;
   // the lagged estimate is what a human's prediction actually tracks.
   const px = aimPos.x + st.leadVel.x * leadFlight;
   const pz = aimPos.z + st.leadVel.z * leadFlight;
   // Self-splash read: when the predicted blast lands closer to the
-  // shooter than the target, the shot costs more than it earns — a
+  // shooter than the target, the shot costs more than it earns - a
   // human holds that disc. Courage draws the exception: heroic bots
   // sometimes take the mutual-splash shot anyway.
   const aoe = ctx.weaponAoe?.(d);
   if (aoe && aoe.r > 0) {
     const selfD = Math.hypot(px - pos.x, pz - pos.z);
     const foeD = Math.hypot(px - aimPos.x, pz - aimPos.z);
-    // A blast landing nearer me than him costs more than it earns —
+    // A blast landing nearer me than him costs more than it earns -
     // humans hold that disc. Courage draws the exception: heroic bots
     // sometimes take the mutual-splash shot anyway.
     if (selfD < aoe.r * 0.9 && selfD < foeD * 0.9 && botRand() > st.skill.courage) {
@@ -553,7 +553,7 @@ st.burstLeft -= 1;
       return undefined;
     }
     // The lethal read: a shot that would kill ME only earns when the
-    // enemy is nearer its center — dying to take him down is a play,
+    // enemy is nearer its center - dying to take him down is a play,
     // dying while he grazes is a waste. Self-damage follows the same
     // falloff the server applies (full in the core, fading to the rim).
     const selfDmg = selfD < 3 ? aoe.dmg : aoe.dmg * Math.max(0, 1 - (selfD - 3) / Math.max(1, aoe.r - 3));
@@ -563,7 +563,7 @@ st.burstLeft -= 1;
       return undefined;
     }
   }
-  // `pos` is the eye point — the capsule's axis midpoint sits `aimY`
+  // `pos` is the eye point - the capsule's axis midpoint sits `aimY`
   // below it, so center-mass aim means the bolt crosses the fattest
   // legal radius even before its wake proxy grows.
   const py = Math.max(
@@ -574,12 +574,12 @@ st.burstLeft -= 1;
     // Center-mass keeps the body-glue kill path live.
     aimPos.y + st.lastAimY + st.leadVel.y * leadFlight + 0.5 * GRAVITY * leadFlight * leadFlight,
   );
-  // Gravity-bent shells drop by the same amount — aim the arc's
+  // Gravity-bent shells drop by the same amount - aim the arc's
   // drop back so mortars don't land short.
   const drop = ctx.weaponGravity?.(d) && fuse === undefined ? -0.5 * GRAVITY * flight * flight : 0;
   // Fuse-carriers solve a fixed-time arc instead: muzzle speed is
   // constant, so only the carrier's HORIZONTAL waypoint at fuse is
-  // placeable — loft vy so its xz at the pop is over the led target
+  // placeable - loft vy so its xz at the pop is over the led target
   // (the rain then lands at ground under the burst).
   let ay = py + drop;
   if (fuse !== undefined) {
@@ -595,10 +595,10 @@ st.burstLeft -= 1;
     z: pz + (botRand() - 0.5) * err,
   };
   // Muzzle clearance: LOS proves the EYE line is open, but the shell
-  // leaves from +1.4m and launches lower than the sightline — a lip
+  // leaves from +1.4m and launches lower than the sightline - a lip
   // right in front eats it ~3-5m out, which is exactly the self-splash
   // the soak ledger showed (foe@120m, impact@4m). Only the first
-  // meters decide that: a bump farther downrange just costs a miss —
+  // meters decide that: a bump farther downrange just costs a miss -
   // and ballistic arcs clear lips a straight full-length ray would
   // flag, so probing the whole ray strangled fire volume for nothing.
   if (ctx.weaponSpeed?.(d) && !sharedEnv.noMuzzle) {
@@ -613,12 +613,12 @@ st.burstLeft -= 1;
       y: pos.y + ((aim.y - pos.y) / d) * reach,
       z: pos.z + ((aim.z - pos.z) / d) * reach,
     };
-    // Raw march of the shell's own segment — the shared LOS sense lifts
+    // Raw march of the shell's own segment - the shared LOS sense lifts
     // its endpoints to eye height and declines to look inside 4m, which
     // is exactly the band the lip pops live in (impact@6m, foe@98m: a
     // sub-eye-height lip the lifted ray sailed over and the shell ate).
     // The shell flies the unlifted segment, so probe the unlifted
-    // segment at ~1m steps, solids included — a wall eats it too.
+    // segment at ~1m steps, solids included - a wall eats it too.
     let blocked = false;
     const steps = Math.max(2, Math.ceil(reach));
     for (let i = 1; i <= steps; i += 1) {
@@ -642,7 +642,7 @@ st.burstLeft -= 1;
 }
 
 /** Score one candidate position for the combat picker: LOS to the hunt
- *  target (a spot that can't see it is cover — mildly bad on offense),
+ *  target (a spot that can't see it is cover - mildly bad on offense),
  *  closeness to the preferred range band, exposure to every OTHER enemy
  *  that could see the spot, and how much vertical scrambling it needs. */
 function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: number, candGround: number): number {
@@ -651,7 +651,7 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
   s -= Math.abs(dt - mid) * 0.08;
   for (const e of ctx.enemies) {
     if (!e.alive || e === t) {continue;}
-    // A shooter past engagement range can't hold this spot down — skip
+    // A shooter past engagement range can't hold this spot down - skip
     // the march; the whole roster times a ring of candidates made this
     // the hunt stage's hot loop.
     if (dist3(cand, e.pos) >= BOT_FIRE_RANGE) {continue;}
@@ -659,7 +659,7 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
   }
   const selfG = ctx.groundY(self.x, self.z);
   s -= Math.abs(candGround - selfG) * 0.05;
-  // A spot that only a hop+jet mount can reach costs the climb — pay it
+  // A spot that only a hop+jet mount can reach costs the climb - pay it
   // when the target is up there (fighting for the deck you need anyway),
   // avoid it when the duel could happen on the flat (soak: duel picks
   // parked bots at the base of a dais lip they could never walk up).
@@ -671,7 +671,7 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
 
 
 /** Retreat: straight away from the shooter, folding toward the nearest
- *  body when one is near — suppression keeps them honest. */
+ *  body when one is near - suppression keeps them honest. */
 export function retreatDest(ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec {
   const ax = pos.x - t.pos.x, az = pos.z - t.pos.z;
   const al = dirXZ(ax, az);
@@ -684,7 +684,7 @@ export function retreatDest(ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec {
   }
   if (ally && ad < 2500) { rx = (rx + ally.x) * 0.5; rz = (rz + ally.z) * 0.5; }
   // Spatial memory votes too: fold the escape toward the direction the
-  // map says is quiet — running away blind lands in yesterday's graveyard.
+  // map says is quiet - running away blind lands in yesterday's graveyard.
   const q = ctx.imapQuietDir?.(pos);
   if (q) { rx += q.x * 12; rz += q.z * 12; }
   return { x: rx, y: pos.y, z: rz };

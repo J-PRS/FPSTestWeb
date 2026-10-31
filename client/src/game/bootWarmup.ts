@@ -76,7 +76,7 @@ export class BootWarmup {
   }
 
   /** Post-veil summary: worst frame, p50/p95, and every >50ms hitch in
-   *  the first OBSERVE_SECONDS after release — the anomalies a too-early
+   *  the first OBSERVE_SECONDS after release - the anomalies a too-early
    *  veil drop would have hidden. */
   private report(): void {
     const sorted = [...this.p50Samples].sort((a, b) => a - b);
