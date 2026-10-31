@@ -473,6 +473,7 @@ export class ConnectionManager {
       if (introT0 !== undefined) {this.introAt.delete(playerId); this.onIntroDrained?.(playerId, wallNow() - introT0);}
     }
     if (buffered > MAX_TICK_BACKLOG) {return this.sparseOrShed(playerId, ws, data);}
+    this.strained.delete(playerId); // clean sample drains the marker
     wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!);
     if (this.collecting) {this.push(playerId, data); return 'sent';}
     ws.send(data);
@@ -484,6 +485,7 @@ export class ConnectionManager {
    *  clock -- the cap sheds frames but a reader that never drains must
    *  still be closed, or a tick-only client lingers below DROWN_BYTES. */
   private sparseOrShed(playerId: string, ws: ServerWebSocket<WebSocketData>, data: Uint8Array): 'backlogged' | 'sparse' {
+    this.strained.add(playerId); // fanout reads this: strained conns get a halved record cap
     this.drownCheck(playerId, ws);
     const n = (this.shedPhase.get(playerId) ?? 0) + 1;
     if (n < SHED_KEEPALIVE) {this.shedPhase.set(playerId, n); return 'backlogged';}
@@ -525,6 +527,12 @@ export class ConnectionManager {
   /** Per-conn shed phase -- counts backlogged ticks so every SHED_KEEPALIVE-th
    *  still rides through (sparse keepalive); reset on unregister. */
   private shedPhase = new Map<string, number>();
+  /** Conns currently over the tick backlog — set in sparseOrShed,
+   *  cleared on the first clean sample. The fanout drops these seats
+   *  to a halved record cap: half the encode work and egress land on
+   *  exactly the links that can't keep up. */
+  readonly strained = new Set<string>();
+  isStrained(playerId: string): boolean { return this.strained.has(playerId); }
   /** Per-conn held-gate streak -- the intro burst's grace is counted in
    *  calls (~ticks), not wall time; a conn that drains resets to zero. */
   private heldPhase = new Map<string, number>();

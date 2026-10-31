@@ -218,6 +218,10 @@ export class TickFanout {
   /** Mutual-engagement multiplier — far stronger than the cone boost:
    *  the record that's literally shooting you must win the cap. */
   private static readonly ENGAGE_BOOST = 0.02;
+  /** Strained-conn cap — a link shedding tick frames gets half the
+   *  record budget so encode+egress drop on exactly the links that
+   *  can't keep up. */
+  private static readonly STRAIN_RECORDS = 16;
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -551,6 +555,9 @@ this.metrics.recordsIdleReaped += 1;
       // Who's actively shooting this recipient — refreshed per fanout
       // so a new attacker wins the cap the same tick it engages.
       const engaged = room.engagementOf(recipientId);
+      // Strained conns get a halved cap — a link already shedding frames
+      // pays half the encode work and egress, so it sheds even less.
+      const recCap = room.connections.isStrained(recipientId) ? TickFanout.STRAIN_RECORDS : TickFanout.MAX_RECORDS;
       const others = this.scratchOthers;
       others.length = 0;
       const cands = this.candRecs;
@@ -633,11 +640,11 @@ this.metrics.recordsIdleReaped += 1;
       // by construction, so their eval is provably wasted work.
       let scanCut = Infinity;
       for (let i = 0; i < list.length; i += 1) {
-        if (cands.length >= TickFanout.MAX_RECORDS) {
+        if (cands.length >= recCap) {
           // First-pool cutoff is final forever: better candidates only
           // shrink the 32nd score, so this is a permanent upper bound --
           // anything skipped couldn't have won the cap either way.
-          if (scanCut === Infinity) {scanCut = kthSmallest(candScore, TickFanout.MAX_RECORDS);}
+          if (scanCut === Infinity) {scanCut = kthSmallest(candScore, recCap);}
           if (listMin[i]! * TickFanout.CONE_BOOST > scanCut) {break;}
         }
         const r = list[i]!;
@@ -761,10 +768,10 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
       // Scored cap: bound each recipient's frame at MAX_RECORDS.
       // A quickselect pass finds the cutoff score; ties at the edge
       // stop at the cap itself so the bound is exact.
-      if (cands.length > TickFanout.MAX_RECORDS) {
-        const cutoff = kthSmallest(candScore, TickFanout.MAX_RECORDS);
+      if (cands.length > recCap) {
+        const cutoff = kthSmallest(candScore, recCap);
         let kept = 0;
-        for (let i = 0; i < cands.length && kept < TickFanout.MAX_RECORDS; i++) {
+        for (let i = 0; i < cands.length && kept < recCap; i++) {
           if (candScore[i]! <= cutoff) {others.push(cands[i]!); kept += 1;}
         }
         this.metrics.recordsCapped += cands.length - kept;
