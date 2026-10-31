@@ -394,7 +394,7 @@ this.structEpoch += 1;
    *  wins dropped every co-tick edge (tap-jumps, double-edges inside
    *  50ms, the prev-redundancy copy) — a systematic divergence vs the
    *  client's per-edge replay. */
-  queueInput(playerId: string, input: Partial<MoveInput>, status = 0, seq?: number): boolean {
+  queueInput(playerId: string, input: Partial<MoveInput>, status = 0, seq?: number, ageMs?: number): boolean {
     const sh = this.shadows.get(playerId);
     if (!sh) {return true;}
     // Gate against the queued tail too — lastInputSeq only moves at
@@ -402,7 +402,17 @@ this.structEpoch += 1;
     // edge behind fresher queued ones.
     const tail = sh.pending.length > 0 ? sh.pending[sh.pending.length - 1]!.seq : undefined;
     if (seq !== undefined && seq <= Math.max(sh.lastInputSeq, tail ?? 0)) {return false;}
-    sh.pending.push({ input, status, seq });
+    // ageMs is a client-claimed "this edge fired N ms before send" -
+    // same trust class as fireAt: clamp it into the link's plausible
+    // window (honest age error IS uplink jitter) so a forged stamp
+    // can't buy replay time the path never had. est lands the edge on
+    // the server's wall clock: arrival minus transit minus claimed age.
+    let est: number | undefined;
+    if (ageMs !== undefined && Number.isFinite(ageMs)) {
+      const clamped = Math.min(Math.max(ageMs, 0), sh.transitEma * 2 + sh.transitVar * 4 + 50);
+      est = wallNow() - sh.transitEma - clamped;
+    }
+    sh.pending.push({ input, status, seq, est });
     // Bounded — a flood can't queue unbounded replay work; the oldest
     // edge drops (its seq anchor with it) so the newest intent survives.
     if (sh.pending.length > 8) {sh.pending.shift();}
@@ -657,6 +667,11 @@ sh.gapStreak += 1;
       // seq order — seq-journal anchors, jet gating, and rising-edge
       // antes all land before the econ pass reads the final jetWanted.
       const edges = sh.pending.length > 0 ? sh.pending.splice(0, sh.pending.length) : null;
+      // Stamped slicing needs the input state that governed BEFORE the
+      // first edge fired - setInput is about to overwrite it, so capture
+      // it here (the drain must still see edges in seq order for
+      // anchors/gating/antes).
+      const preIn = edges ? { ...sh.sim.input } : null;
       if (edges) {for (const e of edges) {this.setInput(pid, e.input, e.status, e.seq);}}
       if (bodies) {
         // Shared list for every shadow — collideBodies skips selfId, so
@@ -724,15 +739,47 @@ sh.gapStreak += 1;
         // feed it the raw tick delta. Count consumed steps ourselves for
         // the seq-anchored journal (simTicks is in STEP quanta).
         if (edges) {
-          // Interleave: each edge governs an equal slice of the window
-          // (uniform intra-tick timing — edges carry seq, not stamps), so
-          // a press+release pair holds the key for ~half the tick and the
-          // hop/jet fires instead of collapsing into the final state.
-          const slice = dt / edges.length;
-          for (const e of edges) {
-            this.applyInput(sh, e.input, jetting);
-            sh.sim.update(slice);
-            landing = Math.max(landing, sh.sim.landingImpact);
+          if (edges.every((e): boolean => e.est !== undefined)) {
+            // Stamped edges replay at their real intra-tick times: edge
+            // i's input governs [est_i, est_{i+1}) and the sim's
+            // pre-edge state covers [t0, est_0). Estimates clamp into
+            // the window and stay non-decreasing - a forged or skewed
+            // stamp degrades to zero-length slices, not time travel.
+            // This is the claim-driven side of the tick window, so the
+            // placement clock is the same wall domain the stamps use.
+            const t1 = wallNow();
+            const t0 = t1 - dt * 1000;
+            // preIn (pre-drain input) governs [t0, est_0) - setInput
+            // already pushed the FINAL edge state live, so without
+            // restoring it the pre-edge span would run future input.
+            this.applyInput(sh, preIn!, jetting);
+            let t = t0, prevEst = t0;
+            for (const e of edges) {
+              const start = Math.min(Math.max(e.est!, prevEst), t1);
+              prevEst = start;
+              if (start > t) {
+                sh.sim.update((start - t) / 1000);
+                landing = Math.max(landing, sh.sim.landingImpact);
+              }
+              this.applyInput(sh, e.input, jetting);
+              t = start;
+            }
+            if (t1 > t) {
+              sh.sim.update((t1 - t) / 1000);
+              landing = Math.max(landing, sh.sim.landingImpact);
+            }
+          } else {
+            // Interleave: each edge governs an equal slice of the window
+            // (uniform intra-tick timing for unstamped edges), so a
+            // press+release pair holds the key for ~half the tick and
+            // the hop/jet fires instead of collapsing into the final
+            // state.
+            const slice = dt / edges.length;
+            for (const e of edges) {
+              this.applyInput(sh, e.input, jetting);
+              sh.sim.update(slice);
+              landing = Math.max(landing, sh.sim.landingImpact);
+            }
           }
         } else {
           sh.sim.update(dt);

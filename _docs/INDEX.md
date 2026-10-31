@@ -106,7 +106,8 @@ The project produces a lot of documentation. This file is the map.
 `netcode-remote-render-truth.md`, `anim-rig-conventions.md`.
 Mostly 2026-09-27 baseline; `terrain-gen.md` updated 2026-10-16;
 `killcam.md`, `netcode-remote-render-truth.md`, `anim-rig-conventions.md`
-added 2026-10-22.
+added 2026-10-22; `netcode.md` rewritten 2026-10-31 (master reference:
+tick pipeline, sub-tick claims, shadow sims, rewind, fanout, lanes).
 
 ## Traps (gotchas — read before touching the area)
 

@@ -118,8 +118,8 @@ export type ClientMessage =
   // prev piggybacks the previous edge — the classic "every packet sends a
   // copy of the last" redundancy (GGPO/X-Wing): a single lost packet then
   // costs nothing instead of a watchdog round-trip.
-  | { type: 'inputMove'; seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }; rotation: Rotation;
-      prev?: { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }; rotation: Rotation } }
+  | { type: 'inputMove'; seq?: number; ageMs?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }; rotation: Rotation;
+      prev?: { seq?: number; ageMs?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }; rotation: Rotation } }
   | { type: 'projectileDestroy'; projectileId: string; shotId?: string; claimSeq?: number }
   // claimSeq stamps the claim kinds the client wants a verdict for —
   // every claim carrying one gets a claimAck back (applied vs rejected+

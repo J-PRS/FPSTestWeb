@@ -139,6 +139,9 @@ export interface CombatDeps {
   wireCast?: (data: Uint8Array, journaled?: boolean | 'volatile', exclude?: string) => void;
   /** Single-recipient reliable binary (knockback — victim-only). */
   wireTo?: (playerId: string, data: Uint8Array, journaled?: boolean | 'volatile') => void;
+  /** Arrival-time cosmetic relay already flashed this shotId - skip the
+   *  drain's own emit or observers see a double muzzle. */
+  earlyRelayed?: (playerId: string, shotId?: string) => boolean;
 }
 
 /**
@@ -433,7 +436,8 @@ w.n += 1;
       });
       const meleeWid = this.deps.widOf?.(playerId);
       const muzzle = { x: mpos.x, y: mpos.y, z: mpos.z };
-      if (meleeWid !== undefined && this.deps.wireCast) {
+      if (this.deps.earlyRelayed?.(playerId, msg.shotId)) { /* flashed at arrival */ }
+      else if (meleeWid !== undefined && this.deps.wireCast) {
         this.deps.wireCast(encodeShotEv(meleeWid, msg.weaponType, muzzle, msg.dir), 'volatile', playerId);
       } else {
         this.broadcast({
@@ -635,6 +639,7 @@ win.violations += 1;
     // pos.y IS the eye (screen center) — the muzzle relays right off it,
     // Quake-style, no bump (a +1.6 would double-offset over the crosshair).
     const shotWid = this.deps.widOf?.(playerId);
+    if (this.deps.earlyRelayed?.(playerId, msg.shotId)) {return;} // flashed at arrival
     if (shotWid !== undefined && this.deps.wireCast) {
       this.deps.wireCast(encodeShotEv(shotWid, msg.weaponType, { x: at.x, y: at.y, z: at.z }, msg.dir), 'volatile', playerId);
     } else {

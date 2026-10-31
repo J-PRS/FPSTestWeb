@@ -7,9 +7,16 @@
 import { wallNow, type WallMs } from './wallClock.ts';
 
 // Depth covers the worst rewind envelope: clampPing(~400) + adaptive
-// render lag (~800) — a shorter buffer would clamp deep rewinds to the
+// render lag (~1200) — a shorter buffer would clamp deep rewinds to the
 // oldest sample and validate arbitrarily far behind the real ghost.
-export const REWIND_MS = 1200;
+export const REWIND_MS = 1700;
+
+/** Hard ceiling on any render-lag claim. Shooter-first doctrine: this
+ *  rejects FRAUDULENT lag (claimed staleness the link never had), not
+ *  honest lag - a jittery 300ms link can legitimately render ~1s stale
+ *  and those shots must still register WYSIWYG. Keep
+ *  REWIND_MS ≥ clampPing(400) + this + margin. */
+export const RENDER_LAG_BOUND_MAX = 1200;
 
 /** Client remote-render delay: SnapshotBuffer holds ~BASE(100) +
  *  arrival interval (~50 at 20Hz) + jitter headroom (~50) behind the
@@ -23,9 +30,9 @@ export const RENDER_LAG_MS = 200;
  *  snapshot buffer stretches to ~800ms under heavy jitter/suppression,
  *  so a fixed 200ms understates the ghost lag exactly where links are
  *  bad. The client reports its worst-case delay via clientStats; this
- *  clamps it to the buffer's own ceiling (SnapshotBuffer.MAX_INTERP_DELAY
- *  mirrored — a bigger claim can't rewind past the buffer anyway). */
-export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: number } } | null | undefined, bound = 800): number {
+ *  clamps it to RENDER_LAG_BOUND_MAX (the client's starve cap is
+ *  dynamic — interpDelay can legitimately outgrow the base buffer). */
+export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: number } } | null | undefined, bound = RENDER_LAG_BOUND_MAX): number {
   const st = p?.clientStats;
   // A report older than ~3 uplink windows describes a link state that
   // may no longer exist — fall back to the base constant rather than
@@ -53,7 +60,7 @@ export function renderLagBoundOf(
   const jit = transitVarOf?.(playerId) ?? 0;
   // Casual-floor: every player gets a fair hit-what-you-see window even on
   // a perfect link — the exploit case is the ceiling, not the floor.
-  return Math.min(Math.max(RENDER_LAG_MS + 2 * transit + 3 * jit, 350), 800);
+  return Math.min(Math.max(RENDER_LAG_MS + 2 * transit + 3 * jit, 350), RENDER_LAG_BOUND_MAX);
 }
 
 /** Per-victim render delay: the shooter's ghost lag for THIS target.
@@ -64,7 +71,7 @@ export function renderLagBoundOf(
 export function renderLagOfTarget(
   p: { clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined,
   targetId: string,
-  bound = 800,
+  bound = RENDER_LAG_BOUND_MAX,
 ): number {
   const st = p?.clientStats;
   if (st?.renderLag && !(st.at !== undefined && wallNow() - st.at > 30_000)) {

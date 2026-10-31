@@ -201,17 +201,22 @@ export function decodePosition(u8: Uint8Array, into?: WirePosition): WirePositio
 // The edge-timed input journal's fast lane: same semantic as the JSON
 // inputMove (edge + prev redundancy), minus the rotation the server
 // never reads (yaw comes from position reports). Layout:
-//   seq u32 | fwd i8 | right i8 | flags u8 | status u8 | hasPrev u8
-//   [pseq u32 | pfwd i8 | pright i8 | pflags u8 | pstatus u8]
+//   seq u32 | fwd i8 | right i8 | flags u8 | status u8 | ageMs u16
+//   | hasPrev u8
+//   [pseq u32 | pfwd i8 | pright i8 | pflags u8 | pstatus u8 | pageMs u16]
+// ageMs = ms before send the edge fired - the sub-tick stamp the drain
+// slices the tick window by. Legacy frames (8B edges, no age) still
+// decode; their edges just carry no stamp.
 export interface WireInputMove {
   type: 'inputMove';
   seq?: number;
+  ageMs?: number;
   input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number };
   rotation: { yaw: number; pitch: number };
-  prev?: { seq?: number; input: NonNullable<WireInputMove['input']>; rotation: { yaw: number; pitch: number } };
+  prev?: { seq?: number; ageMs?: number; input: NonNullable<WireInputMove['input']>; rotation: { yaw: number; pitch: number } };
 }
 
-export interface InputEdge { seq?: number; input: NonNullable<WireInputMove['input']>; rotation: { yaw: number; pitch: number } }
+export interface InputEdge { seq?: number; ageMs?: number; input: NonNullable<WireInputMove['input']>; rotation: { yaw: number; pitch: number } }
 
 function writeInputEdge(d: DataView, o: number, e: InputEdge): number {
   d.setUint32(o, (e.seq ?? 0) >>> 0, true);
@@ -219,15 +224,16 @@ function writeInputEdge(d: DataView, o: number, e: InputEdge): number {
   d.setInt8(o + 5, Math.round(e.input.right));
   d.setUint8(o + 6, (e.input.jump ? 1 : 0) | (e.input.ski ? 2 : 0) | (e.input.jet ? 4 : 0));
   d.setUint8(o + 7, (e.input.status ?? 0) & 0xFF);
-  return o + 8;
+  d.setUint16(o + 8, Math.min(Math.max(Math.round(e.ageMs ?? 0), 0), 0xFF_FF), true);
+  return o + 10;
 }
 
-export function encodeInputMove(seq: number, input: NonNullable<WireInputMove['input']>, prev?: InputEdge): Uint8Array {
-  const buf = new ArrayBuffer(prev ? 19 : 11);
+export function encodeInputMove(seq: number, input: NonNullable<WireInputMove['input']>, prev?: InputEdge, curAgeMs = 0): Uint8Array {
+  const buf = new ArrayBuffer(prev ? 23 : 13);
   const d = new DataView(buf);
   d.setUint8(0, MAGIC);
   d.setUint8(1, WIRE_INPUTMOVE);
-  const end = writeInputEdge(d, 2, { seq, input, rotation: { yaw: 0, pitch: 0 } });
+  const end = writeInputEdge(d, 2, { seq, ageMs: curAgeMs, input, rotation: { yaw: 0, pitch: 0 } });
   if (prev) {
     d.setUint8(end, 1);
     writeInputEdge(d, end + 1, prev);
@@ -237,24 +243,33 @@ export function encodeInputMove(seq: number, input: NonNullable<WireInputMove['i
   return new Uint8Array(buf);
 }
 
-function readInputEdge(d: DataView, o: number): InputEdge | null {
-  if (d.byteLength < o + 8) {return null;}
+function readInputEdge(d: DataView, o: number, stamped: boolean): InputEdge | null {
+  const stride = stamped ? 10 : 8;
+  if (d.byteLength < o + stride) {return null;}
   const seq = d.getUint32(o, true);
   const forward = d.getInt8(o + 4), right = d.getInt8(o + 5);
   const flags = d.getUint8(o + 6);
   const status = d.getUint8(o + 7);
-  return { seq, rotation: { yaw: 0, pitch: 0 },
+  const e: InputEdge = { seq, rotation: { yaw: 0, pitch: 0 },
     input: { forward, right, jump: (flags & 1) ? 1 : 0, ski: (flags & 2) ? 1 : 0, jet: (flags & 4) ? 1 : 0, status } };
+  if (stamped) {e.ageMs = d.getUint16(o + 8, true);}
+  return e;
 }
 
 export function decodeInputMove(u8: Uint8Array): WireInputMove | null {
   if (u8.length < 11 || u8[0] !== MAGIC || u8[1] !== WIRE_INPUTMOVE) {return null;}
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-  const cur = readInputEdge(d, 2);
+  // Frame shapes: stamped 13/23 bytes, legacy 11/19 - anything else is
+  // not a well-formed inputMove.
+  const stamped = u8.length === 13 || u8.length === 23;
+  if (!stamped && u8.length !== 11 && u8.length !== 19) {return null;}
+  const cur = readInputEdge(d, 2, stamped);
   if (!cur || !Number.isFinite(cur.input.forward + cur.input.right)) {return null;}
-  const msg: WireInputMove = { type: 'inputMove', seq: cur.seq, input: cur.input, rotation: { yaw: 0, pitch: 0 } };
-  if (u8.length >= 19 && d.getUint8(10) === 1) {
-    const prev = readInputEdge(d, 11);
+  const msg: WireInputMove = { type: 'inputMove', seq: cur.seq, ageMs: cur.ageMs, input: cur.input, rotation: { yaw: 0, pitch: 0 } };
+  const prevAt = stamped ? 13 : 11;
+  const flagAt = stamped ? 12 : 10;
+  if (u8.length > prevAt && d.getUint8(flagAt) === 1) {
+    const prev = readInputEdge(d, prevAt, stamped);
     if (prev) {msg.prev = prev;}
   }
   return msg;

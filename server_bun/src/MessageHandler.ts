@@ -153,7 +153,7 @@ export interface RoomInfo {
    *  sim; teleport/respawn resync it; inputMove feeds it. */
   /** Returns false when the event is stale (seq regression on an
    *  unordered transport) — the handler then skips its side effects. */
-  moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number) => boolean | void;
+  moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number, ageMs?: number) => boolean | void;
   /** Reports reconcile the sim; a non-null return is the sim's truth when
    *  the report diverged past tolerance — send it back as a correction. */
   moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
@@ -193,6 +193,8 @@ export interface RoomInfo {
   wireCast?: (data: Uint8Array, journaled?: boolean | 'volatile', exclude?: string) => void;
   /** Single-recipient reliable binary (knockback — victim-only). */
   wireTo?: (playerId: string, data: Uint8Array, journaled?: boolean | 'volatile') => void;
+  /** Arrival-time muzzle relay already flashed this shotId. */
+  earlyRelayed?: (playerId: string, shotId?: string) => boolean;
   energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'
@@ -268,6 +270,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     widOf: roomInfo?.widOf,
     wireCast: roomInfo?.wireCast,
     wireTo: roomInfo?.wireTo,
+    earlyRelayed: roomInfo?.earlyRelayed,
   };
 }
 
@@ -786,8 +789,8 @@ export class MessageHandler {
   moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number): { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean; } | null {
     return this.roomInfo.moveReport?.(playerId, pos, yaw, vel, inputSeq, rttMs) ?? null;
   }
-  moveInput(playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number): boolean | void {
-    return this.roomInfo.moveInput?.(playerId, input, status, seq);
+  moveInput(playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number, ageMs?: number): boolean | void {
+    return this.roomInfo.moveInput?.(playerId, input, status, seq, ageMs);
   }
   inputSeqOf(playerId: string): number { return this.roomInfo.inputSeqOf?.(playerId) ?? -1; }
   moveResync(playerId: string, pos: Vec3, yaw: number): void { this.roomInfo.moveResync?.(playerId, pos, yaw); }

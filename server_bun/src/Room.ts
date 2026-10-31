@@ -20,7 +20,7 @@ import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
-import { NOISE_TTL_MS , type V4Last, encodeHit, encodeWidPos, WIRE_E_LANDED } from '../../shared/wire.ts';
+import { NOISE_TTL_MS , type V4Last, encodeHit, encodeWidPos, encodeShotEv, WIRE_E_LANDED } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -33,7 +33,7 @@ import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
 import type { PlayerState, Vec3, ClientMessage,WebSocketData } from './types.ts';
-import { CLASS_STATS, classCapsule, type ArmorClass } from '../../shared/botClasses.ts';
+import { CLASS_STATS, classCapsule, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
 import { inv, setInvariantSink } from '../../shared/invariants.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
@@ -47,7 +47,7 @@ import { EventBus } from './roomEvents.ts';
 import { MODE_MODULES, type ModeModule } from './modeModules.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY, MOVEMENT_CONFIG, type BodyCapsule } from '../../shared/movement.ts';
-import { BELT_MAX } from '../../shared/weapons.ts';
+import { BELT_MAX, serverSimmed, WeaponType } from '../../shared/weapons.ts';
 import { chatKindFor, vgsCommandFor, radioAimFor } from '../../shared/botTaunts.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { healPool } from './healPool.ts';
@@ -351,7 +351,12 @@ export class Room {
         const f = (c.msg as { fireAt?: number }).fireAt;
         if (typeof f !== 'number' || !Number.isFinite(f)) {return c.at;}
         const transit = this.moveSim.transitOf(c.playerId);
-        return Math.max(Math.min(f, c.at), c.at - (transit * 2 + 100));
+        const jit = this.moveSim.transitVarOf(c.playerId);
+        // Margin scales with the link: honest fireAt error IS uplink
+        // jitter (the client estimates transit from the same noisy
+        // channel), so 4×jitter + 50ms floor covers honest clocks while
+        // shrinking the forgeable window from 100ms on stable links.
+        return Math.max(Math.min(f, c.at), c.at - (transit * 2 + jit * 4 + 50));
       };
       this.commands.sort((a, b): number => key(a) - key(b));
     }
@@ -368,6 +373,48 @@ export class Room {
       }
     }
     this.commands.length = 0;
+  }
+
+  /** Arrival-time muzzle relay - the cosmetic playerShot flash doesn't
+   *  adjudicate anything, so it needn't wait ~0-50ms in the command
+   *  buffer for the drain. Stamped, cosmetic-path intents only:
+   *  projectile-spawning weapons get projectileCreated at drain anyway,
+   *  and unstamped claims have no dedupe key so they relay at drain.
+   *  The drain skips its own re-emit through earlyRelayed(). Read-only
+   *  gates mirror the handler's front door (dead/class); state-mutating
+   *  adjudication still happens at drain, in fireAt order. */
+  private static readonly EARLY_RELAY_TTL_MS = 5000;
+  private static readonly BEAM_INTENT_WTS = new Set<number>([WeaponType.Lightning, WeaponType.Shocklance, WeaponType.Repair, WeaponType.HealBeam]);
+  private readonly earlyShots = new Map<string, number>();
+  earlyShotRelay(playerId: string, msg: { shotId?: string; weaponType?: number; dir?: Vec3 }): void {
+    if (!msg.shotId || msg.weaponType === undefined) {return;}
+    const p = this.players.getPlayer(playerId);
+    if (!p || p.isDead || !classCanFire(p.armorClass, msg.weaponType)) {return;}
+    // Only intents whose drain path emits a playerShot relay qualify:
+    // melee swings, beam intents, and non-simmed weapons all land on the
+    // cosmetic emit. A simmed non-beam weapon spawns a shell instead -
+    // projectileCreated covers observers, an early flash would double it.
+    const cosmetic = msg.weaponType === WeaponType.Melee
+      || Room.BEAM_INTENT_WTS.has(msg.weaponType)
+      || !serverSimmed(msg.weaponType);
+    if (!cosmetic) {return;}
+    const wid = this.wireIds.get(playerId);
+    if (wid === undefined) {return;} // no binary id: drain's JSON fallback relays instead
+    const key = `${playerId}:${msg.shotId}`;
+    if (this.earlyShots.has(key)) {return;}
+    const now = wallNow();
+    this.earlyShots.set(key, now);
+    for (const [k, t] of this.earlyShots) {if (now - t > Room.EARLY_RELAY_TTL_MS) {this.earlyShots.delete(k);}}
+    if (this.earlyShots.size > 256) {this.earlyShots.delete(this.earlyShots.keys().next().value!);}
+    // Origin is the live truth, not the drain's rewound claimOrigin -
+    // a few ms of staleness on a cosmetic flash beats re-deriving the
+    // rewind outside the adjudication path.
+    this.connections.broadcastBinaryReliable(encodeShotEv(wid, msg.weaponType, p.position, msg.dir), 'volatile', playerId);
+  }
+  /** True when the early relay already flashed this shot - the drain's
+   *  relay emit must skip it or observers see a double muzzle. */
+  earlyRelayed(playerId: string, shotId?: string): boolean {
+    return shotId !== undefined && this.earlyShots.has(`${playerId}:${shotId}`);
   }
   /** Spatial memory — kills/fights/gems/flags leave decaying scent the
    *  brains read for where-the-action-was. See influenceMap.ts. Sized to
@@ -1051,11 +1098,11 @@ export class Room {
       deployables: () => this.deployables.snapshot(),
       influence: this.influence,
       matchEndsAt: (): number => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
-      moveInput: (pid, i, status, seq): boolean => this.moveSim.queueInput(pid, {
+      moveInput: (pid, i, status, seq, ageMs): boolean => this.moveSim.queueInput(pid, {
         forward: i.forward, right: i.right,
         jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
         jetHeld: Boolean(i.jet),
-      }, status, seq),
+      }, status, seq, ageMs),
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
       inputSeqOf: (pid): number => this.moveSim.inputSeqOf(pid),
       transitOf: (pid): number => this.moveSim.transitOf(pid),
@@ -1091,6 +1138,7 @@ export class Room {
       widOf: (pid): number | undefined => this.wireIds.get(pid),
       wireCast: (data, journaled, exclude): void => this.connections.broadcastBinaryReliable(data, journaled, exclude),
       wireTo: (pid, data, journaled): void => this.connections.sendBinToPlayerReliable(pid, data, journaled),
+      earlyRelayed: (pid, shotId): boolean => this.earlyRelayed(pid, shotId),
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? (): string | null => this.flags?.carrierId() ?? null : undefined,

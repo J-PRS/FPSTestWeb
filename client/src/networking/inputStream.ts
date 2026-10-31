@@ -18,7 +18,7 @@ export class InputStream {
   // re-emits exactly this (the change-only stream's current edge).
   private lastInputState: MoveInput | null = null;
   private lastInputRotation: MoveRotation = { yaw: 0, pitch: 0 };
-  private lastSentEdge: { seq: number; input: MoveInput; rotation: MoveRotation } | null = null;
+  private lastSentEdge: { seq: number; t: number; input: MoveInput; rotation: MoveRotation } | null = null;
   private inputJournal: { seq: number; t: number; input: MoveInput }[] = [];
   private static readonly INPUT_JOURNAL_MAX = 128;
 
@@ -46,13 +46,17 @@ export class InputStream {
     const seq = this.inputSeq;
     // In-packet redundancy: the previous edge rides along so a single
     // lost packet heals instantly instead of via the watchdog RTT —
-    // the server's seq gates make the double-apply a no-op when both land.
-    const prev = this.lastSentEdge ? { seq: this.lastSentEdge.seq, input: Object.assign({}, this.lastSentEdge.input), rotation: Object.assign({}, this.lastSentEdge.rotation) } : undefined;
+    // the server's seq gates make the double-apply a no-op on both land.
+    // ageMs stamps each edge with "fired N ms before send" - the server
+    // slices its tick window by real edge times, so a press+release
+    // inside one tick holds for the true fraction, not ~half.
+    const tNow = performance.now();
+    const prev = this.lastSentEdge ? { seq: this.lastSentEdge.seq, ageMs: tNow - this.lastSentEdge.t, input: Object.assign({}, this.lastSentEdge.input), rotation: Object.assign({}, this.lastSentEdge.rotation) } : undefined;
     this.journal(seq, input);
     this.lastInputState = Object.assign({}, input);
     this.lastInputRotation = Object.assign({}, rotation);
-    this.lastSentEdge = { seq, input: Object.assign({}, input), rotation: Object.assign({}, rotation) };
-    send(Object.assign({}, {seq,input,rotation}, (prev ? { prev } : {}), {type: 'inputMove' as const}));
+    this.lastSentEdge = { seq, t: tNow, input: Object.assign({}, input), rotation: Object.assign({}, rotation) };
+    send(Object.assign({}, {seq, ageMs: 0, input, rotation}, (prev ? { prev } : {}), {type: 'inputMove' as const}));
   }
 
   /** Hard-tolerance answer: the server's consumed input watermark fell

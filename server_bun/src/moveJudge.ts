@@ -121,7 +121,7 @@ export interface Shadow {
    *  co-tick edge the server drops is a guaranteed divergence (tap-jump
    *  under autoHop's hold-to-jump can never exist in a one-slot world).
    *  Bounded: a spam burst drops the oldest edge, not the newest. */
-  pending: { input: Partial<MoveInput>; status: number; seq?: number }[];
+  pending: { input: Partial<MoveInput>; status: number; seq?: number; est?: number }[];
   /** Consecutive reports whose inputSeq outran our consumed watermark —
    *  a transient gap is just queue latency; a sustained one is a lost
    *  input edge (hard-tolerance trip). */
@@ -335,7 +335,7 @@ export class MoveJudge {
     // shadow). If the squared distance is within tol², skip the tol
     // calculation entirely — the report is within tolerance.
     // tol is computed below; use a conservative 1m² threshold here.
-    if (distSq <= 1.0) {return null;}
+    if (distSq <= 1) {return null;}
     let dist = Math.sqrt(distSq);
     const speed = dhypot2(s.vel.x, s.vel.z);
     // A client throttled below ~4fps sims slower than wall time (MAX_DT

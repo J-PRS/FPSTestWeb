@@ -813,10 +813,21 @@ this.ops.msgsRejected += 1;
     // must see this window's earlier commands in wire order.
     const fast = data.type;
     if (fast === 'ping' || fast === 'pong' || fast === 'clientStats' || fast === 'tickNack'
-      || fast === 'position' || fast === 'inputMove' || fast === 'teleport') {
+      || fast === 'position' || fast === 'inputMove' || fast === 'teleport'
+      // jump/jetpack are pure presence relays - nothing orders against
+      // them, so parking them in the command buffer just adds 0-50ms to
+      // every observer's jump-dust/jet FX.
+      || fast === 'jump' || fast === 'jetpack') {
       try { room.messages.handleMessage(playerId, data, wallNow(), trusted); }
       catch (error) { logger.warn('Telemetry handler threw', { playerId, type: data.type, error }); }
       return;
+    }
+    // shotFired stays parked (fireAt-ordered adjudication), but the
+    // cosmetic muzzle relay emits on arrival - observers see the flash
+    // ~a queue-tick earlier; the drain skips its own re-emit via shotId.
+    if (fast === 'shotFired') {
+      try { room.earlyShotRelay?.(playerId, data); }
+      catch (error) { logger.warn('earlyShotRelay threw', { playerId, error }); }
     }
     // Command buffer: effects land at phase 0 of the next room tick, in
     // arrival order — sims never see a mid-frame mutation order. The

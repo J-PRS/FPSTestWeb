@@ -26,7 +26,7 @@ export interface MoveHost {
    *  datagram-style input path next to the change-only inputMove
    *  edges: seq-ungated (monotonicity is enforced by the position
    *  seq gate at the call site), so a lost frame costs nothing. */
-  moveInput?(playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number): boolean | void;
+  moveInput?(playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number, ageMs?: number): boolean | void;
   /** Highest inputMove edge seq consumed so far — held-state frames
    *  older than it must not resurrect a released key. */
   inputSeqOf?(playerId: string): number;

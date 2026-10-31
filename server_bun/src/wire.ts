@@ -56,7 +56,7 @@ export interface WireEntry<K extends ClientMessage['type']> {
 /** Types without their own bucket share this one. */
 export const WIRE_DEFAULT_LIMIT: RateLimit = { maxCount: 120, windowMs: 1000 };
 
-const parseEdge = (raw: unknown): { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet: number; status: number }; rotation: { yaw: number; pitch: number } } | string => {
+const parseEdge = (raw: unknown): { seq?: number; ageMs?: number; input: { forward: number; right: number; jump: number; ski: number; jet: number; status: number }; rotation: { yaw: number; pitch: number } } | string => {
   const input = (raw as Record<string, unknown>)?.input;
   if (typeof input !== 'object' || input === null) {return 'input must be an object';}
   const i = input as Record<string, unknown>;
@@ -67,6 +67,7 @@ const parseEdge = (raw: unknown): { seq?: number; input: { forward: number; righ
   if (!rot.success) {return `rotation: ${rot.error}`;}
   return {
     seq: isFiniteNumber((raw as Record<string, unknown>).seq) ? (raw as Record<string, unknown>).seq as number : undefined,
+    ageMs: isFiniteNumber((raw as Record<string, unknown>).ageMs) ? (raw as Record<string, unknown>).ageMs as number : undefined,
     input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0, status: isFiniteNumber(i.status) ? i.status : 0 },
     rotation: rot.data,
   };
@@ -272,12 +273,12 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       if (!p || p.isDead) {return;}
-      const apply = (e: { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }): boolean => {
+      const apply = (e: { seq?: number; ageMs?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }): boolean => {
         const i = e.input;
         const newStatus = (i.status ?? 0) & CLIENT_STATUS_MASK;
         // Stale edges must not touch skiing/status either — the sim's
         // seq gate decides before we commit.
-        if (h.roomInfo.moveInput?.(id, i, newStatus, e.seq) === false) {return false;}
+        if (h.roomInfo.moveInput?.(id, i, newStatus, e.seq, e.ageMs) === false) {return false;}
         p.skiing = i.ski ? 1 : 0;
         p.jetting = i.jet ? 1 : 0;
         p.status = newStatus;

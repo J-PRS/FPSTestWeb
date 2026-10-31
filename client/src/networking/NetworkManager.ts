@@ -633,7 +633,7 @@ this.sendDrops += 1;
    *  is replay fidelity for the server shadow). */
   private sendInputMsg(m: ClientMessage): void {
     if (m.type === 'inputMove' && m.input) {
-      this.sendBinary(encodeInputMove(m.seq ?? 0, m.input, m.prev));
+      this.sendBinary(encodeInputMove(m.seq ?? 0, m.input, m.prev, m.ageMs ?? 0));
       return;
     }
     this.send(m);

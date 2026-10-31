@@ -125,10 +125,10 @@ describe('renderLag bound', () => {
 
   it('bad link: bound still opens to the buffer ceiling', () => {
     // 400ms transit + 150ms jitter — a real bad-link client keeps the
-    // full window.
-    expect(renderLagBoundOf(() => 400, () => 150, 'p1')).toBe(800);
-    const bound = renderLagBoundOf(() => 300, () => 50, 'p1'); // 200+600+150=950→800
-    expect(bound).toBe(800);
+    // full window. Ceiling is 1200 (shooter-first: honest deep lag binds).
+    expect(renderLagBoundOf(() => 400, () => 150, 'p1')).toBe(1200);
+    const bound = renderLagBoundOf(() => 300, () => 50, 'p1'); // 200+600+150=950, under cap
+    expect(bound).toBe(950);
   });
 
   it('absent/stale stats degrade to the base delay, never above bound', () => {

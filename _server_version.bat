@@ -6,10 +6,14 @@ setlocal
 for /f "tokens=*" %%h in ('git rev-parse --short HEAD') do set "LOCAL=%%h"
 for /f "usebackq delims=" %%j in (`powershell -NoProfile -Command "try {(irm -TimeoutSec 8 'https://play.jprice.app/health').build} catch {''}"`) do set "REMOTE=%%j"
 for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "try {(irm -TimeoutSec 8 'https://play.jprice.app/health').version} catch {''}"`) do set "VER=%%v"
+for /f "usebackq delims=" %%b in (`powershell -NoProfile -Command "try {(irm -TimeoutSec 8 'https://play.jprice.app/health').bun} catch {''}"`) do set "RBUN=%%b"
+for /f "delims=" %%l in ('bun --version 2^>nul') do set "LBUN=%%l"
+if "%LBUN%"=="" for /f "delims=" %%l in ('"%USERPROFILE%\.bun\bin\bun.exe" --version 2^>nul') do set "LBUN=%%l"
+if "%LBUN%"=="" set "LBUN=not found"
 echo.
-echo   local  : %LOCAL%
+echo   local  : %LOCAL%   (bun %LBUN%)
 if "%REMOTE%"=="" (echo   remote : ^<unreachable or no stamp^> & endlocal & exit /b 2)
-echo   remote : %REMOTE%  (version %VER%)
+echo   remote : %REMOTE%  (version %VER%, bun %RBUN%)
 echo.
 if /i "%LOCAL%"=="%REMOTE%" (echo   MATCH - box runs HEAD & endlocal & exit /b 0)
 REM Hash differs — is it a server-side diff or just docs/client?
