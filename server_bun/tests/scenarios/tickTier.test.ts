@@ -23,7 +23,7 @@ describe('scenario: interest tier hysteresis', () => {
     const pool: TickDecodePool = { slots: [] as WireTickPlayer[], byId: new Map(), resolveId: (w) => roster.get(w) };
     const metrics: FanoutMetrics = {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
-      recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
+      recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0,
     };
     const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
     const prevBroadcast = room.connections.broadcast;
@@ -93,7 +93,7 @@ describe('scenario: interest tier hysteresis', () => {
     const pool: TickDecodePool = { slots: [] as WireTickPlayer[], byId: new Map(), resolveId: (w) => roster.get(w) };
     const metrics: FanoutMetrics = {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
-      recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
+      recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0,
     };
     const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
     const prevBroadcast = room.connections.broadcast;

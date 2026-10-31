@@ -106,7 +106,7 @@ export function mountFuzzFanout(
   for (const id of repIds) {room.spectators.add(id);}
   const metrics: FanoutMetrics = {
     recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
-    recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
+    recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0,
   };
   const fanout = new TickFanout(metrics,
     onRemove ?? ((r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {})));
