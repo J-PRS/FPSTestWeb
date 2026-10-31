@@ -4,8 +4,8 @@ import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 import type { ProjectileConfig } from './types.js';
 
 // Serious Sam cannonball: a fast, fat iron sphere that SKIPS off terrain
-// (livelier than the GL shell — keeps its speed) and detonates on target
-// contact or at fuse. Dark ball + smoke/ember trail — reads as ordnance,
+// (livelier than the GL shell - keeps its speed) and detonates on target
+// contact or at fuse. Dark ball + smoke/ember trail - reads as ordnance,
 // not energy.
 export const CANNON_CONFIG: ProjectileConfig = {
   name: 'cannon',
@@ -24,11 +24,11 @@ export const CANNON_CONFIG: ProjectileConfig = {
   aoeDamage: WEAPONS[14].aoeDamage,
   aoeRadius: WEAPONS[14].aoeRadius,
   vfx: 'shellburst', // black-powder blast: dirty flash + white smoke + iron chips
-  burstShards: true, // the iron ball visibly bursts in the blast — dome + shards, not just a dome
+  burstShards: true, // the iron ball visibly bursts in the blast - dome + shards, not just a dome
   damageColor: '#ffbb66',
-  // No trail — the joke IS the giant ball. A smoke streak behind a
+  // No trail - the joke IS the giant ball. A smoke streak behind a
   // beach-ball-sized cannonball just clutters the read. (ribbonTrail
-  // defaults ON — it has to be opted out, not just zeroed particles.)
+  // defaults ON - it has to be opted out, not just zeroed particles.)
   ribbonTrail: false,
   trailColors: [],
   trailParticlesPerUnit: 0,
@@ -45,11 +45,11 @@ export const CANNON_CONFIG: ProjectileConfig = {
   trailRampIn: 0,
   meshColor: 0x23_25_2B, // dark iron cannonball
   meshType: 'ball',
-  litMesh: true, // iron ball needs real shading — flat unlit read as a dark disc
-  glowShell: false, // iron, not energy — the ember trail carries the read
-  glowColor: 0x00_00_00, // unused — glowShell is off
+  litMesh: true, // iron ball needs real shading - flat unlit read as a dark disc
+  glowShell: false, // iron, not energy - the ember trail carries the read
+  glowColor: 0x00_00_00, // unused - glowShell is off
   glowOpacity: 0,
-  // Ramp-in uses the global default (20% → 100% over 0.2s) — explicitly
+  // Ramp-in uses the global default (20% → 100% over 0.2s) - explicitly
   // NOT overriding here: the 1.6m ball needs the full ramp, not GL's 40ms
   terrainOffset: WEAPONS[14].hitMin,
   needsServerTracking: true,
@@ -64,3 +64,32 @@ export const CANNON_CONFIG: ProjectileConfig = {
   lodgeBounce: WEAPONS[14].lodgeBounce,
   maxBounces: WEAPONS[14].maxBounces,
 };
+
+/** Arc-80 family factory - cannon/gonne/basilisk share the iron-ball
+ *  shell recipe; stats re-derive per weaponType, `over` carries only
+ *  the flavor differences (name, tint, display). */
+export function mkArc80(weaponType: number, over: Partial<ProjectileConfig>): ProjectileConfig {
+  const w = WEAPONS[weaponType];
+  return Object.assign({}, CANNON_CONFIG, {
+    weaponType,
+    speed: w.speed,
+    gravity: w.gravity,
+    explosionRadius: w.aoeRadius * AOE_VFX_SCALE,
+    force: w.knockbackForce,
+    bodyRadius: w.bodyRadius,
+    hitMin: w.hitMin,
+    hitMax: w.hitMax,
+    hitGrow: w.hitGrow,
+    aoeDamage: w.aoeDamage,
+    aoeRadius: w.aoeRadius,
+    terrainOffset: w.hitMin,
+    maxLifetime: w.maxLifetime,
+    bounces: w.terrainBounce === true,
+    bounceRestitution: w.bounceRestitution,
+    bounceFriction: w.bounceFriction,
+    firstBounceVelScale: w.firstBounceVelScale,
+    fuseAfterBounce: w.fuseAfterBounce,
+    lodgeBounce: w.lodgeBounce,
+    maxBounces: w.maxBounces,
+  }, over);
+}
