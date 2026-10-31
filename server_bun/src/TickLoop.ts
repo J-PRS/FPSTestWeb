@@ -6,6 +6,7 @@ import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
 import { wallNow } from './wallClock.ts';
 import { simNow } from './simClock.ts';
+import { rxCost } from './wireMeter.ts';
 import { evictEldest } from './evictEldest.ts';
 
 // Heal/suppression helpers live in tickHelpers.ts so tickRecords doesn't
@@ -79,7 +80,7 @@ export class TickLoop {
   }
   /** Last completed 10s rollup -- surfaced on /metrics, null until a
    *  window closes (needs a connected player to accumulate). */
-  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; cappedPerSec: number; scansPerSec: number; scanMs: number; frameMs: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; sendsPerSec: number; sendUsPerCall: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number }; worstTicks?: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] } | null = null;
+  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; cappedPerSec: number; scansPerSec: number; scanMs: number; frameMs: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; sendsPerSec: number; sendUsPerCall: number; rxMsgsPerSec: number; rxUsPerCall: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number }; worstTicks?: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] } | null = null;
   /** Worst ticks this rollup window -- a bare tickMsMax never says WHICH
    *  phase held the spike, and "code vs GC/deschedule" is the whole
    *  question: a 200ms tick whose spans sum to 2ms is a runtime pause,
@@ -402,6 +403,8 @@ this.metrics.ticks += 1;
         room.connections.sendsCount = 0;
         room.connections.sendsNs = 0;
       }
+      const rxCountNow = rxCost.count, rxNsNow = rxCost.ns;
+      rxCost.count = 0; rxCost.ns = 0;
       this.lastBw = {
         kbpsDownTotal: Number((m.bytesSent * 8 / 1000 / secs).toFixed(1)),
         recordsPerSec: Number((m.recordsSent / secs).toFixed(0)),
@@ -419,6 +422,10 @@ this.metrics.ticks += 1;
         // per-call cost a measured number, not an estimate.
         sendsPerSec: Number((sends / secs).toFixed(0)),
         sendUsPerCall: sends > 0 ? Number((sendNs / sends / 1000).toFixed(1)) : 0,
+        // Ingress handler cost (inside onMessage) -- the ELD delay that
+        // tickMs can't see: msgs/s x per-call us lands between ticks.
+        rxMsgsPerSec: Number((rxCountNow / secs).toFixed(0)),
+        rxUsPerCall: rxCountNow > 0 ? Number((rxNsNow / rxCountNow / 1000).toFixed(1)) : 0,
         tickErrors: m.tickErrors,
         phaseMs,
         tickMs: m.tickSamples ? { avg: Number((m.tickMsSum / m.tickSamples).toFixed(2)), max: Number(m.tickMsMax.toFixed(2)) } : undefined,

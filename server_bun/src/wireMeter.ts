@@ -20,6 +20,12 @@ function slot(pid: string): ConnBytes {
  *  ~25K string allocs/s of pure bookkeeping churn. */
 export const BIN_KIND: readonly string[] = Array.from({ length: 256 }, (_, i) => `bin:${i}`);
 
+/** Ingress handler cost -- elapsed INSIDE GameServer.onMessage, the
+ *  same style as sendsNs on ConnectionManager. Read+cleared by the
+ *  tick rollup so /metrics carries per-call ingress cost, which is
+ *  where ELD delay that ticks don't see must live. */
+export const rxCost = { count: 0, ns: 0 };
+
 export function wireRx(pid: string | undefined, bytes: number, kind?: string): void {
   total.rxB += bytes; total.rxF += 1;
   const s = slot(pid ?? '');

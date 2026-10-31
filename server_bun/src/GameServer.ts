@@ -19,7 +19,7 @@ import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
 import { SessionRegistry } from './sessionRegistry.ts';
 import { wallNow } from './wallClock.ts';
-import { wireRx, BIN_KIND } from './wireMeter.ts';
+import { wireRx, BIN_KIND, rxCost } from './wireMeter.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import { MessageHandler } from './MessageHandler.ts';
 import type { UdpLane } from './UdpLane.ts';
@@ -290,6 +290,8 @@ export class GameServer {
   }
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer | Uint8Array): void {
+    const tRx = process.hrtime.bigint();
+    try {
     // Wrap first: the binary metering tag needs byte 1 — a DataView +
     // string per frame was ~50K throwaway allocs/s at load.
     const u8 = typeof message === 'string'
@@ -311,6 +313,10 @@ export class GameServer {
       return;
     }
     this.onJsonText(ws, message as string);
+    } finally {
+      rxCost.count += 1;
+      rxCost.ns += Number(process.hrtime.bigint() - tRx);
+    }
   }
 
   /** Binary frames from ANY lane (ws binary, udp datagrams) — the decode
