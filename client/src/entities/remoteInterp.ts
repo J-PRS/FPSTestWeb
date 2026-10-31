@@ -190,6 +190,14 @@ export class RemoteInterp {
     if (d > RemoteInterp.REPLAY_SNAP_M) {
       s.pos.x = pos.x; s.pos.y = pos.y; s.pos.z = pos.z;
       if (vel) {s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z;}
+    } else if (d > 0.05) {
+      // Under the snap the sim's own error would otherwise sit forever:
+      // pull 25% of the gap per record so drift asymptotes to zero
+      // instead of plateauing at the threshold edge.
+      const k = 0.25;
+      s.pos.x += (pos.x - s.pos.x) * k;
+      s.pos.y += (pos.y - s.pos.y) * k;
+      s.pos.z += (pos.z - s.pos.z) * k;
     }
   }
 
