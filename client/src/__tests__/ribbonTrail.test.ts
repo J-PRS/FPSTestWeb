@@ -198,32 +198,38 @@ describe('RibbonTrail pooling + slots', (): void => {
   });
 });
 
-describe('RibbonTrail follow weld', (): void => {
-  it('a bound follow welds the tip to the live host between pushes', (): void => {
-    // Drivers push after the host update, so the head sample is one frame
-    // old at render time - without the re-pin the strip floats a frame of
-    // travel behind the body (the projectile head gap).
+describe('RibbonTrail follow (no weld)', (): void => {
+  it('a bound follow never re-pins the head - the tip lags at most SAMPLE_SPACING', (): void => {
+    // push() commits one sample per 0.5m of travel against its own anchor,
+    // and the head is a committed worldpoint, never a live host mirror. A
+    // re-pinned head follows _rpos through renderOffset decays and paints
+    // blend-direction chords (the "trail pointing the wrong way"), so the
+    // weld is gone on purpose: the tip lags at most half a meter of fresh
+    // history, invisible next to a moving body.
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00, width: 0.5, life: 10 });
     const host = new THREE.Vector3(0, 0, 0);
     r.follow = host;
     r.followManaged = true;
     r.push(pos(0), vel());
     host.set(1, 0, 0);
-    r.push(pos(1), vel());
+    r.push(pos(1), vel()); // 1m of travel -> one commit, head at 1.0
     r.update(0.016);
-    // Host advanced one frame of travel with no new push - head must track
-    // it, not sit at the last push (a teleport-sized hop would rightly cut).
+    // Host walks 0.16m with no push: under SAMPLE_SPACING the tip must stay
+    // on the last committed sample instead of chasing the host.
     host.set(1.16, 0, 0);
     r.update(0.016);
     const internals = r as unknown as { head: number; px: Float32Array; count: number };
-    expect(internals.px[internals.head]).toBeCloseTo(1.16, 5);
-    // ...and the drawn head verts sit at the host: width 0.5 → ±0.25, so
-    // the outer vert lands ~1.41 (an unpinned head would max out at 1.25).
+    expect(internals.px[internals.head]).toBeCloseTo(1, 5);
+    // The drawn head verts sit on that sample: width 0.5 -> +-0.25, so the
+    // outer vert lands at 1.25 (a welded head would read 1.41).
     const b = (r as unknown as { batch: { pos: Float32Array } }).batch;
     const o = slot(r) * 48 * 2 * 3 + (internals.count - 1) * 6;
     const hi = Math.max(b.pos[o]!, b.pos[o + 3]!);
-    expect(hi).toBeGreaterThan(1.3);
-    expect(hi).toBeLessThan(1.55);
+    expect(hi).toBeGreaterThan(1.2);
+    expect(hi).toBeLessThan(1.3);
+    // Travel past SAMPLE_SPACING commits again, so the lag stays bounded.
+    r.push(pos(1.6), vel());
+    expect(internals.px[internals.head]).toBeCloseTo(1.6, 5);
     r.dispose();
   });
 
