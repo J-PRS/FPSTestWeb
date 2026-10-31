@@ -134,13 +134,11 @@ Port map lives in root AGENTS.md.
 
 ## Known seams (ranked by earlier analysis)
 
-- Remote viewers still interpolate 20 Hz positions — the shadow-sim +
-  `inputMove` infrastructure could relay edges to near-tier clients for
-  full-framerate remote replay (determinism already exists; records
-  become reconciliation checkpoints).
-- `fireAt` clamp margin is now jitter-scaled (4×jitter + 50ms floor).
-- `fireAt` clamp margin is now jitter-scaled (4×jitter + 50ms floor).
-- `fireAt` clamp margin (+100 ms flat) could tighten by measured jitter.
+- Remote edge replay is live (pilot): the server relays each consumed
+  `inputMove` edge as `WIRE_E_INPUT` (0x1A) on the volatile lane;
+  clients run a per-remote MoveSim that owns the body while edges are
+  fresh (<1.5s) and falls back to interp/DR otherwise. Records act as
+  reconciliation checkpoints (>3m drift snap-resyncs).
 - `fireAt` clamp margin is now jitter-scaled (4×jitter + 50ms floor).
 
 ## Don't regress these
