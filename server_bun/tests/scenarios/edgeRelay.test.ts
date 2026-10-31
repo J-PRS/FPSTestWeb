@@ -21,7 +21,9 @@ describe('remote input edge relay', () => {
     };
     room.moveSim.track('p1', { x: 0, y: 1, z: 0 }, 0);
     // Drive through the same host callback the wire uses.
-    const ok = room.handlerInfo().moveInput?.('p1', { forward: 1, right: 0, jump: 0, ski: 0 }, 0, 7, 20);
+    type HostInfo = { moveInput?: (pid: string, i: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number, ageMs?: number) => boolean };
+    const hi = (room as unknown as { handlerInfo(): HostInfo }).handlerInfo();
+    const ok = hi.moveInput?.('p1', { forward: 1, right: 0, jump: 0, ski: 0 }, 0, 7, 20);
     expect(ok).toBe(true);
     const relay = sent.filter((s) => s.data[1] === WIRE_E_INPUT);
     expect(relay.length).toBe(1);
@@ -33,6 +35,19 @@ describe('remote input edge relay', () => {
     expect(d?.ageMs).toBe(20);
   });
 
+  it('engagement tracks who shot whom and expires stale pairs', () => {
+    const room = mkRoom({}, 'dm');
+    room.players.addPlayer('p1', 'alpha', 'none', 'medium');
+    room.players.addPlayer('p2', 'bravo', 'none', 'medium');
+    room.noteEngagement('p1', 'p2');
+    room.noteEngagement('p1', 'p1'); // self-hit ignored
+    const m = room.engagementOf('p2');
+    expect(m?.has('p1')).toBe(true);
+    expect(room.engagementOf('p1')).toBeUndefined();
+    m!.set('p1', 1); // forge an expired stamp
+    expect(room.engagementOf('p2')).toBeUndefined(); // pruned on read
+  });
+
   it('a stale seq edge is gated out and never relays', () => {
     const room = mkRoom({}, 'dm');
     room.players.addPlayer('p1', 'alpha', 'none', 'medium');
@@ -41,7 +56,7 @@ describe('remote input edge relay', () => {
     const sent: Uint8Array[] = [];
     room.connections.broadcastBinaryReliable = (data: Uint8Array): void => { sent.push(data); };
     room.moveSim.track('p1', { x: 0, y: 1, z: 0 }, 0);
-    const mi = room.handlerInfo().moveInput!;
+    const mi = (room as unknown as { handlerInfo(): { moveInput?: (pid: string, i: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number, ageMs?: number) => boolean } }).handlerInfo().moveInput!;
     mi('p1', { forward: 1, right: 0, jump: 0, ski: 0 }, 0, 5);
     sent.length = 0;
     const ok = mi('p1', { forward: 0, right: 0, jump: 0, ski: 0 }, 0, 4); // older seq

@@ -168,6 +168,27 @@ export class Room {
    *  every ~15s so a soak log answers "did anything weird happen" at a
    *  glance instead of needing per-event archaeology. */
   readonly health = new Map<string, number>();
+  /** Mutual engagement for the fanout cap: victim -> attacker -> expiry
+   *  (wall ms). A player who's shooting you must never lose the record
+   *  lottery to a distant idle - the cap scorer boosts engaged records
+   *  past even the aim-cone. Bumped on every wireHit; lazily pruned. */
+  readonly engagedBy = new Map<string, Map<string, number>>();
+  private static readonly ENGAGE_MS = 4000;
+  noteEngagement(shooterId: string, victimId: string): void {
+    if (shooterId === victimId) {return;}
+    let m = this.engagedBy.get(victimId);
+    if (!m) {m = new Map(); this.engagedBy.set(victimId, m);}
+    m.set(shooterId, wallNow() + Room.ENGAGE_MS);
+  }
+  /** Attackers currently engaged with `victimId` (expired pruned on read). */
+  engagementOf(victimId: string): Map<string, number> | undefined {
+    const m = this.engagedBy.get(victimId);
+    if (!m) {return undefined;}
+    const now = wallNow();
+    for (const [k, t] of m) {if (t < now) {m.delete(k);}}
+    if (m.size === 0) {this.engagedBy.delete(victimId); return undefined;}
+    return m;
+  }
   /** Since-boot totals — the rollup window clears per flush, so /metrics
    *  reads this cumulative mirror instead of racing it. */
   readonly healthTotal = new Map<string, number>();
@@ -1143,6 +1164,7 @@ export class Room {
         if (targetWid === undefined) {return false;}
         const shooterWid = e.shooterId === 'environment' ? 0 : this.wireIds.get(e.shooterId);
         if (shooterWid === undefined) {return false;}
+        if (e.shooterId !== 'environment') {this.noteEngagement(e.shooterId, e.targetId);}
         this.connections.broadcastBinaryReliable(encodeHit({ ...e, targetWid, shooterWid }), 'volatile'); // combat events journal — same 3s staleness window the JSON lane carried
         return true;
       },

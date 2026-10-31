@@ -215,6 +215,9 @@ export class TickFanout {
    *  early-out cutoff must reach (cutoff x ~2.5, not x5). */
   private static readonly CONE_HALF = Math.PI / 4;
   private static readonly CONE_BOOST = 0.16;
+  /** Mutual-engagement multiplier — far stronger than the cone boost:
+   *  the record that's literally shooting you must win the cap. */
+  private static readonly ENGAGE_BOOST = 0.02;
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -545,6 +548,9 @@ this.metrics.recordsIdleReaped += 1;
       // instead of a per-recipient get.
       const pending = room.admitPending.size > 0 ? room.admitPending.get(recipientId) : undefined;
       if (pending) {this.drainAdmits(room, recipientId, pending);}
+      // Who's actively shooting this recipient — refreshed per fanout
+      // so a new attacker wins the cap the same tick it engages.
+      const engaged = room.engagementOf(recipientId);
       const others = this.scratchOthers;
       others.length = 0;
       const cands = this.candRecs;
@@ -617,7 +623,7 @@ this.metrics.recordsIdleReaped += 1;
               r.sparse = sparseV4Record(r.data, pr.encSparse);
               r.sparseTick = seq;
             }
-            cands.push(r.sparse!); candScore.push(TickFanout.FAR_SCORE);
+            cands.push(r.sparse!); candScore.push(engaged?.get(r.playerId!) !== undefined ? TickFanout.FAR_SCORE * TickFanout.ENGAGE_BOOST : TickFanout.FAR_SCORE);
           }
         }
       }
@@ -743,6 +749,10 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
               if (d > Math.PI) {d -= 2 * Math.PI;} else if (d < -Math.PI) {d += 2 * Math.PI;}
               if (d < TickFanout.CONE_HALF && d > -TickFanout.CONE_HALF) {score *= TickFanout.CONE_BOOST;}
             }
+            // Mutual engagement: a player shooting at me outranks every
+            // bystander — the shooter-first cap contract. Score drops to
+            // ~2% of distance so only another engaged record competes.
+            if (engaged?.get(r.playerId!) !== undefined) {score *= TickFanout.ENGAGE_BOOST;}
             cands.push(variant); candScore.push(score);
           }
         }
