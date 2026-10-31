@@ -417,6 +417,12 @@ export class RemoteInterp {
     this.simulatedVelocity.x += (dx / dist) * impulseMag * s;
     this.simulatedVelocity.y += (pull ? 0.3 : 0.5) * impulseMag;
     this.simulatedVelocity.z += (dz / dist) * impulseMag * s;
+    // Edge-replay owns the body while edges are fresh - the impulse
+    // must enter the SIM, not just the DR velocity, or a knocked remote
+    // keeps its pre-hit velocity until the next record snap (a visible
+    // rubberband). sim.impulse() also arms the launch-gate window so
+    // the arc doesn't re-ground mid-flight.
+    this.replay?.sim.impulse({ x: (dx / dist) * impulseMag * s, y: (pull ? 0.3 : 0.5) * impulseMag, z: (dz / dist) * impulseMag * s });
     // No buffer clear, no fabricated flight: a predicted arc is client-
     // side fiction about ANOTHER player - the overshoot resample is the
     // 40-70m model pop seen on mortar-heavy maps, and the cleared
