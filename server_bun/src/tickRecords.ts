@@ -622,14 +622,14 @@ this.metrics.recordsIdleReaped += 1;
       // once the cap pool holds 32, candidates whose cell's nearest
       // corner can't beat the cutoff -- even at the cone boost -- lose
       // by construction, so their eval is provably wasted work.
-      let cutoff = Infinity;
+      let scanCut = Infinity;
       for (let i = 0; i < list.length; i += 1) {
         if (cands.length >= TickFanout.MAX_RECORDS) {
           // First-pool cutoff is final forever: better candidates only
           // shrink the 32nd score, so this is a permanent upper bound --
           // anything skipped couldn't have won the cap either way.
-          if (cutoff === Infinity) {cutoff = kthSmallest(candScore, TickFanout.MAX_RECORDS);}
-          if (listMin[i]! * TickFanout.CONE_BOOST > cutoff) {break;}
+          if (scanCut === Infinity) {scanCut = kthSmallest(candScore, TickFanout.MAX_RECORDS);}
+          if (listMin[i]! * TickFanout.CONE_BOOST > scanCut) {break;}
         }
         const r = list[i]!;
         this.metrics.recordsScanned += 1;
