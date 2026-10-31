@@ -22,6 +22,7 @@ const _scratch = new THREE.Vector3();
  * flock attack token. Renders into the shared rakk swarm — owns no meshes.
  */
 export class Rakk implements Targetable, SwarmSlotOwner {
+  readonly species: string = 'rakk';
   id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;

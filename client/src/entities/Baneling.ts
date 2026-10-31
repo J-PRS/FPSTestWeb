@@ -51,6 +51,7 @@ export function banelingParts(): SwarmPart[] {
  * IS the attack.
  */
 export class Baneling implements Targetable, SwarmSlotOwner {
+  readonly species: string = 'baneling';
   readonly id: number;
   readonly variant = 0;
 

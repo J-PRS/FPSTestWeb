@@ -60,6 +60,7 @@ export function gnatParts(): SwarmPart[] {
  * Renders into the shared gnat swarm — owns no meshes.
  */
 export class Gnat implements Targetable, SwarmSlotOwner {
+  readonly species: string = 'gnat';
   // Cloud ownership: each spawn call makes one cloud; members share the
   // SAME object so the swarm drifts as a unit and the nip gate spaces out
   // darts across the whole flock, not per gnat.

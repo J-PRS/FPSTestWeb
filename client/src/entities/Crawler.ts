@@ -24,6 +24,7 @@ const _dir = new THREE.Vector3();
  * Renders into the shared crawler swarm — owns no meshes.
  */
 export class Crawler implements Targetable, SwarmSlotOwner {
+  readonly species: string = 'crawler';
   id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;

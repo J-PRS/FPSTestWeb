@@ -25,6 +25,7 @@ const _dq = new THREE.Quaternion();
  * Renders into the shared roller swarm — owns no meshes.
  */
 export class Roller implements Targetable, SwarmSlotOwner {
+  readonly species: string = 'roller';
   id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
 

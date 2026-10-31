@@ -57,6 +57,7 @@ export function snakeParts(): SwarmPart[] {
  * counterplay. Renders into the shared snake swarm — owns no meshes.
  */
 export class Snake implements Targetable, SwarmSlotOwner {
+  readonly species: string = 'snake';
   id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;

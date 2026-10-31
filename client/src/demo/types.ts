@@ -1,6 +1,7 @@
 // creature ids. Ordered to match shared/deployItems.ts — keep stable.
 
 import type { ResultToken } from '../../../shared/resultToken.ts';
+import { SPECIES } from '../../../shared/species.ts';
 
 export const TARGETTYPE_KILL = 224;
 
@@ -119,9 +120,10 @@ export const TARGETTYPE_CREATURE_BASE = 64;
 
 export const CREATURE_ID_FLAG = 0x80_00;
 
-// Ordered to match shared/species.ts — keep stable, ids land in the file.
-
-export const DEMO_SPECIES = ['crawler', 'scarab', 'rakk', 'gnat', 'roller', 'snake', 'baneling', 'totem'] as const;
+// Derived from shared/species.ts key order — the wire-stable species
+// index. Adding a species row updates both ends; reordering SPECIES
+// changes ids in existing demo files (do not reorder shipped rows).
+export const DEMO_SPECIES = Object.keys(SPECIES) as readonly string[];
 
 export function demoSpeciesIndex(species: string): number {
 

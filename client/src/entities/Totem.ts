@@ -31,6 +31,7 @@ const _v = new THREE.Vector3();
  * it conforms to the local heightmap, which instancing can't express.
  */
 export class Totem implements Targetable, SwarmSlotOwner {
+  readonly species: string = 'totem';
   readonly id: number;
   readonly variant = 0;
 

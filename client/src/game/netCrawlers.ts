@@ -34,14 +34,7 @@ type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake | Baneling | Tot
 
 // Fallback species name when the wire omits one (older servers).
 function speciesOf(c: NetBeing): string {
-  if (c instanceof Rakk) {return 'rakk';}
-  if (c instanceof Gnat) {return 'gnat';}
-  if (c instanceof Roller) {return 'roller';}
-  if (c instanceof Snake) {return 'snake';}
-  if (c instanceof Baneling) {return 'baneling';}
-  if (c instanceof Scarab) {return 'scarab';}
-  if (c instanceof Totem) {return 'totem';}
-  return 'crawler';
+  return c.species ?? 'crawler';
 }
 
 // ---- Server-owned crawlers (melee PvE) --------------------------------

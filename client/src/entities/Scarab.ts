@@ -75,6 +75,7 @@ export function scarabParts(): SwarmPart[] {
  * only as a crowd. Renders into the shared scarab swarm — owns no meshes.
  */
 export class Scarab implements Targetable, SwarmSlotOwner {
+  readonly species: string = 'scarab';
   id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;
