@@ -147,6 +147,28 @@ export async function listClips(): Promise<VaultClip[]> {
   } catch { return []; }
 }
 
+/** Read a clip back for in-browser playback — dir handle first (its
+ *  'readwrite' grant covers reads), vault as fallback. Returns null
+ *  when the blob isn't reachable (dir never armed + clip only on disk). */
+export async function getClipBlob(name: string): Promise<Blob | null> {
+  if (dir) {
+    try {
+      const fh = await dir.getFileHandle(name);
+      const f = await (fh as unknown as { getFile(): Promise<File> }).getFile();
+      if (f) {return f;}
+    } catch { /* not on disk / permission lost — try the vault */ }
+  }
+  try {
+    const db = await idb();
+    const row = await new Promise<{ blob: Blob } | undefined>((res): void => {
+      const q = db.transaction('v').objectStore('v').get(name);
+      q.onsuccess = (): void => res(q.result as { blob: Blob } | undefined);
+      q.addEventListener('error', (): void => res(undefined));
+    });
+    return row?.blob ?? null;
+  } catch { return null; }
+}
+
 /** Deliberate-gesture export — the one place an anchor download is fine. */
 export async function exportClip(name: string): Promise<boolean> {
   try {
