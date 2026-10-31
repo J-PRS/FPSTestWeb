@@ -7,6 +7,7 @@ import { WeaponType, type WeaponStats } from './weaponTable.ts';
  *  the visual edge (covers the shock ring), and the two can never drift. */
 export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.BoltLauncher]: {
+    aimAxis: 'arcJudge',
     fireInterval: 1,
     gib: true, airtimeScale: true, aoeBonus: true,
     directDamage: 50,
@@ -23,6 +24,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12, // ~1.4km - effectively "flies until it lands"; the fuse only exists so a bugged remote replica can't streak forever
   },
   [WeaponType.Disc]: {
+    aimAxis: 'arcLead',
     fireInterval: 1,
     airtimeScale: true, aoeBonus: true,
     directDamage: 50,
@@ -39,6 +41,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12, // ~960m - long prayers stay live; fuse only bounds desynced replicas
   },
   [WeaponType.Implodisc]: {
+    aimAxis: 'arcLead',
     fireInterval: 1,
     airtimeScale: true,
     // Belt disc (C): the implosion - pulls targets toward the blast.
@@ -75,6 +78,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     beltThrow: true,
   },
   [WeaponType.Grenade]: {
+    aimAxis: 'arcJudge',
     fireInterval: 1,
     directDamage: 50,
     aoeDamage: 20,
@@ -97,6 +101,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.75,
   },
   [WeaponType.Chaingun]: {
+    aimAxis: 'track',
     fireInterval: 0.09,
     directDamage: 8, // ~89 dps at 11/s - below plasma (125) but hitscan-easy; 13 slugs to kill a player
 
@@ -113,6 +118,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.5, // ~375m of reach - every other fast slug carries a fuse; without one remote replicas streak to the 10s backstop
   },
   [WeaponType.Mortar]: {
+    aimAxis: 'arcJudge',
     fireInterval: 2,
     gib: true, tier: 'heavy',
     directDamage: 120,
@@ -138,6 +144,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.7,
   },
   [WeaponType.GrenadeLauncher]: {
+    aimAxis: 'arcLead',
     fireInterval: 0.5,
     gib: true,
     directDamage: 50,
@@ -160,6 +167,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.7,     // = client GL_BOUNCE_FRICTION
   },
   [WeaponType.Flak]: {
+    aimAxis: 'arcLead',
     fireInterval: 1.2,
     tier: 'medium',
     directDamage: 9,
@@ -183,6 +191,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 3,          // shards die on the Nth terrain hit
   },
   [WeaponType.PlasmaCannon]: {
+    aimAxis: 'track',
     fireInterval: 0.28,
     gib: true, tier: 'heavy',
     directDamage: 45,
@@ -200,6 +209,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 5, // ~450m flat - same fuse class as Disc; remote replicas otherwise streak forever
   },
   [WeaponType.PlasmaGun]: {
+    aimAxis: 'track',
     fireInterval: 0.1,
     tier: 'medium',
 
@@ -220,9 +230,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.5, // ~240m of reach
   },
   [WeaponType.Railgun]: {
+    aimAxis: 'snap',
     fireInterval: 1.5,
     tier: 'light',
-    // Quake railgun: 60dmg slug at 450 m/s ≈ hitscan past ~200m - a
+    // Quake railgun: 60dmg slug at 400 m/s ≈ hitscan past ~200m - a
     // three-shot on mediums, not two (was dominant at range: 7/12 FFA
     // wins). Small AOE so near-misses still pop.
     directDamage: 60,
@@ -230,7 +241,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 6,
     knockbackForce: 35,
     forceMode: 'push',
-    speed: 450,
+    speed: 400,
     gravity: false,
     bodyRadius: 0.18,
     hitMin: 0,
@@ -255,6 +266,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0,
   },
   [WeaponType.Lightning]: {
+    aimAxis: 'track',
     fireInterval: 0.05,
     tier: 'light',
     // Hitscan beam - not a projectile; ballistic fields inert. Tick damage is
@@ -290,6 +302,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Shotgun]: {
+    aimAxis: 'track',
     fireInterval: 0.7,
     burst: 10, // one pull registers all pellets at once
     pelletSpread: 0.065,
@@ -312,6 +325,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Cannon]: {
+    aimAxis: 'arcLead',
     fireInterval: 1.1,
     gib: true, tier: 'medium',
 
@@ -394,6 +408,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 0, // bounce/lodge shelved - contact pop for now, same as the cannon
   },
   [WeaponType.MissileLauncher]: {
+    aimAxis: 'arcLead',
     fireInterval: 2.5,
     gib: true, tier: 'heavy',
     // RPG-style missile: flat trajectory, slower than the Bolt Launcher
@@ -420,9 +435,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 6, // ~290m of flat reach
   },
   [WeaponType.RocketLauncher]: {
+    aimAxis: 'arcLead',
     fireInterval: 1,
     gib: true, airtimeScale: true, aoeBonus: true,
-    sfxKey: WeaponType.BoltLauncher, vmKey: WeaponType.BoltLauncher,
+    sfxKey: WeaponType.BoltLauncher, vmKey: WeaponType.RocketLauncher,
     // The universal rocket: Bolt Launcher stats minus the arc - flat
     // 120 m/s bolt anyone can carry (every class, no tier lock).
     directDamage: 50,
@@ -439,6 +455,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12,
   },
   [WeaponType.Pistol]: {
+    aimAxis: 'snap',
     fireInterval: 0.22,
 
     // Hold-out sidearm: fast flat slug, modest damage - the panic button
@@ -458,6 +475,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Revolver]: {
+    aimAxis: 'snap',
     fireInterval: 0.6,
 
     // Hand cannon: slow cadence, heavy single slug.
@@ -476,6 +494,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Blaster]: {
+    aimAxis: 'snap',
 
     // T1 blaster - jet-energy sidearm: 10 energy per pull, 30 flat on
     // contact. Heavier than the pistol slug per hit, but the magazine IS
@@ -497,6 +516,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Sticky]: {
+    aimAxis: 'arcJudge',
     fireInterval: 0.6,
     gib: true,
     // Sticky launcher (T2): glue bomb - sticks where it lands, pops on a
@@ -541,6 +561,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     rides: true,
   },
   [WeaponType.ClusterBomb]: {
+    aimAxis: 'arcJudge',
     fireInterval: 1,
     // Belt cluster: a fuse bomb whose pop is only the carrier - the real
     // damage is the bomblet scatter it releases (each claims with
@@ -575,6 +596,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.1,
   },
   [WeaponType.Javelin]: {
+    aimAxis: 'snap',
     fireInterval: 1,
     airtimeScale: true,
     // Thrown dart: near-flat long throw, heavy single-target pierce.
@@ -593,6 +615,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12, // ~1.4km - spear prayers stay live; fuse only bounds desynced replicas
   },
   [WeaponType.ImpactGrenade]: {
+    aimAxis: 'arcLead',
     fireInterval: 1,
     // Contact-fused blast nade: flies flat and far, pops on ANY touch,
     // medium-high damage in a tight envelope - a real kill tool whose
@@ -635,6 +658,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     fireInterval: 1,
   },
   [WeaponType.RemoteRailgun]: {
+    aimAxis: 'snap',
     fireInterval: 1,
     // Belt capacitor slug: 0.4s of readable lob, then a railgun-class beam
     // down its velocity line and a pop at whatever the beam touches. The

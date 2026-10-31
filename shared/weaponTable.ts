@@ -152,6 +152,9 @@ export interface WeaponStats {
    *  id, never a copied row in the presentation maps. */
   sfxKey?: WeaponType;
   vmKey?: WeaponType;
+  /** Bot aim axis this weapon exercises (botSkill.weaponAxis reads it).
+   *  Unset = thrown/no-skill type - shoots at 1x. */
+  aimAxis?: 'snap' | 'track' | 'arcLead' | 'arcJudge';
   /** First terrain bounce clamps the remaining fuse to this many seconds
    *  - a skip becomes a short cook-off instead of free ricochet time. */
   fuseAfterBounce?: number;

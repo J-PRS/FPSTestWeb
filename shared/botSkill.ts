@@ -10,7 +10,7 @@
  *  re-sequence every behavior roll downstream. Same spawn → same
  *  matrix, which also keeps a bot's personality consistent across
  *  respawns like a real player's. */
-import { WeaponType } from './weapons.ts';
+import { WEAPONS } from './weaponRows.ts';
 import type { BotVec } from './botVec.ts';
 
 const clamp = (v: number): number => Math.min(1.5, Math.max(0.45, v));
@@ -126,48 +126,10 @@ export function rollSkill(spawn: BotVec, spec: BotSkillSpec = 'medium'): BotSkil
   };
 }
 
-/** Weapon → the axis its shots actually exercise. Thrown/no-skill
- *  types return null and always shoot at 1×. */
+/** Weapon → the axis its shots actually exercise. Reads the `aimAxis`
+ *  marker on the stat row; thrown/no-skill types return null = 1x. */
 export function weaponAxis(w: number): AimAxis | null {
-  switch (w as WeaponType) {
-    case WeaponType.Railgun:
-    case WeaponType.RemoteRailgun:
-    case WeaponType.Pistol:
-    case WeaponType.Revolver:
-    case WeaponType.Blaster:
-    case WeaponType.Javelin: {
-      return 'snap';
-    }
-    case WeaponType.Chaingun:
-    case WeaponType.Lightning:
-    case WeaponType.Shotgun:
-    case WeaponType.PlasmaGun:
-    case WeaponType.PlasmaCannon:
-    case WeaponType.Sprinkler: {
-      return 'track';
-    }
-    case WeaponType.Disc:
-    case WeaponType.Implodisc:
-    case WeaponType.RocketLauncher:
-    case WeaponType.Flak:
-    case WeaponType.Cannon:
-    case WeaponType.Bombard:
-    case WeaponType.GrenadeLauncher:
-    case WeaponType.ImpactGrenade:
-    case WeaponType.MRVLauncher: {
-      return 'arcLead';
-    }
-    case WeaponType.BoltLauncher:
-    case WeaponType.Mortar:
-    case WeaponType.Grenade:
-    case WeaponType.Sticky:
-    case WeaponType.ClusterBomb: {
-      return 'arcJudge';
-    }
-    default: {
-      return null;
-    }
-  }
+  return WEAPONS[w]?.aimAxis ?? null;
 }
 
 /** Effective multiplier for one shot: blends the axis' moving/still

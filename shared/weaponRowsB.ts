@@ -5,6 +5,7 @@
 import { WeaponType, type WeaponStats } from './weaponTable.ts';
 export const WEAPONS_B: Record<number, WeaponStats> = {
   [WeaponType.Sprinkler]: {
+    aimAxis: 'track',
     fireInterval: 0.1,
 
     // Sprinkler: plasma-gun cadence (~10/s ≈ 140dps on paper) but every bolt
@@ -150,6 +151,7 @@ export const WEAPONS_B: Record<number, WeaponStats> = {
     stick: true,   // hand-planted: rests where it lands until the fuse
   },
   [WeaponType.MRVLauncher]: {
+    aimAxis: 'arcLead',
     fireInterval: 2.4,
     tier: 'heavy',
 
@@ -195,6 +197,7 @@ export const WEAPONS_B: Record<number, WeaponStats> = {
     maxLifetime: 10,    // safety TTL only - contact pops them; an air fuse wastes the rain
   },
   [WeaponType.Bombard]: {
+    aimAxis: 'arcLead',
     fireInterval: 1.6,
     gib: true, tier: 'heavy',
     // The cannon's bigger, meaner brother: an even fatter iron ball that
