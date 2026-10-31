@@ -24,6 +24,7 @@ import { DeployShield } from '../entities/DeployShield.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployTether } from '../entities/DeployTether.js';
 import { DeployWatersphere } from '../entities/DeployWatersphere.js';
+import type { Terrain } from '../world/terrain.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
 import { Explosion } from '../effects/explosion.js';
 import { DeployRockets } from './deployRockets.js';
@@ -80,23 +81,38 @@ const _repTo = new THREE.Vector3(); // repair-beam ray scratch
 interface Pod {
   kind: DeployKind;
   // The item itself IS the thrown body — it unfolds in the air and lands
-  // already full-size (same read as a Turretter dropping in).
-  turret?: DeployTurret;
-  mortar?: DeployMortar;
-  cgturret?: DeployCg;
+  // already full-size (same read as a Turretter dropping in). Seated
+  // kinds share ONE field; mine/nugget keep their own (bespoke shape).
+  item?: PodBody;
   mine?: Mine;
-  station?: DeployStation;
-  drone?: DeployDrone;
-  shield?: DeployShield;
   nugget?: THREE.Mesh; // pure visual — lands as a pickup, not an item
-  beacon?: DeployBeacon;
-  tether?: DeployTether;
-  watersphere?: DeployWatersphere;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   ttl: number;
   landed: boolean;
 }
+
+type PodBody = DeployTurret | DeployMortar | DeployCg | DeployStation
+  | DeployDrone | DeployShield | DeployBeacon | DeployTether | DeployWatersphere;
+
+/** Seated-kinds registry — one entry per bolted-down kit: ctor + the
+ *  adopter slot it lands in. A new kind writes ONE row here instead of
+ *  growing a parallel if-chain in every pod path. Mine/nugget aren't
+ *  here: their pod lifecycle is bespoke, not the shared seat ceremony. */
+const SEATED: Partial<Record<DeployKind, {
+  make: (scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) => PodBody;
+  adopt: (a: DeployAdopter, b: PodBody, owner?: DeployOwner) => void;
+}>> = {
+  turret:      { make: (s, t, p) => new DeployTurret(s, t, p),      adopt: (a, b, o) => a.adoptTurret(b as DeployTurret, o) },
+  mortar:      { make: (s, t, p) => new DeployMortar(s, t, p),      adopt: (a, b, o) => a.adoptMortar(b as DeployMortar, o) },
+  cgturret:    { make: (s, t, p) => new DeployCg(s, t, p),          adopt: (a, b, o) => a.adoptCg(b as DeployCg, o) },
+  station:     { make: (s, t, p) => new DeployStation(s, t, p),     adopt: (a, b, o) => a.adoptStation(b as DeployStation, o) },
+  drone:       { make: (s, t, p) => new DeployDrone(s, t, p),       adopt: (a, b, o) => a.adoptDrone(b as DeployDrone, o) },
+  shield:      { make: (s, t, p) => new DeployShield(s, t, p),      adopt: (a, b, o) => a.adoptShield(b as DeployShield, o) },
+  beacon:      { make: (s, t, p) => new DeployBeacon(s, t, p),      adopt: (a, b, o) => a.adoptBeacon(b as DeployBeacon, o) },
+  tether:      { make: (s, t, p) => new DeployTether(s, t, p),      adopt: (a, b, o) => a.adoptTether(b as DeployTether, o) },
+  watersphere: { make: (s, t, p) => new DeployWatersphere(s, t, p), adopt: (a, b, o) => a.adoptWatersphere(b as DeployWatersphere, o) },
+};
 
 export interface Item {
   kind: DeployKind;
@@ -272,13 +288,7 @@ export class Deployables {
     }
     // The item is constructed at release — it flies folded and finishes
     // unfolding mid-air, so touchdown lands a full-size sentry/dome.
-    if (kind === 'turret') {pod.turret = new DeployTurret(this.deps.scene, terrain, pos);}
-    else if (kind === 'mortar') {pod.mortar = new DeployMortar(this.deps.scene, terrain, pos);}
-    else if (kind === 'cgturret') {pod.cgturret = new DeployCg(this.deps.scene, terrain, pos);}
-    else if (kind === 'station') {pod.station = new DeployStation(this.deps.scene, terrain, pos);}
-    else if (kind === 'drone') {pod.drone = new DeployDrone(this.deps.scene, terrain, pos);}
-    else if (kind === 'shield') {pod.shield = new DeployShield(this.deps.scene, terrain, pos);}
-    else if (kind === 'nugget') {
+    if (kind === 'nugget') {
       pod.nugget = new THREE.Mesh(NUG_POD_GEO, NUG_POD_MAT);
       pod.nugget.position.copy(pos);
       pod.nugget.layers.enable(BLOOM_LAYER);
@@ -291,12 +301,10 @@ export class Deployables {
       pod.nugget.add(halo);
       this.deps.scene.add(pod.nugget);
     }
-    else if (kind === 'beacon') {pod.beacon = new DeployBeacon(this.deps.scene, terrain, pos);}
-    else if (kind === 'tether') {pod.tether = new DeployTether(this.deps.scene, terrain, pos);}
-    else if (kind === 'watersphere') {pod.watersphere = new DeployWatersphere(this.deps.scene, terrain, pos);}
     // Server-tracked life: the planted mine lives its wire ttl, not the
     // overlord field's 45s — the server still explodes it either way.
-    else {pod.mine = new Mine(this.deps.scene, terrain, pos, false, DEPLOY_ITEMS.mine.ttlS);}
+    else if (kind === 'mine') {pod.mine = new Mine(this.deps.scene, terrain, pos, false, DEPLOY_ITEMS.mine.ttlS);}
+    else {pod.item = SEATED[kind]!.make(this.deps.scene, terrain, pos);}
     this.pods.push(pod);
     sfx.dash();
   }
@@ -310,7 +318,7 @@ export class Deployables {
 
     // The unfolding kits share one tumble — assemble mid-air, spin, track
     // the pod's fall. Mine/nugget pods differ below.
-    const flying = pod.turret ?? pod.mortar ?? pod.cgturret ?? pod.station ?? pod.drone ?? pod.shield ?? pod.beacon ?? pod.tether ?? pod.watersphere;
+    const flying = pod.item;
     if (flying) {
       flying.tickUnfold(dt); // assembly completes in the air
       flying.group.rotation.y += dt * 4; // slow tumble reads mass
@@ -323,11 +331,6 @@ export class Deployables {
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.update(dt, _FAR); // airborne — nobody to trigger on
-    } else if (pod.beacon) {
-      pod.beacon.tickUnfold(dt);
-      pod.beacon.group.rotation.y += dt * 4;
-      pod.beacon.pos.copy(pod.pos);
-      pod.beacon.group.position.copy(pod.pos);
     }
 
     // Collide with the drawn surface, not the smooth field — on convex
@@ -362,35 +365,22 @@ export class Deployables {
     // Every bolted-down kit shares the seat: snap to the pod spot, tilt to
     // the face normal, adopt into items. Drone skips the tilt — it lifts
     // off the touchdown spot on its own lift.
-    const seated = pod.turret ?? pod.mortar ?? pod.cgturret ?? pod.station ?? pod.drone ?? pod.shield ?? pod.beacon ?? pod.tether ?? pod.watersphere;
+    const seated = pod.item;
     if (seated) {
       seated.pos.copy(pod.pos);
       seated.group.position.copy(pod.pos);
-      if (!pod.drone && !pod.watersphere) {seated.group.quaternion.setFromUnitVectors(_UP, n);}
+      // Drone/watersphere skip the tilt — they orient on their own lift.
+      if (pod.kind !== 'drone' && pod.kind !== 'watersphere') {seated.group.quaternion.setFromUnitVectors(_UP, n);}
       seated.group.scale.setScalar(1); // snap any unfolding tail to done
       seated.unfoldDone();
-      if (pod.turret) { this.adopter.adoptTurret(pod.turret, undefined); pod.turret = undefined; }
-      else if (pod.mortar) { this.adopter.adoptMortar(pod.mortar, undefined); pod.mortar = undefined; }
-      else if (pod.cgturret) { this.adopter.adoptCg(pod.cgturret, undefined); pod.cgturret = undefined; }
-      else if (pod.station) { this.adopter.adoptStation(pod.station, undefined); pod.station = undefined; }
-      else if (pod.drone) { this.adopter.adoptDrone(pod.drone, undefined); pod.drone = undefined; }
-      else if (pod.shield) { this.adopter.adoptShield(pod.shield, undefined); pod.shield = undefined; }
-      else if (pod.beacon) { this.adopter.adoptBeacon(pod.beacon, undefined); pod.beacon = undefined; }
-      else if (pod.tether) { this.adopter.adoptTether(pod.tether, undefined); pod.tether = undefined; }
-      else if (pod.watersphere) { this.adopter.adoptWatersphere(pod.watersphere, undefined); pod.watersphere = undefined; }
+      SEATED[pod.kind]!.adopt(this.adopter, seated, undefined);
+      pod.item = undefined;
       // ownership moved — fizzle cleanup must not dispose it
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.seatOn(terrain);
       this.adopter.adoptMine(pod.mine, undefined);
       pod.mine = undefined;
-    } else if (pod.beacon) {
-      pod.beacon.pos.copy(pod.pos);
-      pod.beacon.group.position.copy(pod.pos);
-      pod.beacon.group.quaternion.setFromUnitVectors(_UP, n);
-      pod.beacon.unfoldDone();
-      this.adopter.adoptBeacon(pod.beacon, undefined);
-      pod.beacon = undefined;
     } else if (pod.nugget) {
       // Nothing seats — the pod IS the payload. Connected, the deploy
       // claim below mints the server pickup whose spawn edge paints the
@@ -419,44 +409,13 @@ export class Deployables {
     if (live.length >= def.max) {live[0]!.dead = true;}
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
-    if (kind === 'turret') {
-      const t = new DeployTurret(this.deps.scene, terrain, at);
-      t.unfoldDone();
-      this.adopter.adoptTurret(t, owner);
-    } else if (kind === 'mortar') {
-      const m = new DeployMortar(this.deps.scene, terrain, at);
-      m.unfoldDone();
-      this.adopter.adoptMortar(m, owner);
-    } else if (kind === 'cgturret') {
-      const c = new DeployCg(this.deps.scene, terrain, at);
-      c.unfoldDone();
-      this.adopter.adoptCg(c, owner);
-    } else if (kind === 'station') {
-      const s = new DeployStation(this.deps.scene, terrain, at);
-      s.unfoldDone();
-      this.adopter.adoptStation(s, owner);
-    } else if (kind === 'drone') {
-      const d = new DeployDrone(this.deps.scene, terrain, at);
-      d.unfoldDone();
-      this.adopter.adoptDrone(d, owner);
-    } else if (kind === 'shield') {
-      const s = new DeployShield(this.deps.scene, terrain, at);
-      s.unfoldDone();
-      this.adopter.adoptShield(s, owner);
+    const spec = SEATED[kind];
+    if (spec) {
+      const item = spec.make(this.deps.scene, terrain, at);
+      item.unfoldDone();
+      spec.adopt(this.adopter, item, owner);
     } else if (kind === 'nugget') {
       this.deps.dropNugget?.(at);
-    } else if (kind === 'beacon') {
-      const b = new DeployBeacon(this.deps.scene, terrain, at);
-      b.unfoldDone();
-      this.adopter.adoptBeacon(b, owner);
-    } else if (kind === 'tether') {
-      const t = new DeployTether(this.deps.scene, terrain, at);
-      t.unfoldDone();
-      this.adopter.adoptTether(t, owner);
-    } else if (kind === 'watersphere') {
-      const w = new DeployWatersphere(this.deps.scene, terrain, at);
-      w.unfoldDone();
-      this.adopter.adoptWatersphere(w, owner);
     } else {
       const m = new Mine(this.deps.scene, terrain, at, false, DEPLOY_ITEMS.mine.ttlS);
       m.seatOn(terrain);
@@ -866,15 +825,7 @@ export class Deployables {
       const pod = this.pods[i]!;
       this.updatePod(pod, dt);
       if (pod.ttl <= 0) {
-        pod.turret?.dispose(this.deps.scene);
-        pod.mortar?.dispose(this.deps.scene);
-        pod.cgturret?.dispose(this.deps.scene);
-        pod.station?.dispose(this.deps.scene);
-        pod.drone?.dispose(this.deps.scene);
-        pod.shield?.dispose(this.deps.scene);
-        pod.beacon?.dispose(this.deps.scene);
-        pod.tether?.dispose(this.deps.scene);
-        pod.watersphere?.dispose(this.deps.scene);
+        pod.item?.dispose(this.deps.scene);
         pod.mine?.dispose();
         if (pod.nugget) {this.disposeNuggetPod(pod.nugget);}
         this.pods.splice(i, 1);
