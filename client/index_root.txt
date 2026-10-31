@@ -6,6 +6,7 @@ assets
 dist-manifest.json
 eslint.config.js
 gunlab.html
+gunstats.html
 index.html
 index_root.txt
 knip.json
