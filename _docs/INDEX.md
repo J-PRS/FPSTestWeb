@@ -32,6 +32,7 @@ The project produces a lot of documentation. This file is the map.
 || `_docs/2026-10-29_JOIN_LATENCY_AUTOPSY.md` | **Join latency autopsy** — /metrics.joinMs phases + introDrain prove the herd's multi-second first-gameState tail is WAN delivery, not compute (work ~0.4ms, ELD healthy while drain hit 245s); herd single-link artifact boundary documented |
 | `_docs/2026-10-29_WEAPON_ARCHITECTURE.md` | **Weapon system state** — layer map (wire law → derived sets → authority → prediction → presentation), both ammo economies, the hardcoded-wid bug the audit caught, ranked remaining seams, add-a-weapon checklist |
 | `_docs/2026-10-30_WEAPON_REGISTRATION_PLAN.md` | **Weapon registration consolidation plan** — the 14-file blast radius of a new weapon, the marker-field/derived-set fix (beltThrow precedent, generalized), config factories, sfxKey/vm families, migration order, risks |
+| `_docs/2026-10-30_BOT_MULTITASK_PLAN.md` | **Bot multitask plan** — hunt-target audit (one `st.hunt` drives aim+feet) and the eyes/feet/hands lane split: objective beacon, corridor loot, attention budget, build order |
 | `_docs/2026-10-30_SCATTER_AUDIT.md` | **Whole-repo scatter audit** — every per-kind registration domain ranked by files-per-new-member: species ~10 and deployables ~11 are the worst; bot aim tables silently degrade; perks/maps/keybinds are the model domains |
 | `_docs/2026-10-29_EXPLOSION_VFX_BIBLE.md` | **Blast VFX reference** — variant architecture, per-weapon recipes, AOE-accuracy rules, layer-timing beats, shellburst (black-powder) recipe, tuning knobs, sources |
 | `_docs/2026-10-29_RENDER_ORDER.md` | **Render-order reference** — three.js opaque/transparent pass mechanics, the tier table (-100 sky → 9999 debug), the depthWrite/depthTest rules, terrain's transparent-pseudo-opaque special case, sim-vs-render gap trap |
@@ -39,6 +40,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-29_MOBILE_PERF_BUDGET.md` | **Mobile perf budget** — K70 measured (~16fps, 502 calls, 429k tris) vs published targets (Arm/PlayCanvas/DevForge): 3–5× over on draw calls, ~1.5× on tris; ranked next steps |
 | `_docs/2026-10-26_TTS_DTS_REFERENCE.md` | **TTS/DTS reference** - cold-boot time-to-shoot and data-to-shoot profile, phase breakdown, prediction table, improvement levers |
 | `_docs/2026-10-30_NATIVE_ACCEL.md` | **Native acceleration analysis** — wasm/bun:ffi candidates ranked (VFX pools, sweeps, wire encode, moveSim batch); boundary-cost + shared-memory rules; why worker offload and threads beat the port |
+| `_docs/2026-10-31_CAPACITY_KNEE.md` | **Capacity knee ~350-370 seats/process** — 368-seat profload: fanout is O(N²) in CPU (dSq per seat×record), intro seats bypass the record cap; spatial-index fix order for thousands-per-box; FPS_MAX_PLAYERS/GLOBAL gotcha for fill runs |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
 | `_docs/2026-10-21_NETCODE_GAP.md` | Netcode gap analysis vs production shooters |

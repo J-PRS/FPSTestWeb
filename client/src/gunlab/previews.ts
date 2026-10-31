@@ -6,6 +6,7 @@
 // the camera). The returned Group is a proxy — the body draws through
 // the swarm's InstancedMeshes in the lab scene; an invisible bounds box
 // gives inspect's Box3 fit something to frame.
+import { ballParts } from '../entities/balls.js';
 import * as THREE from 'three';
 import { initSwarms, type LabEntity } from '../entities/swarms.js';
 import { AmbientBirds } from '../effects/birds.js';
@@ -135,6 +136,267 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
     .filter(([, s]): ((scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) => LabEntity) | undefined => s.spawn)
     .map(([name, s]): [string, () => THREE.Group] =>
       [name, (): THREE.Group<THREE.Object3DEventMap> => creatureProxy((): LabEntity => s.spawn!(LAB_SCENE, LAB_TERRAIN, new THREE.Vector3()))]),
+  // The live ball: the same swarm parts + instance-colour path the game
+  // writes (writeBallInstance), so a lab view shows what a player sees.
+  ['ball', (): THREE.Group<THREE.Object3DEventMap> => {
+    const g = new THREE.Group();
+    const hue = new THREE.Color(1, 0.25, 0.25);
+    ballParts().forEach((p, i): void => {
+      const m = new THREE.InstancedMesh(p.geometry, p.material, 1);
+      m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(3).fill(1), 3);
+      const s = i === 1 ? 1.07 : 1;
+      m.setMatrixAt(0, new THREE.Matrix4().makeScale(s, s, s));
+      m.setColorAt(0, i === 0 ? hue : new THREE.Color(1, 1, 1));
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) {m.instanceColor.needsUpdate = true;}
+      g.add(m);
+    });
+    return g;
+  }],
+  // Material lineup on the real ball geometry: default toon+hull first,
+  // then alternates. Transmission needs scene.environment (baked in
+  // gunlab boot). The reversed-hull DOES fail on transparent fills —
+  // its BackSide shell shades over the core; 'glass+hull' proves it.
+  ['ballmats', (): THREE.Group<THREE.Object3DEventMap> => {
+    const g = new THREE.Group();
+    const geo = ballParts()[0]!.geometry;
+    // The lab mounts the game's AtmosphericSky + bakes it into
+    // scene.environment — a transmissive ball shows the sky through
+    // and around it, no fake studio needed.
+    const mkBall = (mat: THREE.Material, hull: boolean, x: number, label: string): void => {
+      const b = new THREE.Mesh(geo, mat);
+      b.position.set(x, 0, 0);
+      b.userData.label = label;
+      g.add(b);
+      if (hull) {
+        const h = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF, side: THREE.BackSide }));
+        h.position.set(x, 0, 0);
+        h.scale.setScalar(1.12);
+        g.add(h);
+      }
+    };
+    const toon = ballParts()[0]!.material; // the real ramp material
+    const hue = new THREE.MeshToonMaterial({ color: 0xFF4040, gradientMap: (toon as THREE.MeshToonMaterial).gradientMap });
+    mkBall(hue, true, -7, 'default');
+    const glass = (): THREE.MeshPhysicalMaterial => new THREE.MeshPhysicalMaterial({
+      color: 0xFF_FF_FF, transmission: 1, roughness: 0.08, metalness: 0,
+      ior: 1.5, thickness: 1, envMapIntensity: 1,
+    });
+    mkBall(glass(), false, -4.7, 'glass');
+    mkBall(glass(), true, -2.4, 'glass+hull');
+    mkBall(new THREE.MeshPhysicalMaterial({
+      color: 0xFF_E0_B0, transmission: 1, roughness: 0.15, metalness: 0,
+      ior: 1.55, thickness: 1, envMapIntensity: 1,
+      attenuationColor: new THREE.Color(0xFF_95_00), attenuationDistance: 0.6,
+    }), false, 0, 'amber');
+    mkBall(new THREE.MeshPhysicalMaterial({
+      color: 0xD0_E8_FF, transmission: 1, roughness: 0.05, metalness: 0,
+      ior: 1.33, thickness: 0.8, envMapIntensity: 1,
+      attenuationColor: new THREE.Color(0x33_88_CC), attenuationDistance: 1.2,
+    }), false, 2.3, 'water');
+    mkBall(new THREE.MeshPhysicalMaterial({
+      color: 0xD8_FF_E0, transmission: 1, roughness: 0.2, metalness: 0,
+      ior: 1.6, thickness: 1.2, envMapIntensity: 1,
+      attenuationColor: new THREE.Color(0x11_AA_44), attenuationDistance: 0.5,
+    }), false, 4.6, 'jade');
+    mkBall(new THREE.MeshStandardMaterial({
+      color: 0x99_CC_FF, transparent: true, opacity: 0.3,
+      roughness: 0.1, metalness: 0.1, envMapIntensity: 1.4,
+      emissive: 0x22_44_66, emissiveIntensity: 0.3,
+    }), false, 6.9, 'cheap fake');
+    // Fresnel rim shell: grazing-angle glow over the glass — the edge
+    // reads like the toon hull but occludes nothing (additive + no
+    // depth write). This is the transparent-safe outline.
+    {
+      mkBall(glass(), false, 9.2, 'glass+fresnel');
+      const rim = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide,
+        vertexShader: `varying vec3 vN; varying vec3 vV;
+          void main() { vN = normalMatrix * normal; vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = -mv.xyz; gl_Position = projectionMatrix * mv; }`,
+        fragmentShader: `varying vec3 vN; varying vec3 vV;
+          void main() { float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 3.0); gl_FragColor = vec4(vec3(1.0), f * 0.9); }`,
+      }));
+      rim.position.set(9.2, 0, 0);
+      rim.scale.setScalar(1.08);
+      g.add(rim);
+    }
+    // Semi-transparent hull: the toon recipe with alpha — the band
+    // outline survives but the core shows through. Cheap fallback.
+    {
+      mkBall(glass(), false, 11.5, 'glass+hull α');
+      const h = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: 0xFF_FF_FF, side: THREE.BackSide, transparent: true, opacity: 0.55, depthWrite: false,
+      }));
+      h.position.set(11.5, 0, 0);
+      h.scale.setScalar(1.12);
+      g.add(h);
+    }
+    // Iridescence: thin-film interference — soap-bubble/oil-slick
+    // rainbow riding on a transmissive shell. Needs the env bake.
+    mkBall(new THREE.MeshPhysicalMaterial({
+      color: 0xFF_FF_FF, transmission: 0.85, roughness: 0.1, metalness: 0,
+      ior: 1.4, thickness: 0.8,
+      iridescence: 1, iridescenceIOR: 1.3, iridescenceThicknessRange: [100, 400],
+    }), false, 13.8, 'iridescent');
+    // Frosted glass: transmission + high roughness — the background
+    // blurs instead of bending; milk-glass read.
+    mkBall(new THREE.MeshPhysicalMaterial({
+      color: 0xFF_FF_FF, transmission: 0.9, roughness: 0.55, metalness: 0,
+      ior: 1.5, thickness: 1.2,
+    }), false, 16.1, 'frosted');
+    // Candy coat: clearcoat lacquer over a colored base — car paint.
+    mkBall(new THREE.MeshPhysicalMaterial({
+      color: 0xC8_18_18, roughness: 0.35, metalness: 0.1,
+      clearcoat: 1, clearcoatRoughness: 0.08,
+    }), false, 18.4, 'candy');
+    // Chrome: no color — pure env reflection. The mirror ball.
+    mkBall(new THREE.MeshStandardMaterial({
+      color: 0xFF_FF_FF, roughness: 0.05, metalness: 1, envMapIntensity: 1.5,
+    }), false, 20.7, 'chrome');
+    // Neon: emissive carries the read — no lighting needed at all.
+    mkBall(new THREE.MeshStandardMaterial({
+      color: 0x11_00_22, emissive: 0xFF_20_C0, emissiveIntensity: 2.2,
+      roughness: 0.4, metalness: 0,
+    }), false, 23, 'neon');
+    // Velvet: sheen retroreflects at grazing — the cloth/felt look.
+    mkBall(new THREE.MeshPhysicalMaterial({
+      color: 0x30_28_80, roughness: 0.9, metalness: 0,
+      sheen: 1, sheenColor: new THREE.Color(0x80_70_FF), sheenRoughness: 0.4,
+    }), false, 25.3, 'velvet');
+    // Toon family — gradientMap texels ARE the shade. Gray ramps give
+    // the usual cel bands; an RGB ramp tints each band (duotone).
+    const ramp = (rgb: number[]): THREE.DataTexture => {
+      const px = new Uint8Array(rgb.length / 3 * 4);
+      for (let i = 0; i < rgb.length / 3; i += 1) {px.set([rgb[i * 3]!, rgb[i * 3 + 1]!, rgb[i * 3 + 2]!, 255], i * 4);}
+      const d = new THREE.DataTexture(px, rgb.length / 3, 1, THREE.RGBAFormat);
+      d.minFilter = THREE.NearestFilter; d.magFilter = THREE.NearestFilter; d.needsUpdate = true;
+      return d;
+    };
+    const gray = (g: number[]): number[] => g.flatMap((v): number[] => [v, v, v]);
+    // Hard 2-band anime — light or shadow, no mid. (Dark bands stay
+    // readable: 60-90% of diffuse, not near-black.)
+    mkBall(new THREE.MeshToonMaterial({ color: 0xFF_50_50, gradientMap: ramp(gray([130, 255])) }),
+      true, 27.6, 'toon2');
+    // 5-step — still cel, but reads rounder.
+    mkBall(new THREE.MeshToonMaterial({ color: 0x50_80_FF, gradientMap: ramp(gray([110, 140, 175, 215, 255])) }),
+      true, 29.9, 'toon5');
+    // Duotone sunset — RGB ramp paints shade bands navy → orange.
+    mkBall(new THREE.MeshToonMaterial({ color: 0xFF_FF_FF,
+      gradientMap: ramp([60, 50, 130, 200, 100, 40, 255, 190, 70]) }), false, 32.2, 'duotone');
+    // Halftone-ish — a noisy ramp dithers the bands (screenprint read).
+    {
+      const nz = new Uint8Array(24 * 3);
+      for (let i = 0; i < 24; i += 1) {const v = i < 12 ? 120 : 255; nz.set([v, v, v], i * 3);}
+      for (let i = 0; i < 60; i += 1) {const j = Math.floor(Math.random() * 24) * 3; nz[j] = nz[j + 1] = nz[j + 2] = 140 + (Math.random() * 115);}
+      mkBall(new THREE.MeshToonMaterial({ color: 0xFF_C0_40, gradientMap: ramp([...nz]) }), false, 34.5, 'halftone');
+    }
+    // Ink — pale fill, BLACK hull: the comic-ink outline instead of glow.
+    mkBall(new THREE.MeshToonMaterial({ color: 0xE8_E0_D0, gradientMap: ramp(gray([180, 255])) }),
+      false, 36.8, 'ink');
+    {
+      const h = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x10_10_10, side: THREE.BackSide }));
+      h.position.set(36.8, 0, 0);
+      h.scale.setScalar(1.12);
+      g.add(h);
+    }
+    // Shader tier — the cool stuff the stock materials can't do. All
+    // are plain ShaderMaterial, no textures, no lights needed.
+    const timeMats: THREE.ShaderMaterial[] = [];
+    const _v = `varying vec3 vN; varying vec3 vV; varying vec3 vP;
+      void main() { vN = normalMatrix * normal; vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = -mv.xyz; vP = position; gl_Position = projectionMatrix * mv; }`;
+    // Hologram — scanlines + fresnel rim + flicker, additive: the
+    // sci-fi projection. uTime ticks via previewLive.
+    {
+      const mat = new THREE.ShaderMaterial({
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: _v,
+        fragmentShader: `varying vec3 vN; varying vec3 vV; varying vec3 vP; uniform float uTime;
+          void main() {
+            float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.5);
+            float scan = 0.55 + 0.45 * sin(vP.y * 90.0 + uTime * 6.0);
+            float flick = 0.85 + 0.15 * sin(uTime * 23.0);
+            vec3 c = vec3(0.35, 0.85, 1.0) * (0.3 + 0.7 * f) * scan * flick;
+            gl_FragColor = vec4(c, 0.65);
+          }`,
+      });
+      timeMats.push(mat);
+      mkBall(mat, false, 39.1, 'hologram');
+    }
+    // X-ray — INVERTED fresnel: brightest where the face points at you,
+    // dark at the silhouette (the depth-read of a medical scan).
+    {
+      const mat = new THREE.ShaderMaterial({
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        vertexShader: _v,
+        fragmentShader: `varying vec3 vN; varying vec3 vV;
+          void main() {
+            float f = pow(abs(dot(normalize(vN), normalize(vV))), 2.0);
+            gl_FragColor = vec4(vec3(0.4, 0.9, 0.7) * f, 0.8);
+          }`,
+      });
+      mkBall(mat, false, 41.4, 'x-ray');
+    }
+    // Pearl — matcap from a radial-gradient DataTexture: the soft
+    // porcelain/abalone read with zero env cost.
+    {
+      const px = new Uint8Array(64 * 64 * 4);
+      for (let y = 0; y < 64; y += 1) {for (let x = 0; x < 64; x += 1) {
+        const dx = (x - 26) / 32, dy = (y - 30) / 32;
+        const l = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy));
+        const i = (y * 64 + x) * 4;
+        px.set([180 + 75 * l, 200 + 55 * l, 235 + 20 * l, 255], i);
+      }}
+      const mc = new THREE.DataTexture(px, 64, 64, THREE.RGBAFormat);
+      mc.needsUpdate = true;
+      mkBall(new THREE.MeshMatcapMaterial({ matcap: mc, color: 0xFF_F0_E8 }), false, 43.7, 'pearl');
+    }
+    // Normals — MeshNormalMaterial paints world normals as RGB.
+    // Psychedelic, free, and secretly useful for normal debugging.
+    mkBall(new THREE.MeshNormalMaterial(), false, 46, 'normals');
+    // Edge-glow trio — the wear vertex attribute IS edge distance, so
+    // real geometry edges can carry the glow (no texture, no post).
+    mkBall(new THREE.MeshBasicMaterial({ color: 0x40_E8_FF, wireframe: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }),
+      false, 48.3, 'wireglow');
+    {
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: `attribute float wear; varying float vW; varying vec3 vN; varying vec3 vV;
+          void main() { vW = wear; vN = normalMatrix * normal; vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = -mv.xyz; gl_Position = projectionMatrix * mv; }`,
+        fragmentShader: `varying float vW; varying vec3 vN; varying vec3 vV; uniform float uTime;
+          void main() {
+            vec3 fill = vec3(0.04, 0.05, 0.08); // near-black body
+            float edge = smoothstep(0.45, 0.8, vW);
+            float pulse = 0.8 + 0.2 * sin(uTime * 4.0);
+            vec3 c = fill + vec3(0.2, 0.9, 1.0) * edge * pulse * 1.6;
+            // Fresnel rim keeps the silhouette readable on the dark fill.
+            float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 4.0) * 0.5;
+            gl_FragColor = vec4(c + vec3(0.1, 0.5, 0.6) * f, 1.0);
+          }`,
+      });
+      timeMats.push(mat);
+      mkBall(mat, false, 50.6, 'edgeglow');
+    }
+    {
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: `attribute float wear; varying float vW; varying vec3 vP;
+          void main() { vW = wear; vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `varying float vW; varying vec3 vP; uniform float uTime;
+          void main() {
+            float band = smoothstep(0.12, 0.0, abs(fract(vP.y * 0.5 - uTime * 0.3) - 0.5) - 0.35);
+            float edge = smoothstep(0.4, 0.75, vW);
+            vec3 c = vec3(0.05, 0.03, 0.08) + vec3(1.0, 0.3, 0.6) * edge + vec3(0.4, 0.9, 1.0) * band;
+            gl_FragColor = vec4(c, 1.0);
+          }`,
+      });
+      timeMats.push(mat);
+      mkBall(mat, false, 52.9, 'scan');
+    }
+    // One tick feeds every animated shader in the row.
+    previewLive.tick = (dt): void => { for (const m of timeMats) {m.uniforms.uTime!.value += dt;} };
+    return g;
+  }],
   ['buzzard', (): THREE.Group<THREE.Object3DEventMap> => creatureProxy(() => {
     const kettle = new AmbientBirds(LAB_SCENE, 0.08);
     return {

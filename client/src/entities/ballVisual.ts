@@ -3,19 +3,25 @@ import { getSwarm, freeSlots } from './swarms.js';
 import { GRAVITY } from '../core/config.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
 import { jumpBudget } from '../effects/RibbonTrail.js';
+import { dropDebugPin } from '../effects/debugPins.js';
 import { glitch } from '../core/fxDiag.js';
-// Type-only back-import — Ball calls into these helpers per tick, so a
+// Type-only back-import - Ball calls into these helpers per tick, so a
 // value import would make the pair a runtime cycle. viewPos comes in as
 // a param instead of reaching into Ball's statics.
 import type { Ball } from './balls.js';
 
-// Ball visual family — instance write + render-position blend + trail
+// Ball visual family - instance write + render-position blend + trail
 // lifecycle + dead fade-out. The Ball class is the host; these take it
 // flat (same pattern as ballRage / ballNet helpers).
 const BALL_GRAVITY = GRAVITY;
-// Spring-in on birth/teleport — the body scales 0→1 with a small
+// Spring-in on birth/teleport - the body scales 0→1 with a small
 // overshoot over ~0.2s so appearances read as eruptions, not pop-ins.
 export const SPAWN_POP_S = 0.22;
+/** Legacy ball trails (ribbon lines + dot deposits) - off while WPOS
+ *  quads carry the line-trail role. Particles (trailDriver emit) still
+ *  run. Flip to true to re-enable. */
+export const BALL_TRAILS = false;
+
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
@@ -31,8 +37,8 @@ export function writeBallInstance(b: Ball): void {
     const u = 1 - b.spawnPopT / SPAWN_POP_S - 1; // t-1 for the back-out ease
     const pop = b.spawnPopT <= 0 ? 1 : 1 + 2.70158 * u * u * u + 1.70158 * u * u;
     const s = Math.max(0.05, b.scale * pop);
-    // Hull first — part 1 rides the same transform at outline scale.
-    _m.compose(b._rpos, _q.identity(), _s.setScalar(s * 1.07));
+    // Hull first - part 1 rides the same transform at outline scale.
+    _m.compose(b._rpos, _q.identity(), _s.setScalar(s * 1.12));
     swarm.setMatrix(1, b.swarmSlot, _m);
     _m.compose(b._rpos, _q.identity(), _s.setScalar(s));
     swarm.setMatrix(0, b.swarmSlot, _m);
@@ -48,7 +54,7 @@ export function writeBallInstance(b: Ball): void {
   // additionally extrapolate over the sub-50ms remainder so the ball
   // doesn't step at ~20fps. (Inert legs already integrate continuously.)
 export function tickBallRenderPos(b: Ball, dt: number): void {
-    // Segment corrections drain back to zero — exp decay, ~0.2s time constant.
+    // Segment corrections drain back to zero - exp decay, ~0.2s time constant.
     if (b.renderOffset.lengthSq() > 0.0001) {
       b.renderOffset.multiplyScalar(Math.exp(-dt * 10));
     } else {
@@ -66,34 +72,43 @@ export function tickBallRenderPos(b: Ball, dt: number): void {
 
 export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): void {
     // Emission rides the runtime TrailDriver like every other trail pack:
-    // it detects the renderOffset correction sweep (host maxStep policy —
+    // it detects the renderOffset correction sweep (host maxStep policy -
     // the same >max(6, travel×4) predicate this used to hand-roll) and
     // cuts ribbons + suppresses that frame's deposit in ONE place.
-    // Far balls: skip sparkle emission — a 0.5m dot trail is sub-pixel past
+    // Far balls: skip sparkle emission - a 0.5m dot trail is sub-pixel past
     // ~200m but each emit still churns the dot list.
     b._trailNear = b._rpos.distanceToSquared(viewPos) < 200 * 200;
     b._trailDt = dt;
     if (!b.trailDriver) {
       b.trailDriver = new TrailDriver(
         {
-          pos: b._rpos, vel: b.vel,
-          // Dead balls fade only — updateBallDead emits nothing. The 200m
+          // Push SIM truth (b.pos) like projectile trails - _rpos blends
+          // corrections into the sample path, painting arcs the ball never
+          // flew. follow stays on _rpos: the tip still meets the drawn
+          // mesh, but only within the weld budget's cut.
+          pos: b.pos, vel: b.vel,
+          // Dead balls fade only - updateBallDead emits nothing. The 200m
           // cull lives on the DOT emitter only: gating the whole emit
           // here starved ribbons too, so every ball past 200m flew
           // trail-less ("missing trails").
-          emitting: (): boolean => !b.dead && b.renderOffset.lengthSq() <= 400,
-          ribbonEmitting: (): boolean => !b.dead && b.vel.lengthSq() > 0.5 && b.renderOffset.lengthSq() <= 400,
+          // Uniform trail presence: emit while the ball lives, period.
+          // Speed/offset gates used to starve emission on slow or mid-
+          // blend balls - trails died on live balls at "random" times.
+          // Distance-quantized push already prevents co-located pileup,
+          // and >20m blends retire the ribbon wholesale instead.
+          emitting: (): boolean => !b.dead,
+          ribbonEmitting: (): boolean => !b.dead,
           emitOnJump: false,
           maxStep: (d): number => Math.max(6, Math.max(1e-4, Math.sqrt(b.vel.lengthSq()) * d) * 4),
         },
         [{
-          emitSegment: (): void => { if (b._trailNear) { b.trails.emit(b._trailDt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color); } },
-          teleport: (): void => { /* dot deposits die fast — suppression is the cut */ },
+          emitSegment: (): void => { if (BALL_TRAILS && b._trailNear) { b.trails.emit(b._trailDt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color); } },
+          teleport: (): void => { /* dot deposits die fast - suppression is the cut */ },
         }],
         b.ribbons,
       );
     }
-    // A segment correction blends through renderOffset over ~0.5s — the
+    // A segment correction blends through renderOffset over ~0.5s - the
     // render pos sweeps tens of meters and every follower (ribbon, dots)
     // paints the sweep as a chord. Retire the ribbons while a big blend
     // is in flight; fresh ones restart from the corrected arc when it lands.
@@ -103,44 +118,48 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
         b._blendCut = true;
         // offM alone can't tell a sim-clock lag (correction ≈ speed×skew,
         // periodic at segment cadence) from an integrator mismatch
-        // (bounce/field resolving differently — irregular). skew names it.
-        // Early folds are the join/roster heal — the seed plus its first
+        // (bounce/field resolving differently - irregular). skew names it.
+        // Early folds are the join/roster heal - the seed plus its first
         // stamped corrections are a fresh replica converging onto
         // mid-flight truth, not a correction the predictor caused.
         // foldExplained = the fold was a stamp-behind-cursor rewind or a
-        // burst-drain catch-up (gap inside the cells-stepped budget) —
+        // burst-drain catch-up (gap inside the cells-stepped budget) -
         // designed folding, not integrator divergence. Fold still
         // happens; the warn doesn't.
-        // skewMs ≤ 0: the cursor was BEHIND net truth — the stamp pulled
+        // skewMs ≤ 0: the cursor was BEHIND net truth - the stamp pulled
         // the sim forward (convergence heal, same class foldExplained's
-        // rewind covers). Only a positive-skew unexplained fold — cursor
-        // ahead AND divergent — is the integrator-mismatch anomaly.
+        // rewind covers). Only a positive-skew unexplained fold - cursor
+        // ahead AND divergent - is the integrator-mismatch anomaly.
         if ((b.netS.segsSeen ?? 0) > 3 && !b.netS.foldExplained) {
           const skew = b.netS.lastSimNow >= 0 ? Math.round((b.netS.simT - b.netS.lastSimNow) * 1000) : 0;
           if (skew > 0) {
             glitch('render-blend', { netId: b.netId ?? -1, offM: Math.round(Math.sqrt(offSq)), skewMs: skew });
           }
         }
-        // Retire, not clear — the old tails FADE OUT where they were.
+        // Retire, not clear - the old tails FADE OUT where they were.
         b.retireRibbons();
       }
     } else {
       // Mid-size folds keep their ribbons anchored to _rpos, but the
       // offset's exp decay can slide that anchor faster than the ribbon
-      // jump budget — at low fps one frame moves it most of the offset
+      // jump budget - at low fps one frame moves it most of the offset
       // and the follow guard fires a follow-jump for a cut it was going
       // to make anyway. When this frame's projected slide outruns the
       // budget, retire quietly instead: same cut, graceful fade, no
       // false-positive glitch.
       const off = Math.sqrt(offSq);
       const spd = Math.max(1e-4, Math.sqrt(b.vel.lengthSq()));
-      // Total pending correction vs one-sample budget — the per-frame slide
+      // Total pending correction vs one-sample budget - the per-frame slide
       // slice stays under a speed-scaled budget at high fps, letting the
       // follow-weld stretch the strip across the whole blend (sky streak).
       if (off > 0.5 && off > jumpBudget(spd)) {b.retireRibbons();}
       b._blendCut = false;
     }
     b.trails.fade(dt);
+    // F1 position pin — drops every 0.1s at the ball's live render pos;
+    // unrelated to the trail system: lets you compare where the body
+    // actually was vs where the trail skeleton claims.
+    dropDebugPin(b, b._rpos, 4, b.renderOffset.lengthSq() > 0.5); // blend snaps flag silently
     for (const r of b.ribbons) {r.update(dt, viewPos);}
   }
 
@@ -154,7 +173,7 @@ export function updateBallDead(b: Ball, dt: number, viewPos: THREE.Vector3): voi
     b.trails.fade(dt);
     for (const r of b.ribbons) {r.update(dt, viewPos);}
     if (b.trails.size === 0 && b.ribbons.every((r): boolean => r.done)) {
-      // Final cleanup — caller splices on `disposed` without dispose(),
+      // Final cleanup - caller splices on `disposed` without dispose(),
       // so dispose() is invoked here only to leave Ball.live.
       b.trails.dispose();
       for (const r of b.ribbons) {r.dispose();}

@@ -5,6 +5,7 @@
 // on window so selection survives), and a HEAD poll on the baked
 // /weapons/*.glb/_ao.png files hot-swaps bake assets in place — no reload.
 import * as THREE from 'three';
+import { AtmosphericSky } from './world/atmosphericSky.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import ManifoldModuleFactory from 'manifold-3d';
@@ -103,6 +104,20 @@ scene.add(new THREE.AmbientLight(0x88_99_AA, 0.9));
 const sun = new THREE.DirectionalLight(0xFF_FF_FF, 1.2);
 sun.position.set(0.5, 1, 0.4);
 scene.add(sun);
+// The game's real atmospheric sky — mounted before the env bake so
+// scene.environment IS the sky (transmission/metal reflect it) and the
+// dome itself draws behind every preview. 4km dome scaled inside the
+// camera's 100 far plane; the shader is view-direction based so scale
+// only affects depth, never the gradient.
+new AtmosphericSky(scene);
+(scene.getObjectByName('__sky') as THREE.Mesh).scale.setScalar(60 / 4000);
+// PMREM env bake — physical materials (transmission/metal) are dead
+// without something to reflect/refract; same recipe as main.ts.
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(scene, 0.06).texture;
+  pmrem.dispose();
+}
 // Probes read state.pick AND dump baked attributes off scene — same
 // object both times: a second assignment here silently dropped the
 // state side once this module finished booting.
