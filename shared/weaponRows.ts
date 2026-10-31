@@ -266,6 +266,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0,
   },
   [WeaponType.Lightning]: {
+    beam: true,
     aimAxis: 'track',
     fireInterval: 0.05,
     tier: 'light',
@@ -286,6 +287,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0,
   },
   [WeaponType.Shocklance]: {
+    beam: true,
     // T2 shocklance, first pass: a single hitscan zap on the pull-out
     // cycle - directDamage IS the bolt (no splash, no backstab yet).
     directDamage: 70,

@@ -155,6 +155,9 @@ export interface WeaponStats {
   /** Bot aim axis this weapon exercises (botSkill.weaponAxis reads it).
    *  Unset = thrown/no-skill type - shoots at 1x. */
   aimAxis?: 'snap' | 'track' | 'arcLead' | 'arcJudge';
+  /** Hitscan beam weapon (Lightning/Repair/Shocklance/HealBeam) - the
+   *  trigger fires a beam, not a spawn claim. SLOT_DEFS kind reads it. */
+  beam?: boolean;
   /** First terrain bounce clamps the remaining fuse to this many seconds
    *  - a skip becomes a short cook-off instead of free ricochet time. */
   fuseAfterBounce?: number;

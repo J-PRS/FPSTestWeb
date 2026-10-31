@@ -55,10 +55,10 @@ function def(weaponType: WeaponType, rate: number | undefined,
   // Registry miss falls back to the bolt config rather than taking down
   //  firing - same rule weaponDef() applies to a corrupt wid.
   const config = CONFIG_BY_TYPE.get(weaponType) ?? CONFIG_BY_TYPE.get(WeaponType.BoltLauncher)!;
+  const stats = getWeaponStats(weaponType);
   let kind: WeaponDef['kind'] = 'projectile';
   if (opts.pellets) {kind = 'fan';}
-  else if (weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair || weaponType === WeaponType.Shocklance || weaponType === WeaponType.HealBeam) {kind = 'beam';}
-  const stats = getWeaponStats(weaponType);
+  else if (stats.beam === true) {kind = 'beam';}
   return {
     weaponType,
     // The shared row's fireInterval IS the law - it's the same number the

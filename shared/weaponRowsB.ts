@@ -41,6 +41,7 @@ export const WEAPONS_B: Record<number, WeaponStats> = {
     hitGrow: 0,
   },
   [WeaponType.Repair]: {
+    beam: true,
     // Hitscan repair beam - the sting vs creatures exists so the tool
     // isn't a dead slot in a fight, but its real damage is the heal:
     // REPAIR_HEAL_PER_TICK flows into a friendly deployable, overflow
@@ -78,6 +79,7 @@ export const WEAPONS_B: Record<number, WeaponStats> = {
     maxLifetime: 2,
   },
   [WeaponType.HealBeam]: {
+    beam: true,
     fireInterval: 0.1,
     // Hitscan heal - the payload is HP on a friend, not damage. directDamage
     // stays 0 so a claim routed through the damage path lands nothing;
