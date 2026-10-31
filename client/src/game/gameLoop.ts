@@ -62,7 +62,7 @@ import { isBotId } from '../../../shared/botNames.js';
 import { nanScanTick, nanScanBindProbe } from '../core/nanScan.js';
 import { Logger } from '../core/Logger.js';
 import type { PlayerSheep } from './playerSheep.js';
-import { BootWarmup } from './bootWarmup.js';
+import { BootWarmup, pendingHeavy } from './bootWarmup.js';
 import { warmRig } from '../entities/rigPool.js';
 import { PlayerModel } from '../entities/PlayerModel.js';
 
@@ -793,7 +793,12 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
     const rewarm = st.rewarmT ?? 0;
     if (rewarm > 0) {
       st.rewarmT = rewarm - 1;
-      if (st.rewarmT === 0) {deps.rendererSetup.warmup();}
+      if (st.rewarmT === 0) {
+        // compileAsync's serial link+introspection is a live-frame block
+        // - count it so the veil never drops into a mid-warm hitch.
+        pendingHeavy.n += 1;
+        Promise.resolve(deps.rendererSetup.warmup()).finally((): void => { pendingHeavy.n -= 1; });
+      }
     }
     const count = deps.world.remotePlayers.size;
     if (count !== (st.lastRemoteCount ?? 0)) {st.lastRemoteCount = count; st.rewarmT = 90;}
@@ -817,7 +822,8 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   // of a match profile through getObjectByProperty).
   if (st.warmN <= 600 && (st.warmN % 30 !== 0 || !deps.sceneSetup.scene.getObjectByName('__t2interiors'))) {return;}
   st.warmed = true;
-  deps.rendererSetup.warmup();
+  pendingHeavy.n += 1;
+  Promise.resolve(deps.rendererSetup.warmup()).finally((): void => { pendingHeavy.n -= 1; });
   // Pre-clone each armor-class rig so a mid-match join grabs one off
   // the shelf instead of paying SkeletonUtils.clone on the live frame.
   // Depth 4/variant - a 15-bot churn exhausts 2 before the macrotask
