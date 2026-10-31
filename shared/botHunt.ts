@@ -167,7 +167,9 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
     if (d >= (e.id.startsWith('b:') ? beastRange : range)) {continue;}
     // Hoard beacon: a purple-tier carrier (27+) can't hide behind a
     // ridge — the crown marks him the way the flag thief's beacon does.
-    if (!losClear(ctx, pos, e.pos) && (e.held ?? 0) < 27) {continue;}
+    // HUD markers mean everyone is nominally visible — high-carriers
+    // stay acquirable through walls like a player's eye on the diamond.
+    if (!losClear(ctx, pos, e.pos) && (e.held ?? 0) < 10) {continue;}
     seenAll?.push(e);
     if (e.id.startsWith('b:')) {
       if (d < beastD) { beastD = d; beast = e; }
@@ -175,7 +177,10 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
       // Bounty read: a hoarder's effective range shrinks 0.8%/token,
       // floored at 10% — a 100-token vault reads 8x closer from 200m
       // without letting value override the brawl at the muzzle.
-      let effD = d * Math.max(0.1, 1 - (e.held ?? 0) * 0.008);
+      // Bounty pricing: each held token shrinks effective distance 3% —
+      // a 15-gizmo carrier at 50m contests a weakling at 28m, so the
+      // leader pulls hunts instead of being a second-class contact.
+      let effD = d * Math.max(0.1, 1 - (e.held ?? 0) * 0.03);
       // No-figit (PUG guide: both flags home → enemy offense is
       // ignorable). Route roles still pressing the stand price a
       // mid-field passerby 3x farther — the spot is worth more than
