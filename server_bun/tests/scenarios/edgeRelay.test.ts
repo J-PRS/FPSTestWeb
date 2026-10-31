@@ -15,9 +15,9 @@ describe('remote input edge relay', () => {
     pin(room, 'p1', { x: 0, y: 1, z: 0 });
     room.wireIds.set('p1', 1);
     room.wireIds.set('p2', 2);
-    const sent: { to?: string; data: Uint8Array }[] = [];
-    room.connections.broadcastBinaryReliable = (data: Uint8Array, _j: unknown, exclude?: string): void => {
-      sent.push({ to: exclude, data });
+    const sent: { to: string; data: Uint8Array }[] = [];
+    room.connections.sendBinToPlayerReliable = (pid: string, data: Uint8Array): void => {
+      sent.push({ to: pid, data });
     };
     room.moveSim.track('p1', { x: 0, y: 1, z: 0 }, 0);
     // Drive through the same host callback the wire uses.
@@ -27,7 +27,7 @@ describe('remote input edge relay', () => {
     expect(ok).toBe(true);
     const relay = sent.filter((s) => s.data[1] === WIRE_E_INPUT);
     expect(relay.length).toBe(1);
-    expect(relay[0]!.to).toBe('p1'); // exclude = sender
+    expect(relay[0]!.to).toBe('p2'); // observer gets it, sender excluded
     const d = decodeRemoteInput(relay[0]!.data);
     expect(d?.wid).toBe(room.wireIds.get('p1'));
     expect(d?.seq).toBe(7);
@@ -54,7 +54,7 @@ describe('remote input edge relay', () => {
     pin(room, 'p1', { x: 0, y: 1, z: 0 });
     room.wireIds.set('p1', 1);
     const sent: Uint8Array[] = [];
-    room.connections.broadcastBinaryReliable = (data: Uint8Array): void => { sent.push(data); };
+    room.connections.sendBinToPlayerReliable = (_pid: string, data: Uint8Array): void => { sent.push(data); };
     room.moveSim.track('p1', { x: 0, y: 1, z: 0 }, 0);
     const mi = (room as unknown as { handlerInfo(): { moveInput?: (pid: string, i: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number, ageMs?: number) => boolean } }).handlerInfo().moveInput!;
     mi('p1', { forward: 1, right: 0, jump: 0, ski: 0 }, 0, 5);

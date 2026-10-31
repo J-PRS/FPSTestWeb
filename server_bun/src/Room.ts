@@ -174,6 +174,9 @@ export class Room {
    *  past even the aim-cone. Bumped on every wireHit; lazily pruned. */
   readonly engagedBy = new Map<string, Map<string, number>>();
   private static readonly ENGAGE_MS = 4000;
+  /** C4 edge relay radius (XZ) — replay fidelity pays inside ~400m;
+   *  far specks keep interpolating. Squared for the hot check. */
+  private static readonly RELAY_EDGE_R2 = 400 * 400;
   noteEngagement(shooterId: string, victimId: string): void {
     if (shooterId === victimId) {return;}
     let m = this.engagedBy.get(victimId);
@@ -1131,9 +1134,21 @@ export class Room {
         // silence window does today.
         const wid = this.wireIds.get(pid);
         if (ok && wid !== undefined && seq !== undefined) {
-          this.connections.broadcastBinaryReliable(
-            encodeRemoteInput(wid, seq, ageMs ?? 0, { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: i.jet }, status ?? 0),
-            'volatile', pid);
+          // Distance-gated fanout: replay fidelity matters inside combat
+          // range; a far speck's edges would just buy bytes nobody sees.
+          // Edges are rare so the O(N) distance pass is cheap.
+          const shooter = this.players.getPlayer(pid);
+          const data = encodeRemoteInput(wid, seq, ageMs ?? 0, { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: i.jet }, status ?? 0);
+          if (shooter) {
+            const sp = shooter.position;
+            for (const [qid, q] of this.players.getAllPlayers()) {
+              if (qid === pid || q.isBot) {continue;}
+              const dx = q.position.x - sp.x, dz = q.position.z - sp.z;
+              if (dx * dx + dz * dz < Room.RELAY_EDGE_R2) {
+                this.connections.sendBinToPlayerReliable(qid, data, 'volatile');
+              }
+            }
+          }
         }
         return ok;
       },
