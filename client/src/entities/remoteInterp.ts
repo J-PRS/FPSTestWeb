@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
-import { MOVEMENT_CONFIG } from '../../../shared/movement.js';
-import { classCapsule, classMass } from '../../../shared/botClasses.js';
+import { MOVEMENT_CONFIG, MoveSim, type MoveInput, type MoveState } from '../../../shared/movement.js';
+import { FieldSurface } from '../../../shared/fieldSurface.js';
+import { classCapsule, classMass, CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
+import { terrainSampler } from './movement.js';
 import { hmChord } from '../../../shared/heightfield.js';
 import { getHeightfield } from '../world/heightmap.js';
 import type { Terrain } from '../world/terrain.js';
@@ -83,6 +85,11 @@ export class RemoteInterp {
   private prevDrawValid = false;
   private reachLogAt = 0;
   private wireGapLogAt = 0;
+  /** C4 edge replay - the server's consumed inputMove edges replayed
+   *  through the same shared MoveSim the shadow runs. Owns the body
+   *  while edges are fresh; interp/DR stay the fallback below. */
+  private replay: { sim: MoveSim; input: MoveInput; lastSeq: number; freshUntil: number; seeded: boolean } | null = null;
+  private static readonly REPLAY_SNAP_M = 3;
   /** Past this, no input combination explains one frame's displacement -
    *  terminalVelocity is 100 and impulses don't stack that high. */
   private static readonly REACH_CAP = 150;
@@ -144,6 +151,44 @@ export class RemoteInterp {
   get underruns(): number { return this.net.underruns; }
   get extCapMs(): number { return this.net.extCapMsTotal; }
   get atCap(): boolean { return this.net.atExtCap; }
+
+  /** Relayed input edge - seq-gated like the server's own drain.
+   *  Lazily seeds the replay sim from the newest wire truth so the
+   *  first edge doesn't invent a body state. */
+  onInputEdge(seq: number, _ageMs: number, input: { forward: number; right: number; jump?: number; ski?: number; jet?: number }): void {
+    if (!this.h.terrain) {return;}
+    if (!this.replay) {
+      const surf = FieldSurface.over(terrainSampler(this.h.terrain));
+      const w = this.lastServerPosition.lengthSq() > 0 ? this.lastServerPosition : this.h.position;
+      const cls = (this.h.armorClass ?? 'medium') as ArmorClass;
+      const st = CLASS_STATS[cls];
+      const st0: MoveState = { pos: { x: w.x, y: w.y, z: w.z }, vel: { x: this.h.serverVelocity.x, y: this.h.serverVelocity.y, z: this.h.serverVelocity.z }, yaw: this.targetRotation.yaw, pitch: 0, onGround: true };
+      const sim = new MoveSim(surf, st0);
+      sim.mass = st.mass; sim.eyeHeight = classCapsule(cls).eye; sim.speedScale = st.speedScale; sim.bodyRadius = classCapsule(cls).radius;
+      this.replay = { sim, input: { forward: 0, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false }, lastSeq: seq - 1, freshUntil: 0, seeded: true };
+    }
+    const rp = this.replay;
+    if (seq <= rp.lastSeq) {return;} // dup/OOO edge - server already consumed it
+    rp.lastSeq = seq;
+    rp.input.forward = input.forward; rp.input.right = input.right;
+    rp.input.jumpPressed = Boolean(input.jump); rp.input.jumpHeld = Boolean(input.jump);
+    rp.input.skiHeld = Boolean(input.ski); rp.input.jetHeld = Boolean(input.jet);
+    rp.freshUntil = Date.now() + 1500;
+  }
+
+  /** Snap the replay sim back onto wire truth - called on every record
+   *  so a divergence (lost edge, knockback, teleport) can't treadmill. */
+  private reconcileReplay(pos: THREE.Vector3, vel: THREE.Vector3 | undefined, yaw: number): void {
+    const rp = this.replay;
+    if (!rp) {return;}
+    const s = rp.sim.state;
+    const d = Math.hypot(pos.x - s.pos.x, pos.y - s.pos.y, pos.z - s.pos.z);
+    if (d > RemoteInterp.REPLAY_SNAP_M) {
+      s.pos.x = pos.x; s.pos.y = pos.y; s.pos.z = pos.z;
+      if (vel) {s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z;}
+      s.yaw = yaw;
+    }
+  }
 
   /** One server position update arrived - push the snapshot, refresh
    *  velocity estimates, and (when the DR window allows) blend back.
@@ -212,6 +257,10 @@ export class RemoteInterp {
     this.targetPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     this.targetRotation.yaw = targetRotation.yaw;
     this.targetRotation.pitch = targetRotation.pitch;
+    // Records are the replay sim's reconciliation checkpoints - a
+    // >3m drift means a lost edge or an impulse the edge stream can't
+    // express (knockback, teleport); resync, don't drift.
+    this.reconcileReplay(this.targetPosition, serverVelocity ? this.h.serverVelocity : undefined, targetRotation.yaw);
 
     // Push onto the snapshot buffer - it also tracks arrival jitter and
     // adapts the render delay (see remoteSnapshots.ts)
@@ -276,6 +325,25 @@ export class RemoteInterp {
       logger.debug(`STARTING dead reckoning`, { playerId: this.h.playerId, silentMs: timeSinceUpdate, underruns: this.net.underruns, atCap: this.net.atExtCap });
     }
 
+    if (this.replay && Date.now() < this.replay.freshUntil && !localDriven) {
+      // Edge-replay owns the body: replayed input through the shared sim
+      // at render framerate beats 20Hz-interpolated ghosts - and when
+      // edges go quiet the freshness gate hands the corpse back to
+      // interp/DR below without a seam.
+      const rp = this.replay;
+      rp.sim.setInput(rp.input);
+      rp.sim.update(dt);
+      rp.input.jumpPressed = false; // edge-consumed
+      const s = rp.sim.state;
+      this.h.position.set(s.pos.x, s.pos.y, s.pos.z);
+      this.h.velocity.set(s.vel.x, s.vel.y, s.vel.z);
+      this.simulatedVelocity.copy(this.h.velocity);
+      this._simulating = true; // expose "not on buffer" to diagnostics
+      this.watchReach(dt);
+      this.watchWireGap();
+      this.clampWireGap(dt);
+      return;
+    }
     if (this._simulating) {
       if (this.convergeTimer > 0) {
         this.convergeStep(dt);

@@ -118,7 +118,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
       const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid, shooterBound) - targetTransit);
       const tp = rewindPos(t, back, world.field);
       const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
-      // Capsule test, not midpoint sphere — a beam over the helmet or
+      // Capsule test, not midpoint sphere - a beam over the helmet or
       // under the feet is a visual miss, so it must not register.
       if (segCapsuleDist(a, b, c.x, c.y - cap.half, c.y + cap.half, c.z) > cap.radius + 0.2) {continue;}
       const tt = segPointT(a, b, c);

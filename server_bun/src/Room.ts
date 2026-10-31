@@ -20,7 +20,7 @@ import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
-import { NOISE_TTL_MS , type V4Last, encodeHit, encodeWidPos, encodeShotEv, WIRE_E_LANDED } from '../../shared/wire.ts';
+import { NOISE_TTL_MS , type V4Last, encodeHit, encodeWidPos, encodeShotEv, encodeRemoteInput, WIRE_E_LANDED } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -1098,11 +1098,24 @@ export class Room {
       deployables: () => this.deployables.snapshot(),
       influence: this.influence,
       matchEndsAt: (): number => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
-      moveInput: (pid, i, status, seq, ageMs): boolean => this.moveSim.queueInput(pid, {
-        forward: i.forward, right: i.right,
-        jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
-        jetHeld: Boolean(i.jet),
-      }, status, seq, ageMs),
+      moveInput: (pid, i, status, seq, ageMs): boolean => {
+        const ok = this.moveSim.queueInput(pid, {
+          forward: i.forward, right: i.right,
+          jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
+          jetHeld: Boolean(i.jet),
+        }, status, seq, ageMs);
+        // C4 remote replay: the consumed edge forwards to observers so
+        // their per-remote MoveSim tracks the shadow's input timeline.
+        // Volatile lane - a lost edge degrades to interp, same as a
+        // silence window does today.
+        const wid = this.wireIds.get(pid);
+        if (ok && wid !== undefined && seq !== undefined) {
+          this.connections.broadcastBinaryReliable(
+            encodeRemoteInput(wid, seq, ageMs ?? 0, { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: i.jet }, status ?? 0),
+            'volatile', pid);
+        }
+        return ok;
+      },
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
       inputSeqOf: (pid): number => this.moveSim.inputSeqOf(pid),
       transitOf: (pid): number => this.moveSim.transitOf(pid),

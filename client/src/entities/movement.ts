@@ -20,7 +20,7 @@ export type MovementInput = MoveInput;
 // shared FieldSurface itself — there is no second adapter to drift. A
 // client-side reimplementation once dropped the maxTop bound and
 // teleported walkers onto structure roofs.
-const terrainSampler = (terrain: Terrain) => ({
+export const terrainSampler = (terrain: Terrain) => ({
   getHeight: (x: number, z: number): number => terrain.getHeight(x, z),
   getNormal: (x: number, z: number, out: Vec3Like): Vec3Like => {
     const n = terrain.getNormal(x, z); // may be a shared scratch — copy fields now

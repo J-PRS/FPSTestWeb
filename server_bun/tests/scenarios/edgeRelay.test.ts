@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'bun:test';
+import { mkRoom, pin } from './harness.ts';
+import { decodeRemoteInput, WIRE_E_INPUT } from '../../../shared/wire.ts';
+
+// C4 remote replay: a consumed inputMove edge relays to observers on
+// the volatile lane so their per-remote MoveSim replays the shadow's
+// input timeline. The sender never gets its own edge back, a seq-gated
+// (stale) edge doesn't relay, and the frame decodes cleanly.
+
+describe('remote input edge relay', () => {
+  it('a consumed edge fans out to observers, not the sender', () => {
+    const room = mkRoom({}, 'dm');
+    room.players.addPlayer('p1', 'alpha', 'none', 'medium');
+    room.players.addPlayer('p2', 'bravo', 'none', 'medium');
+    pin(room, 'p1', { x: 0, y: 1, z: 0 });
+    room.wireIds.set('p1', 1);
+    room.wireIds.set('p2', 2);
+    const sent: { to?: string; data: Uint8Array }[] = [];
+    room.connections.broadcastBinaryReliable = (data: Uint8Array, _j: unknown, exclude?: string): void => {
+      sent.push({ to: exclude, data });
+    };
+    room.moveSim.track('p1', { x: 0, y: 1, z: 0 }, 0);
+    // Drive through the same host callback the wire uses.
+    const ok = room.handlerInfo().moveInput?.('p1', { forward: 1, right: 0, jump: 0, ski: 0 }, 0, 7, 20);
+    expect(ok).toBe(true);
+    const relay = sent.filter((s) => s.data[1] === WIRE_E_INPUT);
+    expect(relay.length).toBe(1);
+    expect(relay[0]!.to).toBe('p1'); // exclude = sender
+    const d = decodeRemoteInput(relay[0]!.data);
+    expect(d?.wid).toBe(room.wireIds.get('p1'));
+    expect(d?.seq).toBe(7);
+    expect(d?.input.forward).toBe(1);
+    expect(d?.ageMs).toBe(20);
+  });
+
+  it('a stale seq edge is gated out and never relays', () => {
+    const room = mkRoom({}, 'dm');
+    room.players.addPlayer('p1', 'alpha', 'none', 'medium');
+    pin(room, 'p1', { x: 0, y: 1, z: 0 });
+    room.wireIds.set('p1', 1);
+    const sent: Uint8Array[] = [];
+    room.connections.broadcastBinaryReliable = (data: Uint8Array): void => { sent.push(data); };
+    room.moveSim.track('p1', { x: 0, y: 1, z: 0 }, 0);
+    const mi = room.handlerInfo().moveInput!;
+    mi('p1', { forward: 1, right: 0, jump: 0, ski: 0 }, 0, 5);
+    sent.length = 0;
+    const ok = mi('p1', { forward: 0, right: 0, jump: 0, ski: 0 }, 0, 4); // older seq
+    expect(ok).toBe(false);
+    expect(sent.filter((s) => s[1] === WIRE_E_INPUT).length).toBe(0);
+  });
+});
