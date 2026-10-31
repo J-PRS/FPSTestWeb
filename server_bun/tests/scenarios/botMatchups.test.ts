@@ -124,11 +124,7 @@ describe('scenario: weapon matchups at far band (43m — BOT_FIRE_RANGE cap)', (
   it('railgun vs rocket: a coin flip since humanized aim', () => {
     // Was rail dominance (5/0) after the wake proxy shrank; the strafe
     // penalty at 43m brought it back to even. Pin resolution, not winner.
-    // Long window: ordnance-aim ground shots starve 43m lethality (aim
-    // lands ~3.4m low under the target - both sides grind), so the duel
-    // resolves past the old 700-tick cap. 1400 still fails if a kit
-    // turns truly unkillable.
-    const r = SEEDS.map((s) => duel(KIT.bruiser, KIT.chaser, 43, s, 1400));
+    const r = series(KIT.bruiser, KIT.chaser, 43);
     expect(r.filter((x) => x.w !== '-').length).toBeGreaterThanOrEqual(4);
   });
 

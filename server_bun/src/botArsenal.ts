@@ -42,13 +42,18 @@ export function ordnanceAimY(aim: BotVec, gY: number, dist: number, wt: number):
   // where its real proxy is ~1m, and the whole ground-shot branch died.
   const pDirect = Math.min(1, (hitRadiusAt(wt, tImpact) / Math.max(1, reachR)) ** 2);
   const eDirect = (st.directDamage || 0) * pDirect;
-  const gap = Math.max(0, aim.y - gY - 0.5);
+  // pickFire already baked drop comp into aim.y for gravity shells; undo
+  // it for the lift read, re-add it on the ground shot - aiming the
+  // literal ground point drops the shell into dirt ~10m short instead
+  // of popping under the target's feet (the 43m lethality stall).
+  const drop = st.gravity ? -0.5 * GRAVITY * tImpact * tImpact : 0;
+  const gap = Math.max(0, aim.y - drop - gY - 0.5);
   // A feet shot at a grounded target is direct-or-splash, not splash-only:
   // the shell still crosses the lower capsule when the target is nearly
   // level with the ground point (the direct share fades over ~3m of lift).
   const eGround = aoeDamageAt(Math.hypot(gap, reachR * 0.3), wt)
     + eDirect * Math.max(0, 1 - gap / 3);
-  return eGround > eDirect ? gY + 0.5 : aim.y;
+  return eGround > eDirect ? gY + 0.5 + drop : aim.y;
 }
 
 const BOLT_SPEED = 60; // m/s — the melee swing's visual bolt

@@ -31,9 +31,11 @@ describe('ordnanceAimY — EV ordnance aim', () => {
   });
   it('a huge blast still reaches a target 10m up', () => {
     // Mortar: 18m envelope — 10m of lift stays inside the radius edge
-    // where the ground shot pays more than the thin direct.
+    // where the ground shot pays more than the thin direct. The return
+    // is the launch aim, not the pop point: drop comp lifts it +3.5 so
+    // the gravity arc lands ON the ground point under the target.
     const aim = { x: 0, y: 20, z: 0 };
-    expect(ordnanceAimY(aim, 10, 40, WeaponType.Mortar)).toBe(10.5);
+    expect(ordnanceAimY(aim, 10, 40, WeaponType.Mortar)).toBe(14);
   });
 });
 
