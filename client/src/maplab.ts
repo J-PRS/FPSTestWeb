@@ -12,8 +12,8 @@ import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacier
 
 // Player-facing lab: served on prod too - no isDevHost gate on the entry.
 
-const state: GenParams & { heightScale: number; preset: number; showRaw: boolean; wire: boolean; slopeOverlay: boolean; flowOverlay: boolean; dropHeight: number; ballTerm: number; map: string; verbs: string[] } =
-  Object.assign({}, DEFAULTS, { heightScale: 1, preset: 1, showRaw: false, wire: false, slopeOverlay: true, flowOverlay: true, dropHeight: 0, ballTerm: 100, map: '', verbs: [] });
+const state: GenParams & { heightScale: number; preset: number; showRaw: boolean; wire: boolean; wireSolid: boolean; slopeOverlay: boolean; flowOverlay: boolean; dropHeight: number; ballTerm: number; map: string; verbs: string[] } =
+  Object.assign({}, DEFAULTS, { heightScale: 1, preset: 1, showRaw: false, wire: false, wireSolid: false, slopeOverlay: true, flowOverlay: true, dropHeight: 0, ballTerm: 100, map: '', verbs: [] });
 try { Object.assign(state, JSON.parse(localStorage.getItem('maplab') ?? '{}')); } catch { /* fresh */ }
 const save = (): void => { localStorage.setItem('maplab', JSON.stringify(state)); };
 
@@ -85,6 +85,20 @@ const mat = new THREE.ShaderMaterial({
 });
 const terrain = new THREE.Mesh(geo, mat);
 scene.add(terrain);
+// 'wire solid' occluder: same geometry drawn colorless into the depth
+// buffer FIRST, so wireframe edges behind the front surface fail depth.
+// polygonOffset pulls the solid back a hair so front edges don't z-fight.
+const wireOccl = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+  colorWrite: false, depthWrite: true,
+  polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2,
+}));
+wireOccl.renderOrder = -1;
+wireOccl.visible = false;
+scene.add(wireOccl);
+function applyWire(): void {
+  mat.wireframe = state.wire || state.wireSolid;
+  wireOccl.visible = state.wireSolid;
+}
 // Frame grid - the tile edge, so wrap-seams read at a glance.
 const frame = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.PlaneGeometry(WS, WS).rotateX(-Math.PI / 2)),
@@ -773,8 +787,11 @@ function paintRail(): void {
       state.showRaw = !state.showRaw; save(); paintRail(); refresh();
     }, state.showRaw),
     mk('wireframe', function (this: HTMLButtonElement): void {
-      state.wire = !state.wire; mat.wireframe = state.wire; save(); paintRail();
+      state.wire = !state.wire; applyWire(); save(); paintRail();
     }, state.wire),
+    mk('wire solid', function (this: HTMLButtonElement): void {
+      state.wireSolid = !state.wireSolid; applyWire(); save(); paintRail();
+    }, state.wireSolid),
     mk('slope tint', function (this: HTMLButtonElement): void {
       state.slopeOverlay = !state.slopeOverlay; save(); paintRail(); paintHeightmap();
     }, state.slopeOverlay),
@@ -1069,7 +1086,7 @@ addEventListener('resize', (): void => {
 paintRail();
 refresh();
 loadMapList();
-mat.wireframe = state.wire;
+applyWire();
 const clock = new THREE.Clock();
 const fpsEl = document.querySelector<HTMLDivElement>('#fps')!;
 let fpsFrames = 0, fpsT = 0;

@@ -17,6 +17,7 @@ import { createSpeciesKit } from './speciesKit.js';
 import { PROFILES } from './targeting.js';
 
 import { Ball, pickVariant, type Targetable } from '../entities/balls.js';
+import { flushDebugPins } from '../effects/debugPins.js';
 
 import { targetDemoId } from '../demo/types.js';
 
@@ -43,13 +44,13 @@ import { spawnRand, drawSplitVel } from '../../../shared/spawnDice.js';
 
 export interface EntitiesDeps extends GameContext {
 
-  // scene/camera exist before entities is constructed — eager refs, no lazy needed
+  // scene/camera exist before entities is constructed - eager refs, no lazy needed
 
   scene: THREE.Scene;
 
   camera: THREE.Camera;
 
-  // Playback balls are owned by demoLifecycle — updateBalls defers to it
+  // Playback balls are owned by demoLifecycle - updateBalls defers to it
 
   updateBallsPlayback: (dt: number) => void;
 
@@ -63,7 +64,7 @@ export interface EntitiesDeps extends GameContext {
 
   onNuggetCollect?: (collectorId: string, kind?: PickupKind, val?: number) => void;
 
-  /** Deployables: combat resolves after entities is built — lazy getter. */
+  /** Deployables: combat resolves after entities is built - lazy getter. */
 
   lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean; predictLocalShove?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string }): boolean } | undefined;
 
@@ -71,13 +72,13 @@ export interface EntitiesDeps extends GameContext {
 
   deployEnemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
 
-  /** Hostiles of a given team — a bot-owned turret/mine scans these. */
+  /** Hostiles of a given team - a bot-owned turret/mine scans these. */
 
   deployBotFoes?: (team: string) => import('./bots/botSenses.js').BotEntry[];
 
   deployDamageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
 
-  /** Offline base-grid edge — a downed generator drops its team's panes. */
+  /** Offline base-grid edge - a downed generator drops its team's panes. */
 
   deployBasePower?: (team: string, on: boolean) => void;
 
@@ -127,7 +128,7 @@ type Kit = ReturnType<typeof createSpeciesKit>;
 
 // splits, demo keyframe + snapshot recording. Server-owned ball
 
-// replication lives in game/netBalls.ts — this field only runs the
+// replication lives in game/netBalls.ts - this field only runs the
 
 // offline/demo side and culls locals once a server roster arrives.
 
@@ -181,11 +182,11 @@ function spawnBall(): void {
 
   if (f.serverBalls()) {return;} // connected: the server owns ball spawning
 
-  if (urlParams.noBallsLocal) {return;} // explicit ?noballs only — the fps-noballs room-creation flag must not starve the local field
+  if (urlParams.noBallsLocal) {return;} // explicit ?noballs only - the fps-noballs room-creation flag must not starve the local field
 
   if (f.atCap(balls, BALL_MAX)) {return;}
 
-  // Classic mode is plain bouncy balls — no elites, no variants
+  // Classic mode is plain bouncy balls - no elites, no variants
 
   spawnBallOfVariant(f.classicMode ? 0 : f.pickVariant());
 
@@ -193,7 +194,7 @@ function spawnBall(): void {
 
 
 
-// Shared spawn path — director events need to spawn specific variants
+// Shared spawn path - director events need to spawn specific variants
 
 function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
 
@@ -221,7 +222,7 @@ function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
 
 
 
-// Director-friendly spawn — an elite on demand (skips the cap: events
+// Director-friendly spawn - an elite on demand (skips the cap: events
 
 // are authored moments, the population cap is for ambient trickle)
 
@@ -287,6 +288,13 @@ function updateBalls(dt: number): void {
 
   const dm = deps.lazyDemoManager();
 
+  // Billboard anchor + retired-ribbon fade tick in BOTH lanes - during
+  // playback the early return below skipped them, so ribbons parked by
+  // die/teleport froze in the sky forever instead of decaying out.
+  Ball.viewPos.copy(camera.position); // feeds billboarded ball ribbon trails
+  Ball.updateDyingRibbons(dt); // retired teleport tails fade out where they were
+  flushDebugPins(scene, camera.position); // F1 ball-position pin rebuild (no-op when off)
+
   if (dm?.isPlaying) {
 
     deps.updateBallsPlayback(dt);
@@ -313,11 +321,9 @@ function updateBalls(dt: number): void {
 
 
 
-  Ball.viewPos.copy(camera.position); // feeds billboarded ball ribbon trails
+  // viewPos + dyingRibbons already ticked above the playback early-return.
 
-  Ball.updateDyingRibbons(dt); // retired teleport tails fade out where they were
-
-  // ?debug: per-slice ball cost — the phase dump blamed balls at 15ms
+  // ?debug: per-slice ball cost - the phase dump blamed balls at 15ms
   // but every piece reads cheap; this names the hog without a profiler.
   const prof = urlParams.debug ? { aggro: 0, upd: 0, dust: 0, snap0: performance.now(), snap: 0, n: 0 } : null;
 
@@ -327,7 +333,7 @@ function updateBalls(dt: number): void {
 
     if (netMode && !b.netDriven && !b.dead) {b.netKill();} // cull pre-connect locals
 
-    // Classic: docile balls leash straight to the player — aggroFor would
+    // Classic: docile balls leash straight to the player - aggroFor would
 
     // degrade to a wander waypoint near the BALL once its fodder leash drops
 
@@ -347,7 +353,7 @@ function updateBalls(dt: number): void {
     b.update(dt, deps.lazyTerrain(), ballTarget);
     const t2 = prof ? performance.now() : 0;
 
-    f.kickDust(b, dt); // bounce frames puff — airborne frames don't
+    f.kickDust(b, dt); // bounce frames puff - airborne frames don't
     if (prof) {prof.aggro += t1 - t0; prof.upd += t2 - t1; prof.dust += performance.now() - t2; prof.n++;}
 
     // Only remove ball when trails have fully faded out
@@ -404,7 +410,7 @@ function recordBallSnapshots(dt: number): void {
 
 // nuggets) plus their spawn timers, update passes, and demo keyframe
 
-// recording. `targets` is the shared projectile/blast surface — every
+// recording. `targets` is the shared projectile/blast surface - every
 
 // hittable entity lands in it. Per-family species blocks live in
 
@@ -437,17 +443,17 @@ export function createEntities(deps: EntitiesDeps) {
       nuggets.push(n);
     }
 
-  // Assigned right after the kit — brains reference it lazily, so the
+  // Assigned right after the kit - brains reference it lazily, so the
 
   }
 
-  const _noVel = new THREE.Vector3(); // dropNugget scratch — at-rest tosses
+  const _noVel = new THREE.Vector3(); // dropNugget scratch - at-rest tosses
 
   let nuggetsCollected = 0;
 
 
 
-  // ?mode=classic — plain bounce-and-shoot: variant-0 balls only
+  // ?mode=classic - plain bounce-and-shoot: variant-0 balls only
 
   const CLASSIC_MODE = urlParams.isClassic;
 
@@ -471,7 +477,7 @@ export function createEntities(deps: EntitiesDeps) {
 
 
 
-  // Species families — registries + spawn + update wiring live in
+  // Species families - registries + spawn + update wiring live in
 
   // game/species/*. Each gets the same ctx (deps, kit funnels, targets).
 
@@ -521,7 +527,7 @@ export function createEntities(deps: EntitiesDeps) {
 
 
 
-  // ?nocreatures/?noballs — the lobby sim-gates mint server rooms bare via
+  // ?nocreatures/?noballs - the lobby sim-gates mint server rooms bare via
 
   // the join handshake; offline there is no mint, so the local population
 
@@ -549,7 +555,7 @@ export function createEntities(deps: EntitiesDeps) {
 
     const player = deps.lazyPlayer();
 
-    // In team mode nuggets sweep toward the nearest living collector —
+    // In team mode nuggets sweep toward the nearest living collector -
 
     // bots mine gems too, that's the whole game mode.
 
@@ -595,7 +601,7 @@ nuggetsCollected += 1;
 
           player.heal(0.2); // 20% max hp per nugget
 
-          // Belt income — the wired collect (net/pickups.ts) pays a charge
+          // Belt income - the wired collect (net/pickups.ts) pays a charge
 
           // per gem; offline nuggets must or the pack economy only exists
 
@@ -603,7 +609,7 @@ nuggetsCollected += 1;
 
           player.beltCharges = Math.min(BELT_MAX, player.beltCharges + 1);
 
-          deps.lazyNetworkManager()?.sendHeal(20); // server stays the truth — clamped 25/call
+          deps.lazyNetworkManager()?.sendHeal(20); // server stays the truth - clamped 25/call
 
           sfx.powerup('gem'); // same crystal chime server-owned gems play on collect
 
@@ -631,7 +637,7 @@ nuggetsCollected += 1;
 
 
 
-  /** Loose gems from non-target deaths (bots fragged offline — combat's
+  /** Loose gems from non-target deaths (bots fragged offline - combat's
 
    *  onTargetDestroyed already covers Targetable deaths). */
 
@@ -687,11 +693,11 @@ nuggetsCollected += 1;
 
     updateWeeds: ambient.updateWeeds,
 
-    // All per-species ticks in one iterable — gameLoop iterates, so adding
+    // All per-species ticks in one iterable - gameLoop iterates, so adding
 
     // a species never touches the loop. Deployables stay separate (they
 
-    // aren't a species — no spawn cadence, no targets registry).
+    // aren't a species - no spawn cadence, no targets registry).
 
     updateSpeciesAll: (dt: number): void => {
 

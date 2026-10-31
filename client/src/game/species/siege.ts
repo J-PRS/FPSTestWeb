@@ -6,13 +6,13 @@ import {
 
   TURRET_MAX, TURRET_SPAWN_INTERVAL, TURRET_SPAWN_MIN, TURRET_SPAWN_MAX, TURRET_BOLT_DAMAGE,
 
-  OVERLORD_MAX, OVERLORD_SPAWN_INTERVAL, OVERLORD_SPAWN_MIN, OVERLORD_SPAWN_MAX,
+  OVERLORD_SPAWN_INTERVAL, OVERLORD_SPAWN_MIN, OVERLORD_SPAWN_MAX,
 
-  MINE_MAX, MINE_DAMAGE_MAX, MINE_KNOCKBACK,
+  MINE_DAMAGE_MAX, MINE_KNOCKBACK,
 
-  BANELING_MAX, BANELING_DAMAGE_MAX, BANELING_KNOCKBACK,
+  BANELING_DAMAGE_MAX, BANELING_KNOCKBACK,
 
-  TOTEM_MAX, TOTEM_SPAWN_INTERVAL, TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX,
+  TOTEM_SPAWN_INTERVAL, TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX,
 
   TOTEM_BOLT_DAMAGE, UBER_TOTEM_MAX, UBER_TOTEM_BOLT_DAMAGE,
 
@@ -95,7 +95,7 @@ function plantMineImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
 
   // Cap the field: dropping a new mine past the cap retires the oldest
 
-  if (mines.length >= MINE_MAX) {
+  if (mines.length >= capFor('mine')) {
 
     const oldest = mines.shift()!;
 
@@ -173,7 +173,7 @@ function spawnBanelingImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
 
   const { atCap, blastAtPlayer } = kit;
 
-  if (atCap(banelings, capFor('baneling', BANELING_MAX))) {return;}
+  if (atCap(banelings, capFor('baneling'))) {return;}
 
   const b = new Baneling(scene, deps.lazyTerrain(), pos, uber);
 
@@ -225,7 +225,7 @@ function spawnTotemImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
 
   if (deps.lazyDemoManager()?.isPlaying) {return;}
 
-  const cap = uber ? UBER_TOTEM_MAX : capFor('totem', TOTEM_MAX);
+  const cap = uber ? UBER_TOTEM_MAX : capFor('totem');
 
   if (totems.filter((t): boolean => !t.dead && (!uber || t.uber)).length >= cap) {return;}
 
@@ -307,7 +307,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   function spawnTurretter(uber?: boolean): void {
 
-    if (atCap(turrets, capFor('turret', TURRET_MAX))) {return;}
+    if (atCap(turrets, capFor('turret'))) {return;}
 
     const u = uber ?? rollUber();
 
@@ -439,7 +439,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
     if (deps.lazyDemoManager()?.isPlaying) {return;}
 
-    if (atCap(overlords, capFor('overlord', OVERLORD_MAX))) {return;}
+    if (atCap(overlords, capFor('overlord'))) {return;}
 
     const u = uber ?? rollUber();
 

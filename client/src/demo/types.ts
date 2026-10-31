@@ -1,4 +1,4 @@
-// creature ids. Ordered to match shared/deployItems.ts — keep stable.
+// creature ids. Ordered to match shared/deployItems.ts - keep stable.
 
 import type { ResultToken } from '../../../shared/resultToken.ts';
 import { SPECIES } from '../../../shared/species.ts';
@@ -29,7 +29,7 @@ export const RemoteFrameFlags = {
   Ski: 1 << 1,
 
   /** The server re-seated this body between samples (respawn/reclaim
-   *  resync) — the implied-speed jump is authoritative teleport, not
+   *  resync) - the implied-speed jump is authoritative teleport, not
    *  wire corruption. Audit/playback must not flag it. */
   Teleport: 1 << 2,
 
@@ -113,7 +113,7 @@ export enum TargetEventType {
 
 // is the creature lane, 64 + index into DEMO_SPECIES. Playback splits lanes
 
-// on this, so creature targetIds only need uniqueness among themselves —
+// on this, so creature targetIds only need uniqueness among themselves -
 
 // CREATURE_ID_FLAG sets the top bit anyway so raw ids never alias ball ids.
 
@@ -121,7 +121,7 @@ export const TARGETTYPE_CREATURE_BASE = 64;
 
 export const CREATURE_ID_FLAG = 0x80_00;
 
-// Derived from shared/species.ts key order — the wire-stable species
+// Derived from shared/species.ts key order - the wire-stable species
 // index. Adding a species row updates both ends; reordering SPECIES
 // changes ids in existing demo files (do not reorder shipped rows).
 export const DEMO_SPECIES = Object.keys(SPECIES) as readonly string[];
@@ -136,11 +136,11 @@ export function demoSpeciesIndex(species: string): number {
 
 export function creatureDemoId(netId: number): number {
 
-  // 14-bit mask, not 15: creatures must stay 0x8000–0xbfff. 0x7fff let a
+  // 14-bit mask, not 15: creatures must stay 0x8000-0xbfff. 0x7fff let a
 
   // creature netId ≥ 0x4000 wrap into the flag (0xc000+) and pickup
 
-  // (0xe000+) lanes — cross-lane corruption every 16k spawns. NetIds past
+  // (0xe000+) lanes - cross-lane corruption every 16k spawns. NetIds past
 
   // 0x3fff now self-collide within the creature lane only, which the
 
@@ -158,7 +158,7 @@ export function isCreatureTargetType(targetType: number): boolean {
 
 
 
-// Deployable lane — same shape as creatures: 128 + index into
+// Deployable lane - same shape as creatures: 128 + index into
 
 // DEMO_DEPLOY_KINDS, top-bit-below demo id so it can't alias ball or
 
@@ -166,7 +166,7 @@ export const TARGETTYPE_DEPLOY_BASE = 128;
 
 export const DEPLOY_ID_FLAG = 0x40_00;
 
-// Derived from DEPLOY_KINDS (deployItems.ts key order) — the
+// Derived from DEPLOY_KINDS (deployItems.ts key order) - the
 // wire-stable kind index; do not reorder shipped DEPLOY_ITEMS rows.
 export const DEMO_DEPLOY_KINDS = DEPLOY_KINDS;
 
@@ -192,7 +192,7 @@ export function isDeployTargetType(targetType: number): boolean {
 
 
 
-// Marker lanes — game-state edges that aren't bodies on the field:
+// Marker lanes - game-state edges that aren't bodies on the field:
 
 // 224 kill marker (targetId = victim roster idx, health = weapon,
 
@@ -208,27 +208,27 @@ export const TARGETTYPE_FLAG = 225;
 
 export const TARGETTYPE_PICKUP_BASE = 226;
 
-// 240 conquest node — pos = node pos, health = hp, peakPosX packs
+// 240 conquest node - pos = node pos, health = hp, peakPosX packs
 // owner(0-2)|core|show|hot|buildBy(0-3)<<3, peakPosY/Z = gx/gz grid.
 export const TARGETTYPE_NODE = 240;
 
-// 241 match meta — health = ms remaining on the match clock at event
+// 241 match meta - health = ms remaining on the match clock at event
 // time, peakPosX = alpha score, peakPosY = bravo score. Recorded on
 // change only; scoreboard/timer HUD reads world.teamScores/matchEndsAt.
 export const TARGETTYPE_MATCH = 241;
 
 export const MATCH_DEMO_ID = 0xE8_00;
 
-export const NODE_DEMO_ID_BASE = 0xD0_00; // |nodeId — netId nibble space
+export const NODE_DEMO_ID_BASE = 0xD0_00; // |nodeId - netId nibble space
 export function nodeDemoId(nodeId: number): number {
   return NODE_DEMO_ID_BASE | (nodeId & 0xF_FF);
 }
 
-export const FLAG_DEMO_ID_BASE = 0xC0_00; // |teamIdx — one flag per team
+export const FLAG_DEMO_ID_BASE = 0xC0_00; // |teamIdx - one flag per team
 
 export const PICKUP_ID_FLAG = 0xE0_00;
 
-// Ordered to match shared/pickups.ts — keep stable, ids land in the file.
+// Ordered to match shared/pickups.ts - keep stable, ids land in the file.
 
 export const DEMO_PICKUP_KINDS = ['gem', 'tag', 'token', 'heal', 'armor', 'regen', 'dd'] as const;
 
@@ -260,7 +260,7 @@ export function isMiscTargetType(targetType: number): boolean {
 
 
 
-/** Every target event keys on the wire netId for net-driven targets —
+/** Every target event keys on the wire netId for net-driven targets -
 
  *  the client's 0x40xx id namespace creates phantom lanes whose edges
 
@@ -300,13 +300,13 @@ export interface DemoFrame {
 
   // v4: held weapon so replays can rebuild the viewmodel. Agnostic on
 
-  // purpose — if the weapon is deleted from the build, playback swaps in
+  // purpose - if the weapon is deleted from the build, playback swaps in
 
   // a stock model rather than refusing to load the clip.
 
   weaponType: number;       // uint8
 
-  // v8: HUD bars — health/armor so playback drives the readout instead
+  // v8: HUD bars - health/armor so playback drives the readout instead
   // of showing whatever the live body had when the clip started.
   health: number;           // uint16
   armor: number;            // uint16
@@ -333,7 +333,7 @@ export interface ProjectileEvent {
 
   targetId: number;               // uint16
 
-  // v6: which demo lane targetId addresses on Hit — the ball variant
+  // v6: which demo lane targetId addresses on Hit - the ball variant
 
   // (0-63) for ball hits, HIT_TARGET_NONE for terrain/player hits.
 
@@ -407,9 +407,9 @@ export interface DemoHeader {
 
   startVelX: number; startVelY: number; startVelZ: number;
 
-  projectileLifetime: number;   // float32 — airtime of the cool shot (0 for full recordings)
+  projectileLifetime: number;   // float32 - airtime of the cool shot (0 for full recordings)
 
-  // v3: match context — a demo recorded on quicksand replayed on raindance
+  // v3: match context - a demo recorded on quicksand replayed on raindance
 
   // reconstructs nonsense; carrying the room/mode makes clips self-describing
 
@@ -423,13 +423,13 @@ export interface DemoHeader {
 
   // v6: crc32 of the persisted enum tables (species/deploy/pickup kinds,
 
-  // ball variants) at record time — a later table reorder flags old clips
+  // ball variants) at record time - a later table reorder flags old clips
 
   // instead of silently remapping them. See demoTables.ts.
 
   tableHash: number;            // uint32
 
-  // v7: the run's sim-RNG seed — replays that re-seed walk the identical
+  // v7: the run's sim-RNG seed - replays that re-seed walk the identical
   // dice stream, so a fabricated Spawned/moved event can't hide inside
   // "random luck". Stamped by the writer at serialize time.
   runSeed: number;              // uint32
@@ -454,7 +454,7 @@ export interface RemoteFrame {
 
   timestamp: number;          // float32
 
-  rosterIdx: number;          // uint16 — index into roster
+  rosterIdx: number;          // uint16 - index into roster
 
   posX: number; posY: number; posZ: number;
 
@@ -462,22 +462,22 @@ export interface RemoteFrame {
 
   yaw: number; pitch: number;
 
-  flags: number;              // uint8 — RemoteFrameFlags
+  flags: number;              // uint8 - RemoteFrameFlags
 
-  // v8 meta tail — everything the HUD indicator lane reads beyond
+  // v8 meta tail - everything the HUD indicator lane reads beyond
   // motion. Absent on v≤7 files; playback falls back to name-only
   // chevrons when undefined.
-  team?: number;              // uint8 — TEAM_CODE (0 none, 1 alpha, 2 bravo)
-  hp?: number;                // uint8 — health clamped 0-255
-  held?: number;              // uint8 — headhunt token count
-  sheep?: number;             // uint8 — bot sheep meter
-  cls?: number;               // uint8 — CLS_CODE (1 light, 2 medium, 3 heavy)
-  status?: number;            // uint8 — low STATUS_* bits
-  wid?: number;               // uint8 — held weaponType
+  team?: number;              // uint8 - TEAM_CODE (0 none, 1 alpha, 2 bravo)
+  hp?: number;                // uint8 - health clamped 0-255
+  held?: number;              // uint8 - headhunt token count
+  sheep?: number;             // uint8 - bot sheep meter
+  cls?: number;               // uint8 - CLS_CODE (1 light, 2 medium, 3 heavy)
+  status?: number;            // uint8 - low STATUS_* bits
+  wid?: number;               // uint8 - held weaponType
 
 }
 
-// v8 remote-frame meta encodings — wire strings → u8 lanes.
+// v8 remote-frame meta encodings - wire strings → u8 lanes.
 export const TEAM_CODE: Record<string, number> = { alpha: 1, bravo: 2 };
 export const TEAM_NAME = ['', 'alpha', 'bravo'];
 export const CLS_CODE: Record<string, number> = { light: 1, medium: 2, heavy: 3 };
@@ -485,7 +485,7 @@ export const CLS_NAME = ['', 'light', 'medium', 'heavy'];
 
 
 
-// v5: optional embedded heightmap trailer — a coarse u8 grid sampled
+// v5: optional embedded heightmap trailer - a coarse u8 grid sampled
 
 // off the live field so the clip replays a shaped battlefield even when
 
@@ -493,17 +493,17 @@ export const CLS_NAME = ['', 'light', 'medium', 'heavy'];
 
 export interface DemoHeightmap {
 
-  gridN: number;              // uint16 — samples per side (square)
+  gridN: number;              // uint16 - samples per side (square)
 
-  heightScale: number;        // float32 — field gain (spec.heightScale)
+  heightScale: number;        // float32 - field gain (spec.heightScale)
 
-  worldScale: number;         // float32 — meters per tile wrap
+  worldScale: number;         // float32 - meters per tile wrap
 
-  srcHash: number;            // uint32 — crc32 of the source field bytes
+  srcHash: number;            // uint32 - crc32 of the source field bytes
 
   data: Uint8Array;           // gridN² u8 heights (stride-1 Heightfield)
 
-  /** Optional sparse corrections — worst-error samples on a finer grid,
+  /** Optional sparse corrections - worst-error samples on a finer grid,
    *  preserving peaks/saddles the coarse bilinear grid flattens. See
    *  _docs/2026-10-27_DEMO_HMAP_DELTA.md. */
   corr?: { grid: number; idx: Uint32Array; delta: Int8Array };
@@ -528,14 +528,14 @@ export interface DemoFile {
 
   heightmap?: DemoHeightmap;       // absent unless the recorder saw terrain
   /** v8: map look spec ({fog, weather, atmosphere} as MapSnapshot fields)
-   *  — playback replays the recorded haze/sky instead of the live map's. */
+   *  - playback replays the recorded haze/sky instead of the live map's. */
   atmo?: { fog?: unknown; weather?: unknown; atmosphere?: unknown; terrain?: unknown; terrainTex?: unknown; terrainPreset?: unknown; heightScale?: unknown; tileSize?: unknown; sky?: unknown };
-  // v7 trailer: server-signed result receipt (SECTION_TOKEN) — the
+  // v7 trailer: server-signed result receipt (SECTION_TOKEN) - the
   // leaderboard submission pairs demo+token in one file. Absent offline.
   matchToken?: ResultToken;
   // Seek checkpoints (SECTION_SNAP): ascending elapsed-time marks where
   // the recorder guarantees a bounded tail replay (see
-  // _docs/2026-10-14_DEMO_SEEK_CHECKPOINTS.md). Absent on old files —
+  // _docs/2026-10-14_DEMO_SEEK_CHECKPOINTS.md). Absent on old files -
   // seek falls back to replay-from-0.
   snapshots?: number[];
 

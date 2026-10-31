@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  WEED_MAX, WEED_SPAWN_INTERVAL, WEED_SPAWN_MIN, WEED_SPAWN_MAX,
+  WEED_SPAWN_INTERVAL, WEED_SPAWN_MIN, WEED_SPAWN_MAX,
   WEED_WIND_X, WEED_WIND_Z,
 } from '../../core/config.js';
 import { simRand } from '../../../../shared/simRand.js';
@@ -20,7 +20,7 @@ export function createAmbientSpecies({ deps, kit, targets }: SpeciesCtx): { weed
   const weedWind = new THREE.Vector3(WEED_WIND_X, 0, WEED_WIND_Z).normalize();
 
   function spawnWeed(): void {
-    if (atCap(weeds, capFor('tumbleweed', WEED_MAX))) {return;}
+    if (atCap(weeds, capFor('tumbleweed'))) {return;}
     const player = deps.lazyPlayer();
     // Spawn upwind so it rolls across the player's field of view; a lateral
     // jitter keeps the parade from becoming a conveyor line.

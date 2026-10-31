@@ -7,13 +7,13 @@ import { bakeVertexAO } from '../effects/vertexAO.js';
 
 export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 
-// Per-species instanced renderers — created lazily on first spawn so the
+// Per-species instanced renderers - created lazily on first spawn so the
 // scene only pays for species actually in play. `capacity` is the
 // initial buffer size: species grow when full and idle-shrink after
 // ~30s of low occupancy (checkShrink driven from updateGibs).
-// `bake` runs the shared AO+grunge+wear pass over the part geometries —
+// `bake` runs the shared AO+grunge+wear pass over the part geometries -
 // for mechanical species that want the gun-metal pipeline, not organics.
-// What the gunlab needs to run a live specimen — every swarm-rendered
+// What the gunlab needs to run a live specimen - every swarm-rendered
 // entity shares this shape, so a preview needs no per-species wiring.
 export interface LabEntity {
   pos: THREE.Vector3; radius: number;
@@ -22,7 +22,11 @@ export interface LabEntity {
 }
 export interface SwarmSpec {
   parts: () => SwarmPart[]; capacity: number; bake?: boolean;
-  /** Lab/debug spawn — entities that don't fit the shared ctor (Ball) omit it. */
+  /** Alive-cap default for spawn gates (capFor reads it; map-spec
+   *  `ambient` overrides win). Distinct from `capacity` - that's the
+   *  instancing buffer size, this is the population gate. */
+  max?: number;
+  /** Lab/debug spawn - entities that don't fit the shared ctor (Ball) omit it. */
   spawn?: (scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) => LabEntity;
 }
 
@@ -33,7 +37,7 @@ let registryScene: THREE.Scene | null = null;
 let registryTerrain: Terrain | null = null;
 let specTable: Record<string, SwarmSpec> = {};
 
-/** Called once at boot — scene + terrain the swarm layers live in. */
+/** Called once at boot - scene + terrain the swarm layers live in. */
 export function initSwarms(scene: THREE.Scene, terrain: Terrain, specs: Record<string, SwarmSpec>): void {
   registryScene = scene;
   registryTerrain = terrain;
@@ -50,11 +54,11 @@ export function getSwarm(species: string): SpeciesSwarm | null {
   if (spec.bake) {
     for (const p of parts) {
       // bakeMesh de-indexes geometry into a CLONE (indexed verts can't
-      // hold per-corner attributes) — de-index in place FIRST, or every
+      // hold per-corner attributes) - de-index in place FIRST, or every
       // baked attribute lands on a throwaway clone and the instanced
       // mesh renders the virgin buffer. And bake ONE part per host:
       // stacked parts at origin mutually occlude and the whole bake
-      // floors out black — each part wants its own self-occlusion only.
+      // floors out black - each part wants its own self-occlusion only.
       if (p.geometry.index) {p.geometry = p.geometry.toNonIndexed();}
       const host = new THREE.Group();
       host.add(new THREE.Mesh(p.geometry, p.material));
@@ -62,7 +66,7 @@ export function getSwarm(species: string): SpeciesSwarm | null {
     }
   }
   const swarm = new SpeciesSwarm(registryScene, parts, spec.capacity);
-  // Aim-probe tags — a crosshair hit on any part mesh resolves to this
+  // Aim-probe tags - a crosshair hit on any part mesh resolves to this
   // species + the owning entity through swarm.ownerAt.
   swarm.meshes.forEach((m, i): void => markProbe(m, { kind: 'species', species, swarm, part: i }));
   swarms.set(species, swarm);
@@ -74,7 +78,7 @@ export function getShadows(): InstancedBlobShadows | null {
 }
 
 /** Alloc both handles; fails only before initSwarms or on an unknown
- *  species — the pools themselves grow on demand and never fill. */
+ *  species - the pools themselves grow on demand and never fill. */
 export function allocSlots(species: string, owner: SwarmSlotOwner): boolean {
   const swarm = getSwarm(species);
   if (!swarm || swarm.alloc(owner) < 0) {return false;}
@@ -100,9 +104,9 @@ function getGibPool(species: string): GibPool | null {
 
 /**
  * Shatter a swarm-rendered body: every part instance becomes a gib at its
- * exact current world transform (pixel-identical handoff — no pop), then
+ * exact current world transform (pixel-identical handoff - no pop), then
  * the swarm + shadow slots free. Returns false for single-part species or
- * when the body already released its slot — callers fall back to shard
+ * when the body already released its slot - callers fall back to shard
  * debris there.
  */
 export function burstGibs(
@@ -119,7 +123,7 @@ export function burstGibs(
   return true;
 }
 
-/** Per-frame gib integration — same tick as the shard debris update.
+/** Per-frame gib integration - same tick as the shard debris update.
  *  Also the idle-shrink pass for the three grow-only capacity buffers:
  *  occupancy under a quarter for 30s contracts them back to initCap. */
 export function updateGibs(dt: number): void {
@@ -131,7 +135,7 @@ export function updateGibs(dt: number): void {
   shadows?.checkShrink(now);
 }
 
-/** Capacity/live census for the Alt+Q dump — a species pinned at capacity
+/** Capacity/live census for the Alt+Q dump - a species pinned at capacity
  *  or a gib pool that never drains shows up here before it starves. */
 export function swarmStats(): Record<string, unknown> {
   const species: Record<string, { live: number; cap: number }> = {};
@@ -145,8 +149,8 @@ export function swarmStats(): Record<string, unknown> {
   };
 }
 
-// No flush pass needed — SpeciesSwarm.setMatrix/setColor and
+// No flush pass needed - SpeciesSwarm.setMatrix/setColor and
 // InstancedBlobShadows.set flag their own buffers dirty per write.
 
-// Alt+Q census section — species/gib/shadow swarm inventory.
+// Alt+Q census section - species/gib/shadow swarm inventory.
 registerDiag('swarm', (): { swarm: Record<string, unknown>; } => ({ swarm: swarmStats() }));

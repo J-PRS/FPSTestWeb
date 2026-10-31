@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 
 import {
-  CRAWLER_MAX, CRAWLER_SPAWN_INTERVAL, CRAWLER_SPAWN_MIN, CRAWLER_SPAWN_MAX, CRAWLER_POUNCE_DAMAGE,
-  SCARAB_MAX, SCARAB_SPAWN_INTERVAL, SCARAB_SPAWN_MIN, SCARAB_SPAWN_MAX,
+  CRAWLER_SPAWN_INTERVAL, CRAWLER_SPAWN_MIN, CRAWLER_SPAWN_MAX, CRAWLER_POUNCE_DAMAGE,
+  SCARAB_SPAWN_INTERVAL, SCARAB_SPAWN_MIN, SCARAB_SPAWN_MAX,
   SCARAB_PACK_MIN, SCARAB_PACK_MAX, SCARAB_BITE_DAMAGE, SCARAB_BITE_FORCE, SCARAB_BITE_DIST,
-  GRUB_MAX, GRUB_SPAWN_INTERVAL, GRUB_SPAWN_MIN, GRUB_SPAWN_MAX,
+  GRUB_SPAWN_INTERVAL, GRUB_SPAWN_MIN, GRUB_SPAWN_MAX,
   GRUB_BITE_DAMAGE, GRUB_BITE_FORCE, GRUB_BITE_DIST,
-  SNAKE_MAX, SNAKE_SPAWN_INTERVAL, SNAKE_SPAWN_MIN, SNAKE_SPAWN_MAX,
+  SNAKE_SPAWN_INTERVAL, SNAKE_SPAWN_MIN, SNAKE_SPAWN_MAX,
   SNAKE_BITE_DAMAGE, SNAKE_BITE_FORCE, SNAKE_BITE_DIST,
-  ROLLER_MAX, ROLLER_SPAWN_INTERVAL, ROLLER_SPAWN_MIN, ROLLER_SPAWN_MAX,
+  ROLLER_SPAWN_INTERVAL, ROLLER_SPAWN_MIN, ROLLER_SPAWN_MAX,
   ROLLER_HIT_DAMAGE, ROLLER_HIT_FORCE,
 } from '../../core/config.js';
 import { simRand } from '../../../../shared/simRand.js';
@@ -37,14 +37,14 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Crawlers (terrain-hugging targets that pounce) ----
   function spawnCrawler(pos?: THREE.Vector3, uber?: boolean): void {
-    if (!pos && atCap(crawlers, capFor('crawler', CRAWLER_MAX))) {return;} // events bypass the cap
+    if (!pos && atCap(crawlers, capFor('crawler'))) {return;} // events bypass the cap
     const u = uber ?? (!pos && rollUber());
     const c = new Crawler(scene, deps.lazyTerrain(), pos ?? ringPos(CRAWLER_SPAWN_MIN, CRAWLER_SPAWN_MAX), u);
     c.onLanded = (p): void => { deps.lazyEffects().spawnJumpDust(p); sfx.enemyCue(p, 'skitter'); };
     c.onPounceHit = (cr): boolean => bite(cr, 10, CRAWLER_POUNCE_DAMAGE, 'devoured by a crawler', { text: 'devoured by the matriarch' }, 3);
     c.onBrood = (cr): void => {
       // Matriarch births a scarab — cap-checked, positioned just off her hip
-      if (atCap(scarabs, capFor('scarab', SCARAB_MAX))) {return;}
+      if (atCap(scarabs, capFor('scarab'))) {return;}
       const s = new Scarab(scene, deps.lazyTerrain(), cr.pos.clone().add(new THREE.Vector3(
         (simRand() - 0.5) * 3, 0, (simRand() - 0.5) * 3)));
       s.onBite = (sc): boolean => bite(sc, SCARAB_BITE_FORCE, SCARAB_BITE_DAMAGE, 'swarmed by scarabs', undefined, SCARAB_BITE_DIST + 1);
@@ -68,14 +68,14 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Scarabs (pack fodder — mow them down in clumps) ----
   function spawnScarab(pos?: THREE.Vector3, uber?: boolean): void {
-    if (!pos && atCap(scarabs, capFor('scarab', SCARAB_MAX))) {return;}
+    if (!pos && atCap(scarabs, capFor('scarab'))) {return;}
     const u = uber ?? (!pos && rollUber());
     // One spawn attempt = a whole pack, clustered on the same burrow spot.
     // An uber roll drops ONE dreadbeetle instead — a pack of those is a raid boss.
     const base = pos ?? ringPos(SCARAB_SPAWN_MIN, SCARAB_SPAWN_MAX);
     const n = u || pos ? 1 : SCARAB_PACK_MIN + Math.floor(simRand() * (SCARAB_PACK_MAX - SCARAB_PACK_MIN + 1));
     for (let k = 0; k < n; k += 1) {
-      if (atCap(scarabs, capFor('scarab', SCARAB_MAX))) {break;}
+      if (atCap(scarabs, capFor('scarab'))) {break;}
       const s = new Scarab(scene, deps.lazyTerrain(), base.clone().add(new THREE.Vector3(
         (simRand() - 0.5) * 6, 0, (simRand() - 0.5) * 6)), u);
       s.onBite = (sc): boolean => bite(sc, SCARAB_BITE_FORCE, SCARAB_BITE_DAMAGE, 'swarmed by scarabs', { force: 2.5, dmg: 3, text: 'trampled by a dreadbeetle' }, SCARAB_BITE_DIST + 1);
@@ -95,14 +95,14 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Grubs (walking piñatas — slow, fat, poppable) ----
   function spawnGrub(pos?: THREE.Vector3, uber?: boolean): void {
-    if (!pos && atCap(grubs, capFor('grub', GRUB_MAX))) {return;}
+    if (!pos && atCap(grubs, capFor('grub'))) {return;}
     const u = uber ?? (!pos && rollUber());
     const g = new Grub(scene, deps.lazyTerrain(), pos ?? ringPos(GRUB_SPAWN_MIN, GRUB_SPAWN_MAX), u);
     g.onBite = (gr): boolean => bite(gr, GRUB_BITE_FORCE, GRUB_BITE_DAMAGE, 'gummed to death by a grub', { text: 'crushed by a bloatgrub' }, GRUB_BITE_DIST + 1);
     if (u) {g.onDeath = (mother): void => {
       // Bloatgrub births on pop: three live grubs spill out of the corpse —
       // cap-checked so a bloatgrub chain can't flood the field.
-      for (let k = 0; k < 3 && !atCap(grubs, capFor('grub', GRUB_MAX)); k += 1) {
+      for (let k = 0; k < 3 && !atCap(grubs, capFor('grub')); k += 1) {
         const child = new Grub(scene, deps.lazyTerrain(), mother.pos.clone().add(new THREE.Vector3(
           (simRand() - 0.5) * 2, 0, (simRand() - 0.5) * 2)));
         child.onBite = g.onBite; // same wiring — children are normal grubs
@@ -125,7 +125,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Snakes (sand vipers — weave in, coil, lunge) ----
   function spawnSnake(pos?: THREE.Vector3, uber?: boolean): void {
-    if (!pos && atCap(snakes, capFor('snake', SNAKE_MAX))) {return;}
+    if (!pos && atCap(snakes, capFor('snake'))) {return;}
     const u = uber ?? (!pos && rollUber());
     const s = new Snake(scene, deps.lazyTerrain(), pos ?? ringPos(SNAKE_SPAWN_MIN, SNAKE_SPAWN_MAX), u);
     s.onStrike = (sn): boolean => bite(sn, SNAKE_BITE_FORCE, SNAKE_BITE_DAMAGE, 'bitten by a sand viper', { dmg: 2.5, text: 'swallowed by the king serpent' }, SNAKE_BITE_DIST + 1);
@@ -143,7 +143,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Rollers (big homing boulders — the hitbox is the threat) ----
   function spawnRoller(uber?: boolean): void {
-    if (atCap(rollers, capFor('roller', ROLLER_MAX))) {return;}
+    if (atCap(rollers, capFor('roller'))) {return;}
     const u = uber ?? rollUber();
     const r = new Roller(scene, deps.lazyTerrain(), ringPos(ROLLER_SPAWN_MIN, ROLLER_SPAWN_MAX), u);
     r.onLanded = (pos): void => deps.lazyEffects().spawnJumpDust(pos);

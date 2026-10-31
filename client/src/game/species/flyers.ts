@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 
 import {
-  GNAT_MAX, GNAT_SPAWN_INTERVAL, GNAT_SPAWN_MIN, GNAT_SPAWN_MAX,
+  GNAT_SPAWN_INTERVAL, GNAT_SPAWN_MIN, GNAT_SPAWN_MAX,
   GNAT_CLOUD_MIN, GNAT_CLOUD_MAX, GNAT_ORBIT_ALT,
   GNAT_NIP_DAMAGE, GNAT_NIP_FORCE, GNAT_NIP_DIST,
-  SEEKER_MAX, SEEKER_SPAWN_INTERVAL, SEEKER_SPAWN_MIN, SEEKER_SPAWN_MAX,
+  SEEKER_SPAWN_INTERVAL, SEEKER_SPAWN_MIN, SEEKER_SPAWN_MAX,
   SEEKER_STING_DAMAGE, SEEKER_STING_FORCE, SEEKER_STING_DIST,
-  RAKK_MAX, RAKK_SPAWN_INTERVAL, RAKK_SPAWN_MIN, RAKK_SPAWN_MAX,
+  RAKK_SPAWN_INTERVAL, RAKK_SPAWN_MIN, RAKK_SPAWN_MAX,
   RAKK_CLAW_DAMAGE, RAKK_CLAW_FORCE, RAKK_CLAW_DIST,
-  STRIFER_MAX, STRIFER_SPAWN_INTERVAL, STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX,
+  STRIFER_SPAWN_INTERVAL, STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX,
   STRIFER_BOLT_DAMAGE, STRIFER_BOLT_FORCE,
 } from '../../core/config.js';
 import { simRand } from '../../../../shared/simRand.js';
@@ -39,7 +39,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Gnats (boid harasser cloud — orbits you, darts for nips) ----
   function spawnGnatCloud(uber?: boolean): void {
-    if (atCap(gnats, capFor('gnat', GNAT_MAX))) {return;}
+    if (atCap(gnats, capFor('gnat'))) {return;}
     const u = uber ?? rollUber();
     const base = ringPos(GNAT_SPAWN_MIN, GNAT_SPAWN_MAX);
     const player = deps.lazyPlayer();
@@ -58,7 +58,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
       ? 1 + Math.floor(simRand() * 3) + 2      // queen + 2-4 escorts
       : GNAT_CLOUD_MIN + Math.floor(simRand() * (GNAT_CLOUD_MAX - GNAT_CLOUD_MIN + 1));
     for (let k = 0; k < n; k += 1) {
-      if (atCap(gnats, capFor('gnat', GNAT_MAX))) {break;}
+      if (atCap(gnats, capFor('gnat'))) {break;}
       const queen = u && k === 0; // firstborn is the queen
       const g = new Gnat(scene, deps.lazyTerrain(), cloud.center.clone().add(new THREE.Vector3(
         (simRand() - 0.5) * 8, (simRand() - 0.5) * 4, (simRand() - 0.5) * 8)), queen);
@@ -95,7 +95,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Seekers (airborne sting enemies — telegraphed darts) ----
   function spawnSeeker(uber?: boolean): void {
-    if (atCap(seekers, capFor('seeker', SEEKER_MAX))) {return;}
+    if (atCap(seekers, capFor('seeker'))) {return;}
     const u = uber ?? rollUber();
     const s = new Seeker(scene, deps.lazyTerrain(), ringPos(SEEKER_SPAWN_MIN, SEEKER_SPAWN_MAX), u);
     s.onSting = (sk): boolean => bite(sk, SEEKER_STING_FORCE, SEEKER_STING_DAMAGE, 'stung to death by a seeker', { force: 1.5, text: 'run through by a lancer' }, SEEKER_STING_DIST + 1);
@@ -113,7 +113,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   // ---- Rakks (circling cliff-racers — fold-and-swoop passes) ----
   function spawnRakk(uber?: boolean): void {
     if (deps.lazyDemoManager()?.isPlaying) {return;}
-    if (atCap(rakks, capFor('rakk', RAKK_MAX))) {return;}
+    if (atCap(rakks, capFor('rakk'))) {return;}
     const u = uber ?? rollUber();
     const r = new Rakk(scene, deps.lazyTerrain(), ringPos(RAKK_SPAWN_MIN, RAKK_SPAWN_MAX), u);
     r.onClawHit = (rk): void => {
@@ -142,7 +142,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   // ---- Strifers (standoff strafing drones — orbit, hover, bolt volley) ----
   function spawnStrifer(uber?: boolean): void {
     if (deps.lazyDemoManager()?.isPlaying) {return;}
-    if (atCap(strifers, capFor('strifer', STRIFER_MAX))) {return;}
+    if (atCap(strifers, capFor('strifer'))) {return;}
     const u = uber ?? rollUber();
     const st = new Strifer(scene, deps.lazyTerrain(), ringPos(STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX), u);
     st.onBoltHit = (x, pos): boolean => hurtPlayer(pos, STRIFER_BOLT_FORCE, STRIFER_BOLT_DAMAGE * (x.uber ? 2 : 1),

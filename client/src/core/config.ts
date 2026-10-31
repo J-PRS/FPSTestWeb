@@ -118,7 +118,6 @@ export const BALL_ENRAGE_TELEGRAPH_H = 8; // Glow ramps to white under this heig
 export const EMERGE_DUR = 0.8; // Ground spawns burrow up out of the dirt over this many seconds
 
 // Crawlers - terrain-hugging targets that hop, chase, and pounce
-export const CRAWLER_MAX = 6; // Max crawlers alive
 export const CRAWLER_SPAWN_INTERVAL = 4; // Seconds between spawn attempts
 export const CRAWLER_SPAWN_MIN = 40; // Spawn ring: min distance from player
 export const CRAWLER_SPAWN_MAX = 90;
@@ -136,7 +135,6 @@ export const CRAWLER_STUN = 0.5; // Blast knockback suppresses hopping this long
 // Scarabs - cannon fodder. Spawn in packs, skitter fast, weak nibble.
 // Everything about them is small except the count - they exist to be
 // mowed down in satisfying clumps.
-export const SCARAB_MAX = 16;             // total alive - packs chew through the cap
 export const SCARAB_SPAWN_INTERVAL = 5;
 export const SCARAB_SPAWN_MIN = 45;
 export const SCARAB_SPAWN_MAX = 85;
@@ -162,7 +160,6 @@ export const SCARAB_STUN = 0.3;
 
 // Grubs - the most mundane thing alive: slow fat maggots that inch
 // toward you and pop. Walking piñatas - the nuggets are the point.
-export const GRUB_MAX = 10;
 export const GRUB_SPAWN_INTERVAL = 7;
 export const GRUB_SPAWN_MIN = 40;
 export const GRUB_SPAWN_MAX = 80;
@@ -179,7 +176,6 @@ export const GRUB_STUN = 0.4;
 // Snakes - sand vipers. Serpentine weave toward you, a readable coil
 // wind-up, then a committed straight-line lunge. Mid-tier predator:
 // faster and meaner than fodder, frailer than a crawler.
-export const SNAKE_MAX = 8;
 export const SNAKE_SPAWN_INTERVAL = 9;
 export const SNAKE_SPAWN_MIN = 30;
 export const SNAKE_SPAWN_MAX = 60;
@@ -200,7 +196,6 @@ export const SNAKE_BITE_FORCE = 9;
 // Gnats - a boid cloud of insectoid harassers. They ORBIT you in a
 // jittery swarm; individuals dart in for a nip and zip back out. Never
 // a committed divebomb - harassment, not a bombing run.
-export const GNAT_MAX = 16;               // total alive across all clouds
 export const GNAT_SPAWN_INTERVAL = 6.5;
 export const GNAT_SPAWN_MIN = 50;
 export const GNAT_SPAWN_MAX = 80;
@@ -241,7 +236,6 @@ export const TURRET_BOLT_DAMAGE = 12;
 
 // Roller - a big ball that just rolls at you. No hops, no brains:
 // terrain-following homing boulder. Hitbox is the threat.
-export const ROLLER_MAX = 4;
 export const ROLLER_SPAWN_INTERVAL = 8;
 export const ROLLER_SPAWN_MIN = 50;
 export const ROLLER_SPAWN_MAX = 110;
@@ -254,7 +248,6 @@ export const ROLLER_HIT_FORCE = 22;      // shove on contact
 
 // Tumbleweed - destructible rolling props. Wind-blown (same drift direction
 // as the ambient dust), bounce off slopes, pop into twigs when shot.
-export const WEED_MAX = 10;
 export const WEED_SPAWN_INTERVAL = 2.5;
 export const WEED_SPAWN_MIN = 40;      // spawn upwind of the player…
 export const WEED_SPAWN_MAX = 70;
@@ -269,7 +262,6 @@ export const WEED_HOP = 3;             // bounce impulse cresting bumps
 // Seeker - airborne skull-wasp. Ignores terrain while cruising above it,
 // commits to a telegraphed straight-line dart (the dodge window IS the
 // design), stings on contact, then drifts off to recover.
-export const SEEKER_MAX = 4;
 export const SEEKER_SPAWN_INTERVAL = 7;
 export const SEEKER_SPAWN_MIN = 35;
 export const SEEKER_SPAWN_MAX = 70;
@@ -292,7 +284,6 @@ export const SEEKER_STUN = 0.6;         // blast knockback suppresses attacks th
 // Overlord - the flying dredge: a big slow gasbag that circles the player and
 // sows mines across the dunes. Always visible, huge hitbox, high HP - a
 // priority target, not a lurker. The mine trail punishes ignoring it.
-export const OVERLORD_MAX = 2;
 export const OVERLORD_SPAWN_INTERVAL = 20; // slow - a persistent menace, not a swarm
 export const OVERLORD_SPAWN_MIN = 60;
 export const OVERLORD_SPAWN_MAX = 100;
@@ -307,7 +298,6 @@ export const OVERLORD_DROP_RANGE = 50;   // only sows inside the player's play s
 export const OVERLORD_STUN = 0.4;          // blast knockback stalls its steering
 
 // Mines - the droppings. Shootable (detonating one clears it), proximity-fused.
-export const MINE_MAX = 10;             // global cap - oldest fields thin out
 export const MINE_RADIUS = 0.5;
 // Combat envelope derives from the shared belt registry - the fuse,
 // blast and damage numbers must match the server's authoritatively;
@@ -320,7 +310,6 @@ export const MINE_KNOCKBACK = DEPLOY_ITEMS.mine.knockback!;
 export const MINE_LIFE = 45;          // seconds before it fizzle-pops
 
 // Banelings - rolling suicide bombs birthed by the Overlord (was: Overlord)
-export const BANELING_MAX = 12;          // brood cap across all overlords
 export const BANELING_RADIUS = 0.7;      // small - an exploding sac, not a boulder
 export const BANELING_HEALTH = 15;       // pops to a couple of hits
 export const BANELING_ACCEL = 22;      // zippy homing
@@ -334,7 +323,6 @@ export const BANELING_LIFE = 25;       // self-detonates eventually
 // Totem - peak-seeking sniper obelisk. Blinks to local high ground, charges
 // a visible aim-beam, fires a fast flat bolt. Relocates when crowded,
 // when LOS is blocked, or after a few shots - it always wants the crest.
-export const TOTEM_MAX = 2;
 export const TOTEM_SPAWN_INTERVAL = 18; // rare - a persistent ranged threat
 export const TOTEM_SPAWN_MIN = 50;
 export const TOTEM_SPAWN_MAX = 95;    // inside readable fog distance
@@ -370,7 +358,6 @@ export const UBER_TOTEM_BEAM_WIDTH = 1.2; // fat red telegraph - reads "death ra
 // Rakk - the cliff-racer. Soars overhead in lazy circles, folds its wings,
 // and swoops a gliding pass through the player. Flock attack token keeps
 // it to one diver at a time; the slow climb-out is the shoot-it window.
-export const RAKK_MAX = 3;
 export const RAKK_SPAWN_INTERVAL = 9;
 export const RAKK_SPAWN_MIN = 40;
 export const RAKK_SPAWN_MAX = 80;
@@ -405,7 +392,6 @@ export const STRIFER_BOLT_DIST = 1.6;     // bolt contact radius
 export const STRIFER_BOLT_DAMAGE = 9;
 export const STRIFER_BOLT_FORCE = 5;      // bolt impact shove
 export const STRIFER_STUN = 0.6;
-export const STRIFER_MAX = 3;
 export const STRIFER_SPAWN_INTERVAL = 11;
 export const STRIFER_SPAWN_MIN = 45;
 export const STRIFER_SPAWN_MAX = 90;
