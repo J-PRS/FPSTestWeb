@@ -142,6 +142,11 @@ export class ConnectionManager {
     if (!q) {q = []; this.outbox.set(pid, q);}
     q.push(frame);
   }
+  /** Send-cost telemetry — counts actual ws.send calls + elapsed inside
+   *  flush so the per-call cost is measured, not guessed. Folded into
+   *  room metrics; cleared on read. */
+  sendsCount = 0;
+  sendsNs = 0;
   flushOutboxes(): void {
     this.collecting = false;
     for (const [pid, q] of this.outbox) {
@@ -150,7 +155,10 @@ export class ConnectionManager {
       if (q.length > 0) {
         const ws = this.connections.get(pid);
         if (ws && ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
+          const t0 = process.hrtime.bigint();
           const status = ws.send(q.length === 1 ? q[0]! : encodeBatch(q, this.batchScratch));
+          this.sendsNs += Number(process.hrtime.bigint() - t0);
+          this.sendsCount += 1;
           if (status === 0) {
             this.reliableDropped += 1;
             this.onReliableDropped?.(pid);

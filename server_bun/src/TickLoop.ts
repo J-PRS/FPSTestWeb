@@ -79,7 +79,7 @@ export class TickLoop {
   }
   /** Last completed 10s rollup — surfaced on /metrics, null until a
    *  window closes (needs a connected player to accumulate). */
-  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number }; worstTicks?: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] } | null = null;
+  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; sendsPerSec: number; sendUsPerCall: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number }; worstTicks?: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] } | null = null;
   /** Worst ticks this rollup window — a bare tickMsMax never says WHICH
    *  phase held the spike, and "code vs GC/deschedule" is the whole
    *  question: a 200ms tick whose spans sum to 2ms is a runtime pause,
@@ -395,6 +395,13 @@ this.metrics.ticks += 1;
       const secs = (now0 - m.windowStart) / 1000;
       const phaseMs: Record<string, number> = {};
       for (const [k, v] of this.phases) {phaseMs[k] = Number(v.toFixed(2));}
+      let sends = 0, sendNs = 0;
+      for (const room of this.rooms.values()) {
+        sends += room.connections.sendsCount;
+        sendNs += room.connections.sendsNs;
+        room.connections.sendsCount = 0;
+        room.connections.sendsNs = 0;
+      }
       this.lastBw = {
         kbpsDownTotal: Number((m.bytesSent * 8 / 1000 / secs).toFixed(1)),
         recordsPerSec: Number((m.recordsSent / secs).toFixed(0)),
@@ -402,6 +409,11 @@ this.metrics.ticks += 1;
         tierSkippedPerSec: Number((m.recordsTierSkipped / secs).toFixed(0)),
         tickFramesDroppedPerSec: Number((m.tickFramesDropped / secs).toFixed(0)),
         tickFramesHeldPerSec: Number((m.tickFramesHeld / secs).toFixed(0)),
+        // Actual ws.send count + µs/call inside flushOutboxes — the
+        // cpuprofile's top line was 'send' at ~36%; this makes the
+        // per-call cost a measured number, not an estimate.
+        sendsPerSec: Number((sends / secs).toFixed(0)),
+        sendUsPerCall: sends > 0 ? Number((sendNs / sends / 1000).toFixed(1)) : 0,
         tickErrors: m.tickErrors,
         phaseMs,
         tickMs: m.tickSamples ? { avg: Number((m.tickMsSum / m.tickSamples).toFixed(2)), max: Number(m.tickMsMax.toFixed(2)) } : undefined,

@@ -219,6 +219,8 @@ try {
     tickMsMax: bw?.tickMs?.max,
     dropped: bw?.tickFramesDroppedPerSec,
     held: bw?.tickFramesHeldPerSec,
+    sendsPerSec: (bw as { sendsPerSec?: number } | undefined)?.sendsPerSec,
+    sendUsPerCall: (bw as { sendUsPerCall?: number } | undefined)?.sendUsPerCall,
     phaseMs: bw?.phaseMs,
     worstTicks: (bw as { worstTicks?: unknown } | undefined)?.worstTicks,
     // Per-thread CPU ms deltas (Linux /proc only) — splits the JS loop
