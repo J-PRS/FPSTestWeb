@@ -138,3 +138,10 @@ duplicates names already in configs) + bot pools. Derivable from markers.
   lower value per edit.
 - **Open**: deployable ctor/adopt/tick registry, `BOT_ALT_SLOTS`
   index-sync, belt/sidearm pool derivation, mode descriptor table.
+- **`f12f62fb`** — `alts` moved onto `BotLoadout` rows; `BOT_ALT_SLOTS`
+  is now a derived alias (index-parallel literal removed).
+- **`450339c3`** — deployable `SEATED` registry: one {make,adopt} row
+  per bolted-down kit; 5 parallel chains + 2 dead beacon branches dead.
+- DEMO_DEPLOY_KINDS derived from DEPLOY_KINDS (order was already exact).
+- **Remaining**: remoteDeployables spawn chain + server tick chains,
+  capFor *_MAX into SpeciesRow, mode descriptor table.
