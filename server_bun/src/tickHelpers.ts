@@ -101,4 +101,9 @@ export interface TickRecord {
   /** Precomputed |vel| -- fanout bumps fast movers off the sparse far
    *  tier so their DR seed and interp tangents stay honest. */
   spd?: number;
+  /** Numeric key for the per-recipient tier map -- Map<number> hashes
+   *  ~3x cheaper than pid strings on the hot scan (2M+ lookups/s at
+   *  ~370 seats). A recycled wireId may inherit a stale tier for one
+   *  eval, bounded because fresh mints are forced anyway. */
+  wireId?: number;
 }

@@ -147,14 +147,20 @@ export class ConnectionManager {
    *  room metrics; cleared on read. */
   sendsCount = 0;
   sendsNs = 0;
+  /** Flush counter -- the tick frame's per-conn drown gate samples
+   *  buffered every 4th flush (~200ms) instead of every send: the
+   *  native getBufferedAmount read was inside the measured ~26us
+   *  ws.send cost, and the 5s drown window doesn't need 20Hz reads. */
+  private flushCount = 0;
   flushOutboxes(): void {
     this.collecting = false;
+    this.flushCount += 1;
     for (const [pid, q] of this.outbox) {
       // Persistent queue -- the array survives the flush (length reset),
       // so a steady fleet allocates zero outbox objects per tick.
       if (q.length > 0) {
         const ws = this.connections.get(pid);
-        if (ws && ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
+        if (ws && ws.readyState === 1 && ((this.flushCount & 3) !== 0 || this.drownCheck(pid, ws) === 'ok')) {
           const t0 = process.hrtime.bigint();
           const status = ws.send(q.length === 1 ? q[0]! : encodeBatch(q, this.batchScratch));
           this.sendsNs += Number(process.hrtime.bigint() - t0);

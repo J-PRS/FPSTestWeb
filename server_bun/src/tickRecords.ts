@@ -134,7 +134,7 @@ export class TickFanout {
    *  boundary orbits need hysteresis or the send cadence flaps 20↔10Hz
    *  tick-to-tick. Increases require 15% past the boundary; decreases
    *  (closer) always apply immediately -- fresh data is never wrong. */
-  private readonly tierMem = new Map<string, Map<string, number>>();
+  private readonly tierMem = new Map<string, Map<number, number>>();
   /** Scratch basis for per-recipient intro fulls -- NEVER the shared
    *  v4Last ring (a second encode against it would double-step the basis
    *  receivers actually hold). forceFull makes every call fresh, so the
@@ -310,6 +310,7 @@ this.metrics.recordsSuppressed += 1;
       }
       rec.playerId = playerId;
       rec.pos = p.position;
+      rec.wireId = wireId;
       // spd only feeds the >12 m/s travel-budget gate -- squared-compare
       // skips the hypot on everyone parked (Math.hypot is ~10x sqrt).
       const vsq = p.velocity.x * p.velocity.x + p.velocity.y * p.velocity.y + p.velocity.z * p.velocity.z;
@@ -539,9 +540,11 @@ this.metrics.recordsIdleReaped += 1;
       const introFull = intro && room.tickSeq - (room.introPlayers.get(recipientId) ?? -100) <= TickFanout.INTRO_CADENCE_TICKS;
       // Spawn pacing: admit a few pending seats per tick -- a paced admit
       // rides an ordinary playerJoined on the wire; nothing says it waited.
-      const pending = room.admitPending.get(recipientId);
-      if (pending) {this.drainAdmits(room, recipientId, pending);}
       const tScan = process.hrtime.bigint();
+      // Free check when no seats are pacing: one map.size read per tick
+      // instead of a per-recipient get.
+      const pending = room.admitPending.size > 0 ? room.admitPending.get(recipientId) : undefined;
+      if (pending) {this.drainAdmits(room, recipientId, pending);}
       const others = this.scratchOthers;
       others.length = 0;
       const cands = this.candRecs;
@@ -647,7 +650,7 @@ this.metrics.recordsIdleReaped += 1;
         // that CANNOT have upgraded skip tier+hysteresis entirely.
         // dSq stays cheap-every-tick so an inward crossing is still
         // discovered instantly; the bound keys on the distance tier.
-        const mem = tiers.get(r.playerId);
+        const mem = tiers.get(r.wireId ?? -1);
         const spd0 = r.spd ?? 0;
         let emitEvery = mem ?? 1;
         if (spd0 > 12) {
@@ -680,7 +683,7 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         }
         // Map write only on change -- an unconditional set was a churn
         // write per recipient×record×tick in the cpuprofile hot loop.
-        if (mem !== tier) {tiers.set(r.playerId, tier);}
+        if (mem !== tier) {tiers.set(r.wireId ?? -1, tier);}
         // Travel-budget tier (ephemeral -- sits AFTER hysteresis so a
         // slowed bot falls back to its distance tier immediately): no
         // remote may cover >5m between records. At ~50ms/tick that's
