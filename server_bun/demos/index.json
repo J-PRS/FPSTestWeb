@@ -623,6 +623,13 @@
     "fileSize": 252882
   },
   {
+    "filename": "clip_2026-10-31T05-57-49_2.9s.demo",
+    "projectileLifetime": 2.8964285850524902,
+    "timestamp": 1793426269594,
+    "description": "Combo x13 (best 2.90s air, 18.6s clip)",
+    "fileSize": 220830
+  },
+  {
     "filename": "clip_2026-10-04T21-21-52_2.9s.demo",
     "projectileLifetime": 2.8833999633789062,
     "timestamp": 1791148912402,
@@ -686,17 +693,10 @@
     "fileSize": 217080
   },
   {
-    "filename": "clip_2026-09-27T19-44-26_2.8s.demo",
-    "projectileLifetime": 2.7592999935150146,
-    "timestamp": 1790538266989,
-    "description": "Combo x12 (best 2.76s air, 23.9s clip)",
-    "fileSize": 148139
-  },
-  {
-    "filename": "clip_2026-10-04T13-26-45_2.8s.demo",
-    "projectileLifetime": 2.7568986415863037,
-    "timestamp": 1791120405421,
-    "description": "Combo x5 (best 2.76s air, 22.7s clip)",
-    "fileSize": 296240
+    "filename": "clip_2026-10-31T05-03-58_2.8s.demo",
+    "projectileLifetime": 2.768749952316284,
+    "timestamp": 1793423038814,
+    "description": "Combo x3 (best 2.77s air, 14.9s clip)",
+    "fileSize": 158492
   }
 ]

@@ -66,5 +66,9 @@
     ".devin": "robot",
     ".agents": "robot",
     "skills": "skills"
+  },
+  "workbench.colorCustomizations": {
+    "titleBar.activeForeground": "#35e7ff",
+    "titleBar.border": "#35e7ff"
   }
 }

@@ -8,9 +8,9 @@ echo Reaping stale dev processes...
 node "%PROJECT_DIR%\_tools\reap.mjs" --kill
 
 echo Killing old process on port 5400...
+:free5400
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5400.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
-
-timeout /t 1 /nobreak >nul
+netstat -ano | findstr ":5400.*LISTENING" >nul && (timeout /t 1 /nobreak >nul & goto free5400)
 
 echo Starting client...
 cd /d "%CLIENT_DIR%"
