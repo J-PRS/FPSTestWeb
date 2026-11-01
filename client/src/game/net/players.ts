@@ -318,7 +318,11 @@ function wireKnockback(ctx: NetCtx, position: { x: number; y: number; z: number 
   // it just isn't an anomaly, and the explosion already painted.
   // Only a shove with no blast anywhere near earns the log + phantom FX.
   const seen = deps.explosionTracker.getRecentExplosions()
-    .some((e): boolean => Date.now() - e.timestamp < 800 && e.position.distanceTo(from) < 12)
+    // 800ms was too tight: wire shove echoes systematically land ~1s
+    // after the stamped blast (kb-echo ageMs ~1014-3016 observed), so a
+    // legit remote blast expired out of the window and every shove read
+    // as an orphan - warn + phantom boom on top of the real one.
+    .some((e): boolean => Date.now() - e.timestamp < 1500 && e.position.distanceTo(from) < 12)
     // A triggered mine's blast has no projectile replica and its
     // deployDown races the echo - a live mine nearby IS the blast.
     || deps.entities().deployables.mineNear(from, 12);
