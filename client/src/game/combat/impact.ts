@@ -953,7 +953,8 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // the wire 'gone' still owns the true detonation. The CLAIM still
   // fires below - the server adjudicates the hit from real aim data.
   // Terrain hits are provably identical both sides - predict them fully.
-  const ghostBodyPop = p.hitPlayerId !== null && p.hitPlayerId !== 'local' && (p.serverProjectileId !== null || p.shotId !== null);
+  const ghostBodyPop = p.hitPlayerId !== null && p.hitPlayerId !== 'local' &&
+    (p.serverProjectileId !== null || (p.shotId !== null && deps.lazyNetworkManager()?.isConnected() === true));
   if (ghostBodyPop) {p.ghostBodyPop = true;}
   else {spawnImpactEffect(c, p);} // flag it - the wire 'gone' owes us the real blast
 
