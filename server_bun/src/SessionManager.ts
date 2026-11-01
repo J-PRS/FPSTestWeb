@@ -12,30 +12,30 @@ import { simNow, simMs } from './simClock.ts';
 import { windowAllow } from './windowLimit.ts';
 import { roomWord } from './wire.ts';
 
-/** Everything the socket lifecycle needs from GameServer — supplied as
+/** Everything the socket lifecycle needs from GameServer  -  supplied as
  *  closures/maps so ownership stays with the dispatcher. */
 export interface SessionDeps {
   rooms: Map<string, Room>;
   /** playerId → room index for the hot paths (binary position 20Hz). */
   playerRoom: Map<string, Room>;
-  /** Spectator sockets aren't players — roomOfPlayer can't find them. */
+  /** Spectator sockets aren't players  -  roomOfPlayer can't find them. */
   specRooms: Map<string, Room>;
   roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): Room | null;
   quickRoom(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean, preferHumans?: boolean): Room | null;
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
-  /** Drain-deploys: armed via /admin/drain — new joins refused (reclaims
+  /** Drain-deploys: armed via /admin/drain  -  new joins refused (reclaims
    *  still land, they're the grace path), process exits on empty. */
   draining?: boolean;
   ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number;
     joinWaitMsSum: number; joinWaitMsMax: number; joinWorkMsSum: number; joinWorkMsMax: number; joinN: number };
-  /** Session lifecycle state machine — owns who each playerId is; sockets
+  /** Session lifecycle state machine  -  owns who each playerId is; sockets
    *  carry the seat generation it stamps so stale callbacks die by gen. */
   registry: SessionRegistry;
-  /** Single spectator exit path (GameServer.departSpectator) — roster,
+  /** Single spectator exit path (GameServer.departSpectator)  -  roster,
    *  connection, specRooms index and session record die together. */
   departSpectator(playerId: string, reason: string, closeCode?: number): boolean;
-  /** Full teardown of a player seat (roster + grace + indexes) — used by
+  /** Full teardown of a player seat (roster + grace + indexes)  -  used by
    *  a different-room join to retire the stale seat before re-seating. */
   removePlayerCompletely(room: Room, playerId: string, reason: string): void;
 }
@@ -47,24 +47,24 @@ export class SessionManager {
 
   // Persistent identity: playerId → HMAC(playerId, secret). A claimed id
   // can't be taken without its token; tokens survive server restarts when
-  // FPS_SECRET is set (random per boot otherwise — dev default).
+  // FPS_SECRET is set (random per boot otherwise  -  dev default).
   private identitySecret = CONFIG.identitySecret || randomBytes(32).toString('hex');
   private claimedIdentities = new Map<string, string>();
-  // Unbounded by default — a join-spam botnet would otherwise grow this
+  // Unbounded by default  -  a join-spam botnet would otherwise grow this
   // map forever. Past the cap, evict oldest-first (insertion order).
   private static readonly MAX_IDENTITIES = 10_000;
 
   // Join throttle: ip → sliding window counters. Entries only reset when
-  // that same IP joins again — unique-IP floods would grow the map
+  // that same IP joins again  -  unique-IP floods would grow the map
   // forever, so cap it like the other server-lifetime tables.
   private joinWindows = new Map<string, { count: number; start: number }>();
   private static readonly MAX_JOIN_WINDOWS = 1024;
   private static readonly RECONNECT_PROTECT_MS = 2500;
-  /** Free reconnect shields per seat — honest flappers rarely reclaim
+  /** Free reconnect shields per seat  -  honest flappers rarely reclaim
    *  more than twice in a seat's life; exploiters flap every 2.5s. */
   private static readonly MAX_RECLAIM_SHIELDS = 3;
   // 5/min rejected a whole household: every player behind one NAT/CGNAT
-  // shares the bucket — a six-seat LAN or a tailnet's clients trip it on
+  // shares the bucket  -  a six-seat LAN or a tailnet's clients trip it on
   // their FIRST connect burst (or any flap storm minting fresh ids).
   // 20/min still stops the script-flood class this exists for.
   private static readonly JOIN_LIMIT = 20;
@@ -73,7 +73,7 @@ export class SessionManager {
   constructor(private readonly d: SessionDeps) {}
 
   private joinThrottleAllow(ip: string): boolean {
-    // Loopback is the dev box and the pvptest harness — fleets spawn 24+
+    // Loopback is the dev box and the pvptest harness  -  fleets spawn 24+
     // joins/minute legitimately. Flood control is for real traffic only.
     if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
     return windowAllow(
@@ -86,7 +86,7 @@ export class SessionManager {
     return createHmac('sha256', this.identitySecret).update(playerId).digest('base64url');
   }
 
-  /** Deterministic per-id token — a mid-match room switch re-seats the
+  /** Deterministic per-id token  -  a mid-match room switch re-seats the
    *  session in the new room, which needs the same token so a later
    *  disconnect+reclaim there still authenticates. */
   tokenFor(playerId: string): string {
@@ -101,7 +101,7 @@ export class SessionManager {
 
     const handshake = raw as Record<string, unknown>;
     // Volatile keepalives may precede join: a tier probe holds sends in a
-    // pending queue that flushes on session open — pings enqueued during
+    // pending queue that flushes on session open  -  pings enqueued during
     // the probe land before join. Killing the session re-arms the
     // reconnect loop (the ~1s flap storm); swallowing them costs nothing.
     if (handshake.type === 'ping' || handshake.type === 'pong' || handshake.type === 'clientStats' || handshake.type === 'tickNack') {return;}
@@ -110,7 +110,7 @@ export class SessionManager {
       ws.close(1008, 'Expected join handshake');
       return;
     }
-    // Join-phase mark: upgrade→dispatch wait — the inbound-queue and
+    // Join-phase mark: upgrade→dispatch wait  -  the inbound-queue and
     // loop-starvation component of first-gameState latency.
     const waitMs = wallNow() - ws.data.connectedAt;
     this.d.ops.joinWaitMsSum += waitMs;
@@ -127,20 +127,20 @@ export class SessionManager {
 
     const { token, roomName, roomMode, joinMap, joinBots, resumeSeq, name, unlisted, noCreatures, noBalls } = SessionManager.joinSpec(handshake);
 
-    // A reclaim must land in the room the session was in — find by playerId
+    // A reclaim must land in the room the session was in  -  find by playerId
     // rather than trusting the claimed room (reconnecting to a different
     // room mid-grace would orphan the slot in the old room). Reclaims run
     // BEFORE the join flood guard: a flapping transport reconnects through
     // this path, and throttling it locks a legit player out of their own
-    // seat — reclaim is already authenticated by the session token.
+    // seat  -  reclaim is already authenticated by the session token.
     const reclaimRoom = this.d.roomOfPlayer(playerId);
     // …but only for the SAME room: an explicit ?room=B while a grace seat
     // lingers in A is intent to move, not a flapping transport. Retire the
-    // old seat now (one-seat-per-id is load-bearing — the lifecycle fuzz
+    // old seat now (one-seat-per-id is load-bearing  -  the lifecycle fuzz
     // enforces it) and fall through to a normal join in the new room.
     if (reclaimRoom && reclaimRoom.name !== roomName) {
       // Token gate BEFORE seat destruction: the join claims a different
-      // room, so reclaim()'s own auth path never runs — without this a
+      // room, so reclaim()'s own auth path never runs  -  without this a
       // bare playerId retires any live/grace seat on any room (grief-kick).
       // The client's stored token is the same id-keyed HMAC the seat holds.
       if (token !== reclaimRoom.sessionTokens.get(playerId)) {
@@ -151,9 +151,9 @@ export class SessionManager {
       this.d.removePlayerCompletely(reclaimRoom, playerId, 'different-room join');
       logger.info('Different-room join retired grace seat', { playerId, from: reclaimRoom.name, to: roomName });
     } else if (reclaimRoom) {
-      const ok = this.reclaim(ws, reclaimRoom, playerId, token, resumeSeq);
+      const ok = this.reclaim(ws, reclaimRoom, playerId, token, resumeSeq, handshake);
       // Reclaim skips roomFor, so the joiner's sim gates would never be
-      // consulted — a re-host with noBalls inside the grace window lands
+      // consulted  -  a re-host with noBalls inside the grace window lands
       // in the stale spec anyway. When the room is otherwise bot-only
       // it's still theirs: adopt the flags like an empty-room join does.
       if (ok && reclaimRoom.players.getHumanCount() <= 1 &&
@@ -167,19 +167,19 @@ export class SessionManager {
       return;
     }
 
-    // Drain-deploy: a new build is live — refuse new seats but let
+    // Drain-deploy: a new build is live  -  refuse new seats but let
     // reclaims land (the grace path is how live players ride through).
     if (this.d.draining) { ws.close(1013, 'Server draining'); return; }
 
-    // Soak/test fleets all live behind one IP — a join carrying the ops
+    // Soak/test fleets all live behind one IP  -  a join carrying the ops
     // admin token is a load driver, not a stranger: skip the flood guard.
     // Same secret + compare as the ops routes (serverRoutes.tokEq).
     const trusted = typeof handshake.adminKey === 'string' && CONFIG.adminToken !== '' &&
       timingSafeEqual(createHash('sha256').update(handshake.adminKey).digest(), createHash('sha256').update(CONFIG.adminToken).digest());
     // Join flood guard: joins bypass the per-player RateLimiter (they ARE
-    // the registration), so throttle by source IP — 5 joins/min is generous
+    // the registration), so throttle by source IP  -  5 joins/min is generous
     // for humans, lethal for a spammer script.
-    // clientIp carries the XFF hop behind the local proxy — without it
+    // clientIp carries the XFF hop behind the local proxy  -  without it
     // every proxied join reads loopback and the flood guard never fires.
     const joinIp = ws.data.clientIp ?? ws.remoteAddress;
     if (!trusted && !this.joinThrottleAllow(joinIp)) {
@@ -189,7 +189,7 @@ export class SessionManager {
     }
 
     // Bare link joins (/s|pub/<name>, no create params) must not mint
-    // rooms — a stale/shared name otherwise becomes an empty 'live'
+    // rooms  -  a stale/shared name otherwise becomes an empty 'live'
     // trap (the arena-1 class). Hosts create: their handshake carries
     // map/mode/bots. Missing room + nothing to mint with = the
     // matchmaker's busiest seat instead.
@@ -203,14 +203,14 @@ export class SessionManager {
     }
 
     // Watch-only join: `spectate: true` registers the socket for this
-    // room's broadcasts + tick stream without spawning a player — no
+    // room's broadcasts + tick stream without spawning a player  -  no
     // roster entry, no team, no idle-reap, no slot in the match.
     if (handshake.spectate === true) {
       this.spectate(ws, room, playerId);
       return;
     }
 
-    // Two caps: the room's own seat count and the process-wide budget —
+    // Two caps: the room's own seat count and the process-wide budget  - 
     // rooms share one core, so total bodies is the number that matters
     // for latency, not per-room occupancy. Spectators draw the same tick
     // stream as players, so they count against the budget too.
@@ -222,9 +222,9 @@ export class SessionManager {
     }
 
     // Claimed identity: a taken name needs its HMAC token, or the claimer
-    // and the claimant get rejected — no stealing by knowing the id.
+    // and the claimant get rejected  -  no stealing by knowing the id.
     // Same-socket re-join for the same id is self-proving (the transport
-    // endpoint was already validated) — a room hop issued before the first
+    // endpoint was already validated)  -  a room hop issued before the first
     // gameState lands has no token yet and must not eat a reject.
     const idToken = this.identityToken(playerId);
     if (ws.data.playerId !== playerId && !this.claimIdentity(playerId, token, idToken)) {
@@ -235,22 +235,22 @@ export class SessionManager {
     // A spectator id is squatters' rights, not a claim: a real join with
     // the same id must evict them or the message dispatcher keeps
     // treating the new player as read-only (specRooms is keyed by id,
-    // not socket). Runs after claimIdentity — a rejected join shouldn't
+    // not socket). Runs after claimIdentity  -  a rejected join shouldn't
     // kick the innocent spectator.
-    // The spectator session ends here — the player session that follows
+    // The spectator session ends here  -  the player session that follows
     // is a fresh generation, not a state transition.
     this.d.departSpectator(playerId, 'id claimed by player', 1008);
 
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);
-    // A hop before the first seat is a retarget, not a re-begin — no
+    // A hop before the first seat is a retarget, not a re-begin  -  no
     // lifecycle edge crossed, no anomaly counters to move.
     if (!this.d.registry.retarget(playerId, room.name)) {
       this.d.registry.begin(playerId, room.name);
     }
     const finishJoin = (): void => {
       this.seat(ws, room, playerId, handshake, idToken, name);
-      // First joiner defined this room's sim gates AND its mode/bot roster —
+      // First joiner defined this room's sim gates AND its mode/bot roster  - 
       // (after seat(): the socket needs its connection registration first)
       // a hosted 'ctf 8 bots' request landing in a pre-existing room would
       // otherwise silently drop into someone else's match.
@@ -263,36 +263,36 @@ export class SessionManager {
           room.noBalls === noBalls ? '' : `balls ${room.noBalls ? 'OFF' : 'ON'}`,
           room.noCreatures === noCreatures ? '' : `critters ${room.noCreatures ? 'OFF' : 'ON'}`,
         ].filter(Boolean).join(', ');
-        room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed — your settings overridden (${diffs})` });
+        room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed  -  your settings overridden (${diffs})` });
       }
     };
-    // The spawn pick needs the room's real field — minted rooms load it
+    // The spawn pick needs the room's real field  -  minted rooms load it
     // async. Seating on groundAt()=0 produces an authored anchor y under
     // the real surface: the buried-seat snap every first joiner paid.
     // The load is ms; defer rather than lift after the fact. A socket
-    // that died in the gap doesn't seat — registering it leaves a ghost.
+    // that died in the gap doesn't seat  -  registering it leaves a ghost.
     // Same for a SUPERSEDED join: a room hop mid-load re-begins the
     // session under the new room; seating this socket into the old room
-    // here would register it against the corpse — the zombie-seat race.
+    // here would register it against the corpse  -  the zombie-seat race.
     if (room.terrainReady) {void room.terrainReady.then((): void => {
       if (ws.readyState === 1 && this.d.registry.roomOf(playerId) === room.name) {finishJoin();}
     });}
     else {finishJoin();}
   }
 
-  /** Grace-period reclaim: the seat is still reserved — cancel the removal
+  /** Grace-period reclaim: the seat is still reserved  -  cancel the removal
    *  timer and re-seat the socket, or reject on a bad token / live playerId. */
-  private reclaim(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, token: string | undefined, resumeSeq: number | undefined): boolean {
+  private reclaim(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, token: string | undefined, resumeSeq: number | undefined, handshake?: Record<string, unknown>): boolean {
     const existingPlayer = room.players.getPlayer(playerId);
     if (!existingPlayer) {
       logger.warn('Reclaim rejected: no player state', { playerId });
       SessionManager.rejectIdentity(ws, 'Invalid session token');
       return false;
     }
-    // Session reclaim requires the server-issued token — bare playerId
+    // Session reclaim requires the server-issued token  -  bare playerId
     // knowledge must not be enough to steal a slot. Check it BEFORE the
     // disconnected test: a token holder is the slot's owner, and a zombie
-    // socket whose close never landed must be evictable by them — the old
+    // socket whose close never landed must be evictable by them  -  the old
     // order rejected every reconnect as 'already connected' while the
     // stale close was still in flight (RTC SCTP shutdown can lag or be
     // lost entirely on a flap), looping the client forever.
@@ -301,9 +301,9 @@ export class SessionManager {
       SessionManager.rejectIdentity(ws, 'Invalid session token');
       return false;
     }
-    // The armed grace timer clears inside registry.reclaim's transition —
+    // The armed grace timer clears inside registry.reclaim's transition  - 
     // no parallel bookkeeping survives from the old room map.
-    // A valid-token reclaim IS liveness — without the stamp a seat that
+    // A valid-token reclaim IS liveness  -  without the stamp a seat that
     // spent >60s in grace gets idle-reaped before the first inputMove
     // lands, looping connect → reap → reconnect forever.
     existingPlayer.lastSeen = wallNow();
@@ -314,16 +314,23 @@ export class SessionManager {
     // Offset-cursor replay: reliable events the dead socket missed stream
     // back BEFORE the handshake reply, so gameState remains the final word.
     if (resumeSeq !== undefined) {room.connections.replayTo(playerId, ws, resumeSeq);}
-    // Evict whatever still held the seat — zombie or not. Register FIRST:
+    // Evict whatever still held the seat  -  zombie or not. Register FIRST:
     // closing the old socket fires GameServer.onClose, which must see the
     // seat already owned by ws or it re-marks the player disconnected and
     // re-arms the removal timer under our live session.
     if (oldSock && oldSock !== ws) {
       try { oldSock.close(1000, 'replaced by reconnect'); } catch { /* gone */ }
     }
-    room.markIntro(playerId); // reclaimer's decode baseline reset — fulls go to them only
+    room.markIntro(playerId); // reclaimer's decode baseline reset  -  fulls go to them only
+    // The rejoiner's declared class must reconcile with the seat's  -  a
+    // restart-restore blob only knows the dying session's class, so a
+    // client whose kit banked a different tier reconnects holding weapons
+    // the seat's class can't fire (class-locked rejects until death).
+    // The reconnect is itself the declared discontinuity: apply now.
+    const claim = typeof handshake?.armorClass === 'string' ? handshake.armorClass : undefined;
+    if (claim) {room.applyClaimedClass(playerId, claim);}
     // Reconnect shield: the client warms its pipeline behind the session
-    // veil before dropping the player in — the restored body must not be
+    // veil before dropping the player in  -  the restored body must not be
     // killable during that window (visible mechanic, not hidden-gfx).
     // Capped per seat: a deliberate flap would otherwise chain free
     // invulnerability windows mid-fight.
@@ -333,10 +340,10 @@ export class SessionManager {
       existingPlayer.protectedUntil = simMs(simNow() + SessionManager.RECONNECT_PROTECT_MS);
     }
     room.messages.handleHandshake(playerId, undefined, true);
-    // Disconnect cancelled any pending respawn — if they come back dead,
+    // Disconnect cancelled any pending respawn  -  if they come back dead,
     // re-arm it or the restored corpse stays dead forever
     room.messages.onPlayerReconnected(playerId);
-    // Same spawn-hold as a fresh join — only for seats that asked at
+    // Same spawn-hold as a fresh join  -  only for seats that asked at
     // join (the flag lives on the player record). Dead seats re-arm
     // their respawn on releaseReady.
     if (existingPlayer.spawnHold) {room.players.holdSpawn(playerId);}
@@ -347,7 +354,7 @@ export class SessionManager {
 
   /** Identity rejections (bad token, claimed id, malformed id): tell the
    *  client to drop its stored session, THEN close. The 1008 close code
-   *  never reaches clients on the WT/RTC tiers — without the message a
+   *  never reaches clients on the WT/RTC tiers  -  without the message a
    *  stale-token client reprobes and rejoins in a loop, spinning up a
    *  fresh room on every attempt. The small delay lets the reliable lane
    *  flush before the socket tears down. */
@@ -363,14 +370,14 @@ export class SessionManager {
       return;
     }
     // Every spectator is a tick-fanout target, so they ride the same
-    // process budget as players — per-room cap alone would let a
+    // process budget as players  -  per-room cap alone would let a
     // watcher fleet across many rooms bypass it entirely.
     if (CONFIG.globalMaxPlayers > 0 &&
         this.d.totalPlayers() + this.d.specRooms.size >= CONFIG.globalMaxPlayers) {
       ws.close(1013, 'Server full');
       return;
     }
-    // Re-spectating the same id must retire the old seat first — the
+    // Re-spectating the same id must retire the old seat first  -  the
     // specRooms index repoints while the old room's spectators set would
     // keep the ghost (two rosters, one id, ticks fanning out to a stale
     // socket). Runs after the caps so a refused re-join doesn't cost
@@ -390,15 +397,15 @@ this.d.ops.joins += 1;
     logger.info('Spectator joined', { playerId, room: room.name });
   }
 
-  /** Field extraction — untyped handshake object → typed join fields.
+  /** Field extraction  -  untyped handshake object → typed join fields.
    *  Map/bots hints ride the join so a disposed quick-join room rebuilds
-   *  with the same spec — the room name alone doesn't carry it. */
-  /** Display-name sanitize — the wire name rides gameState/playerJoined
+   *  with the same spec  -  the room name alone doesn't carry it. */
+  /** Display-name sanitize  -  the wire name rides gameState/playerJoined
    *  verbatim into DOM text nodes, so this only needs to kill control
    *  bytes and cap length (markup dies at textContent rendering). */
   private static nameSpec(v: unknown): string | undefined {
     if (typeof v !== 'string') {return undefined;}
-    // Control bytes die, and so do unicode format chars — a bidi
+    // Control bytes die, and so do unicode format chars  -  a bidi
     // override renders reversed text in scoreboard/chat (name
     // spoofing), zero-width chars make names invisible/impersonable.
     // eslint-disable-next-line no-control-regex -- intentional strip of C0/C1 + Cf
@@ -421,7 +428,7 @@ this.d.ops.joins += 1;
         ? Math.max(0, Math.min(24, Math.floor(handshake.bots)))
         : undefined,
       // Offset cursor (Socket.IO connection-state-recovery shape): the last
-      // reliable-event seq the client processed — the reclaim replays what
+      // reliable-event seq the client processed  -  the reclaim replays what
       // its dead socket missed instead of resnapshotting blind.
       resumeSeq: typeof handshake.resumeSeq === 'number' && Number.isFinite(handshake.resumeSeq)
         ? Math.max(0, Math.floor(handshake.resumeSeq))
@@ -432,7 +439,7 @@ this.d.ops.joins += 1;
     };
   }
 
-  /** A taken name needs its HMAC token — no stealing by knowing the id.
+  /** A taken name needs its HMAC token  -  no stealing by knowing the id.
    *  New claims evict the stalest half of the map when the cap hits
    *  (insertion-ordered iteration = oldest first). */
   private claimIdentity(playerId: string, token: string | undefined, idToken: string): boolean {
@@ -459,7 +466,7 @@ this.d.ops.joins += 1;
   private seat(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, handshake: Record<string, unknown>, sessionToken: string, name?: string): void {
     const joinedPlayer = room.players.addPlayer(playerId, room.nextHumanTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none',
       typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium');
-    // The seat replaces a bot's ONLY when the join grew the big side —
+    // The seat replaces a bot's ONLY when the join grew the big side  - 
     // a human landing on the short side already balanced the room, and
     // retiring there too would just un-swap it (the bug where every join
     // kept sides uneven: odd rooms could never reach even).
@@ -468,7 +475,7 @@ this.d.ops.joins += 1;
     if (joinedPlayer.team && counts[joinedPlayer.team] > counts[other]) {
       room.bots.retireWorst(joinedPlayer.team);
     }
-    // Joins are a drift source too — a retiring bot or a counted seat can
+    // Joins are a drift source too  -  a retiring bot or a counted seat can
     // still leave a lopsided room; bots absorb the swap, humans stay put.
     room.balanceTeams();
     joinedPlayer.name = name;
@@ -480,7 +487,7 @@ this.d.ops.joins += 1;
     ws.data.gen = this.d.registry.seat(playerId, false, 'join');
     this.d.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
-    room.markIntro(playerId); // per-joiner full window — see Room.introPlayers
+    room.markIntro(playerId); // per-joiner full window  -  see Room.introPlayers
     const workT0 = wallNow();
     room.messages.handleHandshake(playerId, sessionToken);
     const workMs = wallNow() - workT0;
@@ -488,7 +495,7 @@ this.d.ops.joins += 1;
     if (workMs > this.d.ops.joinWorkMsMax) {this.d.ops.joinWorkMsMax = workMs;}
     this.d.ops.joinN += 1;
     // Opt-in spawn hold: veil-equipped clients declare spawnHold and
-    // their body stays out of the world until 'ready' — a body that
+    // their body stays out of the world until 'ready'  -  a body that
     // exists before the player can see is a free frag. The hand goes
     // after the handshake so gameState still ships the true (alive)
     // localPlayerState the veil warms on.

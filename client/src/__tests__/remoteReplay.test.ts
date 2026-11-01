@@ -1,5 +1,5 @@
 /* oxlint-disable vitest/no-conditional-in-test -- table harness */
-// C4 remote edge replay — the relayed inputMove edges must (a) take the
+// C4 remote edge replay  -  the relayed inputMove edges must (a) take the
 // body over from interp, (b) resync on >3m record drift, (c) pull sub-snap
 // drift toward truth, (d) stay alive on a record-fed stream while the
 // change-only edge stream is silent, and (e) drop dup/OOO seqs.
@@ -9,7 +9,7 @@ import { RemoteInterp, type InterpHost } from '../entities/remoteInterp.js';
 import type { Terrain } from '../world/terrain.js';
 import { classCapsule } from '../../../shared/botClasses.js';
 
-// Flat world at y=0 — enough surface for the shared MoveSim to walk on.
+// Flat world at y=0  -  enough surface for the shared MoveSim to walk on.
 const flatTerrain = {
   getHeight: (): number => 0,
   getNormal: (): { x: number; y: number; z: number } => ({ x: 0, y: 1, z: 0 }),
@@ -40,7 +40,7 @@ function seeded(): { h: Host; ri: RemoteInterp } {
   return { h, ri };
 }
 
-describe('remoteReplay — C4 edge replay', (): void => {
+describe('remoteReplay  -  C4 edge replay', (): void => {
   beforeEach((): void => { vi.useFakeTimers(); });
   afterEach((): void => { vi.useRealTimers(); });
 
@@ -49,13 +49,13 @@ describe('remoteReplay — C4 edge replay', (): void => {
     const x0 = h.position.x;
     for (let i = 0; i < 60; i += 1) {ri.step(1 / 60, false);}
     expect(ri.simulating).toBe(true);
-    // forward=1 at yaw 0 walks +z — the body must have moved from spawn
+    // forward=1 at yaw 0 walks +z  -  the body must have moved from spawn
     expect(Math.abs(h.position.z - P0.z) + Math.abs(h.position.x - x0)).toBeGreaterThan(0.5);
   });
 
   it('dup/OOO edge seqs are dropped (seq gate)', (): void => {
     const { h, ri } = seeded();
-    ri.onInputEdge(1, 0, { forward: -1, right: 0 }); // replayed seq — must not flip input
+    ri.onInputEdge(1, 0, { forward: -1, right: 0 }); // replayed seq  -  must not flip input
     ri.onInputEdge(0, 0, { forward: -1, right: 0 });
     for (let i = 0; i < 60; i += 1) {ri.step(1 / 60, false);}
     expect(h.position.z).toBeGreaterThan(P0.z); // still walking +z
@@ -86,7 +86,7 @@ describe('remoteReplay — C4 edge replay', (): void => {
     const { h, ri } = seeded();
     vi.advanceTimersByTime(1200); // close to the 1.5s freshness gate
     ri.onUpdate({ x: P0.x, y: P0.y, z: P0.z + 1 }, ROT, 50, { x: 0, y: 0, z: 0 }, 60_000);
-    vi.advanceTimersByTime(1200); // now 2.4s past the edge — dead without refresh
+    vi.advanceTimersByTime(1200); // now 2.4s past the edge  -  dead without refresh
     ri.step(1 / 60, false);
     expect(ri.simulating).toBe(true); // record refresh kept ownership
   });
@@ -96,7 +96,7 @@ describe('remoteReplay — C4 edge replay', (): void => {
     ri.onUpdate(P0, { yaw: Math.PI / 2, pitch: 0 }, 50, { x: 0, y: 0, z: 0 }, 50);
     ri.onInputEdge(2, 0, FWD);
     for (let i = 0; i < 60; i += 1) {ri.step(1 / 60, false);}
-    // forward=(sin yaw,cos yaw): yaw pi/2 walks +x — a stale yaw walks +z
+    // forward=(sin yaw,cos yaw): yaw pi/2 walks +x  -  a stale yaw walks +z
     expect(h.position.x).toBeGreaterThan(P0.x + 0.3);
     expect(Math.abs(h.position.z - P0.z)).toBeLessThan(Math.abs(h.position.x - P0.x));
   });

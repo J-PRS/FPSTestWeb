@@ -7,7 +7,7 @@ import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
 
-// Quake-style plasma gun: rapid volley of chunky cyan bolts — chaingun's
+// Quake-style plasma gun: rapid volley of chunky cyan bolts  -  chaingun's
 // cadence but a visible projectile with a fat body. Blue-shifted palette
 // so it never reads as the green plasma cannon bolt.
 const { 23: W } = WEAPONS; // WeaponType.PlasmaGun
@@ -28,7 +28,7 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: W.aoeDamage,
   aoeRadius: W.aoeRadius,
-  vfx: 'bolt', // repeater pop — half-size energy snap, not a full blast
+  vfx: 'bolt', // repeater pop  -  half-size energy snap, not a full blast
   damageColor: '#66ccff',
   trailColors: [
     new THREE.Color(0.4, 0.8, 1),
@@ -36,9 +36,11 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
     new THREE.Color(0, 0.4, 0.8),
     new THREE.Color(0.05, 0.2, 0.5),
   ],
-  trailParticlesPerUnit: 0.6, // a volley × 7.7/s — keep the trail sparse
+  trailParticlesPerUnit: 0.6, // a volley × 7.7/s  -  keep the trail sparse
   trailLifeMin: 0.2,
   trailLifeMax: 0.4,
+  trailLifeRampDuration: 0.5, // sprinkler ramp  -  tail grows over the first half-second of flight
+  trailLifeStartScale: 0,
   trailSpread: 0.06,
   trailForwardSpread: 0.03,
   trailParticleGravity: 0,
@@ -55,7 +57,7 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   glowOpacity: 0.5,
   glowScale: 0.7,
   meshRampIn: true,
-  // Slow the ramp and start smaller — at 160 m/s a 2-frame ramp left a
+  // Slow the ramp and start smaller  -  at 160 m/s a 2-frame ramp left a
   // near-full-size bolt+glow hanging at the muzzle on spawn. 10% start
   // matches the chaingun slug's ramp.
   meshRampInDuration: 0.1,

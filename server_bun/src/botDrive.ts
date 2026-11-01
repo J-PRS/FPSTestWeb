@@ -1,9 +1,9 @@
 /**
- * botDrive — turning a brain's destination into legal player inputs and
+ * botDrive  -  turning a brain's destination into legal player inputs and
  * stepping the body. ServerBots owns the think/fire cadence; this file
  * owns the contract that keeps bots honest: every motion goes through
  * the room's MoveSim shadow with key-level inputs (forward/yaw/jump/jet)
- * exactly like a human client's inputMove — no injected positions, no
+ * exactly like a human client's inputMove  -  no injected positions, no
  * injected velocities.
  * The no-heightfield legacy fallback lives here too.
  */
@@ -21,7 +21,7 @@ import type { Room } from './Room.ts';
 
 const SPEED = 14;          // m/s ground move (legacy path)
 
-/** Flat-field bag the drive functions read/write — ServerBots publishes
+/** Flat-field bag the drive functions read/write  -  ServerBots publishes
  *  itself. */
 export interface DriveHost {
   room: Room;
@@ -33,7 +33,7 @@ export interface DriveHost {
   checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void;
 }
 
-/** The bot's intent becomes input keys — only what a player's fingers
+/** The bot's intent becomes input keys  -  only what a player's fingers
  *  could press. The arsenal's post-throw jet pin rides the same held
  *  bit as the brain's own jet key. */
 function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean }, now: number): void {
@@ -45,16 +45,16 @@ function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: B
   } : {
     // Idle = every key released. Omitting jetHeld left a stale 1 pinned
     // in the shadow (setInput treats undefined as "unchanged"), so one
-    // transient commit kept jetWanted true forever — the tank burned
+    // transient commit kept jetWanted true forever  -  the tank burned
     // every regen tick and sat at ~0 for the rest of the match.
     forward: 0, right: 0,
     jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false,
     // No seq: bots never reconcile, so the per-call journal entry (a
     // state+input+energy snapshot plus a Map evict) would be pure churn
-    // every tick for every bot — the journal exists for wire replay.
+    // every tick for every bot  -  the journal exists for wire replay.
   }, p.status);
   // C4 replay: mint the observer edge stream (change-only dedupe inside
-  // botInput) — without it a bot remote can never run edge replay.
+  // botInput)  -  without it a bot remote can never run edge replay.
   h.room.botInput(id, intent.moving && !out.move?.park ? {
     forward: 1, right: 0,
     jump: out.move?.jump ? 1 : 0, ski: out.move?.ski ? 1 : 0,
@@ -66,7 +66,7 @@ function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: B
 
 /** Legal path: convert the brain's destination into human inputs
  *  (heading → yaw, walk = forward key) and let the sim integrate.
- *  Commit happens on the NEXT tick — sims[] order puts moveSim.tick
+ *  Commit happens on the NEXT tick  -  sims[] order puts moveSim.tick
  *  after bots.tick, so this reads the fresh post-step state. */
 export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch: number }; status: number; skiing: number; jetting: number; armorClass: string }, frame: { out: BrainOut; sh: MoveState; dt: number; now: number }): void {
   const { out, sh, dt, now } = frame;
@@ -82,10 +82,10 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt, height: sheepHeight }, now);
   const aim = h.arsenal.aimPoint(id);
   if (aim || dist >= 0.5) {
-    // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
+    // Wrist-speed turn  -  a snapped 180° reads as a fly-flick while an
     // arc at ~5 rad/s reads as a player swinging their view around.
     // A bot's yaw is its crosshair (like a human's): while a trigger is
-    // live it faces the TARGET, not the destination — a body strafing
+    // live it faces the TARGET, not the destination  -  a body strafing
     // sideways while its shots land on you reads as a silent aimbot.
     const want = aim
       ? Math.atan2(aim.x - p.position.x, aim.z - p.position.z)
@@ -98,16 +98,16 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
     p.rotation.yaw = yaw;
   }
   // Head tracks the trigger's live aim point (same 5 rad/s slew as the
-  // wrist turn); wire pitch is negated — positive looks down — and a
+  // wrist turn); wire pitch is negated  -  positive looks down  -  and a
   // disengaged bot relaxes back to level.
   const wantPitch = aim ? -Math.atan2(aim.y - p.position.y, Math.hypot(aim.x - p.position.x, aim.z - p.position.z)) : 0;
   const dpitch = wantPitch - p.rotation.pitch;
   p.rotation.pitch += Math.max(-5 * dt, Math.min(5 * dt, dpitch));
-  // Landing flare — the T1 damage floor means a 25+ m/s arrival costs
+  // Landing flare  -  the T1 damage floor means a 25+ m/s arrival costs
   // real health; a human feathers jets on the way down, and the reflex
   // lives below the brain (a splat is a reflex, not a decision). Gate is
   // world fall speed + ~0.8s to contact: slope-parallel descents carry
-  // the same vel.y with v·n≈0 and burn a little tank for nothing —
+  // the same vel.y with v·n≈0 and burn a little tank for nothing  - 
   // under-flare is cheap, a splat is not.
   if (out.move && !sh.onGround && sh.vel.y < -MOVEMENT_CONFIG.fallDamageMinSpeed
     && sheepHeight < -sh.vel.y * 0.8) { out.move.jet = true; }
@@ -116,16 +116,16 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   // can hover a meter off the position (steerer micro-orbit), which
   // would count a bot that has effectively arrived as grinding forever.
   h.checkSheep(id, p, { trying: dist >= 2 && !out.move?.park, ski: Boolean(out.move?.ski), airborne: !sh.onGround, jetting: Boolean(out.move?.jet), dt }, now);
-  // The shadow's write is the bot's whole wire truth — a NaN/Infinity
+  // The shadow's write is the bot's whole wire truth  -  a NaN/Infinity
   // here broadcasts poison to every observer with no warn. Named once.
   inv('bot-pos-finite',
     Number.isFinite(sh.pos.x + sh.pos.y + sh.pos.z + sh.vel.x + sh.vel.y + sh.vel.z),
     { id, pos: { x: Number(sh.pos.x.toFixed(1)), y: Number(sh.pos.y.toFixed(1)), z: Number(sh.pos.z.toFixed(1)) } });
   p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
   p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
-  // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
+  // Ski bit rides the tick flag byte (bit 2)  -  drives remote dust.
   p.skiing = out.move?.ski ? 1 : 0;
-  // Jet bit mirrors the held-input the shadow actually burns — the
+  // Jet bit mirrors the held-input the shadow actually burns  -  the
   // arsenal's post-throw pin counts as jetting too.
   p.jetting = (out.move?.jet || h.arsenal.jetPinUntil(id) > now) ? 1 : 0;
 }
@@ -141,7 +141,7 @@ export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; veloci
   const speed = isSuper(id) ? SPEED * 3 : SPEED;
   p.velocity.x = nx * speed;
   p.velocity.z = nz * speed;
-  // Chord is the rendered surface — a bot clamped to the smooth field
+  // Chord is the rendered surface  -  a bot clamped to the smooth field
   // alone sinks under the level-0 mesh in gullies on every client's screen.
   const rawGroundY = Math.max(
     h.field ? hmHeight(h.field, p.position.x, p.position.z) : p.position.y,
@@ -149,7 +149,7 @@ export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; veloci
     h.room.moveSim.structureTop(p.position.x, p.position.z),
   );
   const groundY = Number.isFinite(rawGroundY) ? rawGroundY : p.position.y;
-  // p.position is EYE-height (the wire convention — clients render
+  // p.position is EYE-height (the wire convention  -  clients render
   // feet at pos.y - eyeHeight); groundY+0.1 parked the model underground.
   const {eye} = classCapsule(p.armorClass);
   const targetY = Math.max(groundY + eye, p.position.y - 9 * dt);

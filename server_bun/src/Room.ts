@@ -1,12 +1,12 @@
 /**
- * Room — one match's worth of state: players, sockets, rate limits,
+ * Room  -  one match's worth of state: players, sockets, rate limits,
  * message routing, and its own BallSim. GameServer holds a rooms map and
  * dispatches connections to them; today every player lands in "default",
  * but the seam is what turns matchmaking/lobbies/multi-match servers into
  * plumbing instead of surgery.
  *
  * Deliberately owns NO transport specifics beyond the broadcast/send
- * closures it hands to its children — a room is just "everyone who shares
+ * closures it hands to its children  -  a room is just "everyone who shares
  * this match state."
  */
 import { PlayerManager } from './PlayerManager.ts';
@@ -62,14 +62,14 @@ import { RoomDemo } from './roomDemo.ts';
 
 export class Room {
   readonly name: string;
-  /** Unlisted rooms never appear in /rooms or quick-join picks — the
+  /** Unlisted rooms never appear in /rooms or quick-join picks  -  the
    *  only way in is knowing the name. Set once at creation. */
   unlisted = false;
   /** Creation-time sim gates (host toggles): strip the melee-species /
    *  ball populations at mint and on applySpec reloads. */
   noCreatures = false;
   noBalls = false;
-  // First joiner's mode locks the match — later joins inherit it via
+  // First joiner's mode locks the match  -  later joins inherit it via
   // gameState rather than a per-client URL param.
   readonly mode: string;
   readonly players = new PlayerManager();
@@ -78,38 +78,38 @@ export class Room {
   readonly messages: MessageHandler;
   readonly ballSim: BallSim;
   readonly creatureSim: CreatureSim;
-  /** Host-side randomness (loot scatter) — tests inject a seeded fn.
+  /** Host-side randomness (loot scatter)  -  tests inject a seeded fn.
    *  Defaults to the injectable botRand stream: construction-time
    *  consumers (bot populate → spawn scatter) run before a harness can
    *  assign `room.rng`, so a plain Math.random default made every room
-   *  after the first diverge — spawn layout is part of the seed.
+   *  after the first diverge  -  spawn layout is part of the seed.
    *  Production rooms get a minted private stream instead (ctor `seed`
    *  param) so a recorded match can replay its draw sequence. */
   rng: () => number = (): number => botRand();
-  /** Minted room seed + the private stream it drives — undefined on
+  /** Minted room seed + the private stream it drives  -  undefined on
    *  harness rooms (they keep the injectable botRand default). The pair
    *  is the replay/sync-report surface: {rngSeed, state, draws}. */
   rngSeed?: number;
   rngStream?: Lcg;
 
-  /** Grace seats live on the registry session itself (timer included) —
+  /** Grace seats live on the registry session itself (timer included)  - 
    *  assigned post-ctor by the factory. `graceInRoom` replaces the old
    *  per-room disconnected map so the countdown can't outlive the
    *  session it belongs to. */
   sessions?: SessionRegistry;
-  /** Watching sockets — no player record, get broadcasts + ticks. */
+  /** Watching sockets  -  no player record, get broadcasts + ticks. */
   readonly spectators = new Set<string>();
-  /** Room-scoped u16 record ids for v3 tick frames — minted lazily on a
+  /** Room-scoped u16 record ids for v3 tick frames  -  minted lazily on a
    *  player's first record (tickRecords); joiners get the snapshot inside
    *  gameState, everyone else via 'wireIds' deltas broadcast before the
    *  frames that need them. Ids are finite (u16), so a departing player
-   *  releases theirs into wireIdRetired — after a quiet window the mint
+   *  releases theirs into wireIdRetired  -  after a quiet window the mint
    *  prefers recycled ids over burning toward the 65536 wrap, where
    *  setUint16 would silently alias a live teammate's binding. */
   readonly wireIds = new Map<string, number>();
   /** Spawn pacing: joiner playerId → seat ids still un-admitted to its
    *  world. gameState ships only admitted seats; the fanout admits a few
-   *  per tick via direct playerJoined and gates their records meanwhile —
+   *  per tick via direct playerJoined and gates their records meanwhile  - 
    *  an unpaced world sends its biggest tick to the peer least able to
    *  take it (the joiner mid-handshake). */
   readonly admitPending = new Map<string, Set<string>>();
@@ -122,32 +122,32 @@ export class Room {
   readonly v4Last = new Map<number, V4Last>();
   nextWireId = 1;
   readonly sessionTokens = new Map<string, string>();
-  /** Reconnect shields armed per seat — a deliberate flap chains 2.5s
+  /** Reconnect shields armed per seat  -  a deliberate flap chains 2.5s
    *  invulnerability windows forever without a cap. */
   readonly reclaimShields = new Map<string, number>();
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; jet: number; status: number; sheep: number; t: number }>();
   tickSeq = 0;
-  /** Room-wide full-record window — stamped by tickNack reseeds (every
+  /** Room-wide full-record window  -  stamped by tickNack reseeds (every
    *  client's basis may be corrupt, so EVERYONE gets fulls for ~1s).
    *  Per-joiner fulls ride `introPlayers` instead: a fresh seat no longer
    *  poisons the delta stream for the whole room. */
   introSeq = -1_000_000;
   /** Per-recipient intro window: pid → seat tickSeq. tickRecords sends
    *  these recipients a per-socket FULL copy of each record (~1s window)
-   *  while everyone else stays on deltas — the joiner's decode baseline
+   *  while everyone else stays on deltas  -  the joiner's decode baseline
    *  lands without doubling the room's egress. Swept by age in
    *  buildRecords. */
   readonly introPlayers = new Map<string, number>();
-  /** Wall-clock of the last accepted tickNack — room-wide cooldown above. */
+  /** Wall-clock of the last accepted tickNack  -  room-wide cooldown above. */
   private lastNackAt = 0;
 
   /** Stamp a fresh/reclaimed/spectator seat's per-recipient intro window.
    *  Also clears lastSentPositions so every live player emits at least
-   *  one record inside the window — otherwise a suppressed/idle player
+   *  one record inside the window  -  otherwise a suppressed/idle player
    *  could sit out all 20 ticks and the recipient's first post-window
    *  masked delta would decode against a zero basis. Costs ≤1 extra
    *  record per player per stamp. */
-  /** A held-off-spawn seat reported ready — materialize the body: the
+  /** A held-off-spawn seat reported ready  -  materialize the body: the
    *  player record existed since seat() but isDead held it out of every
    *  physical funnel and awaitingReady out of every visible channel.
    *  Dead seats re-arm their respawn timer (onPlayerReconnected armed
@@ -162,7 +162,7 @@ export class Room {
     this.lastSentPositions.clear();
   }
 
-  /** Rolling health counters for the room heartbeat — every subsystem
+  /** Rolling health counters for the room heartbeat  -  every subsystem
    *  bumps tagged keys (shot claims, rejects, corrections, desyncs,
    *  implausible damage) and healthTick flushes them to one INFO line
    *  every ~15s so a soak log answers "did anything weird happen" at a
@@ -174,21 +174,21 @@ export class Room {
    *  past even the aim-cone. Bumped on every wireHit; lazily pruned. */
   readonly engagedBy = new Map<string, Map<string, number>>();
   private static readonly ENGAGE_MS = 4000;
-  /** C4 edge relay radius (XZ) — replay fidelity pays inside ~400m;
+  /** C4 edge relay radius (XZ)  -  replay fidelity pays inside ~400m;
    *  far specks keep interpolating. Squared for the hot check. */
   private static readonly RELAY_EDGE_R2 = 400 * 400;
-  /** Dev-only WAN-loss repro for the edge relay (FPS_EDGE_DROP_PCT) —
+  /** Dev-only WAN-loss repro for the edge relay (FPS_EDGE_DROP_PCT)  - 
    *  mirrors tickRecords' FPS_DROP_PCT: dropped relay packets surface as
    *  input seq gaps, replay drifts on stale input, records snap it back. */
   private static edgeDrop(): boolean {
     const pct = Number(process.env.FPS_EDGE_DROP_PCT ?? 0) || 0;
     return pct > 0 && Math.random() * 100 < pct;
   }
-  /** Bot edge bookkeeping — see handlerDeps.botInput. */
+  /** Bot edge bookkeeping  -  see handlerDeps.botInput. */
   private readonly botEdgeLast = new Map<string, string>();
   private readonly botEdgeSeq = new Map<string, number>();
   /** Server bots bypass inputMove (botDrive feeds the shadow directly) so
-   *  they minted no edges — their remotes could never replay. Bots commit
+   *  they minted no edges  -  their remotes could never replay. Bots commit
    *  every tick, so dedupe on the pressed-key shape and mint a seq:
    *  observers see the same change-only stream a human emits. */
   botInput(pid: string, i: { forward: number; right: number; jump: number; ski: number; jet: number }, status: number): void {
@@ -230,10 +230,10 @@ export class Room {
     if (m.size === 0) {this.engagedBy.delete(victimId); return undefined;}
     return m;
   }
-  /** Since-boot totals — the rollup window clears per flush, so /metrics
+  /** Since-boot totals  -  the rollup window clears per flush, so /metrics
    *  reads this cumulative mirror instead of racing it. */
   readonly healthTotal = new Map<string, number>();
-  /** Domain-event channel — combat/chat notifications (kill/hit/fire/
+  /** Domain-event channel  -  combat/chat notifications (kill/hit/fire/
    *  botSpoke/chat) fan out to subscribers wired in the ctor. */
   readonly events = new EventBus();
   healthBump(key: string, n = 1): void {
@@ -247,7 +247,7 @@ export class Room {
     if (this.health.size === 0) {return;}
     logger.debug('Room health', Object.assign({room: this.name,humans: this.players.getHumanCount()}, Object.fromEntries(this.health)));
     // Fold the window into since-boot totals. *Max keys are gauges (the
-    // worst single sample), not counters — merge by max, not sum.
+    // worst single sample), not counters  -  merge by max, not sum.
     for (const [k, v] of this.health) {
       this.healthTotal.set(k, k.endsWith('Max')
         ? Math.max(this.healthTotal.get(k) ?? 0, v)
@@ -260,11 +260,11 @@ export class Room {
    *  surface in one tick, but authored spawns, stale shadows and legacy
    *  writes have all leaked players under the field. Cheap sweep: feet
    *  below the terrain gets lifted to the surface and the shadow reseated
-   *  so client and server agree. Counted in room health — if the number
+   *  so client and server agree. Counted in room health  -  if the number
    *  stays nonzero there's a real leak to hunt. */
   private unburyAcc = 0;
   private unburyLogN = 0;
-  /** Leaderboard receipt minter — roomFactory wires one per room onto the
+  /** Leaderboard receipt minter  -  roomFactory wires one per room onto the
    *  event bus; roomMatch mints the signed token at matchEnd. Optional:
    *  unsigned dev rooms still get the record, just no signature. */
   resultSigner: import('./resultSigner.ts').ResultSigner | null = null;
@@ -276,7 +276,7 @@ export class Room {
     this.unburySweep();
   }
 
-  /** The room's real field landed (attachTerrain) — seats picked before
+  /** The room's real field landed (attachTerrain)  -  seats picked before
    *  it resolved kept authored anchor y (groundAt read 0/stale), leaving
    *  bodies meters under the surface the client will draw. One sweep,
    *  including seats that never reported: a server-picked spawn under
@@ -290,30 +290,30 @@ export class Room {
     if (!this.field) {return;}
     for (const p of this.players.getAllPlayers().values()) {
       if (p.isDead || (!p.isBot && !p.hasReceivedPosition && !includeUnreported)) {continue;}
-      // Measure with the shadow's own eye when one exists — the class
+      // Measure with the shadow's own eye when one exists  -  the class
       // capsule and the sim body disagree whenever a refit left the sim
       // at the default eye, and the record's view was the stale one.
       const eye = this.moveSim.eyeOf(p.id) ?? classCapsule(p.armorClass as ArmorClass).eye;
       // Judge each body on the floor it sims on: bot shadows ride the
       // chord-augmented surface (what remotes draw), human shadows the
-      // plain field — a field-grounded human in a gully is legitimately
+      // plain field  -  a field-grounded human in a gully is legitimately
       // under the drawn chord, and popping their claim is a phantom
       // correction. Remote-side render lift owns the visual clearance.
       const terrain = p.isBot
         ? Math.max(hmHeight(this.field, p.position.x, p.position.z), hmChord(this.field, p.position.x, p.position.z))
         : hmHeight(this.field, p.position.x, p.position.z);
-      // The ground law as an invariant — scoped to sim-owned bodies.
+      // The ground law as an invariant  -  scoped to sim-owned bodies.
       // A bot's record mirrors its shadow every tick (botDrive), so a
-      // buried bot record IS a violation. Human records are claims —
+      // buried bot record IS a violation. Human records are claims  - 
       // a lagged claim under the surface is lag, not a bug.
-      // pos.y IS the eye point — "feet" would double-subtract the eye and
+      // pos.y IS the eye point  -  "feet" would double-subtract the eye and
       // phantom-bury every banded contact (a grounded heavy legally rides
       // its eye ~0.5 under the floor in the snap window). Buried means
       // the EYE itself is below the surface.
       if (p.isBot) {inv('bot-below-ground', !Number.isFinite(terrain) || p.position.y >= terrain - 0.5,
         { id: p.id, xz: `${p.position.x.toFixed(1)},${p.position.z.toFixed(1)}`, y: Number(p.position.y.toFixed(1)), eye, terrain: Number.isFinite(terrain) ? Number(terrain.toFixed(1)) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });}
       if (!Number.isFinite(terrain) || p.position.y >= terrain - 0.5) {continue;}
-      // First rescues carry the autopsy at debug level — the 'unbury'
+      // First rescues carry the autopsy at debug level  -  the 'unbury'
       // health counter and the bot-scoped inv above are the loud signal;
       // a warn per rescue reads as jank in soak asserts while routine
       // claim wobble is legitimately rescued.
@@ -327,21 +327,21 @@ export class Room {
     }
   }
 
-  spec: MapSpec; // mutable — admin hot-reload rewrites it live
-  // Server-owned match scoreboard — only populated in team modes.
+  spec: MapSpec; // mutable  -  admin hot-reload rewrites it live
+  // Server-owned match scoreboard  -  only populated in team modes.
   readonly modeSpec: ModeSpec | null;
   readonly scores: TeamScores = makeScores();
   /** Server-driven filler players, populated from the map spec. */
   readonly bots: ServerBots;
-  /** CTF flag authority — only when the mode has flags AND the map has bases. */
+  /** CTF flag authority  -  only when the mode has flags AND the map has bases. */
   flags: RoomFlags | null = null;
-  /** Server-side demo capture — set when FPS_DEMO names a dir at ctor. */
+  /** Server-side demo capture  -  set when FPS_DEMO names a dir at ctor. */
   demo?: RoomDemo;
-  /** The pluggable mode's module (MODE_MODULES registry) — owns its sims,
+  /** The pluggable mode's module (MODE_MODULES registry)  -  owns its sims,
    *  wire feed, bot objective and spawn pools behind one seam. */
   modeModule: ModeModule | null = null;
-  // Flag/deploy placement domain — standTop surfaces, shelf rescue,
-  // deploy floor, home re-snap — lives in roomFlagPlacer.ts. The
+  // Flag/deploy placement domain  -  standTop surfaces, shelf rescue,
+  // deploy floor, home re-snap  -  lives in roomFlagPlacer.ts. The
   // callbacks carry the two room-level effects a re-snap has (structure
   // collider re-attach + skinny mapUpdate push; spawn-anchor re-seat).
   // Declared before the ctor's wireModeFeatures/flags init uses it.
@@ -353,19 +353,19 @@ export class Room {
       }
     },
     (rings): void => {
-      // Auto-derived stands mint their own spawn rings — but authored
+      // Auto-derived stands mint their own spawn rings  -  but authored
       // teamSpawns still win when a base-less spec bothered to ship them.
       if (this.modeSpec?.teams && !this.spec.teamSpawns) {
         this.players.teamSpawns = rings;
       }
     });
   /** Effective structure set (authored + dais hulls) and everywhere it
-   *  feeds — colliders, join echo, skinny mapUpdate diff — lives in
+   *  feeds  -  colliders, join echo, skinny mapUpdate diff  -  lives in
    *  roomStructures.ts. Reads live state through this, so declare it
    *  after flagPlacer which the eff list consults. */
   readonly structs = new RoomStructures(this);
 
-  /** Direct carrier check — snapshot() clones every flag just to answer
+  /** Direct carrier check  -  snapshot() clones every flag just to answer
    *  "is id carrying", and per-tick callers (checkStuck, propel gate)
    *  paid it every bot every tick. */
   flagCarriedBy(playerId: string): boolean {
@@ -373,13 +373,13 @@ export class Room {
     for (const f of this.flags.flags.values()) {if (f.carrier === playerId) {return true;}}
     return false;
   }
-  /** Server-owned ground loot — gems/tags score in team modes, powerups
+  /** Server-owned ground loot  -  gems/tags score in team modes, powerups
    *  (heal/armor/regen/dd) drop from creature kills in every mode. */
   pickups: RoomPickups | null = null;
-  /** Server-owned deployables — turrets/mines/stations/drones a `deploy`
+  /** Server-owned deployables  -  turrets/mines/stations/drones a `deploy`
    *  claim plants; caps + TTL + teardown live here. */
   readonly deployables: RoomDeployables;
-  /** Server-simulated projectiles — bot fire spawns real shells here
+  /** Server-simulated projectiles  -  bot fire spawns real shells here
    *  instead of rolled hitscan (bots-as-legal-players phase 2). */
   readonly projectiles: RoomProjectiles;
   /** Server-side simulations ticked each room tick, in order. A sim
@@ -388,11 +388,11 @@ export class Room {
    *  naming each sim. */
   readonly sims: { name?: string; tick(dt: number): void; worldState?(): ServerMessage[] }[] = [];
 
-  /** Wall ms of the last room tick — TickLoop turns the gap into the dt
+  /** Wall ms of the last room tick  -  TickLoop turns the gap into the dt
    *  every sim sees, so interval lag can't drift sim clocks off wall time. */
   lastStepAt = 0;
 
-  /** Inbound client messages park here until the next tick drains them —
+  /** Inbound client messages park here until the next tick drains them  - 
    *  the Quake/Valve command-buffer pattern: all input lands at phase 0
    *  so sims see a deterministic order (input → sim → fanout) instead of
    *  arrival-time mutations interleaving with bot/projectile ticks. */
@@ -401,7 +401,7 @@ export class Room {
     if (this.commands.length === 0) {return;}
     // Sub-tick ordering (the CS2 answer to "I fired first but lost"):
     // claims carrying fireAt adjudicate in click-instant order, not
-    // packet-arrival order — two shooters inside one 50ms tick resolve
+    // packet-arrival order  -  two shooters inside one 50ms tick resolve
     // by who actually fired first, not whose packet won the wire race.
     // fireAt is the shooter's own server-clock stamp, so clamp it to the
     // physically possible window (arrival − 2× measured uplink transit,
@@ -424,14 +424,14 @@ export class Room {
     }
     for (const c of this.commands) {
       // Contain per command: a throwing handler must not kill the rest
-      // of the drain (and the tick that hosts it) — the client's binary
+      // of the drain (and the tick that hosts it)  -  the client's binary
       // dispatch got the same treatment; one malformed input = one
       // counted drop, never a stalled queue.
       try { this.messages.handleMessage(c.playerId, c.msg, c.at); }
       catch (error) {
         this.messages.hb('handlerThrow');
         this.messages.hb(`handlerThrow.${c.msg.type}`);
-        logger.warn('Handler threw — contained, counted', { room: this.name, playerId: c.playerId, type: c.msg.type, error });
+        logger.warn('Handler threw  -  contained, counted', { room: this.name, playerId: c.playerId, type: c.msg.type, error });
       }
     }
     this.commands.length = 0;
@@ -478,31 +478,31 @@ export class Room {
   earlyRelayed(playerId: string, shotId?: string): boolean {
     return shotId !== undefined && this.earlyShots.has(`${playerId}:${shotId}`);
   }
-  /** Spatial memory — kills/fights/gems/flags leave decaying scent the
+  /** Spatial memory  -  kills/fights/gems/flags leave decaying scent the
    *  brains read for where-the-action-was. See influenceMap.ts. Sized to
    *  the map's tile span; resized by applySpec when that changes. */
   readonly influence: InfluenceMap;
-  /** Per-player movement shadow — MoveSim fed by inputMove, reconciled
+  /** Per-player movement shadow  -  MoveSim fed by inputMove, reconciled
    *  against reported positions. Judge mode: reported pos stays truth,
    *  divergence is the anti-cheat signal. Authority mode
-   *  (FPS_MOVE_AUTHORITY): sim pos IS truth — GameServer's tick commits
+   *  (FPS_MOVE_AUTHORITY): sim pos IS truth  -  GameServer's tick commits
    *  it into the player record and reports only carry aim/ping/liveness. */
   readonly moveSim: RoomMoveSim;
   readonly moveAuthority: boolean;
-  /** Match-results journal hook — GameServer writes matches.jsonl and
+  /** Match-results journal hook  -  GameServer writes matches.jsonl and
    *  feeds /matches from it. Fired on every win condition. */
   onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[]; token?: import('../../shared/resultToken.ts').ResultToken }) => void;
-  /** Map-rotation hook — GameServer returns the next same-mode spec at
+  /** Map-rotation hook  -  GameServer returns the next same-mode spec at
    *  the horn, or null to replay the current map. */
   onRotate?: () => MapSpec | null;
-  /** Terrain swap — GameServer owns the field cache and attaches the
+  /** Terrain swap  -  GameServer owns the field cache and attaches the
    *  loaded heightfield to ballSim/moveSim/projectiles. applySpec calls
    *  this when the new spec names a different terrain; without it the
-   *  sims keep the OLD map's field while clients load the new one —
+   *  sims keep the OLD map's field while clients load the new one  - 
    *  balls bounce on ground that doesn't exist (the rubberband storm). */
   onTerrain?: (spec: MapSpec) => void;
 
-  /** Push the player's armor-class body into its shadow — ground speed,
+  /** Push the player's armor-class body into its shadow  -  ground speed,
    *  jet mass, and eye height all ride the same class row so the shadow
    *  sim produces the trajectory the client's prediction computes. */
   private applyClassScale(playerId: string): void {
@@ -512,29 +512,45 @@ export class Room {
     this.moveSim.setBody(playerId, st?.mass ?? 1, st?.eyeHeight ?? 1.8, st?.radius ?? classCapsule().radius);
   }
 
-  /** Room's current heightfield — GameServer updates it on terrain
+  /** A reclaiming client's declared class, applied to the seat now  -  the
+   *  reconnect IS the declared discontinuity (respawn re-arm for dead
+   *  seats, shield for live). Without it a restart-restore blob's stale
+   *  class leaves the client's real kit class-locked until death. Same
+   *  field set respawnPlayer's pendingClass block touches. */
+  applyClaimedClass(playerId: string, claim: string): void {
+    if (claim !== 'light' && claim !== 'medium' && claim !== 'heavy') {return;}
+    const p = this.players.getPlayer(playerId);
+    if (!p || p.armorClass === claim) {return;}
+    p.armorClass = claim;
+    p.pendingClass = undefined;
+    p.maxHealth = CONFIG.playerMaxHealth + perkMods(p.perk).maxHealth + CLASS_STATS[claim].maxHealth;
+    p.health = Math.min(p.health, p.maxHealth);
+    this.applyClassScale(playerId);
+  }
+
+  /** Room's current heightfield  -  GameServer updates it on terrain
    *  attach/rotation so gameplay code can resolve ground height. */
   field: Heightfield | null = null;
 
-  /** Non-null while attachTerrain's load is in flight — joins defer
+  /** Non-null while attachTerrain's load is in flight  -  joins defer
    *  seating to it rather than pick a spawn against the missing field
    *  (authored anchor y under the real surface = the buried-seat snap). */
   terrainReady: Promise<Heightfield | null> | null = null;
 
-  /** maps/<X>.json filename this room's spec came from — the scoreboard's
+  /** maps/<X>.json filename this room's spec came from  -  the scoreboard's
    *  map title when the spec has no authored `name`. Factory sets it at
    *  birth; mapCatalog's rotation + GameServer's reload keep it current. */
   mapSrc = '';
 
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false, seed?: number, deferBots = false) {
     if (seed !== undefined) {
-      // A minted seed drives this room's draws — the spawn layout the
+      // A minted seed drives this room's draws  -  the spawn layout the
       // ctor below scatters is then part of the replay record.
       this.rngSeed = seed >>> 0;
       this.rngStream = lcg32(this.rngSeed);
       this.rng = this.rngStream;
     }
-    // Invariant violations land on the room health counters — /metrics
+    // Invariant violations land on the room health counters  -  /metrics
     // exposes them as inv:<name> totals next to the existing tallies.
     setInvariantSink((n, ctx): void => { this.healthBump(`inv:${n}`); logger.warn(`INVARIANT ${n}`, ctx ?? {}); });
     this.name = name;
@@ -554,7 +570,7 @@ export class Room {
     );
     this.moveSim = new RoomMoveSim(field, this.moveAuthority);
     // FPS_JOURNAL=<path.ndjson> records every sim-affecting moveSim call
-    // + periodic state hashes — the forensic file a desync leaves behind
+    // + periodic state hashes  -  the forensic file a desync leaves behind
     // (replayJournal drives a fresh sim with the same stream).
     const journalPath = process.env.FPS_JOURNAL;
     if (journalPath) {
@@ -563,10 +579,10 @@ export class Room {
       j.attachFile(journalPath);
       this.moveSim.journal = j;
     }
-    // FPS_DEMO=<dir> — the server-side demo capture. Records the
+    // FPS_DEMO=<dir>  -  the server-side demo capture. Records the
     // authoritative wire stream (broadcast tap) + shadow samples into a
     // v7 DemoFile; flushes <dir>/<room>-<wallms>.demo on dispose.
-    // Ground truth for desync forensics — no loss, no interp.
+    // Ground truth for desync forensics  -  no loss, no interp.
     const demoDir = process.env.FPS_DEMO;
     if (demoDir) {this.demo = new RoomDemo(this);}
     // Player-vs-player contact: every shadow resolves against the live
@@ -582,29 +598,29 @@ export class Room {
     };
     this.matchClock = new MatchClock(this.matchHost());
     // Hard-tolerance trip: the client's input watermark outran our consumed
-    // seq for ≥3 reports — an input edge died in flight (dead-lane drop).
+    // seq for ≥3 reports  -  an input edge died in flight (dead-lane drop).
     // Ask it to re-emit its current input; cooldown lives on the shadow.
     this.moveSim.onInputGap = (pid, lastSeq): void => {
       this.health?.set('inputgap', (this.health?.get('inputgap') ?? 0) + 1);
       this.connections.sendToPlayer(pid, { type: 'inputSync', lastSeq });
     };
-    // T1 collision damage: the shadow measured a hard contact — turn it
+    // T1 collision damage: the shadow measured a hard contact  -  turn it
     // into hp through the same funnel a bite or blast uses so 'fell to
     // death' reads in the kill feed and respawns on schedule.
     this.moveSim.onLanding = (pid, impact): void => {
       const p = this.players.getPlayer(pid);
       if (!p || p.isDead) {return;}
-      // T1 charges the full fractional hit — but anything under a
+      // T1 charges the full fractional hit  -  but anything under a
       // tenth of the bar is absorbed whole (a stubbed toe isn't a
       // wound; the client still sells dust + thud for the impact).
-      // Everyone in earshot hears the slam — the owner's local sim
+      // Everyone in earshot hears the slam  -  the owner's local sim
       // already dressed it; this echo is for remote observers only.
       const landWid = this.wireIds.get(pid);
       if (landWid === undefined) {this.connections.broadcast({ type: 'landed', playerId: pid, pos: p.position, impact });}
       else {this.connections.broadcastBinaryReliable(encodeWidPos(WIRE_E_LANDED, landWid, p.position, impact), 'volatile');}
       let dmg = (impact - MOVEMENT_CONFIG.fallDamageMinSpeed) * MOVEMENT_CONFIG.fallDamageScale * p.maxHealth;
       // Featherfall: the soak burns the shadow's modeled tank (same pool
-      // the jet econ owns) before the hit exists — a covered landing
+      // the jet econ owns) before the hit exists  -  a covered landing
       // fires nothing at all.
       const soak = perkMods(p.perk).fallSoak;
       if (soak > 0) {
@@ -613,7 +629,7 @@ export class Room {
       }
       if (dmg >= p.maxHealth * MOVEMENT_CONFIG.fallDamageAbsorbFrac) {this.messages.fallDamage(pid, dmg);}
     };
-    // Kill zone — the shadow measured the body below the map's floor, so
+    // Kill zone  -  the shadow measured the body below the map's floor, so
     // there's nothing to validate: it goes straight into the environment
     // funnel and the player respawns like any other death.
     this.moveSim.onKillZone = (pid): void => {
@@ -621,21 +637,21 @@ export class Room {
       if (!p || p.isDead) {return;}
       this.messages.killZone(pid, p.maxHealth);
     };
-    // Reclaim desync accounting — journal wraps and reclaim gaps are the
+    // Reclaim desync accounting  -  journal wraps and reclaim gaps are the
     // only ways a reconnected client silently loses event history.
     this.connections.onJournalWrap = (n): void => this.healthBump('journalWrap', n);
     this.connections.onReclaimGap = (_pid, n): void => this.healthBump('reclaimGap', n);
-    // A drowned socket is a client-side or path failure — count each
+    // A drowned socket is a client-side or path failure  -  count each
     // forced close so it shows in room health, not just the close log.
     this.connections.onDrowned = (): void => this.healthBump('drownedSock', 1);
     this.connections.onReliableDropped = (): void => this.healthBump('reliableDrop', 1);
-    // Register→intro-gate-open — join-burst drain latency under load.
+    // Register→intro-gate-open  -  join-burst drain latency under load.
     this.connections.onIntroDrained = (_pid, ms): void => {
       this.healthBump('introDrainMsSum', ms);
       this.healthBump('introDrainN', 1);
       if (ms > (this.health.get('introDrainMax') ?? 0)) {this.health.set('introDrainMax', ms);}
     };
-    // Send-queue depth gauge (KB, worst sample this window) — the drown
+    // Send-queue depth gauge (KB, worst sample this window)  -  the drown
     // cap only tells us the socket died; this shows it drowning first.
     this.connections.onBuffered = (_pid, bytes): void => {
       const kb = Math.round(bytes / 1024);
@@ -644,12 +660,12 @@ export class Room {
     this.moveSim.attachStructures(this.structs.eff());
     this.moveSim.setWaterLevel(this.spec.water?.swim === false ? undefined : this.spec.water?.level);
     this.moveSim.setKillY(this.spec.killY);
-    // Shield soak burns the same tank the jet model owns — without this
+    // Shield soak burns the same tank the jet model owns  -  without this
     // a shielded player under fire runs the sim tank ahead of the real one.
     this.players.energyBurn = (pid, n): boolean => this.moveSim.drainEnergy(pid, n);
-    // Closure over this.field — a mid-match terrain swap must not leave
+    // Closure over this.field  -  a mid-match terrain swap must not leave
     // spawn anchors snapping to the old map.
-    // Anchors lift to the drawn surface, not just the field — an authored
+    // Anchors lift to the drawn surface, not just the field  -  an authored
     // point under a chord bridge (gully apex) would otherwise respawn a
     // body whose wire pos sits under the mesh it renders on.
     this.players.groundAt = (x, z): number => (this.field ? Math.max(hmHeight(this.field, x, z), hmChord(this.field, x, z)) : 0);
@@ -671,9 +687,9 @@ export class Room {
     if (field) {this.ballSim.attachField(field);}
     this.creatureSim = this.initCreatures(field);
     this.bots = new ServerBots(this, field);
-    // Event subscriptions — producers emit through RoomInfo.emit; each
+    // Event subscriptions  -  producers emit through RoomInfo.emit; each
     // consumer reads only the kinds it cares about. A spoken line is
-    // itself an event worth a reply — the squad sees it on their own
+    // itself an event worth a reply  -  the squad sees it on their own
     // think phases, so an answer lands a beat later like real chat.
     this.events.on((e): void => {
       switch (e.type) {
@@ -689,7 +705,7 @@ export class Room {
         }
         case 'botSpoke': {
           const team = this.players.getPlayer(e.id)?.team;
-          // A bot who spoke a command chord issued a real call — teammates
+          // A bot who spoke a command chord issued a real call  -  teammates
           // get the pin just like a human's VGS. Everything else is a bark.
           const goal = e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined;
           this.bots.notice(goal ? 'ack' : 'reply', e.id, team, goal);
@@ -704,10 +720,10 @@ export class Room {
           this.noteChatPace(e.id);
           break;
         }
-        // Blast aftermath — each emit once carried a bespoke RoomInfo
+        // Blast aftermath  -  each emit once carried a bespoke RoomInfo
         // hook; the bus fans it out instead. Claimed blasts punt only
         // flags ('flag'): a client-claimed origin is untrusted, so it
-        // must not punt loose pickups — 'pickup' emits only come from
+        // must not punt loose pickups  -  'pickup' emits only come from
         // server-owned blast paths (shells, mines).
         case 'blast': { this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales, e.weapon, e.splash); break;
         }
@@ -738,7 +754,7 @@ export class Room {
               default: { break; }
 }
     });
-    // Posted roles spawn at home — a defender materializing on a
+    // Posted roles spawn at home  -  a defender materializing on a
     // front-line sphere 400m out spends the next minute hiking, which
     // reads as wandering on every post/flag metric. Runners keep pure
     // foe-clearance scoring so the forward spheres stay useful.
@@ -746,22 +762,22 @@ export class Room {
       const role = this.bots?.roleOf(id);
       return role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician' ? 1.6 : undefined;
     };
-    // A tasked member materializes toward his JOB, not home — the wave
+    // A tasked member materializes toward his JOB, not home  -  the wave
     // member who respawned at base re-ran the lethal transit and died
     // again (katabatic soak: wave d518m median, near1%, dead~850). The
-    // pull is softer than the defenders' — foe clearance still scores,
+    // pull is softer than the defenders'  -  foe clearance still scores,
     // so a spawn directly on the enemy blob loses on safety.
     this.players.spawnObjective = (id) => {
       const t = this.bots?.taskGoalFor(id);
       return t ? { pos: t.goal, w: 1.6 } : null;
     };
-    // Mode module BEFORE populate — spawn pools it mints (conquest's
+    // Mode module BEFORE populate  -  spawn pools it mints (conquest's
     // node-linked rings) must cover the bots' initial seating, not just
     // their respawns.
     this.modeModule = this.makeModeModule();
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side. Factory rooms defer the seat to the terrain
-    // attach — the pick lifts authored anchors via groundAt, which reads
+    // attach  -  the pick lifts authored anchors via groundAt, which reads
     // 0 pre-field: populating here seats every bot at anchor y under the
     // real surface (announces go out buried, unbury warps them up after).
     if (this.spec.bots) {
@@ -770,12 +786,12 @@ export class Room {
     }
     this.wireModeFeatures();
     this.deployables = new RoomDeployables(this);
-    // Deployables are solid — the move shadows push bodies out of gear.
+    // Deployables are solid  -  the move shadows push bodies out of gear.
     this.moveSim.setDynamic(this.deployables.solidCols);
     if (this.spec.deploys) {
       // Ride structure floors: a generator seeded inside a genhouse must
       // stand on its deck (seated high over terrain), not drown in it.
-      // max() keeps authored elevations — tower sentries never descend.
+      // max() keeps authored elevations  -  tower sentries never descend.
       this.deployables.seedBase(this.spec.deploys.map(e => Object.assign({}, e, {pos: Object.assign({}, e.pos, {y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))})})));
     }
     this.projectiles = new RoomProjectiles(this, field);
@@ -783,19 +799,19 @@ export class Room {
     this.registerSims();
   }
 
-  /** Chat lines per speaker inside the spam window — a burst of fast
+  /** Chat lines per speaker inside the spam window  -  a burst of fast
    *  typing is the trigger for a single 'quiet' callout. */
   private chatPace = new Map<string, number[]>();
 
   /** 4+ lines inside 8s reads as spam. The callout itself is rare (~12%)
-   *  and goes to ONE random bot — VGQ works as a surprise, not a rule,
+   *  and goes to ONE random bot  -  VGQ works as a surprise, not a rule,
    *  and a squad chorus of "Quiet!" would spam the feed worse. */
   private noteChatPace(id: string): void {
     const now = simNow();
     const hits = (this.chatPace.get(id) ?? []).filter((t): boolean => now - t < 8000);
     hits.push(now);
     if (hits.length < 4) { this.chatPace.set(id, hits); return; }
-    this.chatPace.delete(id); // burst spent — re-arm on the next run
+    this.chatPace.delete(id); // burst spent  -  re-arm on the next run
     if (tauntRand() >= 0.12) {return;}
     const bots = [...this.players.getAllPlayers().values()].filter((p): boolean => p.id.startsWith('BOT-') && !p.isDead);
     if (bots.length > 0) {this.messages.killFeed.say(bots[Math.trunc((tauntRand() * bots.length))]!.id, 'quiet', id);}
@@ -815,11 +831,11 @@ export class Room {
     const theirs = this.flags.flags.get(enemyTeam);
     if (aim === 'own') {return ours?.home;}
     if (aim === 'enemy') {return theirs?.home;}
-    // 'carrier' — the thief holding OUR flag; beacon info, pos is public
+    // 'carrier'  -  the thief holding OUR flag; beacon info, pos is public
     return ours && ours.state === 'carried' ? ours.pos : undefined;
   }
 
-  /** Server-authoritative melee species — the crawl* wire events are the
+  /** Server-authoritative melee species  -  the crawl* wire events are the
    *  state-edge stream (retarget/windup/pounce/bite/die); clients replay
    *  the seeded hop sim between them. */
   private initCreatures(field: Heightfield | null): CreatureSim {
@@ -831,7 +847,7 @@ export class Room {
     creatureSim.pops = this.noCreatures ? {} : (this.spec.creatures ?? {});
     creatureSim.colliders = this.ballSim.colliders;
     creatureSim.onBite = (c, targetId): void => {
-      // dep:N ids are deployables — gnaw their hp, not a player.
+      // dep:N ids are deployables  -  gnaw their hp, not a player.
       if (targetId.startsWith('dep:')) {
         this.deployables.gnaw(targetId, c.biteDamage);
         return;
@@ -851,12 +867,12 @@ export class Room {
     return creatureSim;
   }
 
-  // Team bases → spawn anchors, kill-confirmed pickups, CTF flags — the
+  // Team bases → spawn anchors, kill-confirmed pickups, CTF flags  -  the
   // per-mode feature set the spec + modeSpec select together.
   private wireModeFeatures(): void {
     const {bases} = this.spec;
     if (this.modeSpec?.teams && bases?.alpha && bases?.bravo) {
-      // Spawn anchoring uses the SNAPPED stand positions — a defender
+      // Spawn anchoring uses the SNAPPED stand positions  -  a defender
       // bias toward a floating/under-terrain authored base sends players
       // to where the flag was authored, not where it actually is.
       const snapped = this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
@@ -867,25 +883,25 @@ export class Room {
       const p = this.players.getPlayer(pid);
       if (!p) {return;}
       if (kind === 'gem' || kind === 'tag') {
-        // Gems also heal — server-declared now: the collect IS the intent,
+        // Gems also heal  -  server-declared now: the collect IS the intent,
         // so the heal applies here instead of waiting on a claim that a
         // drop could silently lose (credit stayed banked but unclaimed).
         if (kind === 'gem') {
           healPool(p, Math.min(25, Math.round(20 * perkMods(p.perk).healBoost)));
           p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
-          // Client refills half the energy tank on a gem — the shadow
+          // Client refills half the energy tank on a gem  -  the shadow
           // must too or the next jet run diverges for honest reasons.
           this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);
         }
         // Score pickups are the belt economy's income: one charge per
         // nugget, capped at the spawn stock. Gems bank only in a gems
-        // mode — in CTF a gem is heal+credit, not a cap. Tags are tdm's
+        // mode  -  in CTF a gem is heal+credit, not a cap. Tags are tdm's
         // kill-confirmation point; they only ever spawn there.
         p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
         const {team} = p;
         if ((kind === 'tag' || this.modeSpec?.gems) && (team === 'alpha' || team === 'bravo')) {
           this.score(team);
-          // Banker credit — without it nuggets/tdm leave the personal
+          // Banker credit  -  without it nuggets/tdm leave the personal
           // PTS column blank and hauling objective pays zero honor.
           this.scoring.awardPersonal(pid, 1);
         }
@@ -893,10 +909,10 @@ export class Room {
       }
       if (kind === 'token') {
         // Headhunt: the gem's feel-good rewards (jet refill, belt income)
-        // but no bank — the token goes in your pocket and your team's live
+        // but no bank  -  the token goes in your pocket and your team's live
         // score grows by your holding it. Tiered flat bonus on pickup so
         // grabbing a token has immediate utility (green +40% hp, blue +40%
-        // armor, purple +5 belt + 5s 90%-block shield) — on top of the
+        // armor, purple +5 belt + 5s 90%-block shield)  -  on top of the
         // sustained hoard drip that still rewards a disengaged carrier.
         p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
         this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);
@@ -929,50 +945,50 @@ export class Room {
       if (this.mode === 'rabbit') {
         this.flags = new RoomFlags(this, { alpha: this.flagPlacer.rabbitFlagHome() });
       } else {
-        // No authored bases — modes are map-agnostic: auto-place both
+        // No authored bases  -  modes are map-agnostic: auto-place both
         // stands so any geometry can host a flag game.
         this.flags = new RoomFlags(this, bases?.alpha && bases?.bravo
           ? this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo })
           : this.flagPlacer.autoFlagBases());
       }
     }
-    // What the wire currently carries — the join echo and every structure
+    // What the wire currently carries  -  the join echo and every structure
     // push both emit eff(), so boot-time stands are the baseline
     // any later re-push compares against.
     this.structs.baseline();
   }
 
-  /** The one seam where a gamemode becomes pluggable — registry lookup,
+  /** The one seam where a gamemode becomes pluggable  -  registry lookup,
    *  null for every mode without a module (all the built-ins today). */
   private makeModeModule(): ModeModule | null {
     return MODE_MODULES[this.mode]?.(this) ?? null;
   }
 
-  /** Re-snaps flag homes against the LIVE heightfield — terrain attach
+  /** Re-snaps flag homes against the LIVE heightfield  -  terrain attach
    *  and applySpec re-run it (bases can move with the map). */
   refreshFlagHomes(broadcastUpdate = true): void {
     this.flagPlacer.refreshHomes(broadcastUpdate);
-    // Terrain (re)attach — mode entities re-snap their positions against
+    // Terrain (re)attach  -  mode entities re-snap their positions against
     // the live field the same way flag homes do.
     this.modeModule?.onTerrain?.();
   }
 
-  /** Generator state flips which shield panes exist — colliders and the
+  /** Generator state flips which shield panes exist  -  colliders and the
    *  wire echo share this list, so one call re-syncs every client. */
   refreshPowerStructures(): void {
     this.structs.refreshPower();
   }
 
-  // The tick registry — GameServer steps every entry per tick; new
+  // The tick registry  -  GameServer steps every entry per tick; new
   // server-side systems (deployables, generators) register here instead
   // of editing the tick loop.
   private registerSims(): void {
-    // world:'empty' modes (duel) skip the ambient sims — a 2-seat room
+    // world:'empty' modes (duel) skip the ambient sims  -  a 2-seat room
     // paying for wildlife it never renders is the 1v1 capacity penalty
     // (_docs/2026-10-23_DUEL_CAPACITY L1). The OBJECTS still exist, so
     // stateHash lanes emit empty rosters rather than undefined.
     const ambient = this.modeSpec?.world !== 'empty';
-    // World sims step first — bots and downstream systems see post-step
+    // World sims step first  -  bots and downstream systems see post-step
     // wildlife positions inside the same tick.
     if (ambient) {
       this.sims.push({ name: 'balls', tick: (dt): void => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
@@ -981,7 +997,7 @@ export class Room {
     this.sims.push({ name: 'bots', tick: (dt): void => this.bots.tick(dt) });
     if (this.flags) {this.sims.push({ name: 'flags', tick: (dt): void => this.tickFlags(dt), worldState: () => [{ type: 'flagUpdate', flags: this.flags!.snapshot() }] });}
     // The pluggable mode's own sims (conquest's lattice, anything future
-    // modules register) — same tick + join-replay funnel as built-ins.
+    // modules register)  -  same tick + join-replay funnel as built-ins.
     for (const s of this.modeModule?.sims?.() ?? []) {this.sims.push(s);}
     if (ambient && this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind, vel: p.vel }) as ServerMessage) });}
     this.sims.push({ name: 'unbury', tick: (dt): void => this.unburyTick(dt) });
@@ -990,7 +1006,7 @@ export class Room {
       this.sims.push({ name: 'arena', tick: (dt): void => arena.tick(dt) });
     }
     // Deployables join the worldState replay: only edges streamed before,
-    // so a mid-game joiner saw a compound it never spawned — permanent
+    // so a mid-game joiner saw a compound it never spawned  -  permanent
     // DEPLOY/flag/pickup hash desyncs until something happened to change.
     if (ambient) {this.sims.push({ name: 'deploy', tick: (dt): void => this.deployables.tick(dt), worldState: (): ServerMessage[] => this.deployables.snapshot().map((d) => ({ type: 'deploySpawn', id: d.id, owner: d.owner, kind: d.kind, pos: d.pos, team: d.team }) as ServerMessage) });}
     this.sims.push({ name: 'proj', tick: (dt): void => this.projectiles.tick(dt) });
@@ -1006,18 +1022,18 @@ export class Room {
 
   /** Server-issued ping: one human per cadence window, round-robin, so
    *  each player's transit EMA refreshes every ~500ms×roster. Bots are
-   *  skipped — their shadow lives on this box, transit is zero. */
+   *  skipped  -  their shadow lives on this box, transit is zero. */
   private pingCycle = 0;
-  /** Stamp of the ping each player last received — the pong must echo
+  /** Stamp of the ping each player last received  -  the pong must echo
    *  an actually-issued stamp or it could spoof an RTT (a client sending
-   *  `pong{timestamp: now}` unprompted measures rtt≈0 — the lowball
+   *  `pong{timestamp: now}` unprompted measures rtt≈0  -  the lowball
    *  exploit through the trusted channel). */
   private lastPingStamp = new Map<string, number>();
   private pingTick(): void {
     if ((this.pingCycle += 1) % 10 !== 0) {return;}
     const humans = [...this.players.getAllPlayers().values()].filter((p): boolean => !p.isBot);
     if (humans.length === 0) {return;}
-    // Unmeasured humans jump the queue — the client channel stands alone
+    // Unmeasured humans jump the queue  -  the client channel stands alone
     // until the first pong lands, and join grace shouldn't outlast a
     // full round-robin sweep in a big room.
     const target = humans.find((p): boolean => !this.lastPingStamp.has(p.id))
@@ -1027,7 +1043,7 @@ export class Room {
     this.sendToPlayer(target.id, { type: 'ping', timestamp: stamp });
   }
 
-  /** Flag tick — called from GameServer's room tick. Captures feed the
+  /** Flag tick  -  called from GameServer's room tick. Captures feed the
    *  same bank→teamScore→matchEnd funnel nuggets use (worth winAt/5-ish:
    *  one capture = one score point). */
   tickFlags(dt: number): void {
@@ -1035,12 +1051,12 @@ export class Room {
     if (scoredBy) {this.score(scoredBy);}
   }
 
-  /** Beam-intent resolution: the honest ray a Lightning tick strikes —
+  /** Beam-intent resolution: the honest ray a Lightning tick strikes  - 
    *  earliest of terrain face, wall, player capsule, or creature wins
    *  (same math as botBeam.beamContact). A creature contact also picks
    *  the chain fork; payment stays in CombatHandler. */
   private beamSweep(shooterId: string, muzzle: Vec3, dir: Vec3, range: number): BeamContact | null {
-    // One cast for every authority shape — Room and P2PHost resolve the
+    // One cast for every authority shape  -  Room and P2PHost resolve the
     // same rays through shared beamSweep.ts.
     return beamSweepRay({
       players: this.players, field: this.field,
@@ -1052,7 +1068,7 @@ export class Room {
     }, shooterId, muzzle, dir, range);
   }
 
-  /** Any player death drops a carried flag — called from the damage
+  /** Any player death drops a carried flag  -  called from the damage
    *  funnel. In rabbit the same hook doubles as the flag's birth: the
    *  first corpse of the match is where the flag enters play. */
   flagCarrierDied(playerId: string): void {
@@ -1060,24 +1076,24 @@ export class Room {
     this.flags?.spawnAtCorpse(playerId);
   }
 
-  /** The score/kill economy — creature drops, powerup grants, team/FFA
+  /** The score/kill economy  -  creature drops, powerup grants, team/FFA
    *  scoring, match-end awards. Own file (roomScore.ts) via ScoreHost. */
   readonly scoring = new RoomScore(this);
-  /** Per-player FFA scoreboard — lives on RoomScore now; kept as the
+  /** Per-player FFA scoreboard  -  lives on RoomScore now; kept as the
    *  public name GameServer/tests already read. */
   get ffaScores(): Map<string, number> { return this.scoring.ffaScores; }
 
-  /** Match lifecycle — clock/leader/reset funnel lives in roomMatch.ts;
+  /** Match lifecycle  -  clock/leader/reset funnel lives in roomMatch.ts;
    *  matchHost adapts Room's fields to the leaf interface it takes. */
   readonly matchClock: MatchClock;
-  /** MessageHandler's room-facing surface — same lazy-callback pattern
+  /** MessageHandler's room-facing surface  -  same lazy-callback pattern
    *  as matchHost: moveSim/matchClock/ballSim are built after `messages`,
    *  so every reference resolves at call time, not at construction. */
   private handlerInfo(roomName: string): RoomInfo {
     return {
       room: roomName,
       mode: this.mode,
-      // This authority sims every outcome — no client claim is legitimate.
+      // This authority sims every outcome  -  no client claim is legitimate.
       claimsAccepted: false,
       scores: this.scores,
       teams: this.modeSpec?.teams,
@@ -1098,10 +1114,10 @@ export class Room {
       killY: this.spec.killY,
       ambient: this.spec.ambient,
       // Authored spec title wins; the maps/<X>.json source filename is the
-      // fallback — set post-ctor by the factory, refreshed by rotation.
+      // fallback  -  set post-ctor by the factory, refreshed by rotation.
       mapName: (): string | undefined => this.spec.name ?? (this.mapSrc || undefined),
       // Effective spawn pools, live-read: mode modules re-mint spheres
-      // mid-match (conquest node rings) — the spec's authored copy is stale.
+      // mid-match (conquest node rings)  -  the spec's authored copy is stale.
       spawns: () => this.players.spawnPoints,
       teamSpawns: () => this.players.teamSpawns,
       terrain: this.spec.terrain,
@@ -1119,20 +1135,20 @@ export class Room {
       rng: (): number => this.rng(),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
-      // tickNack: reuse the introSeq full-window — every record goes full
+      // tickNack: reuse the introSeq full-window  -  every record goes full
       // for ~1s, which reseeds every client's baselines whether they
       // nacked or not (records are shared; scoping per-socket isn't
       // possible without per-socket encodes). 500ms room cooldown so a
       // nack-storm can't hold the room on fulls permanently.
       drainedForTicks: (pid): boolean => this.connections.drainedForTicks(pid),
-      // A spectator's gap is scoped to their own intro window — spec
+      // A spectator's gap is scoped to their own intro window  -  spec
       // count is unbounded, so room-wide fulls per spec nack would be an
       // amplifier. Player nacks still take nackFulls (their basis
       // corruption is ambiguous, so everyone reseeds).
       nackFor: (pid): boolean => {
         if (!this.spectators.has(pid)) {return false;}
         // Re-arm cap: a spec nack storm would otherwise hold introPending
-        // true forever — every record double-encodes rec.full at 20Hz
+        // true forever  -  every record double-encodes rec.full at 20Hz
         // permanently. An open window still paying out covers the nack.
         if (this.tickSeq - (this.introPlayers.get(pid) ?? -100) < 20) {return true;}
         this.markIntro(pid);
@@ -1142,7 +1158,7 @@ export class Room {
       nackFulls: (): void => {
         const now = wallNow();
         if (now - this.lastNackAt < 500) {return;}
-        // A window still paying out covers every client — re-stamping
+        // A window still paying out covers every client  -  re-stamping
         // would let a nack every 500ms hold the room on fulls forever.
         if (this.tickSeq - this.introSeq < 20) {return;}
         this.lastNackAt = now;
@@ -1183,20 +1199,20 @@ export class Room {
       transitNote: (pid, rtt, stamp): void => {
         if (this.lastPingStamp.get(pid) !== stamp) {return;}
         this.moveSim.feedTransit(pid, rtt);
-        // Echo the server-measured RTT back — the client's own ping/pong
+        // Echo the server-measured RTT back  -  the client's own ping/pong
         // number includes its event-loop stall, so the pair reads as
         // "client/server" and splits a busy renderer from a slow wire.
         this.sendToPlayer(pid, { type: 'srvPing', rtt });
       },
       uplinkNote: (pid, fireAt): void => {
-        // (arrival − declared instant) is this claim's uplink transit —
+        // (arrival − declared instant) is this claim's uplink transit  - 
         // bounded so a wildly off clock (or forged stamp) degrades to the
         // ping/pong channel instead of poisoning the EMA.
         const uplink = wallNow() - fireAt;
         if (uplink >= 0 && uplink <= 2000) {this.moveSim.feedUplink(pid, uplink);}
       },
       // playerHit on the binary lane: one encodeHit per event rides the
-      // same batch as the tick frame — ~20B vs ~160B JSON, the client's
+      // same batch as the tick frame  -  ~20B vs ~160B JSON, the client's
       // own wireIds map resolves ids back. 'environment' encodes wid 0.
       wireHit: (e): boolean => {
         const targetWid = this.wireIds.get(e.targetId);
@@ -1204,32 +1220,32 @@ export class Room {
         const shooterWid = e.shooterId === 'environment' ? 0 : this.wireIds.get(e.shooterId);
         if (shooterWid === undefined) {return false;}
         if (e.shooterId !== 'environment') {this.noteEngagement(e.shooterId, e.targetId);}
-        this.connections.broadcastBinaryReliable(encodeHit({ ...e, targetWid, shooterWid }), 'volatile'); // combat events journal — same 3s staleness window the JSON lane carried
+        this.connections.broadcastBinaryReliable(encodeHit({ ...e, targetWid, shooterWid }), 'volatile'); // combat events journal  -  same 3s staleness window the JSON lane carried
         return true;
       },
-      // Generic S→C binary relay plumbing — the wireId+pos event family
+      // Generic S→C binary relay plumbing  -  the wireId+pos event family
       // encodes at the emit site and rides the same batch/journal lanes.
       widOf: (pid): number | undefined => this.wireIds.get(pid),
       wireCast: (data, journaled, exclude): void => this.connections.broadcastBinaryReliable(data, journaled, exclude),
       wireTo: (pid, data, journaled): void => this.connections.sendBinToPlayerReliable(pid, data, journaled),
       earlyRelayed: (pid, shotId): boolean => this.earlyRelayed(pid, shotId),
-      // The rabbit dep's presence IS the mode check — CombatHandler gates
+      // The rabbit dep's presence IS the mode check  -  CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? (): string | null => this.flags?.carrierId() ?? null : undefined,
       rabbitFlagLive: this.mode === 'rabbit' ? (): boolean => this.flags?.spawned() ?? false : undefined,
       rabbitBottom: this.mode === 'rabbit' ? (): Set<string> => this.scoring.bottomFeeders() : undefined,
       drainEnergy: (pid, n): boolean => this.moveSim.drainEnergy(pid, n),
-      // Blast occlusion through enemy domes — a shell detonating at the
+      // Blast occlusion through enemy domes  -  a shell detonating at the
       // shield's edge can't splash victims inside it.
       shieldBlocked: (from, to, shooterId): boolean =>
         this.deployables.shieldedPoint(to, shooterId, from),
-      // Instant-skill claim: the client already spent the energy locally —
+      // Instant-skill claim: the client already spent the energy locally  - 
       // mirror the same ante on the shadow or the tank drifts 50 apart.
       onSkillUse: (pid, skill): true | "gone" => {
         const p = this.players.getPlayer(pid);
         if (!p) {return 'gone';}
         // Identity check: a claim naming a skill the seat never declared
-        // is a forged press — declared skills are the only legal ones.
+        // is a forged press  -  declared skills are the only legal ones.
         if (p.skill !== undefined && skill !== undefined && skill !== p.skill) {return 'gone';}
         // Cooldown floor: client skills all sit at 1s; 850ms of slack
         // eats jitter, a faster claim is a script.
@@ -1243,7 +1259,7 @@ export class Room {
       energyOf: (pid): number | null => this.moveSim.energyOf(pid),
       moveResync: (pid, pos, yaw, fullEnergy): void => {
         this.moveSim.resync(pid, pos, yaw, fullEnergy);
-        // Resync re-anchors the shadow — also refresh the class speed
+        // Resync re-anchors the shadow  -  also refresh the class speed
         // scale so a respawn-applied tier swap propagates (moveTrack
         // only re-reads it at handshake).
         this.applyClassScale(pid);
@@ -1251,7 +1267,7 @@ export class Room {
       moveTrack: (pid, pos, yaw): void => {
         const p = this.players.getPlayer(pid);
         this.moveSim.track(pid, pos, yaw, p?.perk, p?.team, p?.isBot, p?.armorClass);
-        // Re-seats (room hop) have stale position frames in flight — arm
+        // Re-seats (room hop) have stale position frames in flight  -  arm
         // the same grace resync() uses so they can't seed the fresh
         // shadow at the old seat and flag the real spawn landing a cheat.
         this.moveSim.markReseated(pid);
@@ -1262,7 +1278,7 @@ export class Room {
         this.moveSim.untrack(pid);
         this.lastPingStamp.delete(pid);
       },
-      // A spoken line is itself an event worth a reply — the squad sees
+      // A spoken line is itself an event worth a reply  -  the squad sees
       // it on their own think phases, so an answer (if any) lands a beat
       // later like real chat, not a scripted call-and-response.
 
@@ -1271,7 +1287,7 @@ export class Room {
       envRange: (pid): number => {
         const p = this.players.getPlayer(pid);
         if (!p) {return Infinity;}
-        // Crawlers count too — envDamage legitimately comes from bites,
+        // Crawlers count too  -  envDamage legitimately comes from bites,
         // not just balls; a balls-only check warned on every true pounce.
         let d = this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z);
         for (const c of this.creatureSim.crawlers.values()) {
@@ -1279,7 +1295,7 @@ export class Room {
           const dc = Math.hypot(c.x - p.position.x, c.y - p.position.y, c.z - p.position.z);
           if (dc < d) {d = dc;}
         }
-        // Mines/turrets count too — an untagged blastAtPlayer claim from a
+        // Mines/turrets count too  -  an untagged blastAtPlayer claim from a
         // tripped mine has no creature near, only the hull it stood next to.
         for (const dep of this.deployables.items.values()) {
           const dd = Math.hypot(dep.pos.x - p.position.x, dep.pos.y - p.position.y, dep.pos.z - p.position.z);
@@ -1293,7 +1309,7 @@ export class Room {
           const d = Math.hypot(c.x - pos.x, c.y - pos.y, c.z - pos.z);
           if (d < crawler) {crawler = d;}
         }
-        // Nearest enemy body to the pop — a foe eating the shell at 5m
+        // Nearest enemy body to the pop  -  a foe eating the shell at 5m
         // reads as a 'lip' in the autopsy otherwise, masking body
         // intercepts as terrain clips.
         const team = shooterId ? this.players.getPlayer(shooterId)?.team : undefined;
@@ -1308,10 +1324,10 @@ export class Room {
     };
   }
 
-  /** Built in the constructor — field-initializer order would read
+  /** Built in the constructor  -  field-initializer order would read
    *  mode/modeSpec before they're assigned. */
   private matchHost(): MatchHost {
-    // Getters read through `self` — object-literal `this` would bind to
+    // Getters read through `self`  -  object-literal `this` would bind to
     // the literal itself (the recursion bug this fixes avoided).
     // oxlint-disable-next-line no-this-alias -- the returned literal's getters need this outer scope
     const self = this;
@@ -1332,7 +1348,7 @@ export class Room {
         this.pickups?.clear();
         this.deployables.clearAll();
         this.players.resetStats();
-        // Fresh match means fresh pockets — held tokens don't carry over
+        // Fresh match means fresh pockets  -  held tokens don't carry over
         // (syncHeld flushes the 0s so overhead counters don't go stale).
         for (const p of this.players.getAllPlayers().values()) {p.heldTokens = 0;}
         this.scoring.syncHeld();
@@ -1341,7 +1357,7 @@ export class Room {
         const bots = [...this.players.getAllPlayers().values()].filter((p): boolean | undefined => p.isBot);
         if (bots.length < 2 || !this.modeSpec?.teams) {return;}
         // Fisher-Yates on botRand so harness replays stay deterministic,
-        // then alternate alpha/bravo — sizes stay even, loyalties don't.
+        // then alternate alpha/bravo  -  sizes stay even, loyalties don't.
         for (let i = bots.length - 1; i > 0; i -= 1) {
           const j = Math.floor(botRand() * (i + 1));
           [bots[i], bots[j]] = [bots[j]!, bots[i]!];
@@ -1358,16 +1374,16 @@ export class Room {
       rotate: (): MapSpec | null => this.onRotate?.() ?? null,
       applySpec: (s): void => this.applySpec(s),
       onMatchEnd: (r): void | undefined => this.onMatchEnd?.(r),
-      // 'match' isn't a bot id — nobody's actor-excluded, so every bot
+      // 'match' isn't a bot id  -  nobody's actor-excluded, so every bot
       // sees the gg notice on its own think phase and the usual dice
       // decide who bothers replying. matchEnd adds the staggered
-      // outcome lines on top — the shared chatter cooldown keeps the
+      // outcome lines on top  -  the shared chatter cooldown keeps the
       // two paths from double-speaking the same bot.
       onEnded: (w): void => { this.bots.notice('gg', 'match'); this.bots.matchEnd(w); },
-      // The opener half of the beat — gl-hf as the round goes live.
+      // The opener half of the beat  -  gl-hf as the round goes live.
       onStarted: (): void => { this.bots.matchStart(); this.seedHeadhunt(); },
       // Intermission godmode: the scoreboard is up but the game runs on
-      // — blasts still shove, nobody can deal damage (Overwatch-style).
+      //  -  blasts still shove, nobody can deal damage (Overwatch-style).
       setIntermission: (on): void => { self.players.invulnerable = on; },
     };
   }
@@ -1387,11 +1403,11 @@ export class Room {
     return this.matchClock.forceEnd();
   }
 
-  endMatch(w: string): void { // public — ScoreHost calls it on a win
+  endMatch(w: string): void { // public  -  ScoreHost calls it on a win
     this.matchClock.end(w);
   }
 
-  /** Match-start token seeding — a field with zero tokens stays 0-0 to
+  /** Match-start token seeding  -  a field with zero tokens stays 0-0 to
    *  the horn, so every spawn point gets a pair scattered near it. */
   private seedHeadhunt(): void {
     if (this.mode !== 'headhunt' || !this.pickups) {return;}
@@ -1412,13 +1428,13 @@ export class Room {
     this.scoring.score(team, n);
   }
 
-  /** A Room-shaped send for host interfaces — RoomScore echoes buffs
+  /** A Room-shaped send for host interfaces  -  RoomScore echoes buffs
    *  through the same path the ctor closures use. */
   sendToPlayer(playerId: string, msg: ServerMessage): void {
     this.connections.sendToPlayer(playerId, msg);
   }
 
-  // Combat noise — a short-lived ring of recent loud events (shots,
+  // Combat noise  -  a short-lived ring of recent loud events (shots,
   // blasts). Bots "hear" these without LOS, which produces emergent
   // scouting: a fight across the map attracts attention.
   private noises: { pos: Vec3; at: number }[] = [];
@@ -1437,7 +1453,7 @@ export class Room {
     this.connections.broadcast(msg, exclude);
   }
 
-  /** Blasts detonate server-side without a broadcast position — the sim
+  /** Blasts detonate server-side without a broadcast position  -  the sim
    *  reports them here so bots hear explosions as well as muzzle fire. */
   pushNoise(pos: Vec3): void {
     const now = simNow();
@@ -1468,8 +1484,8 @@ export class Room {
   }
 
   /** Nothing left to serve: no humans, no grace-period ghosts. Bots don't
-   *  keep a match alive — they exist to serve the humans in it.
-   *  A pending terrainReady means a join is deferred on the map load —
+   *  keep a match alive  -  they exist to serve the humans in it.
+   *  A pending terrainReady means a join is deferred on the map load  - 
    *  the seat hasn't registered yet, so the room reads "empty" and the
    *  sweep would dispose it mid-join, seating the joiner into a dead
    *  Room that's gone from gs.rooms (the zombie-seat soak bug: join
@@ -1483,14 +1499,14 @@ export class Room {
    *  Read off spec so a rotation applySpec re-caps without a field copy. */
   get maxPlayers(): number { return this.spec.maxPlayers ?? CONFIG.maxPlayers; }
 
-  /** Standing lobby — minted at boot, exempt from the empty-room sweep.
+  /** Standing lobby  -  minted at boot, exempt from the empty-room sweep.
    *  Hibernates while empty; spec-tracked so a rotation drops the flag
    *  with the spec that carried it. */
   get standing(): boolean { return this.spec.standing === true; }
 
   /** Balance pick: smallest team gets the newcomer. FFA modes return
    *  undefined. Split from assignTeam so GameServer can pass the pick to
-   *  addPlayer — the join spawn itself is then already team-aware. */
+   *  addPlayer  -  the join spawn itself is then already team-aware. */
   nextTeam(): TeamId | undefined {
     if (!this.modeSpec?.teams) {return undefined;}
     let alpha = 0, bravo = 0;
@@ -1501,8 +1517,8 @@ export class Room {
     return pickTeam({ alpha, bravo });
   }
 
-  /** Human join pick: humans-vs-humans first — nobody wants to be the
-   *  second human stacked onto the side that already has one — then
+  /** Human join pick: humans-vs-humans first  -  nobody wants to be the
+   *  second human stacked onto the side that already has one  -  then
    *  total size. Bots keep nextTeam; they don't read the human column. */
   nextHumanTeam(): TeamId | undefined {
     if (!this.modeSpec?.teams) {return undefined;}
@@ -1523,7 +1539,7 @@ export class Room {
 
   /** Admin hot-reload: swap in a re-read map spec without restarting the
    *  room. Mode stays locked (a mode change mid-match would invalidate
-   *  scores/teams) — everything layout-side applies live: spawn points,
+   *  scores/teams)  -  everything layout-side applies live: spawn points,
    *  structures, arena, ball mix/population, bot fill. Clients get a
    *  mapUpdate broadcast to rebuild their geometry. */
   applySpec(spec: MapSpec): void {
@@ -1537,7 +1553,7 @@ export class Room {
     // swapped into the sky arenas has players dropping through to the plain
     // (and a room swapped out keeps killing on the old map's plane).
     this.moveSim.setKillY(spec.killY);
-    // The echo carries the merged list too — joiners get stand hulls in
+    // The echo carries the merged list too  -  joiners get stand hulls in
     // their gameState structures, and combat occlusion sees the dais.
     this.messages.setMap(Object.assign({}, spec, { structures: this.structs.eff() }));
     this.structs.baseline(); // the push below is what clients hold now
@@ -1563,7 +1579,7 @@ export class Room {
       atmosphere: spec.atmosphere,
       interiors: spec.interiors,
     });
-    // Rotate the sims' heightfield WITH the broadcast — clients rebuild on
+    // Rotate the sims' heightfield WITH the broadcast  -  clients rebuild on
     // mapUpdate; a sim still running the old field disagrees about where
     // the ground is for the entire match.
     if (terrainChanged) {this.onTerrain?.(spec);}
@@ -1571,7 +1587,7 @@ export class Room {
   }
 
   /** Spawn pools + seating: mode module re-stamps AFTER the spec-side
-   *  pools land — a module that owns spawning (conquest's node rings)
+   *  pools land  -  a module that owns spawning (conquest's node rings)
    *  must win over authored spheres or a rotation would silently revert
    *  to flat-map seating. */
   private applySpecSeating(spec: MapSpec): void {
@@ -1579,7 +1595,7 @@ export class Room {
     this.players.teamSpawns = spec.teamSpawns ?? null;
     this.modeModule?.onSpec?.(spec);
     this.structs.attach(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
-    // Bases can move with a new spec — re-snap homes (no update push: the
+    // Bases can move with a new spec  -  re-snap homes (no update push: the
     // mapUpdate broadcast carries the post-snap list). If the terrain is
     // also rotating the attach below corrects them once it lands.
     this.refreshFlagHomes(false);
@@ -1596,7 +1612,7 @@ export class Room {
   }
 
   /** Bot seats deferred at ctor (factory rooms wait out the async
-   *  terrain load so the pick lifts against the real field) — populate
+   *  terrain load so the pick lifts against the real field)  -  populate
    *  once the attach lands. No-op when nothing was deferred. */
   populateDeferredBots(): void {
     const n = Math.max(0, this.pendingBots - this.bots.count);
@@ -1610,7 +1626,7 @@ export class Room {
     if (this.bots.count < want) { this.bots.populate(want - this.bots.count); return; }
     if (this.bots.count <= want) {return;}
     let excess = this.bots.count - want;
-    // Snapshot first — removePlayerCompletely mutates the map we're walking.
+    // Snapshot first  -  removePlayerCompletely mutates the map we're walking.
     // oxlint-disable-next-line no-useless-spread
     for (const p of [...this.players.getAllPlayers().values()]) {
       if (excess <= 0) {break;}
@@ -1634,20 +1650,20 @@ excess -= 1;
     }
   }
 
-  /** Full teardown — every store moves together or a slot/token leaks. */
+  /** Full teardown  -  every store moves together or a slot/token leaks. */
   removePlayerCompletely(playerId: string, reason: string, log: (m: string, o?: object) => void): void {
-    // Bot cleanup funnels here too — callers other than retire/adminReload
+    // Bot cleanup funnels here too  -  callers other than retire/adminReload
     // (idle reap on a hibernating room, future teardown paths) used to
     // leave the brain keyed on a gone player forever. Idempotent: retire
     // already untracked before reaching this.
     const wasBot = this.players.getPlayer(playerId)?.isBot;
     if (wasBot) {this.bots.untrack(playerId);}
-    // A carrier leaving drops the flag — same rule as dying with it.
+    // A carrier leaving drops the flag  -  same rule as dying with it.
     this.flagCarrierDied(playerId);
     this.deployables.clearOwner(playerId);
     this.projectiles.clearOwner(playerId);
     // Headhunt: a carrier leaving scatters their held tokens where they
-    // stood — same rule as dying with them, minus the corpse bounty.
+    // stood  -  same rule as dying with them, minus the corpse bounty.
     if (this.mode === 'headhunt') {
       const leaver = this.players.getPlayer(playerId);
       if (leaver && leaver.heldTokens > 0) {
@@ -1667,15 +1683,15 @@ excess -= 1;
     this.sessionTokens.delete(playerId);
     this.reclaimShields.delete(playerId);
     // Removal-without-disconnect paths (kick, idle reap, bot retire)
-    // never hit the onClose cleanup — the limiter's per-player buckets
+    // never hit the onClose cleanup  -  the limiter's per-player buckets
     // would sit in this room's map for its life.
     this.rateLimiter.removePlayer(playerId);
     // A pending grace timer is part of the player's teardown: kick/room
     // hop/admin removal during the window would otherwise leave a zombie
     // timer that re-runs this whole funnel later (double playerLeft,
-    // double leaves count — or worse, tearing down a rejoined player).
+    // double leaves count  -  or worse, tearing down a rejoined player).
     // Terminating here (not only in GameServer's wrapper) keeps the funnel
-    // complete when the room is driven directly — the session's armed
+    // complete when the room is driven directly  -  the session's armed
     // countdown dies with its transition to reaped.
     this.sessions?.terminate(playerId, reason);
     // Retire the wire id: the u16 space wraps at 65536 and a monotonic
@@ -1712,7 +1728,7 @@ excess -= 1;
         ? (['alpha', 'bravo'] as const)
         : (['bravo', 'alpha'] as const);
     if (counts[big] - counts[small] < 2) {return;}
-    // Dead bots first — a corpse's team swap lands on its respawn, so the
+    // Dead bots first  -  a corpse's team swap lands on its respawn, so the
     // flip is invisible. Only the bottom quartile is eligible: the team's
     // star mid-carry shouldn't vanish into the enemy jersey.
     const bots = [...this.players.getAllPlayers().values()]
@@ -1721,7 +1737,7 @@ excess -= 1;
     const pool = Math.max(1, Math.ceil(bots.length * 0.4));
     for (const p of bots.slice(0, pool)) {
       if (counts[big] - counts[small] < 2) {break;}
-      // A flipped carrier would hold the flag in 'carried' forever —
+      // A flipped carrier would hold the flag in 'carried' forever  - 
       // tickCarried requires carrier.team !== flag.team, and the bot's
       // new own-team can't grab or return it. Drop it at their feet.
       this.flagCarrierDied(p.id);
@@ -1731,7 +1747,7 @@ excess -= 1;
 counts[big] -= 1;
 counts[small] += 1;
     }
-    // A flipped carrier's tokens change sides — resync the live sums.
+    // A flipped carrier's tokens change sides  -  resync the live sums.
     this.scoring.syncHeld();
   }
 }
