@@ -11,7 +11,7 @@ import { reconstructSeekDeployable, applyPlaybackDeployableEvent, type PlaybackD
 import { reconstructSeekMarker, applyPlaybackMarkerEvent } from './playbackMarkers.js';
 import type { Player } from '../entities/Player.js';
 import { Projectile } from '../projectiles/Projectile.js';
-import { BOLT_CONFIG, getProjectileConfig, computeAccuracy } from '../projectiles/index.js';
+import { BOLT_CONFIG, getProjectileConfig, computeAccuracy, shotScore } from '../projectiles/index.js';
 import type { BallDebris } from '../effects/debris.js';
 import { Explosion } from '../effects/explosion.js';
 import { Implosion } from '../effects/implosion.js';
@@ -259,7 +259,7 @@ function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r
   if (origin && ev.targetId !== 0) {
     const dist = r.pos.distanceTo(origin);
     const air = r.age;
-    const score = Math.round(acc * dist * air);
+    const score = shotScore(acc, dist, air, r.config.weaponType);
     world.fragMessages.showScore(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`, air);
     world.hud.showHitMarker();
   }
