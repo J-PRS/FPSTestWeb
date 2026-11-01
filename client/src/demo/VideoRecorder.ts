@@ -54,9 +54,9 @@ export class VideoRecorder {
   private videoW = 0;
   private videoH = 0;
   private fpsNow = 60;
-  private vmux: 'avc' | 'hevc' = 'avc';
+  private vmux: 'avc' | 'hevc' | 'av1' = 'avc';
   private qpMode = false;
-  private qpKey: 'avc' | 'hevc' = 'avc';
+  private qpKey: 'avc' | 'hevc' | 'av01' = 'avc';
   private lastFrameAt = 0;
   // Game audio lane: the AudioEngine's post-compressor mix feeds an
   // AudioWorklet that hands PCM to an AudioEncoder (AAC→muxer audio track,
@@ -78,7 +78,23 @@ export class VideoRecorder {
   private statPumpMax = 0;
   private statPumpSum = 0;
   private statPumpN = 0;
+  private statBlitSum = 0;
+  private statBlitN = 0;
   private statLastAt = 0;
+  // Last cutWindow() result - the probe can't see in-page console, so the
+  // trim diagnostics land here instead.
+  lastCut: Record<string, unknown> | null = null;
+  /** Recorder cost snapshot - same numbers the `rec done` log line reports,
+   *  readable from the test hook where console info-level is filtered out. */
+  get stats(): { frames: number; qMax: number; pumpAvg: number; pumpMax: number; blitAvg: number } {
+    return {
+      frames: this.frames,
+      qMax: this.statQMax,
+      pumpAvg: this.statPumpSum / Math.max(1, this.statPumpN),
+      pumpMax: this.statPumpMax,
+      blitAvg: this.statBlitSum / Math.max(1, this.statBlitN),
+    };
+  }
 
   setCanvas(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
@@ -140,7 +156,11 @@ export class VideoRecorder {
     // Codec ladder: HEVC first (NVENC does it — ~25% better quality per
     // bit), then H.264 High. Quantizer mode (fixed QP ≈ visually
     // lossless) beats VBR where the encoder supports it.
-    const ladders: { codec: string; muxCodec: 'hevc' | 'avc'; qKey: 'hevc' | 'avc' }[] = [
+    // AV1 first: RTX40/RDNA3/Arc do HW encode at ~30% better quality/bit
+    // than HEVC. isConfigSupported gates it - falls through on older GPUs.
+    const ladders: { codec: string; muxCodec: 'hevc' | 'avc' | 'av1'; qKey: 'hevc' | 'avc' | 'av01' }[] = [
+      { codec: 'av01.0.13M.08', muxCodec: 'av1', qKey: 'av01' },
+      { codec: 'av01.0.08M.08', muxCodec: 'av1', qKey: 'av01' },
       { codec: 'hvc1.1.6.L156.B0', muxCodec: 'hevc', qKey: 'hevc' },
       { codec: 'hev1.1.6.L156.B0', muxCodec: 'hevc', qKey: 'hevc' },
       { codec: 'avc1.640032', muxCodec: 'avc', qKey: 'avc' },
@@ -153,7 +173,11 @@ export class VideoRecorder {
       for (const cand of ladders) {
         for (const variant of [
           (Object.assign({}, base, {codec: cand.codec,bitrateMode: 'quantizer'})) as VideoEncoderConfig,
-          (Object.assign({}, base, {codec: cand.codec,bitrateMode: 'variable'})) as VideoEncoderConfig,
+          // L1T3 temporal layers on VBR only: cutWindow can trim at
+          // 1/3-rate granularity instead of GOP (2s) boundaries - tighter
+          // clip starts. QP mode doesn't support layering; putting it on
+          // the QP config would lose the preferred variant entirely.
+          (Object.assign({}, base, {codec: cand.codec,bitrateMode: 'variable',scalabilityMode: 'L1T3'})) as VideoEncoderConfig,
           (Object.assign({}, base, {codec: cand.codec,latencyMode: 'realtime'})) as VideoEncoderConfig,
         ]) {
           const { supported } = await VideoEncoder.isConfigSupported(variant);
@@ -208,6 +232,8 @@ export class VideoRecorder {
       this.statPumpMax = 0;
       this.statPumpSum = 0;
       this.statPumpN = 0;
+      this.statBlitSum = 0;
+      this.statBlitN = 0;
       this.statLastAt = performance.now();
       this.keyEvery = fps * 2; // IDR every 2s — the mp4 trim granularity
       this.encFailed = false;
@@ -327,7 +353,7 @@ export class VideoRecorder {
       this.mux = null;
       this.ring = [];
       this.staged = false;
-      logger.info(`rec done ${this.frames}f qMax=${this.statQMax} pumpMax=${this.statPumpMax.toFixed(2)}ms pumpAvg=${(this.statPumpSum / Math.max(1, this.statPumpN)).toFixed(2)}ms codec=${this.vmux}${this.qpMode ? '+qp' : ''}`);
+      logger.info(`rec done ${this.frames}f qMax=${this.statQMax} pumpMax=${this.statPumpMax.toFixed(2)}ms pumpAvg=${(this.statPumpSum / Math.max(1, this.statPumpN)).toFixed(2)}ms blitAvg=${(this.statBlitSum / Math.max(1, this.statBlitN)).toFixed(2)}ms codec=${this.vmux}${this.qpMode ? '+qp' : ''}`);
       try {
         if (aenc) {
           // Disconnect the tap first so no more PCM lands on a closing codec.
@@ -376,12 +402,15 @@ export class VideoRecorder {
     if (!this.canvas || this.suspended) {return;}
     const src = this.canvas;
     if (this.staged && this.stageCtx) {
+      const b0 = performance.now();
       const scale = Math.min(STAGE_W / src.width, STAGE_H / src.height);
       const w = src.width * scale, h = src.height * scale;
       const dx = (STAGE_W - w) / 2, dy = (STAGE_H - h) / 2;
       this.stageCtx.fillStyle = '#000';
       this.stageCtx.fillRect(0, 0, STAGE_W, STAGE_H);
       this.stageCtx.drawImage(src, 0, 0, src.width, src.height, dx, dy, w, h);
+      this.statBlitSum += performance.now() - b0;
+      this.statBlitN += 1;
     }
     if (this.enc) {
       // The error callback closes the codec but keeps this.enc set —
@@ -415,7 +444,7 @@ this.frames += 1;
       this.statPumpSum += pumpMs;this.statPumpN += 1;
       if (now - this.statLastAt >= 5000) {
         this.statLastAt = now;
-        logger.info(`rec stats qMax=${this.statQMax} pump=${pumpMs.toFixed(2)}ms pumpAvg=${(this.statPumpSum / Math.max(1, this.statPumpN)).toFixed(2)}ms`);
+        logger.info(`rec stats qMax=${this.statQMax} pump=${pumpMs.toFixed(2)}ms pumpAvg=${(this.statPumpSum / Math.max(1, this.statPumpN)).toFixed(2)}ms blitAvg=${(this.statBlitSum / Math.max(1, this.statBlitN)).toFixed(2)}ms`);
       }
     }
   }
@@ -433,7 +462,10 @@ this.frames += 1;
       if (r.c.type === 'key' && r.ts <= startMs) {keyIdx = i;}
       if (r.ts <= endMs) {endIdx = i;} else {break;}
     }
-    if (keyIdx < 0 || endIdx < keyIdx) {return null;}
+    if (keyIdx < 0 || endIdx < keyIdx) {
+      this.lastCut = { keyIdx, endIdx, added: 0, failed: 0, bytes: 0, why: keyIdx < 0 ? 'no keyframe before start' : 'end before key' };
+      return null;
+    }
     const mux = new Muxer({
       target: new ArrayBufferTarget(),
       video: { codec: this.vmux, width: this.videoW, height: this.videoH, frameRate: this.fpsNow },
@@ -441,6 +473,7 @@ this.frames += 1;
       fastStart: 'in-memory',
     });
     const base = this.ring[keyIdx]!.ts;
+    let added = 0, failed = 0;
     for (let i = keyIdx; i <= endIdx; i += 1) {
       const r = this.ring[i]!;
       // Retimestamp relative to the leading keyframe so the clip starts at 0.
@@ -451,7 +484,8 @@ this.frames += 1;
         meta = r.m;
         if (!meta?.decoderConfig && this.decConf) {meta = { decoderConfig: this.decConf };}
       }
-      mux.addVideoChunk(r.c, meta, Math.round((r.ts - base) * 1000));
+      try { mux.addVideoChunk(r.c, meta, Math.round((r.ts - base) * 1000)); added += 1; }
+      catch (error) { failed += 1; if (failed === 1) {console.warn('cutWindow addVideoChunk:', error);} }
     }
     if (this.aCodec) {
       let firstAudio = true;
@@ -467,6 +501,7 @@ this.frames += 1;
       }
     }
     mux.finalize();
+    this.lastCut = { keyIdx, endIdx, added, failed, bytes: mux.target.buffer.byteLength, why: failed > 0 ? 'addVideoChunk threw' : '' };
     return new Blob([mux.target.buffer], { type: 'video/mp4' });
   }
 
