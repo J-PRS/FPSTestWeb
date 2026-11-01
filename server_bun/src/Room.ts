@@ -348,14 +348,15 @@ export class Room {
   readonly flagPlacer = new FlagPlacer(this,
     (broadcast): void => { this.structs.attach(); if (broadcast) {this.structs.pushUpdate();} },
     (snapped): void => {
-      if (this.modeSpec?.teams) {
+      if (this.modeSpec?.teams && this.modeSpec.flags) {
         this.players.teamBases = { alpha: Object.assign({}, snapped.alpha), bravo: Object.assign({}, snapped.bravo) };
       }
     },
     (rings): void => {
-      // Auto-derived stands mint their own spawn rings  -  but authored
-      // teamSpawns still win when a base-less spec bothered to ship them.
-      if (this.modeSpec?.teams && !this.spec.teamSpawns) {
+      // Auto-derived stands mint their own spawn rings  -  but only flag
+      // modes adopt them (tdm/headhunt spawn off bases they don't play),
+      // and authored teamSpawns still win either way.
+      if (this.modeSpec?.teams && this.modeSpec.flags && !this.spec.teamSpawns) {
         this.players.teamSpawns = rings;
       }
     });
