@@ -15,7 +15,7 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import type { Heightfield } from '../../shared/heightfield.ts';
+import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { type BotBrain,BRAWL_RANGE,FOE_CONE_MIN_DOT,type BotVec,type BrainCtx,type BrainOut} from '../../shared/botBrain.ts';
 
 import { losClear } from '../../shared/botLos.ts';
@@ -736,6 +736,16 @@ hurtCount += 1;
           ? Math.atan2(mpcAim.x - p.position.x, mpcAim.z - p.position.z)
           : sh.yaw;
         p.skiing = 1;
+        // Meter tick parity with driveMove: MPC bots skip driveMove, so
+        // without this they never tick and of() reads the unproven
+        // default (100) - every capper displaying max sheep forever.
+        this.sheep.check(id, p, {
+          out, airborne: !sh.onGround, hasDest: true,
+          foe: (this.foeNear.get(id) ?? 0) > now, dt,
+          height: Math.max(0, p.position.y - classCapsule(p.armorClass).eye - Math.max(
+            this.room.moveSim.structureTop(p.position.x, p.position.z),
+            this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y)),
+        }, now);
       }
       else if (this.legacyMove(id, p, out.dest, dt)) {continue;}
       this.stageProf[4]! += performance.now() - tm2;
