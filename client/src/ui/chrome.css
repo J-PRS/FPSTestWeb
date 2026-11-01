@@ -177,7 +177,9 @@ body.menu-open #frag-msg { display: none !important; }
 #overlay .btn-row button:hover { background: rgba(255,255,255,0.14); color: #fff; }
 /* Two toggles per row — short labels only (ON/OFF state pairs). */
 #overlay .btn-row .btn-pair { display: flex; gap: 6px; }
-#overlay .btn-row .btn-pair button { flex: 1; }
+/* min-width:0 lets the flex children shrink below label width — without
+   it a long label (WPOS) forces the row past the panel and it spills. */
+#overlay .btn-row .btn-pair button { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #overlay .btn-row .btn-pair .field-row { flex: 1; min-width: 0; }
 /* #dev-tools wraps two btn-pair rows — as one flex child of .btn-row its
    inner rows stacked flush; re-column it with the same 6px gap. */

@@ -136,6 +136,11 @@ export function dropDebugPin(owner: object, p: { x: number; y: number; z: number
     //   1. DECLARED: the owner called breakDropDebugPin (teleport event)
     //   2. DETECTED: long AND sideways AND flat-ish - see below
     let bad = breakNext.delete(owner);
+    // Absolute discontinuity cap: pins drop ~every 4m of travel, so a
+    // >60m gap is NEVER one hop - it's an unbroken teleport the owner
+    // forgot to declare (blend re-seat, seek reconstruct, respawn).
+    // Without this the strip draws a sky-spanning chord.
+    if (!bad && d > 60) {bad = true;}
     let log = gapLog.get(owner);
     if (!log) {log = []; gapLog.set(owner, log);}
     // Air→air conns can never hide: teleports happen at terrain, and

@@ -5,6 +5,7 @@ import { BallDebris } from '../effects/debris.js';
 import { fastForward } from './playbackFF.js';
 import { SPAWN_POP_S } from '../entities/ballVisual.js';
 import { breakDropDebugPin } from '../effects/debugPins.js';
+import { GRAVITY } from '../core/config.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';
 import * as sfxWorld from '../core/sfx/world.js';
 
@@ -81,9 +82,19 @@ function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number
       breakDropDebugPin(ball, ball.pos); // declared break - the strip ends at the old spot
       return;
     }
-    // Mid-size corrections route through renderOffset like live - _rpos
-    // blends back over ~0.5s so the trail driver sees a sweep, not a
-    // teleport jump-cut that segments the ribbon every event.
+    // Only small corrections get the renderOffset glide: a 1.5-4m drift
+    // blends invisibly, but anything bigger sweeping midair is fake
+    // flight (the ball never traveled that chord) - snap it like a live
+    // hard segment instead of manufacturing a sweep.
+    if (drift >= 4) {
+      ball.pos.set(ex, ey, ez);
+      ball.vel.set(evx, evy, evz);
+      ball.renderOffset.set(0, 0, 0);
+      ball._rpos.copy(ball.pos);
+      ball.retireRibbons();
+      breakDropDebugPin(ball, ball.pos);
+      return;
+    }
     ball.renderOffset.set(ball.pos.x - ex, ball.pos.y - ey, ball.pos.z - ez);
     ball.pos.set(ex, ey, ez);
     ball.vel.set(evx, evy, evz);
@@ -99,6 +110,15 @@ function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number
 export function blendPlaybackBall(ball: Ball, dt: number): void {
   const pb = ball as Ball & { pbTarget?: THREE.Vector3; pbTargetVel?: THREE.Vector3 };
   if (!pb.pbTarget || !pb.pbTargetVel || ball.dead) {return;}
+  // Dead-reckon the target: the recorded point is where the ball WAS at
+  // the edge; pulling pos toward it drags a ball that flew past back-
+  // wards — the rubberband. Advancing the target at the recorded vel
+  // (+gravity) makes the blend converge on where the ball should be NOW.
+  const g = GRAVITY;
+  pb.pbTarget.x += pb.pbTargetVel.x * dt;
+  pb.pbTarget.y += pb.pbTargetVel.y * dt;
+  pb.pbTarget.z += pb.pbTargetVel.z * dt;
+  pb.pbTargetVel.y -= g * dt;
   const k = 1 - Math.exp(-PLAYBACK_BLEND_HZ * dt);
   ball.pos.lerp(pb.pbTarget, k);
   ball.vel.lerp(pb.pbTargetVel, k);

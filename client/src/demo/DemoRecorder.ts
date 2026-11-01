@@ -41,8 +41,11 @@ function pruneEventsBefore<T extends { timestamp: number }>(events: T[], cutoff:
     else {hi = mid;}
   }
   // Retired events go back on the freelist — recording is always-on now,
-  // so a churn-free spool keeps GC out of the steady frame.
-  for (const e of events.splice(0, lo)) {pool.push(e);}
+  // so a churn-free spool keeps GC out of the steady frame. copyWithin
+  // not splice: the splice form allocates the cut array every tick.
+  for (let i = 0; i < lo; i += 1) {pool.push(events[i]!);}
+  events.copyWithin(0, lo);
+  events.length -= lo;
 }
 
 /** Projectile prune — same rolling-window drop EXCEPT a Fired whose shell
@@ -165,6 +168,10 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   recording = false;
+  /** Record-side cost probe - µs accumulated per section since start().
+   *  Read live: __demoManager.recorder.prof. Two performance.now() calls
+   *  per tick section ≈ 60ns - noise against the ~µs being measured. */
+  readonly prof = { updateNs: 0, updateN: 0, frameNs: 0, frameN: 0, remoteNs: 0, remoteN: 0, targetNs: 0, targetN: 0, pruneNs: 0, pruneN: 0 };
   /** Dedupe bit-identical frames (local + remote). Off = verbatim every
    *  tick, for analysis tooling that wants an unbroken sample stream. */
   deadReckon = true;
@@ -229,6 +236,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.lastWallMarkT = -1;
     this.lastEventResetTime = 0;
     this.eventCountThisSecond = 0;
+    for (const k of Object.keys(this.prof) as (keyof typeof this.prof)[]) {this.prof[k] = 0;}
     this.projectileEvents = [];
     this.targetEvents = [];
     this.remoteFrames = [];
@@ -273,6 +281,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     if (!this.remoteSource) {return;}
     if (now - this.lastRemoteSampleT < 1 / REMOTE_SAMPLE_HZ) {return;}
     this.lastRemoteSampleT = now;
+    const t0 = performance.now();
     for (const s of this.remoteSource()) {
       let idx = this.rosterIdxById.get(s.id);
       if (idx === undefined) {
@@ -308,13 +317,18 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       f.wid = (s.weapon ?? 0) & 0xFF;
       this.remoteFrames.push(f);
     }
+    this.prof.remoteNs += performance.now() - t0;
+    this.prof.remoteN += 1;
   }
 
   private sampleTargets(now: number): void {
     if (!this.targetSnapshotSource) {return;}
     if (now - this.lastTargetSnapT < TARGET_SNAPSHOT_INTERVAL) {return;}
     this.lastTargetSnapT = now;
+    const t0 = performance.now();
     ev.recordTargetSnapshots(this, this.targetSnapshotSource());
+    this.prof.targetNs += performance.now() - t0;
+    this.prof.targetN += 1;
   }
 
   /** Bit-exact change test for the remote dead-reckon skip; also updates
@@ -337,7 +351,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
   /** Bit-exact change test for the local dead-reckon skip — any field
    *  that differs (including under future physics like drag) forces a write. */
-  private frameIdentical(last: DemoFrame, p: IPlayerDataProvider, i: IInputProvider): boolean {
+  private static frameIdentical(last: DemoFrame, p: IPlayerDataProvider, i: IInputProvider): boolean {
     return last.posX === p.posX && last.posY === p.posY && last.posZ === p.posZ &&
       last.velX === p.velX && last.velY === p.velY && last.velZ === p.velZ &&
       last.yaw === p.yaw && last.pitch === p.pitch &&
@@ -359,6 +373,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   // dt is seconds since last game frame.
   update(dt: number): void {
     if (!this.recording || !this.playerData || !this.inputData) {return;}
+    const t0 = performance.now();
+    this.prof.updateN += 1;
 
     this.elapsedTime += dt;
     const now = this.elapsedTime;
@@ -381,10 +397,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     // would reproduce the same constants anyway. Idle stretches cost
     // ~12 compares instead of a 49B write each.
     const last = this.deadReckon && this.frameBuffer.Count > 0 ? this.frameBuffer.peekNewest() : undefined;
-    if (last && this.frameIdentical(last, p, i)) {
+    if (last && DemoRecorder.frameIdentical(last, p, i)) {
       this.housekeep(now);
+      this.prof.updateNs += performance.now() - t0;
       return;
     }
+
+    const tf = performance.now();
 
     // Reuse the slot's existing frame object — the ring overwrites it
     // anyway, so allocating per tick is pure churn.
@@ -414,8 +433,11 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
          } newest=${  newest === frame  } count=${  this.frameBuffer.Count}`);
     }
     this.frameNumber = (this.frameNumber + 1) % 65_536;
+    this.prof.frameNs += performance.now() - tf;
+    this.prof.frameN += 1;
 
     this.housekeep(now);
+    this.prof.updateNs += performance.now() - t0;
   }
 
   /** Remote sampling + rolling-window prune — runs on every tick whether
@@ -430,9 +452,12 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       this.snapshots.push(now);
     }
     const cutoff = this.elapsedTime - this.bufferSeconds;
+    const tp = performance.now();
     pruneProjEvents(this.projectileEvents, cutoff, this.projectileEventPool, this.liveProjIds);
     pruneEventsBefore(this.targetEvents, cutoff, this.targetEventPool);
     pruneEventsBefore(this.remoteFrames, cutoff, this.remoteFramePool);
+    this.prof.pruneNs += performance.now() - tp;
+    this.prof.pruneN += 1;
     // Marks older than the ring are unseekable — the tail they anchor is gone.
     while (this.snapshots.length > 0 && this.snapshots[0]! < cutoff) {this.snapshots.shift();}
   }

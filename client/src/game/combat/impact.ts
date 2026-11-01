@@ -317,7 +317,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
     // view ghost - validate at the adjudicated epoch, not the painted one.
     const myTransit = (deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2;
     const claimTarget = targetPlayer ? targetPlayer.ghostPosition(_claimTarget, myTransit) : hitPos;
-    const verdict = hitVerdict(c, p, p.pos, claimTarget, p.hitAge, targetPlayer?.armorClass);
+    const verdict = hitVerdict(c, p, p.hitPointValid ? p.hitPoint : p.pos, claimTarget, p.hitAge, targetPlayer?.armorClass);
 
     if (!verdict.ok) {
 
@@ -496,7 +496,11 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
 
     if (demoManager?.isRecording && p.hitAge > 0.2) {
 
-      demoManager.autoClipOnHit(p.hitAge, 0.2, undefined, undefined, undefined, { weapon: p.config.displayName, distance: p.hitDistance });
+      demoManager.autoClipOnHit(p.hitAge, 0.2, undefined, undefined, undefined, {
+        weapon: p.config.displayName, distance: p.hitDistance,
+        // Same acc·dist·air the HUD frag score uses — the tile ranks by it.
+        score: Math.round(computeAccuracy(p.hitAccuracy, p.directHit) * p.hitDistance * p.hitAge),
+      });
 
     }
 

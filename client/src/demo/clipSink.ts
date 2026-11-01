@@ -147,7 +147,7 @@ export async function listClips(): Promise<VaultClip[]> {
   } catch { return []; }
 }
 
-/** Read a clip back for in-browser playback — dir handle first (its
+/** Read a clip back for in-browser playback - dir handle first (its
  *  'readwrite' grant covers reads), vault as fallback. Returns null
  *  when the blob isn't reachable (dir never armed + clip only on disk). */
 export async function getClipBlob(name: string): Promise<Blob | null> {
@@ -156,7 +156,7 @@ export async function getClipBlob(name: string): Promise<Blob | null> {
       const fh = await dir.getFileHandle(name);
       const f = await (fh as unknown as { getFile(): Promise<File> }).getFile();
       if (f) {return f;}
-    } catch { /* not on disk / permission lost — try the vault */ }
+    } catch { /* not on disk / permission lost - try the vault */ }
   }
   try {
     const db = await idb();

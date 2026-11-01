@@ -21,7 +21,7 @@ export interface CoolShotEntry {
   description: string;
   weapon?: string;   // displayName of the weapon that scored the hit
   distance?: number; // shot-origin → hit-point travel distance (m)
-  score?: number;    // in-game shot score (acc · dist · air) — the TOP sort key
+  score?: number;    // in-game shot score (acc · dist · air) - the TOP sort key
   mp4Name?: string;  // vault clip name when an mp4 was cut for this shot
   clipData?: DemoFile; // only set for locally-generated clips
 }

@@ -1,5 +1,5 @@
 /* oxlint-disable vitest/no-conditional-in-test -- fuzz/audit harness: random-op branches and tree walks ARE the test logic */
-// Playback differential audit — validates what demovalidate cannot: that a
+// Playback differential audit - validates what demovalidate cannot: that a
 // deserialized .demo, driven through the REAL playback runtime
 // (createDemoLifecycle + applyPlaybackEvents), produces a world that moves.
 // The file-level validator proves the bytes are well-formed; this proves the
@@ -62,7 +62,7 @@ const flatTerrain = {
   },
 } as unknown as Terrain;
 
-// Build a lifecycle whose world is real playback code over stub scenery —
+// Build a lifecycle whose world is real playback code over stub scenery -
 // the same injection seam the game uses, so the exercised path is identical.
 function makePlaybackRig(): {
   scene: THREE.Scene; balls: Ball[]; mgr: unknown;
@@ -142,7 +142,7 @@ const emit = (rig: ReturnType<typeof makePlaybackRig>,
 
 const mkTarget = (over: Partial<TargetEvent>): TargetEvent => (((Object.assign({}, {eventType: TargetEventType.Spawned,timestamp: 0,posX: 0,posY: 5,posZ: 0,velX: 0,velY: 0,velZ: 0,targetId: 1,targetType: 0,health: 30,hasPeakPosition: false,peakPosX: 0,peakPosY: 0,peakPosZ: 0}, over))));
 
-describe('playback audit — every lane animates', (): void => {
+describe('playback audit - every lane animates', (): void => {
   it('creature proxies integrate ballistic drift (gravity species falls)', (): void => {
     const rig = makePlaybackRig();
     applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({

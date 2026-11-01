@@ -1,5 +1,5 @@
 import type { CoolShotEntry, DemoManager } from '../demo/index.js';
-import { exportClip } from '../demo/clipSink.js';
+import { exportClip, getClipBlob } from '../demo/clipSink.js';
 
 interface CoolShotsPanelDependencies {
   demoManager: DemoManager;
@@ -86,6 +86,9 @@ export class CoolShotsPanel {
       item.append(s);
     };
     span('rank', String(rank));
+    // The shot score is the ranking stat - airtime alone undervalues
+    // snappy close-range direct hits.
+    if (shot.score != null) {span('shot-score', String(shot.score));}
     span('lifetime', `${shot.projectileLifetime.toFixed(2)}s`);
     if (meta) {span('shot-meta', meta);}
     // Every entry is a demo clip; the MP4 badge only shows when a
@@ -159,6 +162,18 @@ export class CoolShotsPanel {
       });
     }
     if (shot.mp4Name) {
+      act('Watch MP4', (): void => {
+        // Blob URL in a new tab - the stock video player, nothing saved.
+        getClipBlob(shot.mp4Name!).then((blob): void | null => {
+          if (!blob) {return null;}
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          // Long revoke delay: the player loads lazily; revoking early
+          // blanks the tab in some builds.
+          setTimeout((): void => URL.revokeObjectURL(url), 60_000);
+          return undefined;
+        }).catch((): void => undefined);
+      });
       act('Download MP4', (): void => {
         exportClip(shot.mp4Name!);
       });
@@ -208,8 +223,17 @@ export class CoolShotsPanel {
       return;
     }
 
-    // Top 10 by lifetime (already sorted descending by lifetime)
-    const top10 = shots.slice(0, 10);
+    // Top 10 by shot score (falls back to airtime for entries recorded
+    // before scores existed), last 24h only - shots arrive in insertion
+    // order, not sorted, so the sort must happen here.
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const top10 = shots
+      .filter((s): boolean => s.timestamp >= dayAgo)
+      .toSorted((a, b): number => (b.score ?? b.projectileLifetime) - (a.score ?? a.projectileLifetime))
+      .slice(0, 10);
+    if (top10.length === 0) {
+      this.coolShotsTop.innerHTML = '<div class="cool-shot-item empty">No best shots in 24h</div>';
+    }
     top10.forEach((shot, i): void => this.renderShotItem(this.coolShotsTop, shot, i + 1));
 
     // Recent 10 by timestamp (most recent first)
