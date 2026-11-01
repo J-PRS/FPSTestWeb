@@ -205,7 +205,9 @@ export class Player {
     if (this.meleeCooldown > 0) {return;}
     this.meleeCooldown = MELEE_COOLDOWN;
     const dir = this.getAimDir();
-    this.vel.addScaledVector(dir, MELEE_LUNGE);
+    // Lunge is a gap-closer, not a speed multiplier: at 20+ m/s the
+    // swing alone carries the reach, extra vel just reads as a cheat.
+    if (this.vel.length() <= 20) {this.vel.addScaledVector(dir, MELEE_LUNGE);}
     this.syncMovement();
     this.model?.weaponPunch();
     this.onMelee?.({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
