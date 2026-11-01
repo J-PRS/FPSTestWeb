@@ -49,7 +49,7 @@ import { RoomScore } from './roomScore.ts';
 import { ENERGY, MOVEMENT_CONFIG, type BodyCapsule } from '../../shared/movement.ts';
 import { BELT_MAX, serverSimmed, WeaponType } from '../../shared/weapons.ts';
 import { chatKindFor, vgsCommandFor, radioAimFor } from '../../shared/botTaunts.ts';
-import { perkMods } from '../../shared/perks.ts';
+import { perkMods, isPerkId } from '../../shared/perks.ts';
 import { healPool } from './healPool.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { ServerWebSocket } from 'bun';
@@ -526,6 +526,17 @@ export class Room {
     p.maxHealth = CONFIG.playerMaxHealth + perkMods(p.perk).maxHealth + CLASS_STATS[claim].maxHealth;
     p.health = Math.min(p.health, p.maxHealth);
     this.applyClassScale(playerId);
+  }
+
+  /** Same stale-claim seam for perks: the seat's perk came from the blob,
+   *  the handshake carries what the rejoiner actually picked. */
+  applyClaimedPerk(playerId: string, claim: string): void {
+    const p = this.players.getPlayer(playerId);
+    if (!p || p.perk === claim || !isPerkId(claim)) {return;}
+    p.perk = claim;
+    p.pendingPerk = undefined;
+    p.maxHealth = CONFIG.playerMaxHealth + perkMods(claim).maxHealth + CLASS_STATS[p.armorClass as ArmorClass].maxHealth;
+    p.health = Math.min(p.health, p.maxHealth);
   }
 
   /** Room's current heightfield  -  GameServer updates it on terrain

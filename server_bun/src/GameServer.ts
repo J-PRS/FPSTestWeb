@@ -28,6 +28,7 @@ import type { ClientMessage } from '../../shared/protocol.ts';
 
 interface RestoreSeat {
   id: string; name?: string; team?: TeamId; perk?: string; armorClass?: string;
+  pendingClass?: string; pendingPerk?: string;
   pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number };
   yaw?: number; pitch?: number; health?: number; isDead?: boolean; token: string;
 }
@@ -672,6 +673,7 @@ export class GameServer {
         if (!token) {continue;} // pre-seat or bot — nothing to reclaim with
         players.push({
           id, name: p.name, team: p.team, perk: p.perk, armorClass: p.armorClass,
+          pendingClass: p.pendingClass, pendingPerk: p.pendingPerk,
           pos: Object.assign({}, p.position), vel: Object.assign({}, p.velocity),
           yaw: p.rotation.yaw, pitch: p.rotation.pitch,
           health: p.health, isDead: p.isDead, token,
@@ -713,6 +715,10 @@ export class GameServer {
         p.isDead = ps.isDead === true;
         p.pendingRespawn = p.isDead;
         p.name = ps.name;
+        // Banked mid-match picks ride the blob — a restart must not eat
+        // the classUpdate/perkUpdate the player was owed at next life.
+        p.pendingClass = ps.pendingClass === 'light' || ps.pendingClass === 'medium' || ps.pendingClass === 'heavy' ? ps.pendingClass : undefined;
+        p.pendingPerk = ps.pendingPerk;
         // A mid-fight seat, not a fresh spawn — no protection bubble.
         p.protectedUntil = simMs(0);
         room.sessionTokens.set(ps.id, ps.token);

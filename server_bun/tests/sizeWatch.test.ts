@@ -18,7 +18,7 @@ const GRANDFATHERED: Record<string, number> = {
   'client/src/lab/scenarios.ts': 1000,
   // Re-pinned at the C4 edge-relay + bot-edge-mint size — Room legitimately
   // aggregates the match container; still alarms at +15%.
-  'server_bun/src/Room.ts': 1738,
+  'server_bun/src/Room.ts': 1765,
   'server_bun/src/serverSenses.ts': 1045,
   // Crossed via the C4 remote-replay block — the netcode half legitimately
   // aggregates interp/DR/replay paths. Pinned; still alarms at +15%.

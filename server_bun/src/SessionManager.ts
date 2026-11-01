@@ -329,6 +329,9 @@ export class SessionManager {
     // The reconnect is itself the declared discontinuity: apply now.
     const claim = typeof handshake?.armorClass === 'string' ? handshake.armorClass : undefined;
     if (claim) {room.applyClaimedClass(playerId, claim);}
+    // Perk same shape: the seat's blob perk vs the rejoiner's picked one.
+    const perk = typeof handshake?.perk === 'string' ? handshake.perk : undefined;
+    if (perk) {room.applyClaimedPerk(playerId, perk);}
     // Reconnect shield: the client warms its pipeline behind the session
     // veil before dropping the player in  -  the restored body must not be
     // killable during that window (visible mechanic, not hidden-gfx).
