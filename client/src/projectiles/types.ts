@@ -33,6 +33,14 @@ export interface ProjectileConfig {
   trailScaleMin: number;
   trailScaleMax: number;
   trailRampIn: number;
+  /** Particle-life ramp - emitted droplets live shorter near the muzzle,
+   *  scaling toward full life over this many flight seconds (short tail
+   *  up close, full tail far out). Same contract as meshRampInDuration. */
+  trailLifeRampDuration?: number;
+  trailLifeStartScale?: number; // default 0.25
+  /** Emission hold-off - no droplets before this many flight seconds.
+   *  The emitter stays anchored meanwhile so resume doesn't streak. */
+  trailDelay?: number;
   meshColor: number;
   meshType: string;
   /** Lit body material (Phong + specular) instead of the flat unlit

@@ -60,6 +60,9 @@ export class WireIn {
    *  retained high watermark would silently drop every hit for the whole
    *  session - the "half my damage instances don't work" desync. */
   private lastHitSeq = 0;
+  /** True once a gameState carried localPlayerState — the demote signal
+   *  is a LATER gameState without it (genuine spectators never set it). */
+  private hadSeat = false;
 
   /** Binary hits/kills that arrived before their wireIds minted - a
    *  journaled replay or a gameState race can deliver the damage edge
@@ -94,6 +97,7 @@ export class WireIn {
     this.lastTickSeq = -1;
     this.lastHitSeq = 0;
     this.pendingMissed.clear();
+    this.hadSeat = false; // new session, new seat — stale demote memory would double-join
   }
 
   /** Wire-feed seam - one message through the live dispatch path, so
@@ -550,11 +554,25 @@ dropCensus.total += 1;
     // not let a reassigned id keep the old player's last-decoded fields.
     this.tickPool.byId?.clear();
     if (data.wireIds) {for (const [id, pid] of Object.entries(data.wireIds)) {this.wireIds.set(Number(id), pid);}}
+    // wid-orphan forensics: an empty/absent seed followed by unminted
+    // binary events means this gameState wiped the roster blind.
+    logger.warn(`gameState wids=${data.wireIds === undefined ? 'ABSENT' : Object.keys(data.wireIds).length} room=${String(data.room)}`);
     this.drainPendingWidEvents();
     this.h.remoteReset(data.players);
     // Seat is (re)established - replay fire intents a dead lane may have
     // lost. Server dedupes by shotId, so a shot that DID land is a no-op.
     this.h.replayFireIntents(data.room, data.udp);
+    // AFK demotion detection: a seat we used to hold answers resync with
+    // the bare spectator envelope (no localPlayerState) — combat claims
+    // get refused from here on, so the only sane move is to re-join.
+    // Gated on having held a seat before: a genuine spectator handshake
+    // must not rejoin-loop.
+    if (data.localPlayerState) {this.hadSeat = true;}
+    else if (this.hadSeat) {
+      this.hadSeat = false;
+      logger.warn(`gameState has no localPlayerState — seat was demoted, re-joining room=${String(data.room)}`);
+      this.h.reseat();
+    }
     logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
     this.h.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }
@@ -676,7 +694,7 @@ dedupCensus.hitSeqDrops += 1;
       this.h.patchRemotePlayer(data.targetId, { isDead: false });
     }
     noteVictimRespawn(data.targetId);
-    this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor);
+    this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor, wasPredicted);
   }
 
   private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {

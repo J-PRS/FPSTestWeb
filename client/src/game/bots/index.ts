@@ -200,7 +200,13 @@ export class TeamBots {
         }
         // Debug hitbox tint matches the name-gizmo verdict — squadmates
         // green, everything else red (FFA pseudo-teams never match 'local').
-        bot.setColliderColor(bot.team === this.teamOf.get('local') ? 0x00_FF_00 : 0xFF_33_33);
+        const friendly = bot.team === this.teamOf.get('local');
+        bot.setColliderColor(friendly ? 0x00_FF_00 : 0xFF_33_33);
+        // Same team marks remotes.ts applies per wire update - offline
+        // bots have no wire path, so the roster does it (pending until
+        // the GLB lands; setOutline/setRim defer on !model).
+        bot.model.setOutline(friendly ? null : 0xF0_4A_4A);
+        bot.model.setRim(friendly ? 0x44_CC_55 : 0xF0_4A_4A);
         this.bots.push(bot);
         this.teamOf.set(bot.playerId, bot.team);
         deps.world.remotePlayers.adopt(bot.playerId, bot);

@@ -96,7 +96,7 @@ export class NetworkManager {
   joinSkill: (() => string) | null = null;
   /** REMOTE players only - local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
-  public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number) => void) | null = null;
+  public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number, predicted?: boolean) => void) | null = null;
   public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean) => void) | null = null;
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
@@ -857,6 +857,16 @@ this.sendDrops += 1;
 
   clearResyncQuiet(): void {
     this.resyncQuietUntil = 0;
+  }
+
+  /** Re-seat after an AFK demotion: the server stripped our player on
+   *  the 90s claims sweep and answered resync with the bare spectator
+   *  gameState — the same join handshake re-seats us (sessionToken rides
+   *  the reclaim path). Called from wireIn when a gameState that should
+   *  carry localPlayerState doesn't. */
+  reseat(): void {
+    if (!this.isConnected()) {return;}
+    this.send(this.joinMsg());
   }
 
   /** Server-issued session token - persisted so a reconnect can reclaim

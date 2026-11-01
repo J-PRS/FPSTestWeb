@@ -23,6 +23,8 @@ const warnedAnimMisses = new Set<string>();
  *  fallback's pose/variant re-assignment stays visible after attach. */
 export interface PlayerAnimHost {
   readonly variant: PlayerModelVariant;
+  /** Warm/background loads trickle the retarget bake across frames. */
+  readonly amortizeBake: boolean;
   readonly model: THREE.Group | null;
   readonly pose: PoseControl;
   readonly distal: PlayerDistal;
@@ -461,7 +463,7 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
       this.forceAnimationState(this.currentState);
     };
     const runtimeBake = (): Promise<void> =>
-      bakeUALClips(model, this.host.variant).then(adopt)
+      bakeUALClips(model, this.host.variant, undefined, this.host.amortizeBake).then(adopt)
         .catch((error): void => { logger.warn(`UAL bake failed for ${  this.host.variant}`, error); });
     // The offline bake (public/assets/anims/<variant>.glb) ships the
     // whole retarget so load never flashes bind pose or burns a

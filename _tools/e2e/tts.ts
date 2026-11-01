@@ -2,6 +2,11 @@
  * tts.ts - Time To Shoot: cold-boot benchmark from URL entry to the first
  * fired shot. Headless Chrome, fresh profile, disk cache disabled.
  *
+ * TTS is a TWO-part contract: time-to-shoot AND time-to-stable-frames.
+ * The boot veil must not drop early on an unstable framerate - the veil
+ * exists to hide load work; releasing into a hitch is a regression, not
+ * a TTS win. Do not lift the veil threshold to hit a number.
+ *
  *   bun _tools/e2e/tts.ts [url] [--runs N] [--headed]
  *
  * Debug mode (default URL below uses ?debug=1): uses window.__test.player.lastFireAt.
@@ -33,6 +38,8 @@ const arg = (name: string, dflt: string): string => {
 
 const url = process.argv[2] ?? 'http://localhost:5500/?tts=1';
 const RUNS = +arg('runs', '5');
+const ASSERT_MS = +arg('assert', '0'); // >0: fail the run if any TTS exceeds this
+const results: number[] = [];
 const headed = process.argv.includes('--headed') || Boolean(process.env.E2E_HEADED);
 const debugMode = /[?&]debug=1\b/.test(url) || /[?&]debug=true\b/.test(url);
 const gpu = Boolean(process.env.E2E_GPU);
@@ -90,6 +97,12 @@ for (let run = 0; run < RUNS; run += 1) {
   });
 
   const page = await browser.newPage();
+  // --profile: Chrome trace covering boot→shot (CPU flame data for the
+  // deep TTS breakdown). Written per run, load in chrome://tracing.
+  const tracePath = `tts-run${run}.trace.json`;
+  if (process.argv.includes('--profile')) {
+    await page.tracing.start({ path: tracePath, categories: ['devtools.timeline', 'disabled-by-default-v8.cpu_profiler', 'v8.execute'], screenshots: false });
+  }
   await page.setViewport({ width: 1280, height: 720 });
   await page.evaluateOnNewDocument(POINTER_LOCK_STUB);
   await page.setCacheEnabled(false);
@@ -124,6 +137,8 @@ for (let run = 0; run < RUNS; run += 1) {
   } catch (e) {
     const state = await page.evaluate('({ hasTest: !!window.__test, tts: (window as any).__ttsShot, ready: document.readyState, err: String(window.__bootErr ?? "") })').catch(() => ({}));
     console.log(`run ${run}: READY TIMEOUT page state=${JSON.stringify(state)}`);
+    results.push(-1);
+    await page.tracing.stop();
     await browser.close();
     rmSync(userDataDir, { recursive: true, force: true });
     continue;
@@ -175,6 +190,8 @@ for (let run = 0; run < RUNS; run += 1) {
     }
   } catch (e) {
     console.log(`run ${run}: SHOT TIMEOUT (ready=${Math.round(readyMs)}ms click=${Math.round(clickAt)}ms)`);
+    results.push(-1);
+    await page.tracing.stop();
     await browser.close();
     rmSync(userDataDir, { recursive: true, force: true });
     continue;
@@ -209,7 +226,18 @@ for (let run = 0; run < RUNS; run += 1) {
   );
   console.log(`run ${run}: marks=${JSON.stringify(marks)}`);
   console.log(`run ${run}: DTS=${(dts.total / 1024).toFixed(1)} KB (${dts.count} requests) top=${JSON.stringify(dts.top)}`);
+  results.push(shotMs);
 
+  await page.tracing.stop();
   await browser.close();
   rmSync(userDataDir, { recursive: true, force: true });
+}
+
+if (ASSERT_MS > 0) {
+  const bad = results.filter((r) => r <= 0 || r > ASSERT_MS);
+  if (bad.length > 0 || results.length === 0) {
+    console.error(`TTS ASSERT FAILED: budget=${ASSERT_MS}ms results=${JSON.stringify(results.map((r) => Math.round(r)))}`);
+    process.exit(1);
+  }
+  console.log(`TTS ASSERT OK: budget=${ASSERT_MS}ms results=${JSON.stringify(results.map((r) => Math.round(r)))}`);
 }

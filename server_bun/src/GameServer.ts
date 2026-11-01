@@ -42,7 +42,7 @@ interface RestoreRoom {
 interface RestoreState { v: 1; rooms: RestoreRoom[] }
 
 export class GameServer {
-  // One match's state per room — players land in 'default' unless the join
+  // One match's state per room - players land in 'default' unless the join
   // handshake names a room. Everything per-match (players, sockets, ball
   // sim, tick bookkeeping) lives inside Room; GameServer is the dispatcher.
   rooms = new Map<string, Room>();

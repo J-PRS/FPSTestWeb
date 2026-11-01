@@ -154,7 +154,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
 
 
 /** Wire playerHit → health/death feedback + the demo's damage edge. */
-function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage: number, health: number, armor?: number): void {
+function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage: number, health: number, armor?: number, predicted?: boolean): void {
   const { deps, nm } = ctx;
   const {logger} = deps;
   if (deps.world.playbackMode) {return;}
@@ -179,7 +179,9 @@ function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage:
     // Authority-simmed shells never run the client's predict path, so
     // the damage number has to live on the echo or it never appears.
     const rp = deps.world.remotePlayers.get(targetId);
-    if (rp) {deps.lazyDamageNumbers().spawn(rp.pos, damage, '#ffe08a', deps.lazyCamera());}
+    // A hit the client already predicted painted its number at impact
+    // time — echo-spawning it again reads as double damage on the HUD.
+    if (rp && !predicted) {deps.lazyDamageNumbers().spawn(rp.pos, damage, '#ffe08a', deps.lazyCamera());}
     deps.lazyHud().showHitMarker();
     sfx.hitMarker(false);
   }
@@ -358,8 +360,8 @@ function wirePlayerCombat(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
   const {logger} = deps;
 
-  networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor): void =>
-    handleWireHit(ctx, shooterId, targetId, damage, health, armor);
+  networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor, predicted): void =>
+    handleWireHit(ctx, shooterId, targetId, damage, health, armor, predicted);
 
   // Rejected claim: a predicted self-blast that never happened server-side
   // leaves our health low until the next real event. Adopt the server's

@@ -306,7 +306,10 @@ export class Projectile {
     // frame travel once, and it internally re-samples onto its helix.
     if (config.railSpiral) {this.ribbons.push(new RailSpiral(scene, config));}
     this.driver = new TrailDriver(
-      { pos: this.rendered, vel: this.vel, emitting: (): boolean => !this.exploded },
+      { pos: this.rendered, vel: this.vel,
+        // trailDelay holds ALL trail layers (ribbon + droplets) for the
+        // first flight seconds - `last` still tracks pos, so resume is streak-free.
+        emitting: (): boolean => !this.exploded && this.age >= (config.trailDelay ?? 0) },
       [this.trail],
       this.ribbons,
     );

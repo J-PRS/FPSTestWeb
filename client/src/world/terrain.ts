@@ -157,9 +157,10 @@ export class Terrain {
   };
   private gridGeo: THREE.BufferGeometry;
   // Shader-projected scorch decals: x, z, radius, intensity (16 slots)
-  private scorchList: { x: number; z: number; r: number; intensity: number; ember: number }[] = [];
+  private scorchList: { x: number; z: number; r: number; y: number; intensity: number; ember: number }[] = [];
   private scorchArr = new Float32Array(16 * 4);
   private scorchEmberArr = new Float32Array(16);
+  private scorchYArr = new Float32Array(16);
   // Projected ichor stains - tinted cousin of scorch: creature hits and
   // deaths drop colored ground stains that linger far longer than char.
   private splatList: Splat[] = [];
@@ -260,7 +261,7 @@ export class Terrain {
         // TERRAIN_PRESET picks the palette at COMPILE time - a runtime
         // uniform meant every program compiled all six preset branches.
         defines: { TERRAIN_PRESET: 1 },
-        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
+        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },scorchY:         { value: this.scorchYArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
       });
 
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
@@ -511,6 +512,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
       this.scorchArr[o + 2] = s.r;
       this.scorchArr[o + 3] = s.intensity;
       this.scorchEmberArr[i] = s.ember;
+      this.scorchYArr[i] = s.y;
     }
 
     // Upload field-ring decal slots
@@ -673,14 +675,14 @@ n += 1; sum += d; sumAbs += Math.abs(d);
 
   // Register a projected scorch decal. Returns a handle whose `intensity`
   // and `ember` the caller animates; pass it back to removeScorch when done.
-  addScorch(x: number, z: number, r: number): { x: number; z: number; r: number; intensity: number; ember: number; } {
-    const entry = { x, z, r, intensity: 0.5, ember: 0 };
+  addScorch(x: number, z: number, r: number, y = 0): { x: number; z: number; r: number; y: number; intensity: number; ember: number; } {
+    const entry = { x, z, r, y, intensity: 0.5, ember: 0 };
     if (this.scorchList.length >= 16) {this.scorchList.shift();}
     this.scorchList.push(entry);
     return entry;
   }
 
-  removeScorch(entry: { x: number; z: number; r: number; intensity: number; ember: number }): void {
+  removeScorch(entry: { x: number; z: number; r: number; y: number; intensity: number; ember: number }): void {
     const i = this.scorchList.indexOf(entry);
     if (i !== -1) {this.scorchList.splice(i, 1);}
   }

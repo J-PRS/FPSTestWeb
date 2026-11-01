@@ -15,7 +15,7 @@ const EMBER_PEAK = 0.9;
  */
 export class ScorchDecal {
   dead = false;
-  private entry: { x: number; z: number; r: number; intensity: number; ember: number } | null = null;
+  private entry: { x: number; z: number; r: number; y: number; intensity: number; ember: number } | null = null;
   private terrain!: Terrain;
   private age = 0;
 
@@ -23,7 +23,7 @@ export class ScorchDecal {
     // See Explosion — hidden-tab spawns die at birth.
     if (typeof document !== 'undefined' && document.hidden) { this.dead = true; return; }
     this.terrain = terrain;
-    this.entry = terrain.addScorch(pos.x, pos.z, radius);
+    this.entry = terrain.addScorch(pos.x, pos.z, radius, pos.y);
     this.entry.ember = EMBER_PEAK;
   }
 

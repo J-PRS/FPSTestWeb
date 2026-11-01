@@ -86,7 +86,94 @@ function vertexizeGeo(g: THREE.BufferGeometry, m: THREE.MeshStandardMaterial): v
 // buffers (~memcpy) instead of re-hashing every vertex. userData
 // authColor/tintMask are read-only inputs to setTeamTint - shared refs
 // are safe; the clone owns the mutable `color` attr itself.
+// Black-silhouette bodies: no bake, no texture sheet, no shipped atlas -
+// team readability rides the outline hull + fresnel. Flip to false when
+// tinkering with the generated ao/fx webp path again.
+export const ATLAS_BLACK = true;
+// true = Lambert ~black (normal shading reads the figure); false =
+// MeshBasicMaterial 0x000000 = hard void, cheapest shader possible.
+const ATLAS_BLACK_LIT = typeof location !== 'undefined' && new URLSearchParams(location.search).get('atlaslit') !== '0';
+
+// Shared class clip set: _tools/strip_anims.ts deduped the byte-identical
+// 32-clip payload (~518KB×20 files) into class_anims.glb; class rigs now
+// carry zero embedded anims and every model clones these instead. Falls
+// back to the file's own set when present (unstripped rigs, mannequin).
+let _classAnimsP: Promise<THREE.AnimationClip[]> | null = null;
+function classAnims(loader: ReturnType<typeof mkGltfLoader>): Promise<THREE.AnimationClip[]> {
+  // Plain loadAsync, not the worker path: class_anims.glb is a mesh-less
+  // clips-only file and glbSer's mesh serialization rejects on it.
+  _classAnimsP ??= loader.loadAsync('/assets/models/class_anims.glb').then((g): THREE.AnimationClip[] => g.animations);
+  return _classAnimsP;
+}
+
 const _atlasGeoCache = new Map<string, THREE.BufferGeometry>();
+const _atlasPrefetch = new Map<string, Promise<THREE.BufferGeometry | null>>();
+/** Build-time atlas bake (modeldump/bake_atlas): a shipped
+ *  <variant>_atlas.glb carries the merged geometry WITH baked
+ *  ao/wear/grime attrs - loading it fills the same cache the runtime
+ *  merge would, so mergeAtlasParts skips the whole 4-5s raycast bake.
+ *  Missing file = silent live-bake fallback. */
+function prefetchAtlas(variant: string): Promise<THREE.BufferGeometry | null> {
+  if (ATLAS_BLACK) {return Promise.resolve(null);} // black bodies bake nothing - the atlas GLB is dead weight
+  let p = _atlasPrefetch.get(variant);
+  if (!p) {
+    // One merged bake: players_atlas.glb carries every variant's mesh
+    // named by variant - shared accessor pool + one fetch, and a single
+    // compression stream across similar vertex data (the gzip win).
+    p = loadGlbOrMain(mkGltfLoader(), '/assets/models/players_atlas.glb').then(async (g): Promise<THREE.BufferGeometry | null> => {
+      const geo = g.scene.getObjectByName(variant) as THREE.Mesh | undefined;
+      if (!geo?.geometry) {return null;}
+      const bg = geo.geometry;
+      // authColor/tintMask were stashed as attrs for the export round-trip.
+      const auth = bg.getAttribute('auth');
+      const tint = bg.getAttribute('tint');
+      if (auth) {bg.userData.authColor = auth.array as Float32Array; bg.deleteAttribute('auth');}
+      if (tint) {bg.userData.tintMask = tint.array as Float32Array; bg.deleteAttribute('tint');}
+      // The bake file ships only non-derivable attrs - rebuild the three
+      // derivable ones (abary/aalt pattern+altitude, awear constant fill)
+      // from position+index here. bakeBaryAttrs math, indexed.
+      if (!bg.getAttribute('abary')) {
+        const pos = bg.getAttribute('position') as THREE.BufferAttribute;
+        const idx = bg.getIndex();
+        const triCount = (idx ? idx.count : pos.count) / 3;
+        const abary = new Float32Array(pos.count * 3);
+        const aalt = new Float32Array(pos.count * 3);
+        const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+        const ab = new THREE.Vector3(), ac = new THREE.Vector3();
+        for (let t = 0; t < triCount; t += 1) {
+          const v = [0, 1, 2].map((k): number => idx ? idx.getX(t * 3 + k) : t * 3 + k);
+          abary[v[0]! * 3] = 1; abary[v[1]! * 3 + 1] = 1; abary[v[2]! * 3 + 2] = 1;
+          va.fromBufferAttribute(pos, v[0]!); vb.fromBufferAttribute(pos, v[1]!); vc.fromBufferAttribute(pos, v[2]!);
+          for (let c = 0; c < 3; c += 1) {
+            const p1 = [va, vb, vc][(c + 1) % 3]!, p2 = [va, vb, vc][(c + 2) % 3]!, pc = [va, vb, vc][c]!;
+            ab.subVectors(p2, p1); ac.subVectors(pc, p1);
+            const len = ab.length();
+            const alt = len < 1e-9 ? 0 : ac.cross(ab).length() / len;
+            for (const k of v) {aalt[k * 3 + c] = alt;}
+          }
+        }
+        bg.setAttribute('abary', new THREE.BufferAttribute(abary, 3));
+        bg.setAttribute('aalt', new THREE.BufferAttribute(aalt, 3));
+        if (!bg.getAttribute('awear')) {bg.setAttribute('awear', new THREE.BufferAttribute(new Float32Array(pos.count).fill(0), 1));}
+      }
+      // Texture sheets ride along when present: {v}.webp = ao-albedo +
+      // wear alpha, {v}_fx.webp = grime/edge/tint channels. Absent = the
+      // vertex-attr path still carries everything (older bakes, or when
+      // we tinker with the generated textures again).
+      const texLoader = new THREE.TextureLoader();
+      const aoT = await texLoader.loadAsync(`/assets/models/${variant}.webp`).catch((): null => null);
+      const fxT = await texLoader.loadAsync(`/assets/models/${variant}_fx.webp`).catch((): null => null);
+      for (const t of [aoT, fxT]) { if (t) { t.flipY = false; t.colorSpace = THREE.LinearSRGBColorSpace; } }
+      bg.userData.__aoTex = aoT;
+      bg.userData.__fxTex = fxT;
+      _atlasGeoCache.set(variant, bg);
+      performance.mark(`load:atlasBaked:${variant}`);
+      return bg;
+    }).catch((): null => null);
+    _atlasPrefetch.set(variant, p);
+  }
+  return p;
+}
 
 /** Culling bounds for skinned meshes without the applyBoneTransform
  *  bake (three walks every vert through every bone - ~7% of a throttled
@@ -164,6 +251,9 @@ export class PlayerModel {
   // IK foot snap) live in playerPose.ts - PoseControl owns the bone
   // lists it writes into.
   pose: PoseControl; // public - PlayerAnim drives it as host state
+  /** Trickle the UAL retarget bake across frames - set for warm/background
+   *  loads so a mid-match variant join can't land the bake in one frame. */
+  amortizeBake = false;
 
   /** Live-tune the hand-bone mount rotation (posedump loop) - deg euler. */
   debugSetGunRot(x: number, y: number, z: number): void {
@@ -260,12 +350,18 @@ export class PlayerModel {
     };
   }
 
-  async load(): Promise<void> {
+  async load(opts?: { veil?: boolean }): Promise<void> {
     // Gate the boot veil on model setup (GLB parse + retarget bake is a
     // multi-second main-thread block) - see bootWarmup.pendingHeavy.
-    pendingHeavy.n += 1;
+    // Warm-model loads pass veil:false: they amortize behind gameplay
+    // (playerUal yields between clips) instead of holding the veil up.
+    const gate = opts?.veil !== false;
+    // Background loads (veil:false) amortize the retarget bake across
+    // frames - a veil-gated load runs flat behind the cover instead.
+    this.amortizeBake = !gate;
+    if (gate) {pendingHeavy.n += 1;}
     try { await this.loadInner(); }
-    finally { pendingHeavy.n -= 1; }
+    finally { if (gate) {pendingHeavy.n -= 1;} }
   }
 
   private async loadInner(): Promise<void> {
@@ -273,6 +369,11 @@ export class PlayerModel {
     const mann = this.variant === 'mannequin';
     const knight = this.variant === 'knight';
     const url = RIG_MANIFEST[this.variant]?.url ?? '/assets/models/RobotExpressive.glb';
+    // Overlaps the rig fetch: the baked atlas load rides the same
+    // workered-GLB path and lands in _atlasGeoCache before onModelLoaded.
+    // modeldump (?atlasdump=1) bakes the atlas - it must not prefetch the
+    // old bake or the export round-trips quantized geometry.
+    const atlasP = urlParams.has('atlasdump') ? Promise.resolve(null) : prefetchAtlas(this.variant);
 
     return new Promise((resolve, reject): void => {
       let attempts = 0;
@@ -284,8 +385,8 @@ export class PlayerModel {
       // decode + GPU upload apiece.
       performance.mark('load:rigParseStart');
       loadGltfCached(loader, url).then(
-        (gltf): void => {
-          performance.mark('load:rigParseDone');
+        async (gltf): Promise<void> => {
+          performance.mark(`load:rigParseDone:${this.variant}`);
           if (this._disposed) { resolve(); return; }
           // Worn-gunmetal rigs: matte recipe is cheap - flatten the
           // template's metalness synchronously so the clone inherits it.
@@ -293,7 +394,7 @@ export class PlayerModel {
           // next macrotask: the model shows immediately, the grunge lands
           // a beat later via mats.rearm (clones share baked geometry, and
           // rearm copies the shader hook + tex refs onto material clones).
-          const gunmetal = RIG_MANIFEST[this.variant]?.gunmetal;
+          const gunmetal = ATLAS_BLACK ? undefined : RIG_MANIFEST[this.variant]?.gunmetal;
           if (gunmetal && !gunmetalBaked.has(url)) {
             gunmetalBaked.add(url);
             gltf.scene.traverse((o): void => {
@@ -319,9 +420,11 @@ export class PlayerModel {
           // Pool first - a warmed clone is free; a live SkeletonUtils.clone
           // on this frame was the w:player join spike.
           const scene = takeRig(this.variant, gltf.scene) ?? (SkeletonUtils.clone(gltf.scene) as THREE.Group);
-          performance.mark('load:rigCloneDone');
-          this.onModelLoaded({ scene, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
-          performance.mark('load:modelSetupDone');
+          performance.mark(`load:rigCloneDone:${this.variant}`);
+          await atlasP; // bake file → _atlasGeoCache or null (live-bake fallback)
+          const clips = gltf.animations.length > 0 ? gltf.animations : await classAnims(loader);
+          this.onModelLoaded({ scene, animations: clips.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
+          performance.mark(`load:modelSetupDone:${this.variant}`);
           resolve();
           if (gunmetal) {
             // Every instance waits on the shared per-URL bake - not just the
@@ -387,11 +490,29 @@ export class PlayerModel {
 
     // Enable shadow casting + grab aim/attachment bones
     this.model.traverse((child): void => this.prepareChild(child));
+    performance.mark(`load:setup:prep:${this.variant}`);
     this.shareDrivenSkeleton(gltf.animations);
     this.unifySkeletons();
+    performance.mark(`load:setup:skeleton:${this.variant}`);
     this.vertexizeBody();
+    performance.mark(`load:setup:vertexize:${this.variant}`);
     this.mergeSkinnedParts();
+    performance.mark(`load:setup:skinned:${this.variant}`);
     this.mergeAtlasParts(gltf.animations);
+    performance.mark(`load:setup:atlas:${this.variant}`);
+    if (ATLAS_BLACK) {
+      // Variants whose parts never got the atlasMat flag keep their
+      // authored textures post-merge - blacken every skinned mesh so
+      // the silhouette rule holds on ALL bodies, merged or not.
+      const black = ATLAS_BLACK_LIT
+        ? new THREE.MeshStandardMaterial({ color: 0x33_33_33, roughness: 1, metalness: 0, name: 'atlas-black' })
+        : new THREE.MeshBasicMaterial({ color: 0x00_00_00, name: 'atlas-black' });
+      this.mats.extraRim.push(black); // rim patch skips non-Standard mats - lit black rides extraRim
+      for (const sm of this.skinnedMeshes) {
+        if ((sm.material as THREE.Material).userData.atlasMat !== true && sm.name !== 'atlas-body') {sm.material = black;}
+      }
+      black.userData.atlasMat = true;
+    }
     this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed -
     // the freshly captured skinnedMeshes need the swap applied now.
@@ -428,7 +549,9 @@ export class PlayerModel {
     // UAL_ names the state map prefers so ANIM_NAMES resolves without a
     // retarget pass.
     this.anim.attach(this.model);
+    performance.mark(`load:setup:attach:${this.variant}`);
     for (const clip of gltf.animations) {this.anim.registerClip(clip, mann, knight, this.rootMotionNodes());}
+    performance.mark(`load:setup:clips:${this.variant}`);
     if (CLASS_BODY_SPEC[this.variant]) {this.anim.alignHipYaw();}
     // Any variant whose clips carry Pistol_Aim_* gets the masked layer -
     // mk() no-ops when the rig ships none (polyart, vexa). Mannequin gets
@@ -474,6 +597,11 @@ export class PlayerModel {
     // playerCollider.ts builds it against the FULL visual scale so
     // setScale() can't inflate the wire past the real sim capsule.
     this.collider.attach(this.model, this.modelScale * this._visScale, this.feetOffsetY);
+
+    // Team marks requested before the GLB landed (offline bots) - now
+    // that hulls/rim have meshes to ride, replay them once.
+    if (this.pendingOutline !== undefined) {const h = this.pendingOutline; this.pendingOutline = undefined; this.setOutline(h);}
+    if (this.pendingRim !== undefined) {const r = this.pendingRim; this.pendingRim = undefined; this.setRim(r);}
   }
 
   // Per-node load prep: mesh shadows/frustum fix + flash material capture,
@@ -670,6 +798,27 @@ export class PlayerModel {
       for (const sm of consumed) {
         const g = denormGeo(sm.geometry.clone());
         g.applyMatrix4(T.copy(Ainv).multiply(sm.matrixWorld));
+        // Mirrored parts (negative determinant) keep inward normals after
+        // applyMatrix4 - the winding flips, not the vectors. Flip tris.
+        if (T.determinant() < 0) {
+          const idx = g.getIndex();
+          if (idx) {
+            for (let i = 0; i < idx.count; i += 3) {
+              const b = idx.getX(i + 1);
+              idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, b);
+            }
+          } else {
+            for (const a of Object.values(g.attributes) as THREE.BufferAttribute[]) {
+              for (let i = 0; i < a.count; i += 3) {
+                for (let c = 0; c < a.itemSize; c += 1) {
+                  const t = a.getComponent(i + 1, c);
+                  a.setComponent(i + 1, c, a.getComponent(i + 2, c));
+                  a.setComponent(i + 2, c, t);
+                }
+              }
+            }
+          }
+        }
         geos.push(g);
         geosSrc.push(sm.geometry);
       }
@@ -694,7 +843,7 @@ export class PlayerModel {
       // Same wear bake the weapons get — run it HERE, pre-stash, so the
       // cached clone carries baked attrs and a second player of this
       // variant pays zero bake (was re-baking per model = seconds each).
-      {
+      if (!ATLAS_BLACK) {
         const bakeWrap = new THREE.Group();
         bakeWrap.add(new THREE.Mesh(merged, parts[0]!.material));
         bakeVertexAO(bakeWrap, { grime: false, wearBoost: 0.2, edgeAngle: 28 });
@@ -717,7 +866,12 @@ export class PlayerModel {
     const cached = _atlasGeoCache.get(this.variant)!;
     merged.userData.authColor = cached.userData.authColor;
     merged.userData.tintMask = cached.userData.tintMask;
-    const mm = new THREE.SkinnedMesh(merged, parts[0]!.material);
+    const mm = new THREE.SkinnedMesh(merged, ATLAS_BLACK
+      ? (ATLAS_BLACK_LIT
+        ? new THREE.MeshStandardMaterial({ color: 0x33_33_33, roughness: 1, metalness: 0, name: 'atlas-black' })
+        : new THREE.MeshBasicMaterial({ color: 0x00_00_00, name: 'atlas-black' }))
+      : (parts[0]!.material as THREE.Material).clone());
+    if (ATLAS_BLACK) {this.mats.extraRim.push(mm.material as THREE.Material);} // rim/fresnel patch reach
     mm.name = 'atlas-body';
     mm.castShadow = parts[0]!.castShadow;
     mm.receiveShadow = parts[0]!.receiveShadow;
@@ -731,9 +885,23 @@ export class PlayerModel {
     const M = parts[0]!.bindMatrix.clone()
       .multiply(T.copy(Ainv).multiply(parts[0]!.matrixWorld).invert());
     mm.bind(parts[0]!.skeleton, M);
+    // Texture-sheet path: the bake shipped {v}.webp (ao-albedo+wear) and
+    // {v}_fx.webp (grime/edge/tint) on the geometry's userData - pin them
+    // where enhanceWeaponMaterial's hooks already look. Absent = vertex
+    // attrs carry everything, nothing changes.
+    const mat = mm.material as THREE.MeshLambertMaterial;
+    const aoT = merged.userData.__aoTex as THREE.Texture | null | undefined;
+    const fxT = merged.userData.__fxTex as THREE.Texture | null | undefined;
+    if (aoT) {
+      mat.map = aoT; // AO-modulated albedo replaces the vertex color
+      mat.userData.__wearTex = aoT; // wear lives in .a
+      mat.userData.__grimeTex = fxT ?? null; // grime R + edge G + tint B
+      merged.userData.__keepUv = true;
+    }
     // Wear bake already ran inside the geo-cache build — the cached
     // clone carries it; per-model cost is just the material hook.
-    enhanceWeaponMaterial(mm.material as THREE.MeshStandardMaterial);
+    // ATLAS_BLACK skips it too - its fbm wear/grime is the granite speckle.
+    if (!ATLAS_BLACK) {enhanceWeaponMaterial(mm.material as THREE.MeshStandardMaterial);}
     cheapSkinnedBounds(mm);
     for (const sm of consumed) {sm.removeFromParent();}
     const rigid = this.foldRigidAccessories(animations, parts[0]!.skeleton, anchor, Ainv, A);
@@ -794,6 +962,15 @@ export class PlayerModel {
       // the skeleton does the motion: skinIndex=B makes the output
       // B_now×B_bind⁻¹×meshWorld×v = the rigid node's exact world path.
       g.applyMatrix4(T.copy(Ainv).multiply(rm.matrixWorld));
+      if (T.determinant() < 0) { // mirrored rigid part - flip winding like the atlas merge
+        const idx = g.getIndex();
+        if (idx) {
+          for (let i = 0; i < idx.count; i += 3) {
+            const b = idx.getX(i + 1);
+            idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, b);
+          }
+        }
+      }
       const nv = g.getAttribute('position').count;
       const skinIdx = new Uint16Array(nv * 4);
       const skinW = new Float32Array(nv * 4);
@@ -1319,6 +1496,9 @@ export class PlayerModel {
    *  hand prop's shared material is cloned per model so it rims too
    *  without leaking onto every other model's gun. */
   setRim(hex: number | null): void {
+    // Pre-load callers (offline bots get team marks at roster add, before
+    // the GLB lands) drop onto pending - the post-load block replays them.
+    if (!this.model) {this.pendingRim = hex; return;}
     const gm = this.gunCtl.mesh;
     if (gm && (gm.material as THREE.MeshStandardMaterial).isMeshStandardMaterial && !gm.userData.rimCloned) {
       gm.material = (gm.material as THREE.Material).clone();
@@ -1334,6 +1514,8 @@ export class PlayerModel {
   // plate expands on its own axes, which is the hull a hard-surface
   // model needs (uniform scale would drift the parts apart).
   private hullMat: THREE.MeshBasicMaterial | null = null;
+  private pendingOutline: number | null | undefined;
+  private pendingRim: number | null | undefined;
   private readonly hulls: THREE.SkinnedMesh[] = [];
   private readonly gunHulls: THREE.Mesh[] = [];
 
@@ -1378,7 +1560,8 @@ export class PlayerModel {
   /** Enemy outline - hex shows a normal-extruded silhouette drawn
    *  through occluders (depthTest off = wallhack read), null hides. */
   setOutline(hex: number | null): void {
-    if (hex !== null && this.hulls.length === 0 && this.model) {
+    if (!this.model) {this.pendingOutline = hex; return;}
+    if (hex !== null && this.hulls.length === 0) {
       if (!this.hullMat) {
         // Normal depth test: the inflated shell occludes behind the body
         // so only the silhouette rim survives - and the rim hides behind
@@ -1423,13 +1606,22 @@ gl_Position.xy += normalize(hullN.xy + vec2(1e-6)) * uHullPx * sqrt(max(gl_Posit
         // bone weights stay split, which is correct for animation.
         let hgeo: THREE.BufferGeometry = sk.geometry;
         const pos = sk.geometry.attributes.position;
-        if (pos && sk.geometry.attributes.skinIndex) {
-          const skin = new THREE.BufferGeometry();
-          skin.setAttribute('position', pos);
-          skin.setAttribute('skinIndex', sk.geometry.attributes.skinIndex);
-          skin.setAttribute('skinWeight', sk.geometry.attributes.skinWeight);
-          const w = mergeVertices(skin);
-          if (w.index) {w.computeVertexNormals(); hgeo = w;}
+        if (pos && sk.geometry.attributes.skinIndex && !(pos as THREE.BufferAttribute & { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute) {
+          // Quantized bakes ship normalized u16 positions - weld reads
+          // them fine but computeVertexNormals can't setX floats into a
+          // normalized int array. Dequantize the positions copy first;
+          // missing/odd attr types leave hgeo on the source geometry.
+          try {
+            const skin = new THREE.BufferGeometry();
+            const p = pos as THREE.BufferAttribute;
+            const parr = new Float32Array(p.count * 3);
+            for (let i = 0; i < p.count; i += 1) {parr[i * 3] = p.getX(i); parr[i * 3 + 1] = p.getY(i); parr[i * 3 + 2] = p.getZ(i);}
+            skin.setAttribute('position', new THREE.BufferAttribute(parr, 3));
+            skin.setAttribute('skinIndex', sk.geometry.attributes.skinIndex);
+            skin.setAttribute('skinWeight', sk.geometry.attributes.skinWeight);
+            const w = mergeVertices(skin);
+            if (w.index) {w.computeVertexNormals(); hgeo = w;}
+          } catch { /* hull is cosmetic - a failed weld drops the rim, not the game */ }
         }
         const h = new THREE.SkinnedMesh(hgeo, this.hullMat);
         h.bind(sk.skeleton, sk.bindMatrix);

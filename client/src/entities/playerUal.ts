@@ -153,10 +153,10 @@ function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
 
 /** Bake one source pack's clips onto the target skeleton — names map, the
  *  torso rest-pose correction, hip scale, then retargetClip per clip. */
-function bakeSource(
+async function bakeSource(
   { spec, src, srcBones, srcByNorm, srcHip, clips }: UalSource,
-  target: THREE.SkinnedMesh, model: THREE.Object3D, variant: string,
-): Map<string, THREE.AnimationClip> {
+  target: THREE.SkinnedMesh, model: THREE.Object3D, variant: string, amortize: boolean,
+): Promise<Map<string, THREE.AnimationClip>> {
   // names: target bone name → source bone name. The mannequin maps its
   // DEF-* bones onto the UE-style UAL2 rig instead of the robot's
   // Rigify-side table.
@@ -299,7 +299,12 @@ function bakeSource(
   };
 
   const baked = new Map<string, THREE.AnimationClip>();
+  // A warm/background load's bake amortizes across frames: one clip per
+  // macrotask so a mid-match variant join or boot warm can't land the
+  // whole multi-second retarget in one frame. The veil-gated loads pay
+  // the same trickle behind the cover it provides anyway.
   for (const clip of clips) {
+    if (amortize) {await new Promise<void>((r): NodeJS.Timeout => setTimeout(r, 0));}
     const rt = SkeletonUtils.retargetClip(target, src, clip, {
       names,
       hip: srcHip.name,
@@ -370,7 +375,7 @@ function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.Skin
 /** Retargeted UAL clip table for this model's variant — baked once per
  *  variant, name-keyed 'UAL_*'. Resolves to the shared cache on repeat
  *  calls; rejects only if the source GLBs can't load/bake. */
-export async function bakeUALClips(model: THREE.Object3D, variant: string, env?: UalBakeEnv): Promise<Map<string, THREE.AnimationClip>> {
+export async function bakeUALClips(model: THREE.Object3D, variant: string, env?: UalBakeEnv, amortize = false): Promise<Map<string, THREE.AnimationClip>> {
   const sources = await loadSources(env);
   const cached = bakedByVariant.get(variant);
   if (cached) {return cached;}
@@ -410,10 +415,12 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   // Which sources feed this rig lives on its manifest row — a new
   // variant never edits this list, only its RIG_MANIFEST entry.
   const want = new Set(RIG_MANIFEST[variant]?.sources ?? []);
+  performance.mark(`load:bakeStart:${variant}`);
   for (const s of sources) {
     if (!want.has(s.spec.id)) {continue;}
     restoreRest();
-    for (const [name, clip] of bakeSource(s, target, model, variant)) {baked.set(name, clip);}
+    for (const [name, clip] of await bakeSource(s, target, model, variant, amortize)) {baked.set(name, clip);}
+    performance.mark(`load:bakeSrc:${variant}:${s.spec.id}`);
   }
   // Leave the skeleton at its authored rest, not the last baked frame.
   restoreRest();
@@ -442,6 +449,7 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
     baked.set('__holdbake1', new THREE.AnimationClip('__holdbake1', 0.01, []));
   }
   logger.debug(`UAL retarget baked ${baked.size} clips for ${variant} in ${(performance.now() - t0).toFixed(0)}ms`);
+  performance.mark(`load:bakeDone:${variant}`);
   bakedByVariant.set(variant, baked);
   return baked;
 }

@@ -96,7 +96,10 @@ export class RemotePlayer {
    *  shooter's transit so the sampled ghost lands on the adjudicated
    *  body, not the rendered one. */
   ghostPosition(out: THREE.Vector3, shooterTransitMs = 0): THREE.Vector3 {
-    if (this.lastUpdateTime <= 0) {return out.copy(this.position);}
+    // localDriven first: GameBots write `position` directly and their
+    // wirePosition is a frozen spawn record - the projection path below
+    // would ghost the sweep back at spawn whenever lastUpdate got stamped.
+    if (this.localDriven || this.lastUpdateTime <= 0) {return out.copy(this.position);}
     // The shooter's view epoch IS a server-time in the snapshot buffer -
     // sample the real history (turns, landings, bounces) instead of
     // projecting wire+vel, which missed direction changes by 15-25m.

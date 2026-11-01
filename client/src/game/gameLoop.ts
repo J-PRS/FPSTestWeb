@@ -813,7 +813,7 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
     const scratch = new THREE.Group() as unknown as THREE.Scene;
     for (const v of ['scout', 'brawler', 'brute'] as const) {
       const m = new PlayerModel(scratch, v);
-      m.load().then((): void => m.dispose()).catch((): void => undefined);
+      m.load({ veil: false }).then((): void => m.dispose()).catch((): void => undefined);
     }
   }
   if (st.warmN <= 60) {return;}
@@ -823,7 +823,10 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   if (st.warmN <= 600 && (st.warmN % 30 !== 0 || !deps.sceneSetup.scene.getObjectByName('__t2interiors'))) {return;}
   st.warmed = true;
   pendingHeavy.n += 1;
-  Promise.resolve(deps.rendererSetup.warmup()).finally((): void => { pendingHeavy.n -= 1; });
+  Promise.resolve(deps.rendererSetup.warmup()).finally((): void => {
+    pendingHeavy.n -= 1;
+    performance.mark('load:shaderWarmDone');
+  });
   // Pre-clone each armor-class rig so a mid-match join grabs one off
   // the shelf instead of paying SkeletonUtils.clone on the live frame.
   // Depth 4/variant - a 15-bot churn exhausts 2 before the macrotask

@@ -12,6 +12,9 @@ import { lifestealBurst } from '../../effects/vfx.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 import { displayName } from '../nameOf.js';
 import { noteKill } from '../../core/stateDebug.js';
+import { ATLAS_BLACK } from '../../entities/PlayerModel.js';
+
+const _gibBlack = new THREE.Color(0x11_11_11); // reads black without being a void on dark ground
 import { noteCorpseFling } from './pickups.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { NetCtx } from './ctx.js';
@@ -88,7 +91,9 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   deps.world.playerDebrisList.push(new PlayerDebris(
     deps.lazyScene(), deps.lazyTerrain(),
     { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },
-    new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
+    // Black bodies gib near-black too - team color on scatter fights the
+    // body/fresnel signal convention (colored = alive marker, not debris).
+    ATLAS_BLACK ? _gibBlack : new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
     { impulseDir, inheritVel: remotePlayer.vel, parts, shardGeos: parts?.map((p) => p.geo), count: fullGib ? undefined : 6, smoke: fullGib },
   ));
 

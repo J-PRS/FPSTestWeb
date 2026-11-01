@@ -66,7 +66,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       col *= 0.82 + 0.16 * detail;
       col *= 1.0 + (grain - 0.5) * 0.6 * grainFade + (triGrain - 0.5) * 0.25 * grainFade;
       col += sparkle * detFade * snowMask * vec3(0.03, 0.04, 0.06);
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
@@ -79,7 +79,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       // and even sunlit peaks land ~1.0 — far under the gate.
       float snowLum = dot(col, vec3(0.2126, 0.7152, 0.0722));
       col *= (snowLum > 0.9 ? (0.9 + (snowLum - 0.9) * 0.15) : snowLum) / max(snowLum, 0.001);
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
@@ -154,7 +154,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float crack = smoothstep(0.80, 0.93, cell2) * flatness * (1.0 - crest);
       col *= 0.86 + 0.26 * detail;
       col *= 1.0 + (grain - 0.5) * 0.45 * grainFade + (triGrain - 0.5) * 0.2 * grainFade;
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
 
       float diff = max(dot(vNormal, sunDir), 0.0);
@@ -179,7 +179,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float sheen = pow(max(dot(reflect(-sunDir, vNormal), viewDirV), 0.0), 22.0);
       col += sheen * smoothstep(0.42, 0.72, slope) * vec3(0.10, 0.09, 0.12);
 
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
@@ -245,14 +245,14 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       col *= mix(1.07, 0.82, smoothstep(0.0, 0.45, slope));
       col *= 0.90 + 0.20 * detail;
       col *= 1.0 + (grain - 0.5) * 0.45 * grainFade + (triGrain - 0.5) * 0.2 * grainFade;
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
@@ -319,7 +319,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       col *= 0.90 + 0.18 * detail;
       // Grain only on dry ground — water stays smooth (its ripples read as ripples).
       col *= 1.0 + ((grain - 0.5) * 0.42 + (triGrain - 0.5) * 0.2) * grainFade * smoothstep(0.05, 0.10, height);
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
@@ -330,7 +330,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       vec3 viewDirC = normalize(vCameraPos - vWorldPos);
       float glint = pow(max(dot(reflect(-sunDir, vNormal), viewDirC), 0.0), 24.0);
       col += glint * (1.0 - smoothstep(0.05, 0.10, height)) * vec3(0.22, 0.26, 0.26);
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
@@ -401,14 +401,14 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       col *= mix(1.06, 0.82, smoothstep(0.0, 0.5, slope));
       col *= 0.90 + 0.20 * detail;
       col *= 1.0 + (grain - 0.5) * 0.45 * grainFade + (triGrain - 0.5) * 0.2 * grainFade;
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
@@ -487,14 +487,14 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       col *= mix(1.07, 0.84, smoothstep(0.0, 0.45, slope));
       col *= 0.90 + 0.20 * detail;
       col *= 1.0 + (grain - 0.5) * 0.45 * grainFade + (triGrain - 0.5) * 0.2 * grainFade;
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
@@ -571,7 +571,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       col *= mix(vec3(0.86, 0.94, 1.10), vec3(1.08, 0.90, 1.04), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
       col *= 0.85 + 0.30 * detail;
       col *= 1.0 + ((grain - 0.5) * 0.50 + (triGrain - 0.5) * 0.30) * grainFade;
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
@@ -600,7 +600,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       // Spore motes drift off the glowing valleys — source matches cause.
       float mote = noise(uvFin * 3.8 + q * 4.0) * noise(uvFin * 7.2 + r * 2.5 + 3.1);
       col += vec3(0.55, 0.75, 0.95) * smoothstep(0.78, 0.92, mote) * valley * detFade * 0.45;
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       col = seaTint(col, vWorldPos.y, vWorldPos.xz);
       vec3 fogDelta = vWorldPos - vCameraPos;

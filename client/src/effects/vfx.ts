@@ -338,6 +338,17 @@ export class QuarksTrail {
     }
 this.segCount += 1;
     const { pos, vel, config } = this.host;
+    // trailLifeRampDuration: droplets emitted early in flight die young,
+    // so the tail grows as the bolt travels - startLife is per-pool but
+    // this owner rewrites it every emit, which is also what resets a
+    // checkout's previously-scaled a/b back toward full config values.
+    const ramp = config.trailLifeRampDuration;
+    if (ramp && this.ps.startLife instanceof IntervalValue) {
+      const s = config.trailLifeStartScale ?? 0.25;
+      const k = s + (1 - s) * Math.min(this.host.age() / ramp, 1);
+      this.ps.startLife.a = config.trailLifeMin * k;
+      this.ps.startLife.b = config.trailLifeMax * k;
+    }
     // Emit-time jump cut - the deposit is the segment the emitter
     // traveled, so ANY discontinuity (teleport, resync sweep, correction
     // glide) has to be refused HERE, inside emit, not left to every
@@ -346,6 +357,13 @@ this.segCount += 1;
     // sim ticks, so legit motion never reaches it; the old quarter-second
     // budget let 30-80m jumps cash as one sky-crossing dotted line.
     const em = this.ps.emitter;
+    // trailDelay: same anchored-no-deposit hold as the kill switch, for
+    // the first N seconds of flight - resume lands at the live anchor.
+    if (this.host.age() < (config.trailDelay ?? 0)) {
+      em.position.copy(pos);
+      resyncEmission(this.ps, em);
+      return;
+    }
     // Particle-trails kill switch: keep the emitter anchored + resynced
     // (a parked emitter accumulates deposit distance and paints a streak
     // the frame emission resumes) but deposit nothing while off.

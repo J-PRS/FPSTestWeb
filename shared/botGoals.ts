@@ -109,7 +109,15 @@ export class BotGoals {
     const committed = ctx.runner || ctx.posted || ctx.wave;
     offer(ctx.objective, committed ? 3.5 : 1, Boolean(committed));
     if (!(ctx.posted && ctx.objective && ctx.pickup && distSq(ctx.pickup, ctx.objective) > ctx.posted * ctx.posted)) {
-      offer(ctx.pickup, 0.8);
+      // Corridor loot: a nugget on the way to the objective is nearly
+      // free and worth a bump; one off the line drops to a passing whim.
+      // detour = self→pickup→objective minus self→objective.
+      let w = 0.8;
+      if (ctx.objective && ctx.pickup) {
+        const detour = Math.sqrt(distSq(pos, ctx.pickup)) + Math.sqrt(distSq(ctx.pickup, ctx.objective)) - Math.sqrt(distSq(pos, ctx.objective));
+        w = detour < 12 ? 1.1 : detour > 30 ? 0.3 : w;
+      }
+      offer(ctx.pickup, w);
     }
     // A posted defender hears the same gunfire — he just doesn't go
     // look. Beyond the leash it's someone else's job; wandering is

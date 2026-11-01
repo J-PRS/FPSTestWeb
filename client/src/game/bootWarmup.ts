@@ -70,6 +70,7 @@ export class BootWarmup {
     if (stableCount < REQUIRED_STABLE && this.elapsed < MAX_WARMUP_SECONDS) {return;}
     this.ready = true;
     this.observeS = 0;
+    performance.mark('load:veilReleased');
     const {resolvers} = this;
     this.resolvers = [];
     for (const resolve of resolvers) {resolve();}

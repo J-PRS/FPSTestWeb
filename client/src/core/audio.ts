@@ -149,6 +149,36 @@ export class AudioEngine {
     this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i += 1) {d[i] = Math.random() * 2 - 1;}
+
+    // Global anti-pop: a bare stop() mid-waveform is an audible click
+    // (discontinuity). Every created source gets a private fade gain
+    // spliced at wrap-time, and its stop() schedules a 15ms exponential
+    // ramp into it before the real stop - one patch covers loops,
+    // one-shots and oscs without touching call sites.
+    const FADE = 0.015;
+    const wrapSrc = <T extends AudioBufferSourceNode | OscillatorNode>(src: T): T => {
+      const fade = ctx.createGain();
+      const c0 = src.connect.bind(src);
+      c0(fade);
+      src.connect = fade.connect.bind(fade) as typeof src.connect;
+      const d0 = src.disconnect.bind(src);
+      src.disconnect = ((...a: [number?] | [AudioNode?, number?] | [AudioParam?, number?]): void => {
+        d0(...(a as []));
+        try { fade.disconnect(...(a as [])); } catch { /* noop */ }
+      }) as typeof src.disconnect;
+      const s0 = src.stop.bind(src);
+      src.stop = (when?: number): void => {
+        const t = when ?? ctx.currentTime;
+        fade.gain.setValueAtTime(fade.gain.value, Math.max(ctx.currentTime, t - FADE));
+        fade.gain.exponentialRampToValueAtTime(0.0001, t);
+        s0(t + 0.005);
+      };
+      return src;
+    };
+    const origBuf = ctx.createBufferSource.bind(ctx);
+    ctx.createBufferSource = (): AudioBufferSourceNode => wrapSrc(origBuf());
+    const origOsc = ctx.createOscillator.bind(ctx);
+    ctx.createOscillator = (): OscillatorNode => wrapSrc(origOsc());
   }
 
   get ready(): boolean { return this.ctx !== null && (this.ctx.state === 'running' || 'startRendering' in this.ctx); }

@@ -8,6 +8,9 @@ import { lifestealBurst } from '../../effects/vfx.js';
 import { killTaunt, deathTaunt, comboTailFor, comboCutDelayMs, chatter, noteFrag, bulliedBy } from '../../../../shared/botTaunts.js';
 import { tauntRand } from '../../../../shared/botRand.js';
 import { chatSink } from '../chat.js';
+import { ATLAS_BLACK } from '../../entities/PlayerModel.js';
+
+const _gibBlack = new THREE.Color(0x11_11_11); // same convention as playerKill - colored = alive marker
 import { noteKill } from '../../core/stateDebug.js';
 import { GameBot } from './botBrain.js';
 import type { TeamBots } from './index.js';
@@ -121,7 +124,7 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     b.deps.world.playerDebrisList.push(new PlayerDebris(
       b.deps.lazyScene(), b.deps.lazyTerrain(),
       { x: bot.position.x, y: bot.position.y + 1, z: bot.position.z },
-      new THREE.Color(t === 'alpha' || t === 'bravo' ? TEAM_COLORS[t] : 0xCC_66_FF),
+      ATLAS_BLACK ? _gibBlack : new THREE.Color(t === 'alpha' || t === 'bravo' ? TEAM_COLORS[t] : 0xCC_66_FF),
       { inheritVel: bot.vel, parts },
     ));
     // Kills drop loot — headhunt scatters the carrier's held tokens

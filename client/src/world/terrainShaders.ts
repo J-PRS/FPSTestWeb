@@ -259,6 +259,7 @@ export const terrainFrag = /* glsl */`
 
   uniform vec4 scorchData[16]; // x, z, radius, intensity (w<=0 = unused slot)
   uniform float scorchEmber[16]; // per-slot ember rim glow (0 = none)
+  uniform float scorchY[16];     // decal center height - sphere projection
   // Creature ichor stains — the tinted cousin of scorch: hit/death splats
   // paint the ground colored instead of charring it black.
   uniform vec4 splatData[24];  // x, z, radius, intensity
@@ -291,14 +292,17 @@ export const terrainFrag = /* glsl */`
   // circle with a noise-jittered edge. Applied in the fragment shader so it
   // conforms to the displaced surface exactly — no z-fighting, no decals
   // bridging dips or floating over slopes.
-  float scorchMask(vec2 p) {
+  // Sphere-projected decal (3D distance to the blast center): round on
+  // flats, foreshortened on cliffs. The old XZ cylinder smeared the mark
+  // vertically down steep faces.
+  float scorchMask(vec3 p) {
     float m = 0.0;
     for (int i = 0; i < scorchCount; i++) {
       vec4 s = scorchData[i];
       if (s.w <= 0.0) continue;
       // Mostly circular blast ring with slight edge irregularity
-      float edge = s.z * (0.9 + 0.15 * noise(p * 0.8 + float(i) * 7.31));
-      float d = distance(p, s.xy);
+      float edge = s.z * (0.9 + 0.15 * noise(p.xz * 0.8 + float(i) * 7.31));
+      float d = distance(p, vec3(s.x, scorchY[i], s.y));
       m = max(m, s.w * (1.0 - smoothstep(edge * 0.4, edge, d)));
     }
     return m;
@@ -347,13 +351,13 @@ export const terrainFrag = /* glsl */`
   // Ember rim: additive orange ring at the blast edge, fades in ~1s.
   // Projected in-shader so it always sits ON the terrain — a mesh ring
   // gets eaten by surface bumps at grazing angles.
-  vec3 scorchEmberGlow(vec2 p) {
+  vec3 scorchEmberGlow(vec3 p) {
     float g = 0.0;
     for (int i = 0; i < scorchCount; i++) {
       vec4 s = scorchData[i];
       float eb = scorchEmber[i];
       if (eb <= 0.0) continue;
-      float d = distance(p, s.xy);
+      float d = distance(p, vec3(s.x, scorchY[i], s.y));
       float ring = 1.0 - smoothstep(0.0, s.z * 0.3, abs(d - s.z * 0.7));
       g += eb * max(ring, 0.0);
     }
@@ -523,7 +527,7 @@ export const terrainFrag = /* glsl */`
       }
       float detail = noise(uvFin) * 0.5 + noise(uvMed) * 0.5;
       col *= 0.82 + 0.36 * detail;
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       // T2's terrain was baked/vertex-lit for a bright arcade read —
       // the procedural path's diff² curve night-falls a ported albedo,
@@ -531,7 +535,7 @@ export const terrainFrag = /* glsl */`
       float diff = max(dot(vNormal, sunDir), 0.0);
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       col *= ambientColor * 1.35 + sunColor * diff * shadowMask + vec3(rim);
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       col = seaTint(col, vWorldPos.y, vWorldPos.xz);
       vec3 fogDelta = vWorldPos - vCameraPos;
@@ -586,7 +590,7 @@ export const terrainFrag = /* glsl */`
       vec3 sPal = col;
       col *= 0.86 + 0.28 * detail;
       vec3 sDet = col;
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       vec3 sDec = col;
       float diff = max(dot(vNormal, sunDir), 0.0);
@@ -606,7 +610,7 @@ export const terrainFrag = /* glsl */`
       col *= peak > colCap ? colCap / peak : 1.0;
 #endif
       vec3 sLit = col;
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       vec3 sGlow = col;
       // Fog distance: dampen the DOWNWARD vertical component so terrain
@@ -800,7 +804,7 @@ export const terrainFrag = /* glsl */`
       // bump gradient, so the micro-relief reads as turf, not just tint.
       col *= 1.0 + ((grainG - 0.5) * 0.38 + (triGrainG - 0.5) * 0.22 * nearFadeG) * grainFadeG;
       col *= 1.0 - clamp(bumpGrad * 0.035, 0.0, 0.22) * grainFadeG;
-      col *= 1.0 - scorchMask(vWorldPos.xz);
+      col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(nrmG, sunDir), 0.0);
       float shadow = diff * diff;
@@ -812,7 +816,7 @@ export const terrainFrag = /* glsl */`
       vec3 viewDir2 = normalize(vCameraPos - vWorldPos);
       float sheen = pow(max(dot(reflect(-sunDir, nrmG), viewDir2), 0.0), 14.0);
       col += sheen * (1.0 - dirtMask) * (1.0 - slopeBlend) * vec3(0.06, 0.05, 0.02) * diff;
-      col += scorchEmberGlow(vWorldPos.xz);
+      col += scorchEmberGlow(vWorldPos);
       col += fieldGlow(vWorldPos);
       col = seaTint(col, vWorldPos.y, vWorldPos.xz);
       vec3 fogDelta = vWorldPos - vCameraPos;
@@ -891,7 +895,7 @@ ${TERRAIN_PRESET_GLSL}
 
     // --- micro darkening in concavities via detail ---
     col *= 0.86 + 0.28 * detail;
-    col *= 1.0 - scorchMask(vWorldPos.xz);
+    col *= 1.0 - scorchMask(vWorldPos);
     { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
 
     // --- lighting ---
@@ -901,7 +905,7 @@ ${TERRAIN_PRESET_GLSL}
     float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
     vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
     col *= lit;
-    col += scorchEmberGlow(vWorldPos.xz);
+    col += scorchEmberGlow(vWorldPos);
     col += fieldGlow(vWorldPos);
     // Same dampened-downward-distance fog as the desert branch — see above
     col = seaTint(col, vWorldPos.y, vWorldPos.xz);

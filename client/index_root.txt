@@ -11,6 +11,7 @@ index.html
 index_root.txt
 knip.json
 maplab.html
+modeldump.html
 package-lock.json
 package.json
 posedump.html

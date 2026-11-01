@@ -39,6 +39,9 @@ export const SPRINKLER_CONFIG: ProjectileConfig = {
   trailParticlesPerUnit: 0.5, // ~9/s stream — sparse or it smears
   trailLifeMin: 0.15,
   trailLifeMax: 0.35,
+  trailLifeRampDuration: 0.5, // tail grows over the first half-second of arc
+  trailLifeStartScale: 0,
+  trailDelay: 0.1,
   trailSpread: 0.08,
   trailForwardSpread: 0.03,
   trailParticleGravity: 2, // droplets sag — sells the watering-can arc

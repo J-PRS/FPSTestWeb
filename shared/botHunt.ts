@@ -165,11 +165,11 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
     // Cheapest gate first: an out-of-range enemy never earns the LOS
     // march - it was paying a ~dist/6-probe walk for a guaranteed discard.
     if (d >= (e.id.startsWith('b:') ? beastRange : range)) {continue;}
-    // Hoard beacon: a purple-tier carrier (27+) can't hide behind a
-    // ridge - the crown marks him the way the flag thief's beacon does.
-    // HUD markers mean everyone is nominally visible - high-carriers
-    // stay acquirable through walls like a player's eye on the diamond.
-    if (!losClear(ctx, pos, e.pos) && (e.held ?? 0) < 10) {continue;}
+    // Hoard beacon as a chance, not a gate: richer carriers are likelier
+    // to get noticed through walls (the crown/HUD-marker fiction), ~5%
+    // per token per think - a 20-gizmo vault can't hide, a 5-token
+    // pocket slips behind a ridge most of the time.
+    if (!losClear(ctx, pos, e.pos) && botRand() >= (e.held ?? 0) * 0.05) {continue;}
     seenAll?.push(e);
     if (e.id.startsWith('b:')) {
       if (d < beastD) { beastD = d; beast = e; }
@@ -260,6 +260,26 @@ function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
   if (!t || !t.alive || t.id === ctx.id) {return null;}
   if (dist3(pos, t.pos) >= 80 && !losClear(ctx, pos, t.pos)) {return null;}
   return t;
+}
+
+/** Headhunt carrier beacon: the richest live hoard in the senses packet
+ *  becomes the feet's objective — the hunt lane already keeps the gun on
+ *  nearby threats, so the bot chases value while answering whatever's in
+ *  front of it. Same legality as the thief beacon: the held count is the
+ *  last read, so a carrier dead since the packet drops out next think. */
+function carrierObjective(st: HuntState, ctx: BrainCtx, now: number): BotVec | null {
+  // No absolute gate — the richest live holder IS the objective, however
+  // poor. Whether the chase outbids pickups and fights is the goal
+  // scorer's weight problem, not a legality cutoff here.
+  let best: BotEnemy | null = null;
+  for (const e of ctx.enemies) {
+    if (!e.alive || e.id === ctx.id || !(e.held ?? 0)) {continue;}
+    // A carrier that defeated the escape kit stays blacklisted — chasing
+    // it again is the wall-grind loop unreachUntil exists to break.
+    if ((st.unreachUntil.get(e.id) ?? 0) > now) {continue;}
+    if (!best || (e.held ?? 0) > (best.held ?? 0)) {best = e;}
+  }
+  return best?.pos ?? null;
 }
 
 
@@ -379,7 +399,12 @@ st.huntTick += 1;
     st.leadVel.y += (seen.vel.y - st.leadVel.y) * blend;
     st.leadVel.z += (seen.vel.z - st.leadVel.z) * blend;
   }
-  planFight(st, ctx, pos, best, fearing, pickGoal);
+  // Feet-vs-eyes split: when there's no authored objective (flag mode's
+  // own lane), the headhunt hoard becomes the feet's objective so the
+  // gun can track a nearby threat while the walk stays on the carrier.
+  const objPos = ctx.objective ? null : carrierObjective(st, ectx, now);
+  const gctx = objPos ? Object.assign({}, ctx, {objective: objPos}) : ctx;
+  planFight(st, gctx, pos, best, fearing, pickGoal);
 }
 
 /** Killzone-style position pick: score a ring of candidate spots by

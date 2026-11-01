@@ -122,6 +122,8 @@ export interface RoomInfo {
    *  id is a spectator (their gap is scoped to their own intro window),
    *  false/absent for players (room-wide nackFulls applies). */
   nackFor?: (playerId: string) => boolean;
+  /** Seat is a spectator: no player record, still eats broadcasts. */
+  isSpectator?: (playerId: string) => boolean;
   /** 'ready' sink — a held-off-spawn seat's client finished warming
    *  (session veil dropped); releases the body into the world. */
   readySpawn?: (playerId: string) => void;
@@ -586,7 +588,12 @@ export class MessageHandler {
    *  alt-tab catch-up rebuilds the same truth a reload would. */
   sendWorldState(playerId: string, sessionToken?: string): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player) {return;}
+    // AFK-demoted seats resync too: serve the spectator world state
+    // (+ wireIds roster) or their client rides orphaned binary forever.
+    if (!player) {
+      if (this.roomInfo.isSpectator?.(playerId)) {this.handleSpectatorHandshake(playerId);}
+      return;
+    }
 
     // Humans that never reported a position aren't in-world yet — listing
     // them spawns a frozen ghost mesh at the spawn default for the joiner.
@@ -689,7 +696,9 @@ export class MessageHandler {
    *  no localPlayerState, and no playerJoined goes out. The socket still
    *  gets every broadcast + tick frame (sent to connections, not players). */
   handleSpectatorHandshake(playerId: string): void {
-    this.sendGameState(playerId, this.inWorldRoster());
+    // wireIds is mandatory: spectators consume the same binary events;
+    // an absent roster wipes the client wid table into orphan storms.
+    this.sendGameState(playerId, this.inWorldRoster(), {wireIds: this.roomInfo.wireIds?.() ?? {}});
     this.sendSimWorldState(playerId);
   }
 
