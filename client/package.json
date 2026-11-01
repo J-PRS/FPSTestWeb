@@ -1,6 +1,6 @@
 {
   "name": "client-three-fps",
-  "version": "0.1.113",
+  "version": "0.1.114",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -25,7 +25,9 @@
     "stats.js": "^0.17.0",
     "three": "^0.184.0",
     "three-mesh-bvh": "^0.9.15",
-    "three.quarks": "^0.17.1"
+    "three.quarks": "^0.17.1",
+    "xatlas-three": "^0.2.1",
+    "xatlasjs": "^0.2.0"
   },
   "overrides": {
     "type-coverage-core": {
