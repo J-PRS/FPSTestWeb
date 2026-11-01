@@ -177,6 +177,13 @@ export class Room {
   /** C4 edge relay radius (XZ) — replay fidelity pays inside ~400m;
    *  far specks keep interpolating. Squared for the hot check. */
   private static readonly RELAY_EDGE_R2 = 400 * 400;
+  /** Dev-only WAN-loss repro for the edge relay (FPS_EDGE_DROP_PCT) —
+   *  mirrors tickRecords' FPS_DROP_PCT: dropped relay packets surface as
+   *  input seq gaps, replay drifts on stale input, records snap it back. */
+  private static edgeDrop(): boolean {
+    const pct = Number(process.env.FPS_EDGE_DROP_PCT ?? 0) || 0;
+    return pct > 0 && Math.random() * 100 < pct;
+  }
   noteEngagement(shooterId: string, victimId: string): void {
     if (shooterId === victimId) {return;}
     let m = this.engagedBy.get(victimId);
@@ -1100,6 +1107,7 @@ export class Room {
         this.markIntro(pid);
         return true;
       },
+      isSpectator: (pid): boolean => this.spectators.has(pid),
       nackFulls: (): void => {
         const now = wallNow();
         if (now - this.lastNackAt < 500) {return;}
@@ -1144,7 +1152,7 @@ export class Room {
             for (const [qid, q] of this.players.getAllPlayers()) {
               if (qid === pid || q.isBot) {continue;}
               const dx = q.position.x - sp.x, dz = q.position.z - sp.z;
-              if (dx * dx + dz * dz < Room.RELAY_EDGE_R2) {
+              if (dx * dx + dz * dz < Room.RELAY_EDGE_R2 && !Room.edgeDrop()) {
                 this.connections.sendBinToPlayerReliable(qid, data, 'volatile');
               }
             }
