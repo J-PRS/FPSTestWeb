@@ -119,7 +119,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // Record projectile fired event for demo
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording) {
-    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
+    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, config.inherit ?? 0.5);
     p.demoProjectileId = demoManager.recordProjectileFired(
       { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
       { x: velocity.x, y: velocity.y, z: velocity.z },

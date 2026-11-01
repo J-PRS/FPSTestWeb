@@ -99,7 +99,11 @@ function validateFile(path: string, file: DemoFile): void {
     const tt = e.targetType;
     if (tt === TARGETTYPE_KILL) {
       check(e.targetId < file.roster.length, `${tag} kill marker targetId ${e.targetId} >= roster ${file.roster.length}`);
-      check(e.eventType === TargetEventType.StateChanged, `${tag} kill marker not StateChanged (got ${e.eventType})`);
+      // KILL lane carries two writers: recordKill → StateChanged (the kill
+      // marker proper), recordPlayerHit → Hit (damage-credit echo the
+      // demodiff pairs against server playerHit edges). Both are legal.
+      check(e.eventType === TargetEventType.StateChanged || e.eventType === TargetEventType.Hit,
+        `${tag} kill marker bad eventType ${e.eventType}`);
     } else if (tt === TARGETTYPE_FLAG) {
       check((e.targetId & 0xc000) === 0xc000, `${tag} flag targetId ${e.targetId} missing 0xc000 flag`);
     } else if (tt >= TARGETTYPE_PICKUP_BASE) {
