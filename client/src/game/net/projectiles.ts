@@ -394,6 +394,9 @@ export function wireProjectiles(ctx: NetCtx): void {
         deps.world.explosions.push(new Explosion(
           deps.lazyScene(), new THREE.Vector3(position.x, position.y, position.z), true, p.age, deps.lazyTerrain(),
           p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
+        // blastFx records every other blast here - without it the wire
+        // knockback echo finds no blast and warns + paints a phantom boom.
+        deps.explosionTracker.addExplosion(new THREE.Vector3(position.x, position.y, position.z), p.force, p.shooterId ?? deps.lazyNetworkManager().getLocalPlayerId());
       }
     }
     // Kill local projectile if server says it's gone - explode to let
@@ -456,6 +459,7 @@ export function wireProjectiles(ctx: NetCtx): void {
         deps.world.explosions.push(new Explosion(
           deps.lazyScene(), new THREE.Vector3(position.x, position.y, position.z), true, p.age, deps.lazyTerrain(),
           p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
+        deps.explosionTracker.addExplosion(new THREE.Vector3(position.x, position.y, position.z), p.force, p.shooterId ?? deps.lazyNetworkManager().getLocalPlayerId());
       }
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}
