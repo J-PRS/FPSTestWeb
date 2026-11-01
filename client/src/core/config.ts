@@ -86,7 +86,6 @@ export const MRV_RATE = 2.4; // MRV launcher - slower than mortar, one trigger =
 export const MELEE_COOLDOWN = 0.9;
 export const MELEE_RANGE = 3.2;    // fist reach, meters
 export { MELEE_ARC_DOT } from '../../../shared/weapons.js';
-export const MELEE_LUNGE = 8;    // forward shove on swing
 export { MELEE_CREATURE_DAMAGE as MELEE_DAMAGE } from '../../../shared/weapons.js';
 
 // Game constants

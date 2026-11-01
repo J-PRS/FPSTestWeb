@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, MELEE_COOLDOWN } from '../core/config.js';
 
 import type { Terrain } from '../world/terrain.js';
 import { PlayerSkills } from './player/skills.js';
@@ -205,9 +205,6 @@ export class Player {
     if (this.meleeCooldown > 0) {return;}
     this.meleeCooldown = MELEE_COOLDOWN;
     const dir = this.getAimDir();
-    // Lunge is a gap-closer, not a speed multiplier: at 20+ m/s the
-    // swing alone carries the reach, extra vel just reads as a cheat.
-    if (this.vel.length() <= 20) {this.vel.addScaledVector(dir, MELEE_LUNGE);}
     this.syncMovement();
     this.model?.weaponPunch();
     this.onMelee?.({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
