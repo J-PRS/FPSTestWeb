@@ -101,6 +101,10 @@ export class BotFire {
       : ([lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(bot.armorClass, w)) ?? -1);
     if (!melee && wt < 0) {return;}
     if (!this.canFire(bot.playerId, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}
+    // Mirror the pick to the hand prop - offline bots never ride the wire
+    // path that reveals a remote's weapon, so they held the generic gun
+    // forever. Same convention: melee swings keep the last real gun out.
+    if (!melee) {bot.model.setWeapon(wt);}
     const cfg = melee ? undefined : getProjectileConfig(wt);
 
     // The claim path exists ONLY for wire-remote targets: a locally
@@ -191,6 +195,7 @@ export class BotFire {
   private lobAt(bot: GameBot, aim: { x: number; y: number; z: number }): void {
     const want = bot.loadout?.belt ?? WeaponType.Grenade;
     const wt = classCanFire(bot.armorClass, want) ? want : WeaponType.Grenade;
+    bot.model.setWeapon(wt);
     const stats = getWeaponStats(wt);
     const cfg = getProjectileConfig(wt);
     if (!stats || stats.speed <= 0 || !cfg) {return;}
