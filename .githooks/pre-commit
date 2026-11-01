@@ -13,6 +13,38 @@ if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   fi
 fi
 
+
+# Scope check: a commit is one topic. >12 files spanning >4 distinct
+# areas (client/src/<cluster>, server_bun/src, shared/, _tools/*, ...)
+# is a grab-bag - split it, or --no-verify if it really is one change.
+if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+  FILES=$(git diff --cached --name-only)
+  NF=$(printf '%s
+' "$FILES" | grep -c .)
+  AREAS=$(printf '%s
+' "$FILES" | sed -E 's|^(client/src)/[^/]+.*||; s|^([^/]+/[^/]+)/.*||; s|^[^/]+$|.|' | sort -u | wc -l)
+  if [ "$NF" -gt 12 ] && [ "$AREAS" -gt 4 ]; then
+    echo "pre-commit: $NF files across $AREAS areas - this looks like a grab-bag:" >&2
+    printf '%s
+' "$FILES" | sed -E 's|^(client/src)/[^/]+.*|/...|; s|^([^/]+/[^/]+)/.*|/...|' | sort -u | sed 's/^/  /' >&2
+    # Soft gate: a real terminal gets y/N; non-interactive callers
+    # (agents, CI, IDE commits) must split or pass --no-verify.
+    if [ -t 0 ] && [ -e /dev/tty ]; then
+      printf 'commit anyway? [y/N] ' >&2
+      read -r ans < /dev/tty
+      [ "$ans" = y ] || [ "$ans" = Y ] || exit 1
+    else
+      # Non-interactive (agent/CI): the exit code IS the prompt - the
+      # agent must read this, then decide: split via git add -p, or
+      # rerun with FPS_SCOPE_OK=1 to accept the wide commit (this gate
+      # only). --no-verify stays the nuclear option.
+      echo "  non-interactive: split by topic (git add -p), or rerun with" >&2
+      echo "  FPS_SCOPE_OK=1 to accept the wide commit (skips ONLY this gate)." >&2
+      exit 1
+    fi
+  fi
+fi
+
 # Determinism sentinel: shared/ sim code must not gain wall-clock or
 # unseeded-random reads (added lines only — existing sites stay grandfathered).
 if git diff --cached -U0 -- shared/ | grep '^+' | grep -qE 'Date\.now|Math\.random|new Date\(|crypto\.getRandomValues'; then
