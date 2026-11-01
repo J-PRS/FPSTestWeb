@@ -22,14 +22,17 @@ if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   NF=$(printf '%s
 ' "$FILES" | grep -c .)
   AREAS=$(printf '%s
-' "$FILES" | sed -E 's|^(client/src)/[^/]+.*||; s|^([^/]+/[^/]+)/.*||; s|^[^/]+$|.|' | sort -u | wc -l)
+' "$FILES" | awk -F/ '{ if ($1=="client"&&$2=="src") print "client/src"; else if (NF>=3) print $1"/"$2; else if (NF==2) print $1; else print "." }' | sort -u | wc -l)
   if [ "$NF" -gt 12 ] && [ "$AREAS" -gt 4 ]; then
     echo "pre-commit: $NF files across $AREAS areas - this looks like a grab-bag:" >&2
     printf '%s
-' "$FILES" | sed -E 's|^(client/src)/[^/]+.*|/...|; s|^([^/]+/[^/]+)/.*|/...|' | sort -u | sed 's/^/  /' >&2
-    # Soft gate: a real terminal gets y/N; non-interactive callers
-    # (agents, CI, IDE commits) must split or pass --no-verify.
-    if [ -t 0 ] && [ -e /dev/tty ]; then
+' "$FILES" | awk -F/ '{ if ($1=="client"&&$2=="src") print "  client/src/..."; else if (NF>=3) print "  "$1"/"$2"/..."; else if (NF==2) print "  "$1"/..."; else print "  ." }' | sort -u >&2
+    # Three lanes: FPS_SCOPE_OK=1 accepts a wide commit (this gate only);
+    # a real terminal gets y/N; other non-interactive callers must split
+    # or pass --no-verify.
+    if [ "$FPS_SCOPE_OK" = 1 ]; then
+      echo "pre-commit: FPS_SCOPE_OK=1 - wide commit accepted, scope gate skipped." >&2
+    elif [ -t 0 ] && [ -e /dev/tty ]; then
       printf 'commit anyway? [y/N] ' >&2
       read -r ans < /dev/tty
       [ "$ans" = y ] || [ "$ans" = Y ] || exit 1
