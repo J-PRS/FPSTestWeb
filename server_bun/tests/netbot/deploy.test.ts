@@ -5,7 +5,9 @@ describe.skipIf(!process.env.FPS_SOAK)('netbot — real clients over real socket
   const { spawn, bots, sleep } = mkNetbots();
 
   it('a deploy claim lands on every observer — deploySpawn/deployables wire coverage', async () => {
-    await spawn(3, { pingMs: 20, jitterMs: 120, lossRate: 0 });
+    // Pin the room — bare joins round-robin across standing rooms, and a
+    // deploySpawn rightly never crosses room walls.
+    await spawn(3, { pingMs: 20, jitterMs: 120, lossRate: 0 }, { room: 'deploy-test', mode: 'ctf' });
     await sleep(1500); // joined + field loaded
     const planter = bots[0]!.nc;
     planter.send({ type: 'deploy', kind: 'mine', position: { ...planter.self.pos } });
