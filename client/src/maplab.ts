@@ -8,7 +8,7 @@ import { hmParseBin, hmHeight, hmNormal, hmSurface, HM_HEIGHT_SCALE } from '../.
 import { MoveSim } from '../../shared/movement.js';
 import { terrainFrag } from './world/terrainShaders.js';
 import { hillshadeImage } from './world/hillshade.js';
-import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, rockPass, playaPass, dunesPass, terracePass, cliffPass, fanPass, floodPass, sinkPass, sharpenPass, foldPass, platesPass, canyonPass, snowPass, lakePass, slumpPass, ruggedPass, contrastPass, stretchPass, breachPass, scramblePass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
+import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, rockPass, playaPass, dunesPass, terracePass, cliffPass, fanPass, floodPass, sinkPass, sharpenPass, foldPass, platesPass, canyonPass, snowPass, lakePass, pitPass, sandPass, slumpPass, ruggedPass, contrastPass, stretchPass, breachPass, scramblePass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
 
 // Player-facing lab: served on prod too - no isDevHost gate on the entry.
 
@@ -83,7 +83,11 @@ const mat = new THREE.ShaderMaterial({
     litKnee: { value: 0.85 }, litKeep: { value: 0.2 }, colCap: { value: 0.99 },
   }),
 });
-const terrain = new THREE.Mesh(geo, mat);
+const terrain: THREE.Mesh<THREE.BufferGeometry, THREE.Material> = new THREE.Mesh(geo, mat);
+// Clay = MeshNormalMaterial fallback while iterating verbs - the palette
+// shader recompiles/re-runs per refresh, normals don't.
+const clayMat = new THREE.MeshNormalMaterial();
+let clayOn = false;
 scene.add(terrain);
 // 'wire solid' occluder: same geometry drawn colorless into the depth
 // buffer FIRST, so wireframe edges behind the front surface fail depth.
@@ -294,6 +298,8 @@ const VERBS: Record<string, (h: Float32Array, N: number, i: number) => void> = {
   canyon:  (h, N) => canyonPass(h, N),
   snow:    (h, N) => snowPass(h, N),
   lake:    (h, N) => lakePass(h, N),
+  pitfill: (h, N) => pitPass(h, N),
+  sand:    (h, N) => sandPass(h, N),
   slump:   (h, N) => slumpPass(h, N),
   rugged:  (h, N) => ruggedPass(h, N),
   uplift:  (h, N) => { for (let i = 0; i < N * N; i += 1) { h[i] = h[i]! ** 0.7; } },
@@ -302,19 +308,135 @@ const VERBS: Record<string, (h: Float32Array, N: number, i: number) => void> = {
   breach:  (h, N) => breachPass(h, N),
   scramble:(h, N, i) => scramblePass(h, N, 12, state.seed * 53 + i),
 };
+const lastVerbStats: { entry: string; pct: number; cells: number; ms: number }[] = [];
+const verbLogEl = document.createElement('div');
+verbLogEl.style.cssText = 'font:10px monospace;color:#9ab;margin-top:2px;line-height:1.35;white-space:pre-wrap;overflow:hidden;';
+let verbLogHost: HTMLElement | null = null;
+
+// Per-entry post-op snapshots: the replay log re-runs every prior verb
+// on each click — cache i's output so only NEW entries actually compute.
+const verbCache: ({ h: Float32Array; pct: number; cells: number; ms: number } | null)[] = [];
+
+let baseSig = '';
 function applyVerbs(h: Float32Array, N: number): void {
-  state.verbs.forEach((op, i) => { VERBS[op]?.(h, N, i); });
+  lastVerbStats.length = 0;
+  // Snapshots belong to a base field - params/seed/map change makes them
+  // stale (this was why 🎲 params looked dead until F5). Checksum the
+  // field itself so any base difference invalidates, cheaply.
+  let sig = 0;
+  for (let i2 = 0; i2 < N * N; i2 += 997) {sig += h[i2]! * (i2 % 31 + 1);}
+  const sigStr = `${state.map}:${sig.toFixed(3)}`;
+  if (sigStr !== baseSig) { baseSig = sigStr; verbCache.length = 0; redoStack.length = 0; }
+  if (verbCache.length > state.verbs.length) {verbCache.length = state.verbs.length;} // undo/clear truncates
+  // start = first missing snapshot, NOT length - a mid-log hole (disabled
+  // or edited entry) means everything past it recomputes, never crashes.
+  let start = 0;
+  while (start < state.verbs.length && verbCache[start]) {start += 1;}
+  if (start > 0) {h.set(verbCache[start - 1]!.h);}
+  state.verbs.forEach((entry, i) => {
+    if (i < start) {const c = verbCache[i]!; lastVerbStats.push({ entry, pct: c.pct, cells: c.cells, ms: c.ms }); return;}
+    // Disabled entries MUST still snapshot - a hole at i leaves the tail
+    // cache entry valid and its stale field (op included) restores whole.
+    if (entry.startsWith('!')) {
+      lastVerbStats.push({ entry, pct: 0, cells: 0, ms: 0 });
+      verbCache[i] = { h: h.slice(), pct: 0, cells: 0, ms: 0 };
+      return;
+    }
+    // 'op@cx,cz' = brush stroke: run the pass, keep it only inside the
+    // circle, revert everywhere else. Trailing '*k' = strength — after
+    // the pass, blend h toward src by k (works for any verb).
+    const src = h.slice();
+    const t0 = performance.now();
+    const m = entry.match(/^(\w+)(?:@(\d+),(\d+))?(?:\*([\d.]+))?$/);
+    if (!m) {return;}
+    const k = m[4] === undefined ? 1 : Number(m[4]);
+    if (k === 0) {lastVerbStats.push({ entry, pct: 0, cells: 0, ms: 0 }); verbCache[i] = { h: h.slice(), pct: 0, cells: 0, ms: 0 }; return;} // *0 = no-op, don't pay for the pass
+    VERBS[m[1]!]?.(h, N, i);
+    if (m[2] !== undefined) {
+      const cx = Number(m[2]), cz = Number(m[3]), r = 40;
+      for (let z = 0; z < N; z += 1) {
+        for (let x = 0; x < N; x += 1) {
+          const dx = x - cx, dz = z - cz;
+          if (dx * dx + dz * dz > r * r) { h[z * N + x] = src[z * N + x]!; }
+        }
+      }
+    }
+    if (k !== 1) {for (let i2 = 0; i2 < N * N; i2 += 1) {h[i2] = src[i2]! + (h[i2]! - src[i2]!) * k;}}
+    // Two reads: touched% = share of cells that moved at all, avgΔ% =
+    // mean |Δ| — a shallow-but-wide pass and a deep-but-narrow one
+    // separate cleanly.
+    let touched = 0, delta = 0;
+    for (let i2 = 0; i2 < N * N; i2 += 1) {
+      const d = Math.abs(h[i2]! - src[i2]!);
+      if (d > 0) {touched += 1; delta += d;}
+    }
+    const st = { entry, cells: touched / (N * N) * 100, avg: delta / (N * N) * 100 };
+    lastVerbStats.push({ entry: st.entry, pct: st.avg, cells: st.cells, ms: performance.now() - t0 });
+    verbCache[i] = { h: h.slice(), pct: st.avg, cells: st.cells, ms: performance.now() - t0 };
+  });
+  renderVerbLog(); // stats land here, not just on the next paintRail
+}
+
+/** Action log under the verb rows — rendered inside paintRail so the
+ *  element isn't orphaned when the rail rebuilds. */
+function renderVerbLog(): void {
+  if (verbLogHost && verbLogEl.parentElement !== verbLogHost) {verbLogHost.append(verbLogEl);}
+  // Rows with a strength input per entry — editing writes `op*k` back
+  // into the log and replays, so any past action can be dialed down/up.
+  verbLogEl.replaceChildren();
+  lastVerbStats.forEach((s, i) => {
+    const row = document.createElement('div');
+    const off = s.entry.startsWith('!');
+    const k = s.entry.match(/\*([\d.]+)$/);
+    const span = document.createElement('span');
+    const shown = s.entry.replace(/^!/, '').replace(/\*[\d.]+$/, '');
+    span.textContent = `${String(i + 1).padStart(2)} ${shown.padEnd(11)} ${String(s.cells.toFixed(0)).padStart(3)}% Δ${s.pct.toFixed(2).padStart(5)}% ${s.ms.toFixed(0).padStart(4)}ms`;
+    span.style.cssText = `cursor:pointer;${off ? 'opacity:.35;text-decoration:line-through;' : ''}`;
+    span.title = 'click to disable/enable';
+    span.addEventListener('click', (): void => {
+      state.verbs[i] = off ? s.entry.slice(1) : `!${s.entry}`;
+      verbCache.length = i; // entry edit - snapshots i..end are stale
+      save(); schedule(); paintRail();
+    });
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.min = '0'; inp.max = '2'; inp.step = '0.05';
+    inp.value = k ? k[1]! : '1';
+    inp.style.cssText = 'width:38px;margin-left:4px;background:#14202e;color:#9cf;border:1px solid #2a3a4a;font:inherit;padding:0 2px;';
+    inp.addEventListener('change', (): void => {
+      const base = s.entry.replace(/\*[\d.]+$/, '');
+      state.verbs[i] = inp.value === '1' ? base : `${base}*${inp.value}`;
+      verbCache.length = i; // same-length edit - snapshots i..end are stale
+      save(); schedule();
+    });
+    row.append(span, inp);
+    verbLogEl.append(row);
+  });
 }
 function addVerb(op: string): void {
-  state.verbs.push(op); save(); schedule();
+  state.verbs.push(op); redoStack.length = 0; save(); schedule();
 }
+
+let lastVerbSig = '';
+let brushMode = false;
+let brushVerb: string | null = null;
+// Right-click a slider row pins it out of 🎲 params — persisted so a
+// locked value survives reloads like the sliders themselves.
+const lockedSliders = new Set<string>(
+  JSON.parse(localStorage.getItem('maplab_locks') ?? '[]') as string[],
+);
+const saveLocks = (): void => { localStorage.setItem('maplab_locks', JSON.stringify([...lockedSliders])); };
 
 function refresh(): void {
   // An existing map is a fixed .bin, not a synth - fetch + paint it.
+  // Re-load when the verb log changed too - verbs replay inside loadMap,
+  // so a new op (or brush stroke) on an already-loaded map needs a
+  // re-fetch, not an early return.
+  const vsig = state.verbs.join('|');
   if (state.map) {
-    if (state.map !== loadedMap) { loadMap(state.map); }
+    if (state.map !== loadedMap || vsig !== lastVerbSig) { lastVerbSig = vsig; loadMap(state.map); }
     return;
   }
+  lastVerbSig = vsig;
   loadedMap = '';
   const t0 = performance.now();
   const h = synthField(state);
@@ -405,8 +527,45 @@ function paintMesh(): void {
 
 // Hillshade relief - same picture hillshade.cjs emits for shipped maps,
 // plus a red overlay where the face is too steep to ski (slope > ~0.8).
+// Redo stack — undo keeps the popped entry + its post-snapshot so
+// Ctrl+Shift+Z restores the exact field with zero recompute. Any NEW
+// verb invalidates the tail.
+const redoStack: { entry: string; h: Float32Array }[] = [];
+addEventListener('keydown', (e: KeyboardEvent): void => {
+  if (e.ctrlKey && e.code === 'KeyZ' && state.verbs.length > 0) {
+    e.preventDefault();
+    if (e.shiftKey) {
+      const r = redoStack.pop();
+      if (r) {state.verbs.push(r.entry); verbCache[state.verbs.length - 1] = { h: r.h, pct: 0, cells: 0, ms: 0 };}
+    } else {
+      const entry = state.verbs.pop()!;
+      const snap = verbCache[state.verbs.length]?.h;
+      if (snap) {redoStack.push({ entry, h: snap });}
+      verbCache.length = state.verbs.length;
+    }
+    save(); schedule(); paintRail();
+  }
+});
 const hmcv = document.querySelector<HTMLCanvasElement>('#hmview')!;
 const hmctx = hmcv.getContext('2d')!;
+// Brush strokes land here: armed verb + click → 'op@x,z' in the log.
+// Canvas is N×N so image coords ARE cell coords.
+hmcv.addEventListener('pointerdown', (e: PointerEvent): void => {
+  const armed = (hmcv as HTMLCanvasElement & { _armed?: string })._armed;
+  if (!armed) {flash('click seen — BRUSH on → click a +verb to arm'); return;}
+  const rect = hmcv.getBoundingClientRect();
+  const x = Math.round((e.clientX - rect.left) / rect.width * hmcv.width);
+  const z = Math.round((e.clientY - rect.top) / rect.height * hmcv.height);
+  state.verbs.push(`${armed}@${x},${z}`);
+  redoStack.length = 0;
+  save(); refresh();
+  flash(`${armed}@${x},${z}`);
+});
+/** Arm/disarm a brush verb — maplab.ts scope keeps it out of paintRail. */
+function setArmedVerb(op: string | null): void {
+  (hmcv as HTMLCanvasElement & { _armed?: string })._armed = op ?? undefined;
+  hmcv.style.cursor = op ? 'crosshair' : '';
+}
 function paintHeightmap(): void {
   const N = field.size;
   hmcv.width = N; hmcv.height = N;
@@ -747,11 +906,22 @@ function paintRail(): void {
     val.textContent = key === 'droplets'
       ? `${(Number(state[key])).toFixed(0)}k`
       : Number(state[key]).toFixed(step >= 1 ? 0 : 2);
+    // Drag updates the readout only; the regen fires on release ('change')
+    // — a regen per drag-frame made sliders feel stuck.
     inp.addEventListener('input', (): void => {
-      (state as unknown as Record<string, unknown>)[key] = Number(inp.value);
       val.textContent = key === 'droplets' ? `${Number(inp.value).toFixed(0)}k` : Number(inp.value).toFixed(step >= 1 ? 0 : 2);
+    });
+    inp.addEventListener('change', (): void => {
+      (state as unknown as Record<string, unknown>)[key] = Number(inp.value);
       save(); schedule();
     });
+    row.addEventListener('contextmenu', (e: MouseEvent): void => {
+      e.preventDefault();
+      if (lockedSliders.has(key)) {lockedSliders.delete(key);} else {lockedSliders.add(key);}
+      saveLocks();
+      lab.style.color = lockedSliders.has(key) ? '#5af' : '';
+    });
+    if (lockedSliders.has(key)) {lab.style.color = '#5af';}
     row.append(lab, inp, val);
     rail.append(row);
   }
@@ -795,6 +965,11 @@ function paintRail(): void {
     mk('slope tint', function (this: HTMLButtonElement): void {
       state.slopeOverlay = !state.slopeOverlay; save(); paintRail(); paintHeightmap();
     }, state.slopeOverlay),
+    mk('clay', function (this: HTMLButtonElement): void {
+      clayOn = !clayOn;
+      terrain.material = clayOn ? clayMat : mat;
+      this.classList.toggle('active', clayOn);
+    }),
     mk('flow map', function (this: HTMLButtonElement): void {
       state.flowOverlay = !state.flowOverlay; save(); paintRail(); refresh();
     }, state.flowOverlay),
@@ -809,7 +984,7 @@ function paintRail(): void {
       // Every knob re-rolled within its own slider range (grid size + seed
       // excluded - size is a heavy regen, seed has its own dice).
       for (const [key, , min, max, step] of SLIDERS) {
-        if (key === 'size' || key === 'seed') {continue;}
+        if (key === 'size' || key === 'seed' || lockedSliders.has(key)) {continue;}
         (state as unknown as Record<string, unknown>)[key] = min + Math.round((Math.random() * (max - min)) / step) * step;
       }
       state.preset = Math.floor(Math.random() * 10); // PRESETS 0-9
@@ -835,9 +1010,10 @@ function paintRail(): void {
       flash('spec → clipboard');
     }),
     mk('copy params', async (): Promise<void> => {
-      // Full knob set (synth params + heightScale + preset) so an AI
-      // or a teammate can reproduce the field exactly.
-      const params = Object.assign({}, state);
+      // Full knob set so an AI or teammate can reproduce the field
+      // exactly — terrain + heightScale + terrainPreset fold the spec
+      // into the recipe, one JSON does both jobs.
+      const params = Object.assign({}, state, { terrain: `maplab_s${state.seed}.bin` });
       await navigator.clipboard?.writeText(JSON.stringify(params, null, 2));
       flash('params -> clipboard');
     }),
@@ -853,6 +1029,23 @@ function paintRail(): void {
   const verbGrp = document.createElement('div'); verbGrp.className = 'group';
   verbGrp.textContent = `verbs${state.verbs.length > 0 ? ` (${state.verbs.join(', ')})` : ''}`;
   rail2.append(verbGrp);
+  // GLOBAL = verb applies to the whole field on click (classic). BRUSH =
+  // the verb button ARMS, then clicks on the heightmap paint it in a
+  // circle (logged as op@x,z so replay keeps the stroke).
+  const modeRow = document.createElement('div'); modeRow.className = 'btnrow';
+  const gb = mk('GLOBAL', function (this: HTMLButtonElement): void { brushMode = false; brushVerb = null; paintRail(); });
+  const bb = mk('BRUSH', function (this: HTMLButtonElement): void { brushMode = true; paintRail(); });
+  const syncMode = (): void => {
+    gb.classList.toggle('active', !brushMode);
+    bb.classList.toggle('active', brushMode);
+    bb.textContent = brushVerb ? `BRUSH: ${brushVerb}` : 'BRUSH';
+    setArmedVerb(brushMode ? brushVerb : null);
+  };
+  gb.addEventListener('click', syncMode); bb.addEventListener('click', syncMode);
+  modeRow.append(gb, bb); rail2.append(modeRow);
+  syncMode(); // paintRail rebuilds the buttons every click - re-apply the
+              // armed/active classes on the fresh elements or the toggle
+              // visually resets.
   const VERB_TIPS: Record<string, string> = {
     rock: '12 seeded impact craters - oblique lobate rims, rough floors',
     scree: 'talus slide ×12 - debris creeps to repose under cliffs',
@@ -874,6 +1067,8 @@ function paintRail(): void {
     canyon: 'noise-steered wandering channel - meandering river canyon',
     snow: 'deposit on high + gentle - cornices on ridges, bare cliffs',
     lake: 'fill closed basins to spill - real lakes, playa complement',
+    pitfill: 'fill NARROW sealed pits only - borehole cleanup, canyons kept',
+    sand: 'uniform grain rain settling to repose - bowls bank up, crests stay thin',
     slump: 'collapse steep cells - hillside lobes, flats untouched',
     rugged: 'amplify mid-frequency bumps - rocky texture, same shape',
     uplift: 'gamma-raise the field - mids and highs get taller',
@@ -885,7 +1080,10 @@ function paintRail(): void {
     clear: 'empty the verb log - back to the raw pipeline',
   };
   const verbBtn = (op: string): HTMLButtonElement => {
-    const b = mk(`+${op}`, () => { addVerb(op); paintRail(); });
+    const b = mk(`+${op}`, (): void => {
+      if (brushMode) { brushVerb = op; syncMode(); paintRail(); return; }
+      addVerb(op); paintRail();
+    });
     b.dataset.tip = VERB_TIPS[op]!;
     return b;
   };
@@ -896,7 +1094,7 @@ function paintRail(): void {
   for (const op of ['streams', 'erode', 'glacier', 'scree']) { row4.append(verbBtn(op)); }
   rail2.append(row4);
   const row4b = document.createElement('div'); row4b.className = 'btnrow';
-  for (const op of ['dunes', 'fan', 'cliff', 'sharpen']) { row4b.append(verbBtn(op)); }
+  for (const op of ['dunes', 'fan', 'cliff', 'sharpen', 'sand']) { row4b.append(verbBtn(op)); }
   rail2.append(row4b);
   const row4c = document.createElement('div'); row4c.className = 'btnrow';
   for (const op of ['playa', 'flood', 'smooth']) { row4c.append(verbBtn(op)); }
@@ -905,7 +1103,7 @@ function paintRail(): void {
   for (const op of ['fold', 'plates', 'uplift', 'rugged']) { row4d.append(verbBtn(op)); }
   rail2.append(row4d);
   const row4e = document.createElement('div'); row4e.className = 'btnrow';
-  for (const op of ['canyon', 'snow', 'lake', 'slump']) { row4e.append(verbBtn(op)); }
+  for (const op of ['canyon', 'snow', 'lake', 'pitfill', 'slump']) { row4e.append(verbBtn(op)); }
   rail2.append(row4e);
   const row4f = document.createElement('div'); row4f.className = 'btnrow';
   for (const op of ['contrast', 'stretch', 'breach', 'scramble']) { row4f.append(verbBtn(op)); }
@@ -919,6 +1117,10 @@ function paintRail(): void {
     row5.append(b);
   }
   rail2.append(row5);
+  // Verb log sits UNDER all the rows - inside the group header every new
+  // line shoved the buttons down.
+  verbLogHost = rail2;
+  renderVerbLog();
   const note = document.createElement('div');
   note.style.cssText = 'opacity:.45;margin-top:8px;line-height:1.5';
   note.textContent = 'droplets>0 erodes live · A/B flips raw↔eroded · .bin = maps/<name>.bin format · same lattice as genmap.js';

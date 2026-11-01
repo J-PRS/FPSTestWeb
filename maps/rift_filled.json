@@ -26,7 +26,7 @@
     { "x": 160, "y": 0, "z": -160 }
   ],
   "structures": [],
-  "terrain": "rift.bin",
+  "terrain": "rift_filled.bin",
   "heightScale": 2.5,
   "tileSize": 2048,
   "terrainPreset": 5,

@@ -1,0 +1,42 @@
+{
+  "name": "Strata",
+  "mode": "ctf",
+  "bots": 8,
+  "botFill": 12,
+  "bases": {
+    "alpha": { "x": -320, "y": 0, "z": 0 },
+    "bravo": { "x": 320, "y": 0, "z": 0 }
+  },
+  "teamSpawns": {
+    "alpha": [
+      { "x": -320, "y": 0, "z": -30, "r": 50 },
+      { "x": -340, "y": 0, "z": 40, "r": 50 }
+    ],
+    "bravo": [
+      { "x": 320, "y": 0, "z": -30, "r": 50 },
+      { "x": 340, "y": 0, "z": 40, "r": 50 }
+    ]
+  },
+  "spawns": [
+    { "x": 200, "y": 0, "z": 0, "r": 40 },
+    { "x": -200, "y": 0, "z": 0, "r": 40 },
+    { "x": 0, "y": 0, "z": -200, "r": 40 },
+    { "x": 0, "y": 0, "z": 200, "r": 40 },
+    { "x": 141, "y": 0, "z": -141, "r": 40 },
+    { "x": -141, "y": 0, "z": -141, "r": 40 },
+    { "x": 141, "y": 0, "z": 141, "r": 40 },
+    { "x": -141, "y": 0, "z": 141, "r": 40 }
+  ],
+  "structures": [],
+  "terrain": "strata.bin",
+  "heightScale": 5.3,
+  "tileSize": 1500,
+  "terrainPreset": 5,
+  "fog": {
+    "color": [0.55, 0.50, 0.45],
+    "distance": 150.0,
+    "visible": 700.0
+  },
+  "atmosphere": { "rayleigh": 1.0, "mie": 1.5, "sunIntensity": 0.8, "starIntensity": 0.3 },
+  "_notes": "Strata = maplab synth seed 3331, size 449, elongated ridged strata (elong 7.75) + sea basin edge, badlands preset (switched from crag to match rimrock). Chain: synthField -> fault(0) -> smooth x40 -> streamPower -> erode 125k -> glacier 0.2 -> talus 16 -> flats 6 -> verbs(glacier,glacier,dunes,dunes*0,sand,sand,smooth,smooth,slump,stretch,breach,smooth*5). heightScale 5.3, vscale 0.45."
+}

@@ -646,6 +646,68 @@ export function lakePass(h: Float32Array, N: number, minFill = 0.006): void {
   }
 }
 
+/** Pitfill - lake's masked cousin: fills only NARROW sealed pits
+ *  (boreholes sims leave behind), leaving wide canyons and draining
+ *  channels alone. Mask = local blur sits >thresh above the cell —
+ *  a borehole's neighborhood is mostly its rim so blur is high; a
+ *  canyon floor's blur includes itself so it stays small. */
+export function pitPass(h: Float32Array, N: number, thresh = 0.06, R = 10): void {
+  const f = priorityFlood(h, N);
+  const src = h.slice();
+  // Summed-area table: the local-mean mask was O(N²·R²) — ~1s at 513².
+  // SAT turns each cell's box mean into 4 lookups regardless of R.
+  const sat = new Float64Array((N + 1) * (N + 1));
+  for (let z = 0; z < N; z += 1) {
+    let run = 0;
+    for (let x = 0; x < N; x += 1) {
+      run += src[z * N + x]!;
+      sat[(z + 1) * (N + 1) + x + 1] = sat[z * (N + 1) + x + 1]! + run;
+    }
+  }
+  const area = (2 * R + 1) * (2 * R + 1);
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      // Clamped box — edge cells get a smaller window, which only blurs
+      // the mask boundary, not the flood result.
+      const x0 = Math.max(0, x - R), x1 = Math.min(N - 1, x + R);
+      const z0 = Math.max(0, z - R), z1 = Math.min(N - 1, z + R);
+      const sum = sat[(z1 + 1) * (N + 1) + x1 + 1]! - sat[z0 * (N + 1) + x1 + 1]!
+        - sat[(z1 + 1) * (N + 1) + x0]! + sat[z0 * (N + 1) + x0]!;
+      const n = (x1 - x0 + 1) * (z1 - z0 + 1);
+      const i = z * N + x;
+      if (sum / n - src[i]! > thresh && f[i]! > src[i]!) { h[i] = f[i]!; }
+    }
+  }
+}
+
+/** Sand - uniform grain rain settling to repose: every column gets the
+ *  same sky-dose, but grains on slopes slide downhill until stable, so
+ *  bowls bank up and crests stay thin. Talus without needing cliffs. */
+export function sandPass(h: Float32Array, N: number, dose = 0.02, repose = 0.06, iters = 40): void {
+  for (let i = 0; i < N * N; i += 1) { h[i]! += dose; }
+  const src = h;
+  for (let it = 0; it < iters; it += 1) {
+    let moved = 0;
+    for (let z = 0; z < N; z += 1) {
+      for (let x = 0; x < N; x += 1) {
+        const i = z * N + x;
+        // Flow toward the steepest sub-repose neighbor — same avalanche
+        // rule scree uses, just fed by a sky-dose instead of a cliff.
+        const c = src[i]!;
+        const nb = [src[z * N + (x + 1) % N]!, src[z * N + (x - 1 + N) % N]!,
+          src[((z + 1) % N) * N + x]!, src[((z - 1 + N) % N) * N + x]!];
+        let k = -1, lo = c;
+        for (let j = 0; j < 4; j += 1) { if (nb[j]! < lo) { lo = nb[j]!; k = j; } }
+        if (k < 0 || c - lo <= repose) {continue;}
+        const j = z * N + (k === 0 ? (x + 1) % N : k === 1 ? (x - 1 + N) % N : x) + (k > 1 ? ((k === 2 ? (z + 1) % N : (z - 1 + N) % N) * N - z * N) : 0);
+        const d = (c - lo - repose) * 0.4;
+        src[i] = c - d; src[j] = src[j]! + d; moved += d;
+      }
+    }
+    if (moved < 1e-6) {break;}
+  }
+}
+
 /** Slump - collapse steep cells toward their neighborhood mean. Hillside
  *  lobes instead of sharp cliffs; flat ground untouched. */
 export function slumpPass(h: Float32Array, N: number, thresh = 0.03, k = 0.5): void {

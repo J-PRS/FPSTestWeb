@@ -20,6 +20,9 @@
     .rail .row label { width: 86px; color: #9ac; flex: none; }
     .rail .row input[type=range] { flex: 1; min-width: 0; }
     .rail .row span { width: 38px; text-align: right; flex: none; color: #7d9; }
+    .rail input[type=number]::-webkit-outer-spin-button,
+    .rail input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .rail input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     .rail .row input[type=number], .rail .row select {
       flex: 1; min-width: 0; background: #14202e; color: #9cf;
       border: 1px solid #2a3a4a; font: inherit; padding: 2px 4px;

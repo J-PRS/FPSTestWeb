@@ -693,7 +693,10 @@ export class Room {
     this.ballSim.colliders = structureColliders(this.structs.eff());
     if (this.spec.ballMix) {this.ballSim.ballMix = this.spec.ballMix;}
     if (this.spec.spawns) {this.players.spawnPoints = this.spec.spawns;}
-    this.players.teamSpawns = this.spec.teamSpawns ?? null;
+    // Authored team spheres are CTF-only - a spec that ships bases +
+    // teamSpawns for CTF would otherwise seat DM/headhunt/etc spawns at
+    // the pads instead of the free circles.
+    this.players.teamSpawns = this.mode === 'ctf' ? (this.spec.teamSpawns ?? null) : null;
     this.players.spawnRng = (): number => this.rng();
     this.messages.setBallSim(this.ballSim);
     if (field) {this.ballSim.attachField(field);}
@@ -1604,7 +1607,7 @@ export class Room {
    *  to flat-map seating. */
   private applySpecSeating(spec: MapSpec): void {
     if (spec.spawns) {this.players.spawnPoints = spec.spawns;}
-    this.players.teamSpawns = spec.teamSpawns ?? null;
+    this.players.teamSpawns = this.mode === 'ctf' ? (spec.teamSpawns ?? null) : null;
     this.modeModule?.onSpec?.(spec);
     this.structs.attach(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
     // Bases can move with a new spec  -  re-snap homes (no update push: the

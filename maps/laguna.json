@@ -1,0 +1,42 @@
+{
+  "name": "Laguna",
+  "mode": "ctf",
+  "bots": 8,
+  "botFill": 12,
+  "bases": {
+    "alpha": { "x": -320, "y": 0, "z": 0 },
+    "bravo": { "x": 320, "y": 0, "z": 0 }
+  },
+  "teamSpawns": {
+    "alpha": [
+      { "x": -320, "y": 0, "z": -30, "r": 50 },
+      { "x": -340, "y": 0, "z": 40, "r": 50 }
+    ],
+    "bravo": [
+      { "x": 320, "y": 0, "z": -30, "r": 50 },
+      { "x": 340, "y": 0, "z": 40, "r": 50 }
+    ]
+  },
+  "spawns": [
+    { "x": 200, "y": 0, "z": 0, "r": 40 },
+    { "x": -200, "y": 0, "z": 0, "r": 40 },
+    { "x": 0, "y": 0, "z": -200, "r": 40 },
+    { "x": 0, "y": 0, "z": 200, "r": 40 },
+    { "x": 141, "y": 0, "z": -141, "r": 40 },
+    { "x": -141, "y": 0, "z": -141, "r": 40 },
+    { "x": 141, "y": 0, "z": 141, "r": 40 },
+    { "x": -141, "y": 0, "z": 141, "r": 40 }
+  ],
+  "structures": [],
+  "terrain": "laguna.bin",
+  "heightScale": 3.8,
+  "tileSize": 1500,
+  "terrainPreset": 5,
+  "fog": {
+    "color": [0.60, 0.50, 0.38],
+    "distance": 150.0,
+    "visible": 700.0
+  },
+  "atmosphere": { "rayleigh": 1.0, "mie": 1.5, "sunIntensity": 0.8, "starIntensity": 0.3 },
+  "_notes": "Laguna = maplab synth seed 9541, badlands mesa + small central lagoon (seaR 150), terraced then smoothed. Chain: synthField -> smooth x34 -> streamPower -> erode 65k -> glacier 0.9 -> talus 46 -> flats 2 -> verbs(terrace,smooth,smooth). heightScale 3.8, vscale 0.5."
+}
