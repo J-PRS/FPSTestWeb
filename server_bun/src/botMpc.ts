@@ -56,6 +56,7 @@ export class BotMpc {
   constructor(
     private readonly moveSim: RoomMoveSim,
     private readonly field: Heightfield | null,
+    private readonly botInput?: (id: string, i: { forward: number; right: number; jump: number; ski: number; jet: number }, status: number) => void,
   ) {}
 
   /** Per-bot run state — the plan is a short input schedule plus the
@@ -231,6 +232,7 @@ export class BotMpc {
     run!.i += 1;
     this.moveSim.faceYaw(id, a.yaw);
     this.moveSim.setInput(id, { forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: a.jet });
+    this.botInput?.(id, { forward: 1, right: 0, jump: 0, ski: 1, jet: a.jet ? 1 : 0 }, 0);
     return true;
   }
 

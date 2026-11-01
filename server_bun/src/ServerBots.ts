@@ -88,7 +88,7 @@ export class ServerBots {
     this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id): void => this.untrack(id), ServerBots.THINK_DIV);
     this.sense = new ServerBotSenses(room, field, this.loadouts, this.roster.roleInfo, this.foeNear);
     this.sense.routing.sweatOf = (id): number => this.brains.get(id)?.sweatLevel ?? 0;
-    this.mpc = new BotMpc(room.moveSim, field);
+    this.mpc = new BotMpc(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s));
   }
 
   /** The committed-run option: while a capper is outbound on the enemy

@@ -184,6 +184,37 @@ export class Room {
     const pct = Number(process.env.FPS_EDGE_DROP_PCT ?? 0) || 0;
     return pct > 0 && Math.random() * 100 < pct;
   }
+  /** Bot edge bookkeeping — see handlerDeps.botInput. */
+  private readonly botEdgeLast = new Map<string, string>();
+  private readonly botEdgeSeq = new Map<string, number>();
+  /** Server bots bypass inputMove (botDrive feeds the shadow directly) so
+   *  they minted no edges — their remotes could never replay. Bots commit
+   *  every tick, so dedupe on the pressed-key shape and mint a seq:
+   *  observers see the same change-only stream a human emits. */
+  botInput(pid: string, i: { forward: number; right: number; jump: number; ski: number; jet: number }, status: number): void {
+    const key = `${i.forward},${i.right},${i.jump},${i.ski},${i.jet}`;
+    if (this.botEdgeLast.get(pid) === key) {return;}
+    this.botEdgeLast.set(pid, key);
+    const seq = (this.botEdgeSeq.get(pid) ?? 0) + 1;
+    this.botEdgeSeq.set(pid, seq);
+    this.relayInputEdge(pid, seq, 0, { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: i.jet }, status);
+  }
+  /** C4 relay fanout: one consumed/minted edge to every human observer
+   *  inside the gate. Distance-gated; volatile lane. */
+  private relayInputEdge(pid: string, seq: number, ageMs: number, input: { forward: number; right: number; jump: number | undefined; ski: number | undefined; jet: number | undefined }, status: number): void {
+    const wid = this.wireIds.get(pid);
+    const shooter = this.players.getPlayer(pid);
+    if (wid === undefined || !shooter) {return;}
+    const data = encodeRemoteInput(wid, seq, ageMs, input, status);
+    const sp = shooter.position;
+    for (const [qid, q] of this.players.getAllPlayers()) {
+      if (qid === pid || q.isBot) {continue;}
+      const dx = q.position.x - sp.x, dz = q.position.z - sp.z;
+      if (dx * dx + dz * dz < Room.RELAY_EDGE_R2 && !Room.edgeDrop()) {
+        this.connections.sendBinToPlayerReliable(qid, data, 'volatile');
+      }
+    }
+  }
   noteEngagement(shooterId: string, victimId: string): void {
     if (shooterId === victimId) {return;}
     let m = this.engagedBy.get(victimId);
@@ -1140,23 +1171,8 @@ export class Room {
         // their per-remote MoveSim tracks the shadow's input timeline.
         // Volatile lane - a lost edge degrades to interp, same as a
         // silence window does today.
-        const wid = this.wireIds.get(pid);
-        if (ok && wid !== undefined && seq !== undefined) {
-          // Distance-gated fanout: replay fidelity matters inside combat
-          // range; a far speck's edges would just buy bytes nobody sees.
-          // Edges are rare so the O(N) distance pass is cheap.
-          const shooter = this.players.getPlayer(pid);
-          const data = encodeRemoteInput(wid, seq, ageMs ?? 0, { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: i.jet }, status ?? 0);
-          if (shooter) {
-            const sp = shooter.position;
-            for (const [qid, q] of this.players.getAllPlayers()) {
-              if (qid === pid || q.isBot) {continue;}
-              const dx = q.position.x - sp.x, dz = q.position.z - sp.z;
-              if (dx * dx + dz * dz < Room.RELAY_EDGE_R2 && !Room.edgeDrop()) {
-                this.connections.sendBinToPlayerReliable(qid, data, 'volatile');
-              }
-            }
-          }
+        if (ok && seq !== undefined) {
+          this.relayInputEdge(pid, seq, ageMs ?? 0, { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: i.jet }, status ?? 0);
         }
         return ok;
       },
@@ -1669,6 +1685,8 @@ excess -= 1;
     const wid = this.wireIds.get(playerId);
     if (wid !== undefined) {
       this.wireIds.delete(playerId);
+      this.botEdgeLast.delete(playerId);
+      this.botEdgeSeq.delete(playerId);
       this.wireIdRetired.set(wid, wallNow());
       this.v4Last.delete(wid);
       this.connections.broadcast({ type: 'wireIds', add: {}, remove: [wid] });
