@@ -3,8 +3,9 @@
 // Format: magic(1) + version(4) + header fields + frames + events
 
 import type { DemoFile } from './types.js';
+import { DEMO_DEPLOY_KINDS, DEMO_PICKUP_KINDS, DEMO_SPECIES } from './types.js';
 import { getRunSeed } from './demoSeed.js';
-import { demoTableHash } from './demoTables.js';
+import { BALL_VARIANT_HEALTH, BALL_VARIANT_SCALE } from '../../../shared/ballSim.js';
 
 // CRC32 lookup table
 
@@ -28,6 +29,21 @@ export function crc32(data: Uint8Array): number {
     crc = crcTable[(crc ^ b) & 0xFF]! ^ (crc >>> 8);
   }
   return (crc ^ 0xFF_FF_FF_FF) >>> 0;
+}
+
+// Content-table fingerprint for the demo header (moved here from
+// demoTables.ts to break the demoWriter <-> demoTables cycle: demoTables
+// imports crc32 from this file, and this file previously imported
+// demoTableHash back from demoTables). One-directional now.
+export function demoTableHash(): number {
+  const canonical = [
+    DEMO_SPECIES.join(','),
+    DEMO_DEPLOY_KINDS.join(','),
+    DEMO_PICKUP_KINDS.join(','),
+    BALL_VARIANT_SCALE.join(','),
+    BALL_VARIANT_HEALTH.join(','),
+  ].join('|');
+  return crc32(new TextEncoder().encode(canonical));
 }
 
 // Write string: uint16 length + UTF-8 bytes

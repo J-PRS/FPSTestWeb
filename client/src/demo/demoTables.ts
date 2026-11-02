@@ -8,17 +8,7 @@
 // itself. header.tableHash makes it loud: the writer stamps crc32 of the
 // canonical table serialization, and demovalidate compares it against the
 // running build so a drifted table surfaces as a warning on old clips.
-import { BALL_VARIANT_HEALTH, BALL_VARIANT_SCALE } from '../../../shared/ballSim.js';
-import { DEMO_DEPLOY_KINDS, DEMO_PICKUP_KINDS, DEMO_SPECIES } from './types.js';
-import { crc32 } from './demoWriter.js';
-
-export function demoTableHash(): number {
-  const canonical = [
-    DEMO_SPECIES.join(','),
-    DEMO_DEPLOY_KINDS.join(','),
-    DEMO_PICKUP_KINDS.join(','),
-    BALL_VARIANT_SCALE.join(','),
-    BALL_VARIANT_HEALTH.join(','),
-  ].join('|');
-  return crc32(new TextEncoder().encode(canonical));
-}
+// demoTableHash moved to demoWriter.ts to break the demoWriter <-> demoTables
+// cycle (demoTables imports crc32 from demoWriter). Re-export for callers
+// that still import it from here.
+export { demoTableHash } from './demoWriter.js';

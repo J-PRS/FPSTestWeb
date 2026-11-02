@@ -3,7 +3,7 @@ import { weaponDef } from '../weapons.js';
 import { DISC_RATE } from '../core/config.js';
 import { THROW_TOTAL } from './ViewModel.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
-import { BELT_THROW_TIME, type Player } from './Player.js';
+import type { Player } from './Player.js';
 import { PlayerLoadout } from './playerLoadout.js';
 import { ChildLogger } from '../core/Logger.js';
 import { inv } from '../../../shared/invariants.js';
@@ -70,7 +70,11 @@ export function fireWeapons(p: Player): void {
     const beltCost = p.beltItem === 'satchel' ? 2 : 1;
     if (p.input.beltHeld && p.beltCharges >= beltCost && beltThrowReady(p.beltTimer, p.throwLockT)) {
       p.beltTimer = DISC_RATE;
-      p.throwLockT = THROW_TOTAL * (BELT_THROW_TIME[p.beltItem] ?? 1);
+      // BELT_THROW_TIME lives in Player.ts (canonical, used by fire.ts too);
+// inlined here to break the Player <-> playerImpulse cycle (Player imports
+// playerImpulse as `imp` for method delegation). Keep in sync if the
+// satchel stretch changes.
+p.throwLockT = THROW_TOTAL * (p.beltItem === 'satchel' ? 1.9 : 1);
       p.shootAnimTimer = 0.3; // lob raise — same snap as a shot
       p.model?.weaponThrow();
       p.onBelt?.({ origin: p.pos.clone(), dir: p.getAimDir(), playerVel: p.vel.clone() }, p.beltItem);
