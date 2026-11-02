@@ -745,10 +745,20 @@ hurtCount += 1;
         // driveMove's continuous steer — a 0.9s rollout can't see a
         // 300m stand line and shouldn't try. Between those, the rollout
         // banks altitude into speed like a real skier.
-        const dd = out.dest ? Math.hypot(out.dest.x - p.position.x, out.dest.z - p.position.z) : 0;
-        const transit = out.dest !== undefined && !out.move?.park
+        // No-dest cruise: speed IS defense — a destless bot keeps a
+        // synthesized target along its momentum so the rollout holds
+        // banked energy instead of bleeding to a stand. Park orders and
+        // foes still hand control back to driveMove.
+        const sp = Math.hypot(p.velocity.x, p.velocity.z);
+        const cruise = out.dest === undefined && !out.move?.park
+          ? (sp > 8
+            ? { x: p.position.x + p.velocity.x * 4, y: p.position.y, z: p.position.z + p.velocity.z * 4 }
+            : { x: p.position.x + Math.sin(p.rotation.yaw) * 100, y: p.position.y, z: p.position.z + Math.cos(p.rotation.yaw) * 100 })
+          : out.dest;
+        const dd = cruise ? Math.hypot(cruise.x - p.position.x, cruise.z - p.position.z) : 0;
+        const transit = cruise !== undefined && !out.move?.park
           && dd > 40 && dd < 150 && (this.foeNear.get(id) ?? 0) <= now;
-        if (transit && this.greedy.drive(id, out.dest)) {owned = true;}
+        if (transit && this.greedy.drive(id, cruise)) {owned = true;}
         else {this.greedy.release(id);}
       }
       if (sh && !owned) {this.driveMove(id, p, out, sh, dt, now);}

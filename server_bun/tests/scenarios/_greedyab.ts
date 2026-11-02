@@ -17,7 +17,7 @@ const room = mkRoom({
   mode: 'ctf', bots: BOTS, botSkill: 'impossible',
   bases: { alpha: at(-150, 0), bravo: at(150, 0) },
   arena: { x: 0, z: 0, radius: 450 },
-}, 'ctf', 1337, false, field);
+}, 'ctf', Number(process.env.SEED ?? 1337), false, field);
 room.players.addPlayer('ref');
 pin(room, 'ref', { x: 800, y: 300, z: 800 });
 
