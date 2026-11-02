@@ -216,8 +216,15 @@ Bun.serve({
       let room = url.searchParams.get('room') ?? undefined;
       // No-mint fleets: a bare join must reach a worker that HAS rooms -
       // least-CCU resolve can hand out an empty worker and the worker's
-      // no-mint join then has nothing to land in ('Server full').
-      if (!room && !CONFIG.clientRooms) {room = leastFullRoom()?.name;}
+      // no-mint join then has nothing to land in ('Server full'). Same
+      // for a client-supplied name that isn't a live room: substitute an
+      // existing room instead of routing the name to a worker that
+      // would mint it.
+      if (!CONFIG.clientRooms) {
+        const names = dir.roomNames();
+        for (const rows of lobbyRows.values()) {for (const r of rows) {names.add(r.name);}}
+        if (!room || !names.has(room)) {room = leastFullRoom()?.name;}
+      }
       const w = dir.resolve(room, now);
       if (!w) {return json({ error: 'no workers up' }, { status: 503 });}
       const host = url.hostname;
