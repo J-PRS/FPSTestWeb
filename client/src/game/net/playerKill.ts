@@ -88,18 +88,22 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
     try { parts = remotePlayer.model.deathParts() ?? undefined; }
     catch { /* fall through to generic shards */ }
   }
-  deps.world.playerDebrisList.push(new PlayerDebris(
-    deps.lazyScene(), deps.lazyTerrain(),
-    { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },
-    // Black bodies gib near-black too - team color on scatter fights the
-    // body/fresnel signal convention (colored = alive marker, not debris).
-    ATLAS_BLACK ? _gibBlack : new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
-    { impulseDir, inheritVel: remotePlayer.vel, parts, shardGeos: parts?.map((p) => p.geo), count: fullGib ? undefined : 6, smoke: fullGib },
-  ));
-
-  // Full-gib for every kill for now — the model hides as its baked chunk
-  // geos fly; respawn()'s showRemote restores on the next life.
+  // Hide FIRST — the corpse disappearing is the guaranteed outcome. A
+  // PlayerDebris ctor throw (degenerate part geo, NaN verts) used to
+  // leave the body standing in its last pose.
   remotePlayer.hide();
+  try {
+    deps.world.playerDebrisList.push(new PlayerDebris(
+      deps.lazyScene(), deps.lazyTerrain(),
+      { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },
+      // Black bodies gib near-black too - team color on scatter fights the
+      // body/fresnel signal convention (colored = alive marker, not debris).
+      ATLAS_BLACK ? _gibBlack : new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
+      { impulseDir, inheritVel: remotePlayer.vel, parts, shardGeos: parts?.map((p) => p.geo), count: fullGib ? undefined : 6, smoke: fullGib },
+    ));
+  } catch (err) { deps.logger.warn('PlayerDebris spawn failed', { err: String(err) }); }
+
+  // respawn()'s showRemote restores on the next life.
   deps.lazyHud().removePlayerIndicator(targetId);
   deps.lazyHealthBarSystem().removeBar(targetId);
 }

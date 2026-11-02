@@ -30,7 +30,7 @@ import { playerProviders } from './demo/playerProviders.js';
 
 import { Player } from './entities/Player.js';
 import { RIG_MANIFEST, CLASS_BODY_VARIANT } from './entities/playerClips.js';
-import type { PlayerModelVariant } from './entities/PlayerModel.js';
+import { ATLAS_BLACK, type PlayerModelVariant } from './entities/PlayerModel.js';
 import type { ViewModel } from './entities/ViewModel.js';
 
 import { DamageNumberManager } from './effects/damageNumbers.js';
@@ -290,7 +290,7 @@ function wireNetworkLocal(): void {
     world.playerDebrisList.push(new PlayerDebris(
       scene, terrain,
       { x: player.pos.x, y: player.pos.y - 0.6, z: player.pos.z },
-      new THREE.Color(world.localTeam ? TEAM_COLORS[world.localTeam] : 0x88_99_AA),
+      ATLAS_BLACK ? new THREE.Color(0x11_11_11) : new THREE.Color(world.localTeam ? TEAM_COLORS[world.localTeam] : 0x88_99_AA),
       { inheritVel: player.vel, parts, shardGeos: parts?.map((p) => p.geo) },
     ));
   };
@@ -1267,9 +1267,7 @@ const paintStaleBadge = (): void => {
 if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]')) {
   // Alt+R = rebuild + reload — the loop the preview badge makes visible.
   let rebuildDiv: HTMLDivElement | null = null;
-  addEventListener('keydown', (e: KeyboardEvent): void => {
-    if (!e.altKey || e.code !== 'KeyR' || e.repeat) {return;}
-    e.preventDefault();
+  const rebuild = (): void => {
     if (!rebuildDiv) {
       rebuildDiv = document.createElement('div');
       rebuildDiv.style.cssText =
@@ -1281,6 +1279,20 @@ if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostn
     fetch('/dev/rebuild', { method: 'POST' })
       .then((r) => { if (r.ok) {location.reload();} else {rebuildDiv!.textContent = `rebuild failed (${r.status})`;} })
       .catch((): void => { rebuildDiv!.textContent = 'rebuild endpoint missing'; });
+  };
+  addEventListener('keydown', (e: KeyboardEvent): void => {
+    if (!e.altKey || e.code !== 'KeyR' || e.repeat) {return;}
+    e.preventDefault();
+    rebuild();
+  });
+  // Alt-tab away = "I'm done editing for now": if the badge would show
+  // stale files, rebuild in the background so the bundle is fresh on
+  // return. Blur alone costs nothing when nothing changed.
+  addEventListener('blur', (): void => {
+    fetch('/dev/stale')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d && d.count > 0) {rebuild();} })
+      .catch((): void => { /* no stale probe - do nothing */ });
   });
   let lastCount = 0;
   const applyStale = (d: { count: number; files?: string[]; built?: number } | null): void => {
