@@ -245,7 +245,11 @@ export class RoomFactory {
       // The sim gates are part of the match a joiner asked for — picking a
       // balled room for a no-balls joiner silently ignores the toggle
       // (first joiner defines, so a wrong-gated room can never be fixed).
-      if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {continue;}
+      // One-directional: the flags only ever assert OFF, so an unasked
+      // joiner (both false) lands in whatever room is live - standing
+      // lobbies seed gated-off for cost, and exact-match would refuse
+      // every bare join the moment minting is denied.
+      if ((noBalls && !room.noBalls) || (noCreatures && !room.noCreatures)) {continue;}
       if (room.playerCount() >= room.maxPlayers) {continue;}
       if (room.unlisted) {continue;}
       // humans=1 — /quickjoin wants a live match: the busiest room with

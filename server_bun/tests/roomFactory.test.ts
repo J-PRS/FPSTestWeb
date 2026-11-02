@@ -76,3 +76,29 @@ describe('roomFactory terrain cache', () => {
     expect(reads).toBe(2);
   });
 });
+
+// quickRoom's reuse scan: the sim gates only ever assert OFF - an
+// unasked joiner (both flags false) must reuse a gated-off standing
+// lobby or the mint denial leaves them 'Server full' (production:
+// every bare join refused once FPS_CLIENT_ROOMS=0). A joiner who DID
+// assert a gate still refuses the mismatched room.
+describe('quickRoom sim-gate filter', () => {
+  const gatedRoom = (name: string, noBalls: boolean, noCreatures: boolean): Room =>
+    ({ name, mode: 'headhunt', noBalls, noCreatures, unlisted: false, maxPlayers: 32,
+       playerCount: () => 5, players: { getHumanCount: () => 0 } } as unknown as Room);
+
+  it('an unasked joiner reuses a gated-off standing room', () => {
+    const host = stubHost();
+    host.rooms.set('headhunt-1', gatedRoom('headhunt-1', true, true));
+    const factory = new RoomFactory(host);
+    expect(factory.quickRoom('', '', undefined, false, false, false, false)?.name).toBe('headhunt-1');
+  });
+
+  it('a joiner asserting noBalls skips a balled room', () => {
+    const host = stubHost();
+    host.rooms.set('headhunt-1', gatedRoom('headhunt-1', false, false));
+    const factory = new RoomFactory(host);
+    // Asked for balls OFF, the only room has them ON, mint denied -> null.
+    expect(factory.quickRoom('', '', undefined, false, true, false, false)).toBeNull();
+  });
+});
