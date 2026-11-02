@@ -6,6 +6,11 @@
 // landing; lowering the baseline requires a deliberate edit (with the
 // cycle broken, update the number in the same commit).
 //
+// Type-only edges are excluded: .madgerc in each target sets
+// detectiveOptions.ts.skipTypeImports=true, so `import type` back-edges
+// (which have no runtime edge) no longer count. Baseline reflects runtime
+// cycles only (client 7, server 2 as of 2026-11-02).
+//
 // Usage: node _tools/check-cycles.mjs
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';

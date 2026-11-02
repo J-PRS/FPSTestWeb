@@ -1,7 +1,9 @@
+.madgerc
 AGENTS.md
 VERSION
 _build.bat
 _run.bat
+_shrinkpack.mjs
 assets
 dist-manifest.json
 eslint.config.js

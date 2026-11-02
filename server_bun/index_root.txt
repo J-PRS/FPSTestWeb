@@ -1,4 +1,5 @@
 .gitignore
+.madgerc
 AGENTS.md
 VERSION
 _heapdumps
