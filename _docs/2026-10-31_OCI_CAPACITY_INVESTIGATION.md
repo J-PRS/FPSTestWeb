@@ -153,19 +153,23 @@ are already spread; the shared kernel/steal budget is the bound).
 ## Addendum 2026-11-02 - Bun-TLS measured: the hypothesis holds
 
 A/B on the box (thin Bun ws sink, identical traffic: 500 conns x
-20 msg/s x 450B = 10k msgs/s inbound + 2.5k/s echo replies):
+20 msg/s x 450B = 10k msgs/s; run 1 echoes 1-in-20, run 2 echoes
+every message = symmetric 45MB/s matching the 20Hz fanout weight):
 
-| path | server-side CPU |
-|---|---|
-| wss -> Caddy -> ws:8401 | ~38% (Caddy 27.7 top + echo 10.6 cpuMs) |
-| wss -> Bun-TLS:8443 direct | ~14% (single process, TLS in uWS) |
-| plain ws:8401 | ~11% (floor) |
+| path | server-side CPU (inbound-only) | symmetric (450B in+out) |
+|---|---|---|
+| wss -> Caddy -> ws:8401 | ~38% (Caddy 27.7 + echo 10.6) | ~62% (Caddy 47.0 + echo 14.6) |
+| wss -> Bun-TLS:8443 direct | ~14% (TLS in uWS) | ~18% |
+| plain ws:8401 | ~11% (floor) | - |
 
-Net: Bun-TLS adds ~3.5% inside the process vs plaintext but removes
-the whole Caddy process + double kernel copy - ~24% of a core at
-10k msgs/s, scaling with bytes (egress is heavier than this bench's
-inbound, so real saving trends toward the ~0.9 core the production
-top showed). Consistent with the est. 1.3-1.5k ceiling.
+Net: Bun-TLS adds a few % inside the process vs plaintext but removes
+the whole Caddy process + double kernel copy - ~24% of a core
+inbound-only, **~44% of a core with symmetric traffic**. Egress weight
+doubles the delta: Caddy's cost is per-byte both directions, and the
+20Hz fanout is egress-dominated, so the production saving trends
+~0.9-1.1 cores (matching the observed Caddy ~87.5% under ~1k seats).
+The est. 1.3-1.5k ceiling reads conservative; post-removal the binding
+constraints would be kernel+softirq+steal, which this also shrinks.
 
 Scripts: `_tools/tlsbench/{echow,spamws}.ts`; cert read directly from
 `~opc/.local/share/caddy/certificates/.../play.jprice.app.{crt,key}`
