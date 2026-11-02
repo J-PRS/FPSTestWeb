@@ -450,6 +450,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   pruneAliveSince(queriedIds);
   pruneAsw(queriedIds);
   hud.setScoreboardRows(ranked);
+  hud.setScoreboardPingVisible?.(nm.isConnected()); // offline bots-only boards drop the latency column
   hud.setScoreboardTeamScores?.(deps.world.teamScores);
   hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName));
 }

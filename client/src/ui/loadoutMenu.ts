@@ -141,7 +141,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   ui.sidearmDrop = mkDrop(
     // The SIDEARM table owns id→wid+label - the menu derives, so a new
     // sidearm is one table entry, not a menu edit.
-    Object.entries(PlayerLoadout.SIDEARM).map(([v, s]): { v: string; label: string } => ({ v, label: s.label })),
+    Object.entries(PlayerLoadout.SIDEARM)
+      .map(([v, s]): { v: string; label: string } => ({ v, label: s.label }))
+      .toSorted(byLabel),
     (v): void => deps.lazyPlayer().setSidearm(v as SidearmId),
   );
   sidearm.cell.append(ui.sidearmDrop.el);
@@ -150,7 +152,8 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   ui.beltLabel = belt.cap;
   ui.beltDrop = mkDrop(
     // No descs - every belt item is one throw away from explaining itself.
-    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
+    // BELT_ITEMS order is feature-history, not a sort key — order by label.
+    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })).toSorted(byLabel),
     (v): void => deps.lazyPlayer().setBeltItem(v as BeltItem),
   );
   belt.cell.append(ui.beltDrop.el);
@@ -158,7 +161,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const pack = mkCellDom(kitRowB);
   ui.packLabel = pack.cap;
   ui.packDrop = mkDrop(
-    PACK_KINDS.map((kind): { v: DeployKind; label: string; } => ({ v: kind, label: DEPLOY_ITEMS[kind].label })),
+    PACK_KINDS.map((kind): { v: DeployKind; label: string; } => ({ v: kind, label: DEPLOY_ITEMS[kind].label })).toSorted(byLabel),
     (v): void => deps.lazyPlayer().setPackItem(v as DeployKind),
   );
   pack.cell.append(ui.packDrop.el);
@@ -166,7 +169,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const skill = mkCellDom(kitRowB);
   ui.skillLabel = skill.cap;
   ui.skillDrop = mkDrop(
-    SKILL_ORDER.map((s): { v: SkillId; label: string; } => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })),
+    SKILL_ORDER.map((s): { v: SkillId; label: string; } => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })).toSorted(byLabel),
     (v): void => deps.lazyPlayer().setSkill(v as SkillId),
   );
   skill.cell.append(ui.skillDrop.el);
@@ -174,7 +177,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const perk = mkCellDom(kitRowB);
   perk.cap.textContent = 'PERK';
   ui.perkDrop = mkDrop(
-    PERK_ORDER.map((p): { v: PerkId; label: string; desc: string; } => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb })),
+    // 'none' stays on top — it banners full-width as the absence pick.
+    PERK_ORDER.map((p): { v: PerkId; label: string; desc: string; } => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb }))
+      .toSorted((a, b): number => (a.v === 'none' ? -1 : b.v === 'none' ? 1 : byLabel(a, b))),
     (v): void => {
       deps.lazyPlayer().setPerk(v as PerkId);
       deps.lazyNetworkManager?.()?.sendPerkUpdate(v);
@@ -187,6 +192,8 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
 }
 
 
+
+const byLabel = (a: { label: string }, b: { label: string }): number => a.label.localeCompare(b.label);
 
 // Only equippable weapons list - the class gate hides other tiers'
 // ordnance outright; grayed-out dead options were pure noise.

@@ -613,6 +613,9 @@ body:has(#hud.cm-open) #healthbar-container {
   color: rgba(200,220,240,0.4); padding-left: 0; width: 1.4em;
 }
 #scoreboard th:nth-child(2), #scoreboard td:nth-child(2) { text-align: left; }
+/* Offline boards drop the latency column — cell order is
+   # / PLAYER / CLASS / FRAGS / DEATHS / PTS / NET / PING / ... */
+.sb-noping th:nth-child(8), .sb-noping td:nth-child(8) { display: none; }
 #scoreboard tr.self td { color: #8fd8ff; font-weight: 600; }
 #scoreboard tr.dead td { opacity: 0.45; }
 #scoreboard tr.sb-team td {

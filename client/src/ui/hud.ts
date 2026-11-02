@@ -236,6 +236,9 @@ export class HUD {
       if (this.lastClassicKey !== 'off') { this.lastClassicKey = 'off'; this.classicScore.style.display = 'none'; }
       return;
     }
+    // Headhunt/team modes own this strip too — when teamScore is live it
+    // wins, or the "0 - 0" line overlaps the ALPHA/BRAVO readout.
+    if (this.lastTeamScore !== 'off' && this.lastTeamScore !== '') {this.classicScore.style.display = 'none'; return;}
     this.classicScore.style.display = 'block';
     // Two children, written independently — the clock rolls at frame rate.
     const line = `${parts.score} - ${parts.kills}`;
@@ -290,6 +293,7 @@ export class HUD {
   get scoreboardVisible(): boolean { return this.sb.isVisible; }
 
   setScoreboardRows(rows: SbRow[]): void { this.sb.setRows(rows); }
+  setScoreboardPingVisible(v: boolean): void { this.sb.setPingVisible(v); }
   setScoreboardTeamScores(s: { alpha: number; bravo: number } | null): void { this.sb.setTeamScores(s); }
 
   /** Intermission footer on the board — "NEXT MATCH IN N". */
