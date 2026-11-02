@@ -25,7 +25,12 @@ function* walk(dir: string): Generator<string> {
 
 // Named debt, not silence: literal paths known to be absent land here with
 // their reason, never silently. Empty while the manifest is clean.
-const KNOWN_MISSING = new Set<string>();
+const KNOWN_MISSING = new Set<string>([
+  // Optional build-time atlas bake: prefetchAtlas falls back to the live
+  // raycast bake when the file is absent, so the literal path is allowed
+  // to be missing (see PlayerModel.prefetchAtlas).
+  '/assets/models/players_atlas.glb',
+]);
 
 describe('asset manifest', (): void => {
   const missing: string[] = [];
