@@ -1,4 +1,4 @@
-// kindMake — client-side factory registry for world-model kinds (C5 pilot).
+// kindMake - client-side factory registry for world-model kinds (C5 pilot).
 //
 // The shared WorldKindDecl describes data (fields/channels); construction
 // needs client-only deps (scene, terrain, deps). So the factory is

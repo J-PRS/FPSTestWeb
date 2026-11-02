@@ -134,6 +134,15 @@ export const CONFIG = {
   wtAdvertisePort: envNum('FPS_WT_ADVERTISE_PORT', envNum('FPS_WT_PORT', envNum('FPS_PORT', 8000) + 1443)),
   wtCertPath: envStr('FPS_WT_CERT', ''),
   wtKeyPath: envStr('FPS_WT_KEY', ''),
+  // Direct wss listener: a second Bun.serve on the same handlers with
+  // TLS inside uWS - the measured ~0.9-core win on the A1 (Caddy stays
+  // for matchmaker/metrics only). Enabled when cert+key paths are set;
+  // the default port derives from FPS_PORT (8001→8443, 8002→8444, …) so
+  // fleet workers land on distinct ports without per-worker env. Each
+  // exposed worker needs NSG ingress on its port.
+  tlsPort: envNum('FPS_TLS_PORT', envNum('FPS_PORT', 8000) + 442),
+  tlsCertPath: envStr('FPS_TLS_CERT', ''),
+  tlsKeyPath: envStr('FPS_TLS_KEY', ''),
   // WebRTC tier: ICE servers (STUN/TURN) as JSON, e.g.
   // FPS_ICE_SERVERS='[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:turn.example.com","username":"u","credential":"p"}]'
   // Empty = LAN/direct-connect only, which is what dev needs anyway.

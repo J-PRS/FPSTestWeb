@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { clientLogRoute, rotateLogs } from './clientLogs.ts';
 import { adminRoute, clipRoute, corsResponse, demoRoute, leaderboardRoute, makeRoutes, mapBinRoute } from './serverRoutes.ts';
 import { wallNow } from './wallClock.ts';
+import type { ServerWebSocket } from 'bun';
 
 const gameServer = new GameServer();
 const demoStorage = new DemoStorage(join(import.meta.dir, '..', 'demos'));
@@ -154,8 +155,10 @@ function reclaimStaleBun(port: number): Promise<boolean> {
   );
 }
 
-const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSocketData>({
-  port: CONFIG.port,
+// Shared options shape: the primary plaintext listener and the opt-in
+// direct-TLS listener (FPS_TLS_PORT) dispatch the same sockets into the
+// same GameServer - only port + tls differ.
+const serveOpts = {
   hostname: '0.0.0.0',
   idleTimeout: CONFIG.idleTimeoutSec,
 
@@ -163,31 +166,31 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSo
     data: {} as WebSocketData,
     maxPayloadLength: CONFIG.maxPayloadLength,
 
-    open(ws): void {
+    open(ws: ServerWebSocket<WebSocketData>): void {
       if (ws.data.rtc) { rtcRelay.onOpen(ws); return; }
       if (ws.data.rtcs) { rtcServer.onOpen(ws); return; }
       gameServer.onOpen(ws);
     },
 
-    message(ws, message): void {
+    message(ws: ServerWebSocket<WebSocketData>, message: string | Buffer<ArrayBuffer>): void {
       if (ws.data.rtc) { rtcRelay.onMessage(ws, message as string | ArrayBuffer); return; }
       if (ws.data.rtcs) { rtcServer.onMessage(ws, message as string | ArrayBuffer); return; }
       gameServer.onMessage(ws, message as string | ArrayBuffer);
     },
 
-    close(ws, code, reason): void {
+    close(ws: ServerWebSocket<WebSocketData>, code: number, reason: string): void {
       if (ws.data.rtc) { rtcRelay.onClose(ws); return; }
       if (ws.data.rtcs) { rtcServer.onClose(ws); return; }
       gameServer.onClose(ws, code, reason);
     },
 
-    drain(ws): void {
+    drain(ws: ServerWebSocket<WebSocketData>): void {
       if (ws.data.rtc || ws.data.rtcs) {return;}
       gameServer.onDrain(ws);
     },
   },
 
-  async fetch(req, srv): Promise<Response | undefined> {
+  async fetch(req: Request, srv: Bun.Server<WebSocketData>): Promise<Response | undefined> {
     const url = new URL(req.url);
 
     // Handle CORS preflight
@@ -252,7 +255,10 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSo
 
     return corsResponse('Not found', { status: 404 });
   },
-});
+};
+
+const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> =>
+  Bun.serve<WebSocketData>({ port: CONFIG.port, ...serveOpts });
 
 // The reclaim probe is async but no-async-await is repo law — the bind
 // runs as a flat promise chain and `server` stays a late-bound handle
@@ -321,6 +327,31 @@ if (CONFIG.wtPort > 0) {
     }
   } catch (error) {
     logger.warn('WebTransport disabled — cert/key unreadable', { error: (error as Error).message });
+  }
+}
+
+// Direct wss tier - opt-in via env (FPS_TLS_PORT + cert/key paths): a
+// second listener on the same handlers with TLS inside uWS, so game
+// frames skip the Caddy decrypt/proxy hop entirely (bench: ~0.9 core
+// on the A1). Matchmaker/metrics keep Caddy; this only adds a port.
+// Failures are logged-and-continue like the WT tier.
+if (CONFIG.tlsCertPath || CONFIG.tlsKeyPath) {
+  try {
+    const { existsSync: fileExists } = await import('node:fs');
+    const certPath = CONFIG.tlsCertPath;
+    const keyPath = CONFIG.tlsKeyPath;
+    if (!certPath || !keyPath || !fileExists(certPath) || !fileExists(keyPath)) {
+      logger.warn('Direct TLS disabled - FPS_TLS_CERT/KEY unset or unreadable', { certPath, keyPath });
+    } else {
+      const tls = Bun.serve<WebSocketData>({
+        port: CONFIG.tlsPort,
+        tls: { cert: Bun.file(certPath), key: Bun.file(keyPath) },
+        ...serveOpts,
+      });
+      logger.info('Direct wss listener up', { port: tls.port });
+    }
+  } catch (error) {
+    logger.warn('Direct TLS listener failed', { error: (error as Error).message });
   }
 }
 
