@@ -210,3 +210,19 @@ still *decides* rather than predicts.
 - **Cost**: offline bots have no flood (`ctx.route` undefined) — they
   keep the old machinery; port a light flow field or accept it.
 - **Ref**: `_docs/2026-10-13_BOT_NAV_ORBITS.md`
+
+
+---
+
+## Pilot history
+
+- 2026-11-02 — C5 client-mirror pilot (ball kind): added client/src/game/kindMake.ts
+  factory registry (registerMake/makeKind/hasMake) and routed netBallSpawn
+  construction through makeKind('ball', m, ctx) instead of 
+ew Ball(...).
+  Ball constructor args unchanged (factory wraps them); Ball.initNetMode +
+  push/applyNetSegment/demo recording remain at the spawn site. tsc green;
+  ballClock/predictAt/rubberband/staleSeg/tickNet + netMalformed/netReplay
+  all pass (38 tests). No wire change, no deletion, rollback = revert the
+  factory call site. Remaining 5 kinds (deploy/flag/pickup/creature/player)
+  still hand-build; next pilot extends the registry to one of them.

@@ -10,6 +10,7 @@ import { SIM_TICK_DT, finiteVec } from '../../../shared/wire.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { EntitiesDeps } from './entities.js';
 import { reconcileReplicas } from './replicas.js';
+import { registerMake, makeKind } from './kindMake.js';
 import type { ChildLogger } from '../core/Logger.js';
 
 export interface NetBallsCtx {
@@ -422,6 +423,18 @@ interface NetBallsApi {
 
 export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger): NetBallsApi {
   const { scene, balls, targets } = Object.assign({}, {scene: deps.scene}, ctx);
+  // C5 pilot: ball replica construction goes through the registered
+  // factory instead of `new Ball(...)` at the spawn site. The factory
+  // is the first kind to consume the world-model declaration; other
+  // kinds (deploy/flag/pickup) follow once this shape is soak-proven.
+  registerMake('ball', (row, c) => {
+    const r = row as { variant: number; id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; colorIdx: number };
+    const cc = c as { scene: THREE.Scene; terrain: unknown };
+    return new Ball(cc.scene, cc.terrain as never, r.variant as 0 | 1 | 2 | 3, {
+      id: r.id, x: r.position.x, y: r.position.y, z: r.position.z,
+      vx: r.velocity.x, vy: r.velocity.y, vz: r.velocity.z, colorIdx: r.colorIdx,
+    });
+  });
   const netBallById = new Map<number, Ball>();
   // A P2P host carries no ball sim — peers keep client-side balls there.
   const serverBalls = (): boolean => deps.lazyNetworkManager()?.authoritySims() ?? false;
@@ -439,12 +452,8 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     if (!finiteMsg(m)) {logger.warn(`ball spawn #${m.id} dropped: non-finite vector`); return;}
     if (netBallById.has(m.id)) {return;}
     Ball.initNetMode();
-    const ball = new Ball(scene, deps.lazyTerrain(), m.variant as 0 | 1 | 2 | 3, {
-      id: m.id,
-      x: m.position.x, y: m.position.y, z: m.position.z,
-      vx: m.velocity.x, vy: m.velocity.y, vz: m.velocity.z,
-      colorIdx: m.colorIdx,
-    });
+    const ball = makeKind('ball', m, { scene, terrain: deps.lazyTerrain() }) as Ball;
+    if (!ball) {logger.warn(`ball spawn #${m.id} dropped: no registered factory`); return;}
     balls.push(ball);
     targets.push(ball);
     netBallById.set(m.id, ball);
