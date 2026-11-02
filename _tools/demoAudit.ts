@@ -28,6 +28,9 @@ const demo = deserializeDemo(readFileSync(file).buffer);
 
 const issues: string[] = [];
 const bad = (cls: string, msg: string) => issues.push(`[${cls}] ${msg}`);
+// Warnings print inline but don't count toward the FAIL total — for
+// honest-data anomalies (interp catch-up) a fail would be a false flag.
+const warn = (cls: string, msg: string) => { console.log(`  [${cls}] warn: ${msg}`); };
 
 // ---- structural: finite everywhere, monotonic clocks --------------------
 const fin = (...xs: number[]) => xs.every(Number.isFinite);
@@ -126,8 +129,15 @@ for (const [idx, fs] of byIdx) {
     // record sim vel deliberately, and a pos snap contaminates the delta.
     if ((a.flags | p.flags) & 5) continue;
     const implied = Math.hypot(a.posX - p.posX, a.posY - p.posY, a.posZ - p.posZ) / dt;
-    if (Math.abs(implied - stated) > stated * 0.3 && ++velMismatch <= 5) {
-      bad('kinematic', `roster ${idx} states vel ${stated.toFixed(0)}m/s but trailed ${implied.toFixed(0)}m/s @t=${a.timestamp.toFixed(1)} (vel not from real displacement)`);
+    // implied > stated = renderer catch-up (interp rubber-band toward the
+    // wire target — the pos trail is honest, playback lerps it anyway).
+    // implied < stated = the wire claimed speed the trail never showed —
+    // actual desync between the vel claim and real displacement.
+    if (implied < stated * 0.7) {
+      bad('kinematic', `roster ${idx} states vel ${stated.toFixed(0)}m/s but trailed ${implied.toFixed(0)}m/s @t=${a.timestamp.toFixed(1)} (claimed speed trail never showed)`);
+    } else if (implied > stated * 1.3) {
+      velMismatch += 1;
+      if (velMismatch <= 5) {warn('kinematic', `roster ${idx} interp catch-up: trailed ${implied.toFixed(0)}m/s vs claimed ${stated.toFixed(0)}m/s @t=${a.timestamp.toFixed(1)}`);}
     }
   }
 }
