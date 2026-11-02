@@ -98,6 +98,8 @@ export class ServerBots {
    *  LIMITS.md). Armed per think on the ctx flags; released on carry. */
   private mpc: BotMpc;
   private readonly mpcArm = new Map<string, BotVec>();
+  /** MPC progress sampler — the watchdog seeds/compares net travel. */
+  private readonly mpcProgress = new Map<string, { x: number; z: number; t: number }>();
 
   private roster: BotRoster;
   /** A bot's current squad role (post-rebalance) — telemetry reads it
@@ -692,11 +694,12 @@ hurtCount += 1;
           const f = ctx.flagPos
             ? [...(this.room.flags?.flags.values() ?? [])].find((fl) => Math.hypot(fl.pos.x - ctx.flagPos!.x, fl.pos.z - ctx.flagPos!.z) < 5)
             : undefined;
-          if (f?.carrier) {this.mpcArm.delete(id); this.mpc.release(id);}
+          if (f?.carrier) {this.mpcArm.delete(id); this.mpc.release(id); this.mpcProgress.delete(id);}
           else {this.mpcArm.set(id, tgt);}
         } else {
           this.mpcArm.delete(id);
           this.mpc.release(id);
+          this.mpcProgress.delete(id);
         }
         // Income in reach — a nugget the bot could realistically touch
         // lowers the spend reserve (refill is basically planned).
@@ -722,7 +725,7 @@ hurtCount += 1;
       const sh = this.room.moveSim.simState(id);
       const mpcTgt = this.mpcArm.get(id);
       if (sh && !(mpcTgt && this.mpc.drive(id, mpcTgt))) {
-        if (mpcTgt) {this.mpcArm.delete(id); this.mpc.release(id); this.driveMove(id, p, out, sh, dt, now);}
+        if (mpcTgt) {this.mpcArm.delete(id); this.mpc.release(id); this.mpcProgress.delete(id); this.driveMove(id, p, out, sh, dt, now);}
         else {this.driveMove(id, p, out, sh, dt, now);}
       } else if (sh) {
         // MPC owns inputs; the position commit still mirrors driveMove —
@@ -746,6 +749,18 @@ hurtCount += 1;
             this.room.moveSim.structureTop(p.position.x, p.position.z),
             this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y)),
         }, now);
+        // Stuck-run watchdog: divergence only kills OFF-LINE runs — a bot
+        // pinned against a wall ON its track replays forward+ski into it
+        // forever (vmax=0, reads diverged=false). Net <3m over 5s of MPC
+        // ownership → release the arm; driveMove's unstuck path resumes.
+        const prog = this.mpcProgress.get(id);
+        if (!prog) {this.mpcProgress.set(id, { x: sh.pos.x, z: sh.pos.z, t: now });}
+        else if (now - prog.t > 5000) {
+          this.mpcProgress.delete(id);
+          if (Math.hypot(sh.pos.x - prog.x, sh.pos.z - prog.z) < 3) {
+            this.mpcArm.delete(id); this.mpc.release(id);
+          }
+        }
       }
       else if (this.legacyMove(id, p, out.dest, dt)) {continue;}
       this.stageProf[4]! += performance.now() - tm2;
