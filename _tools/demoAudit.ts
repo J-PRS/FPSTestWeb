@@ -113,31 +113,40 @@ for (const [idx, fs] of byIdx) {
 }
 
 // ---- kinematic: recorded velocity vs its own displacement ---------------
-// RemoteFrames carry REALIZED vel (pos delta across the trailing sample),
-// so stated(a) must equal the displacement that produced it. A mismatch
-// means the recorder wrote vel from the wrong source/dt — physics bursts
-// (spawn pops, slams) are self-consistent in this window and stay clean.
+// RemoteFrames stamp the WIRE-claimed vel (what the server said the seat's
+// velocity was at snap time) next to the interp'd pos trail — the two can
+// legitimately diverge at collision edges for ~1-2 samples (stale claim)
+// or during renderer catch-up (rubber-band). Sustained divergence is the
+// desync signal.
 let velMismatch = 0;
 for (const [idx, fs] of byIdx) {
+  let staleClaim = 0;
   for (let i = 1; i < fs.length; i++) {
     const p = fs[i - 1]!, a = fs[i]!;
     const dt = a.timestamp - p.timestamp;
     if (dt <= 0.02) continue;
     const stated = Math.hypot(a.velX, a.velY, a.velZ);
-    if (stated <= 30) continue;
+    if (stated <= 30) {staleClaim = 0; continue;}
     // Skip dead frames and the two frames around a teleport — teleports
     // record sim vel deliberately, and a pos snap contaminates the delta.
-    if ((a.flags | p.flags) & 5) continue;
+    if ((a.flags | p.flags) & 5) {staleClaim = 0; continue;}
     const implied = Math.hypot(a.posX - p.posX, a.posY - p.posY, a.posZ - p.posZ) / dt;
     // implied > stated = renderer catch-up (interp rubber-band toward the
     // wire target — the pos trail is honest, playback lerps it anyway).
-    // implied < stated = the wire claimed speed the trail never showed —
-    // actual desync between the vel claim and real displacement.
+    // implied < stated = the wire claimed speed the trail never showed.
+    // A stale claim survives ~1-2 samples after a landing/collision edge,
+    // so only a SUSTAINED under-trail (3+ frames) is real desync.
     if (implied < stated * 0.7) {
-      bad('kinematic', `roster ${idx} states vel ${stated.toFixed(0)}m/s but trailed ${implied.toFixed(0)}m/s @t=${a.timestamp.toFixed(1)} (claimed speed trail never showed)`);
-    } else if (implied > stated * 1.3) {
-      velMismatch += 1;
-      if (velMismatch <= 5) {warn('kinematic', `roster ${idx} interp catch-up: trailed ${implied.toFixed(0)}m/s vs claimed ${stated.toFixed(0)}m/s @t=${a.timestamp.toFixed(1)}`);}
+      staleClaim += 1;
+      if (staleClaim === 3) {
+        bad('kinematic', `roster ${idx} states vel ${stated.toFixed(0)}m/s but trail frozen ${implied.toFixed(0)}m/s for 3+ frames @t=${a.timestamp.toFixed(1)} (sustained desync)`);
+      }
+    } else {
+      staleClaim = 0;
+      if (implied > stated * 1.3) {
+        velMismatch += 1;
+        if (velMismatch <= 5) {warn('kinematic', `roster ${idx} interp catch-up: trailed ${implied.toFixed(0)}m/s vs claimed ${stated.toFixed(0)}m/s @t=${a.timestamp.toFixed(1)}`);}
+      }
     }
   }
 }
