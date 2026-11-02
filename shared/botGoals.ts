@@ -112,8 +112,11 @@ export class BotGoals {
       // Corridor loot: a nugget on the way to the objective is nearly
       // free and worth a bump; one off the line drops to a passing whim.
       // detour = self→pickup→objective minus self→objective.
+      // Committed-only: an uncommitted bot's objective is a weight-1
+      // candidate like everything else - pricing its pickup detours
+      // against the route starves it of every off-line gem.
       let w = 0.8;
-      if (ctx.objective && ctx.pickup) {
+      if (committed && ctx.objective && ctx.pickup) {
         const detour = Math.sqrt(distSq(pos, ctx.pickup)) + Math.sqrt(distSq(ctx.pickup, ctx.objective)) - Math.sqrt(distSq(pos, ctx.objective));
         w = detour < 12 ? 1.1 : detour > 30 ? 0.3 : w;
       }

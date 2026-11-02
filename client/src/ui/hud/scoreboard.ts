@@ -327,7 +327,7 @@ export class Scoreboard {
 
   }
 
-  /** Offline (bots-only) boards have no meaningful latency column — hide
+  /** Offline (bots-only) boards have no meaningful latency column - hide
    *  the whole PING column via the root class rather than per-cell. */
   setPingVisible(v: boolean): void {
     this.root.classList.toggle('sb-noping', !v);

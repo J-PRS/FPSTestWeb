@@ -236,7 +236,7 @@ export class HUD {
       if (this.lastClassicKey !== 'off') { this.lastClassicKey = 'off'; this.classicScore.style.display = 'none'; }
       return;
     }
-    // Headhunt/team modes own this strip too — when teamScore is live it
+    // Headhunt/team modes own this strip too - when teamScore is live it
     // wins, or the "0 - 0" line overlaps the ALPHA/BRAVO readout.
     if (this.lastTeamScore !== 'off' && this.lastTeamScore !== '') {this.classicScore.style.display = 'none'; return;}
     this.classicScore.style.display = 'block';

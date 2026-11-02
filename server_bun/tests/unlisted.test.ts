@@ -49,7 +49,7 @@ describe('unlisted rooms', () => {
     }
   });
 
-  it('a switchRoom hop mints unlisted when asked, and can join one by name', () => {
+  it('a switchRoom hop mints unlisted when asked, and can join one by name', async () => {
     const gs = new GameServer();
     const peek = gs as unknown as Peek;
     try {
@@ -64,10 +64,15 @@ describe('unlisted rooms', () => {
       expect((peek.listRooms() as { name: string }[]).map(r => r.name)).not.toContain('vip');
 
       // A friend hopping BY NAME lands inside it — unlisted hides the room
-      // from browse, never from a targeted join.
+      // from browse, never from a targeted join. Minted-terrain hops seat
+      // when the field lands (buried-spawn gate), so poll for the seat
+      // rather than asserting synchronously.
       const ws2 = fakeWs();
       gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'lobby' }));
       gs.onMessage(ws2, JSON.stringify({ type: 'switchRoom', room: 'vip' }));
+      for (let i = 0; i < 100 && !vip.players.getPlayer('p2'); i++) {
+        await new Promise(r => setTimeout(r, 20));
+      }
       expect(vip.players.getPlayer('p2')).toBeTruthy();
     } finally {
       peek.tickLoop.stop();
