@@ -338,5 +338,6 @@
     "relief": 208.5,
     "fmin": 0.0
   },
-  "terrainTex": "t1/snowblind_t1/albedo.webp"
+  "terrainTex": "t1/snowblind_t1/albedo.webp",
+  "_notes": "T1 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 208m, sd 37.2m, sat 0%]"
 }

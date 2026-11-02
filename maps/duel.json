@@ -28,11 +28,22 @@
   "heightScale": 1.2,
   "terrainPreset": 5,
   "fog": {
-    "color": [0.78, 0.66, 0.50],
+    "color": [
+      0.78,
+      0.66,
+      0.5
+    ],
     "distance": 160.0,
     "visible": 820.0
   },
-  "atmosphere": { "rayleigh": 1.0, "mie": 2.2, "sunIntensity": 1.05 },
-  "weather": { "dust": 1.2 },
-  "hidden": true
+  "atmosphere": {
+    "rayleigh": 1.0,
+    "mie": 2.2,
+    "sunIntensity": 1.05
+  },
+  "weather": {
+    "dust": 1.2
+  },
+  "hidden": true,
+  "_notes": "1v1 duel spec reusing rimrock terrain. [audit: rel 150m, sd 16.9m, sat 0%]"
 }

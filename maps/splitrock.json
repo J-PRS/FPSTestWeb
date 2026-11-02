@@ -4,28 +4,96 @@
   "bots": 8,
   "botFill": 12,
   "bases": {
-    "alpha": { "x": -320, "y": 0, "z": 0 },
-    "bravo": { "x": 320, "y": 0, "z": 0 }
+    "alpha": {
+      "x": -320,
+      "y": 0,
+      "z": 0
+    },
+    "bravo": {
+      "x": 320,
+      "y": 0,
+      "z": 0
+    }
   },
   "teamSpawns": {
     "alpha": [
-      { "x": -320, "y": 0, "z": -30, "r": 50 },
-      { "x": -340, "y": 0, "z": 40, "r": 50 }
+      {
+        "x": -320,
+        "y": 0,
+        "z": -30,
+        "r": 50
+      },
+      {
+        "x": -340,
+        "y": 0,
+        "z": 40,
+        "r": 50
+      }
     ],
     "bravo": [
-      { "x": 320, "y": 0, "z": -30, "r": 50 },
-      { "x": 340, "y": 0, "z": 40, "r": 50 }
+      {
+        "x": 320,
+        "y": 0,
+        "z": -30,
+        "r": 50
+      },
+      {
+        "x": 340,
+        "y": 0,
+        "z": 40,
+        "r": 50
+      }
     ]
   },
   "spawns": [
-    { "x": 200, "y": 0, "z": 0, "r": 40 },
-    { "x": -200, "y": 0, "z": 0, "r": 40 },
-    { "x": 0, "y": 0, "z": -200, "r": 40 },
-    { "x": 0, "y": 0, "z": 200, "r": 40 },
-    { "x": 141, "y": 0, "z": -141, "r": 40 },
-    { "x": -141, "y": 0, "z": -141, "r": 40 },
-    { "x": 141, "y": 0, "z": 141, "r": 40 },
-    { "x": -141, "y": 0, "z": 141, "r": 40 }
+    {
+      "x": 200,
+      "y": 0,
+      "z": 0,
+      "r": 40
+    },
+    {
+      "x": -200,
+      "y": 0,
+      "z": 0,
+      "r": 40
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -200,
+      "r": 40
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 200,
+      "r": 40
+    },
+    {
+      "x": 141,
+      "y": 0,
+      "z": -141,
+      "r": 40
+    },
+    {
+      "x": -141,
+      "y": 0,
+      "z": -141,
+      "r": 40
+    },
+    {
+      "x": 141,
+      "y": 0,
+      "z": 141,
+      "r": 40
+    },
+    {
+      "x": -141,
+      "y": 0,
+      "z": 141,
+      "r": 40
+    }
   ],
   "structures": [],
   "terrain": "splitrock.bin",
@@ -33,11 +101,22 @@
   "tileSize": 2048,
   "terrainPreset": 5,
   "fog": {
-    "color": [0.60, 0.50, 0.38],
+    "color": [
+      0.6,
+      0.5,
+      0.38
+    ],
     "distance": 150.0,
     "visible": 600.0
   },
-  "atmosphere": { "rayleigh": 1.0, "mie": 2.0, "sunIntensity": 0.8, "starIntensity": 0.3 },
-  "weather": { "dust": 0.6 },
-  "_notes": "Splitrock = rift's theme rebuilt without its sealed boreholes (terrainPreset 5 badlands, extreme verticality). Chain (seed 31): genmap --bowl=0,0,340,0.45 --plateau=0,0,115,0.5,70 --flats=-320,0,60 --flats=320,0,60 --oct=4,9,20,44 --ridge=0.55 (deep central chasm + central mesa + two base pads) -> simrock --rocks 6 --craterDepth 10 (shallow outcrop digs only - craterDepth 40 was rift's pit source) -> simwater --drops 4000 -> simsand --amount 0.35 -> simcellular defaults -> pitfill.py masked (19,378 sealed-erosion-pit cells raised to spill height; canyon outlets untouched). heightScale 2.5."
+  "atmosphere": {
+    "rayleigh": 1.0,
+    "mie": 2.0,
+    "sunIntensity": 0.8,
+    "starIntensity": 0.3
+  },
+  "weather": {
+    "dust": 0.6
+  },
+  "_notes": "Splitrock = rift's theme rebuilt without its sealed boreholes (terrainPreset 5 badlands, extreme verticality). Chain (seed 31): genmap --bowl=0,0,340,0.45 --plateau=0,0,115,0.5,70 --flats=-320,0,60 --flats=320,0,60 --oct=4,9,20,44 --ridge=0.55 (deep central chasm + central mesa + two base pads) -> simrock --rocks 6 --craterDepth 10 (shallow outcrop digs only - craterDepth 40 was rift's pit source) -> simwater --drops 4000 -> simsand --amount 0.35 -> simcellular defaults -> pitfill.py masked (19,378 sealed-erosion-pit cells raised to spill height; canyon outlets untouched). heightScale 2.5. [audit: rel 295m, sd 42.8m, sat 0%]"
 }

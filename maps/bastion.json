@@ -886,5 +886,6 @@
         "z": 137.0
       }
     }
-  ]
+  ],
+  "_notes": "alias spec reusing slagheap terrain for a different base/structure layout. [audit: rel 125m, sd 22.8m, sat 0%]"
 }

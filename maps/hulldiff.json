@@ -316,5 +316,6 @@
       "r": 20
     }
   ],
-  "hidden": true
+  "hidden": true,
+  "_notes": "DM spec reusing raindance terrain (hull-diff testbed). [audit: rel 125m, sd 21.8m, sat 0%]"
 }

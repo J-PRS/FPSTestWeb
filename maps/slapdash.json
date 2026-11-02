@@ -634,6 +634,6 @@
         1.0
       ]
     }
-  ]
-
+  ],
+  "_notes": "T2 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 193m, sd 25.8m, sat 0%]"
 }

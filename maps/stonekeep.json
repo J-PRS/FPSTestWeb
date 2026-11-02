@@ -974,5 +974,6 @@
       }
     }
   ],
-  "hidden": true
+  "hidden": true,
+  "_notes": "keep layout reusing henge terrain. [audit: rel 125m, sd 18.7m, sat 0%]"
 }

@@ -90,5 +90,5 @@
       0.18
     ]
   },
-  "_notes": "mirage = native (non-T2) oasis: sandy dunes around a central water pool. terrainPreset 6 (coast) for sand+water bands; dust weather for desert haze. water.level 4 = h01 0.0107, matching the coast preset's water-band edge; pool floor sits at 1.5m so the disc is ~190m across, 2.5m deep."
+  "_notes": "desert hollows DM - rough field pocked with deep scattered pits, extreme heightScale 5.2. No recorded recipe. [audit: rel 168m, sd 28.4m, sat 1%]"
 }

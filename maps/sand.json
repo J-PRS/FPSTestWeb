@@ -8,5 +8,5 @@
     "z": 0,
     "radius": 200
   },
-  "_notes": "sand = default boot field (heightmap.bin), all modes"
+  "_notes": "generic test heightmap - fine noise, subtle central depression. No recorded recipe. [audit: rel 60m, sd 10.1m, sat 0%]"
 }

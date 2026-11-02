@@ -4,26 +4,80 @@
   "bots": 8,
   "botFill": 12,
   "bases": {
-    "alpha": { "x": -330, "y": 0, "z": 0 },
-    "bravo": { "x": 330, "y": 0, "z": 0 }
+    "alpha": {
+      "x": -330,
+      "y": 0,
+      "z": 0
+    },
+    "bravo": {
+      "x": 330,
+      "y": 0,
+      "z": 0
+    }
   },
   "teamSpawns": {
     "alpha": [
-      { "x": -330, "y": 0, "z": -30, "r": 42 },
-      { "x": -360, "y": 0, "z": 35, "r": 42 }
+      {
+        "x": -330,
+        "y": 0,
+        "z": -30,
+        "r": 42
+      },
+      {
+        "x": -360,
+        "y": 0,
+        "z": 35,
+        "r": 42
+      }
     ],
     "bravo": [
-      { "x": 330, "y": 0, "z": -30, "r": 42 },
-      { "x": 360, "y": 0, "z": 35, "r": 42 }
+      {
+        "x": 330,
+        "y": 0,
+        "z": -30,
+        "r": 42
+      },
+      {
+        "x": 360,
+        "y": 0,
+        "z": 35,
+        "r": 42
+      }
     ]
   },
   "spawns": [
-    { "x": -330, "y": 0, "z": 0, "r": 40 },
-    { "x": 330, "y": 0, "z": 0, "r": 40 },
-    { "x": 0, "y": 0, "z": -260 },
-    { "x": 0, "y": 0, "z": 260 },
-    { "x": -170, "y": 0, "z": 170 },
-    { "x": 170, "y": 0, "z": -170 }
+    {
+      "x": -330,
+      "y": 0,
+      "z": 0,
+      "r": 40
+    },
+    {
+      "x": 330,
+      "y": 0,
+      "z": 0,
+      "r": 40
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -260
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 260
+    },
+    {
+      "x": -170,
+      "y": 0,
+      "z": 170
+    },
+    {
+      "x": 170,
+      "y": 0,
+      "z": -170
+    }
   ],
   "structures": [],
   "terrain": "whiteout.bin",
@@ -31,11 +85,21 @@
   "tileSize": 1100,
   "terrainPreset": 3,
   "fog": {
-    "color": [0.85, 0.89, 0.95],
+    "color": [
+      0.85,
+      0.89,
+      0.95
+    ],
     "distance": 200.0,
     "visible": 900.0
   },
-  "atmosphere": { "rayleigh": 0.85, "mie": 1.6, "sunIntensity": 0.9 },
-  "weather": { "snow": 1.1 },
-  "_notes": "Whiteout = snow glacier (terrainPreset 3), long descents + cirques, ctf, snow weather"
+  "atmosphere": {
+    "rayleigh": 0.85,
+    "mie": 1.6,
+    "sunIntensity": 0.9
+  },
+  "weather": {
+    "snow": 1.1
+  },
+  "_notes": "snow dune field - smooth billow ridges under bright cap (preset 3 snow). No recorded recipe. [audit: rel 162m, sd 24.9m, sat 0%]"
 }

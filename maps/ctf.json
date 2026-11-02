@@ -14,5 +14,6 @@
     }
   },
   "terrain": "ctf.bin",
-  "hidden": true
+  "hidden": true,
+  "_notes": "original CTF test map - fine rolling field, twin small craters at center. No recorded recipe. [audit: rel 125m, sd 23.7m, sat 0%]"
 }

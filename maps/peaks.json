@@ -371,5 +371,6 @@
     "snake": 2,
     "rakk": 2
   },
-  "_creatures_notes": "Light neutral wildlife: midfield totems guard the plateau approaches, snakes lurk the flag lanes, rakks circle the pillars. Thin enough that flag runs stay primary \u00e2\u20ac\u201d creatures are hazards, not the match."
+  "_creatures_notes": "Light neutral wildlife: midfield totems guard the plateau approaches, snakes lurk the flag lanes, rakks circle the pillars. Thin enough that flag runs stay primary \u00e2\u20ac\u201d creatures are hazards, not the match.",
+  "_notes": "alpine peaks - large smooth bright domes ringed by sharp dividing ridges, CTF between summits. No recorded recipe. [audit: rel 200m, sd 32.8m, sat 0%]"
 }

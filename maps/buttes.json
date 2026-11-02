@@ -4,25 +4,78 @@
   "bots": 8,
   "botFill": 12,
   "bases": {
-    "alpha": { "x": -625, "y": 0, "z": -26 },
-    "bravo": { "x": 553, "y": 0, "z": 133 }
+    "alpha": {
+      "x": -625,
+      "y": 0,
+      "z": -26
+    },
+    "bravo": {
+      "x": 553,
+      "y": 0,
+      "z": 133
+    }
   },
   "teamSpawns": {
     "alpha": [
-      { "x": -625, "y": 0, "z": -26, "r": 50 },
-      { "x": -580, "y": 0, "z": 20, "r": 40 }
+      {
+        "x": -625,
+        "y": 0,
+        "z": -26,
+        "r": 50
+      },
+      {
+        "x": -580,
+        "y": 0,
+        "z": 20,
+        "r": 40
+      }
     ],
     "bravo": [
-      { "x": 553, "y": 0, "z": 133, "r": 50 },
-      { "x": 500, "y": 0, "z": 180, "r": 40 }
+      {
+        "x": 553,
+        "y": 0,
+        "z": 133,
+        "r": 50
+      },
+      {
+        "x": 500,
+        "y": 0,
+        "z": 180,
+        "r": 40
+      }
     ]
   },
   "spawns": [
-    { "x": -625, "y": 0, "z": -26, "r": 40 },
-    { "x": 553, "y": 0, "z": 133, "r": 40 },
-    { "x": 0, "y": 0, "z": 0, "r": 60 },
-    { "x": -200, "y": 0, "z": 350, "r": 50 },
-    { "x": 250, "y": 0, "z": -300, "r": 50 }
+    {
+      "x": -625,
+      "y": 0,
+      "z": -26,
+      "r": 40
+    },
+    {
+      "x": 553,
+      "y": 0,
+      "z": 133,
+      "r": 40
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "r": 60
+    },
+    {
+      "x": -200,
+      "y": 0,
+      "z": 350,
+      "r": 50
+    },
+    {
+      "x": 250,
+      "y": 0,
+      "z": -300,
+      "r": 50
+    }
   ],
   "structures": [],
   "terrain": "buttes.bin",
@@ -30,10 +83,16 @@
   "tileSize": 2048,
   "terrainPreset": 5,
   "fog": {
-    "color": [0.82, 0.62, 0.42],
+    "color": [
+      0.82,
+      0.62,
+      0.42
+    ],
     "distance": 220.0,
     "visible": 450.0
   },
-  "weather": { "dust": 0.45 },
-  "_notes": "Buttes = Monument-Valley-idea isolated towers on a carved plain (terrainPreset 5 badlands). Sim chain: genmap (7 plateau stamps r45-90, lift 0.45-0.6, steep fall 30-45 — tower walls, not ramps; NW bowl for a dry basin) -> simwater (5k drops, sparse channels) -> simsand (0.25, repose 32, scree aprons hug butte bases) -> simcellular (18p, ridgeBoost 0.1 keeps rims) -> simterrace (step 14m edge 0.15 — strata rings on every tower). Bases sit on the two biggest butte tops — APPROXIMATE off the hillshade, tune in maplab; butte-top flag stands need the top flat checked in-game (terrace tops ~40-80m across). Canyon rims run N and S so the plain is the arena floor."
+  "weather": {
+    "dust": 0.45
+  },
+  "_notes": "Buttes = Monument-Valley-idea isolated towers on a carved plain (terrainPreset 5 badlands). Sim chain: genmap (7 plateau stamps r45-90, lift 0.45-0.6, steep fall 30-45 \u00e2\u20ac\u201d tower walls, not ramps; NW bowl for a dry basin) -> simwater (5k drops, sparse channels) -> simsand (0.25, repose 32, scree aprons hug butte bases) -> simcellular (18p, ridgeBoost 0.1 keeps rims) -> simterrace (step 14m edge 0.15 \u00e2\u20ac\u201d strata rings on every tower). Bases sit on the two biggest butte tops \u00e2\u20ac\u201d APPROXIMATE off the hillshade, tune in maplab; butte-top flag stands need the top flat checked in-game (terrace tops ~40-80m across). Canyon rims run N and S so the plain is the arena floor. [audit: rel 162m, sd 24.7m, sat 0%]"
 }

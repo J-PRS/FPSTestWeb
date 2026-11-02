@@ -91,5 +91,6 @@
     "max": 0
   },
   "terrain": "pit.bin",
-  "hidden": true
+  "hidden": true,
+  "_notes": "duel arena - flat field with a small double pit at center. No recorded recipe. [audit: rel 125m, sd 27.5m, sat 0%]"
 }

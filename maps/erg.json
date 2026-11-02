@@ -25,5 +25,5 @@
     "distance": 220,
     "visible": 650
   },
-  "_notes": "erg = dune sea. tileSize 1300 + rebaked field (elong 2, damped high octaves, warp 0.8 — kills the glitch-stripe read); heightScale 0.85 = ~106m relief for real ski lines; arena 380 + creatures keep the hunt focal."
+  "_notes": "dune sea - long sinuous slip-face ridges, proper erg morphology at low heightScale (0.85). nuggets mode. No recorded recipe. [audit: rel 106m, sd 20.6m, sat 0%]"
 }

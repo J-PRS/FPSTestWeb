@@ -4,25 +4,75 @@
   "bots": 10,
   "botFill": 12,
   "spawns": [
-    { "x": -110, "y": 0, "z": 0, "r": 34 },
-    { "x": 110, "y": 0, "z": 0, "r": 34 },
-    { "x": 0, "y": 0, "z": -110, "r": 34 },
-    { "x": 0, "y": 0, "z": 110, "r": 34 },
-    { "x": -78, "y": 0, "z": -78, "r": 34 },
-    { "x": 78, "y": 0, "z": -78, "r": 34 },
-    { "x": -78, "y": 0, "z": 78, "r": 34 },
-    { "x": 78, "y": 0, "z": 78, "r": 34 }
+    {
+      "x": -110,
+      "y": 0,
+      "z": 0,
+      "r": 34
+    },
+    {
+      "x": 110,
+      "y": 0,
+      "z": 0,
+      "r": 34
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -110,
+      "r": 34
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 110,
+      "r": 34
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": -78,
+      "r": 34
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": -78,
+      "r": 34
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": 78,
+      "r": 34
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": 78,
+      "r": 34
+    }
   ],
   "structures": [],
   "terrain": "coulee.bin",
   "heightScale": 1.1,
   "terrainPreset": 8,
   "fog": {
-    "color": [0.74, 0.66, 0.52],
+    "color": [
+      0.74,
+      0.66,
+      0.52
+    ],
     "distance": 170.0,
     "visible": 850.0
   },
-  "atmosphere": { "rayleigh": 1.0, "mie": 2.0, "sunIntensity": 1.05 },
-  "weather": { "dust": 0.8 },
-  "_notes": "Coulee = plateau cut by canyon gullies (terrainPreset 8), grass tops over earthen walls over sand floors, dm"
+  "atmosphere": {
+    "rayleigh": 1.0,
+    "mie": 2.0,
+    "sunIntensity": 1.05
+  },
+  "weather": {
+    "dust": 0.8
+  },
+  "_notes": "densely channeled badlands - sharp carved gullies across the whole field with flat base pads punched in. preset 8 canyon. No recorded recipe. [audit: rel 138m, sd 26.0m, sat 1%]"
 }

@@ -346,5 +346,6 @@
     "relief": 170.5,
     "fmin": -5.5
   },
-  "terrainTex": "t1/stonehenge_t1/albedo.webp"
+  "terrainTex": "t1/stonehenge_t1/albedo.webp",
+  "_notes": "T1 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 170m, sd 34.0m, sat 0%]"
 }

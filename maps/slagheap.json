@@ -273,5 +273,6 @@
     "max": 60
   },
   "terrain": "slagheap.bin",
-  "hidden": true
+  "hidden": true,
+  "_notes": "DM arena - flat field with a ring of small pits around center. No recorded recipe. [audit: rel 125m, sd 22.8m, sat 0%]"
 }

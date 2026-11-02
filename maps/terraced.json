@@ -4,14 +4,54 @@
   "bots": 10,
   "botFill": 12,
   "spawns": [
-    { "x": -110, "y": 0, "z": 0, "r": 34 },
-    { "x": 110, "y": 0, "z": 0, "r": 34 },
-    { "x": 0, "y": 0, "z": -110, "r": 34 },
-    { "x": 0, "y": 0, "z": 110, "r": 34 },
-    { "x": -78, "y": 0, "z": -78, "r": 34 },
-    { "x": 78, "y": 0, "z": -78, "r": 34 },
-    { "x": -78, "y": 0, "z": 78, "r": 34 },
-    { "x": 78, "y": 0, "z": 78, "r": 34 }
+    {
+      "x": -110,
+      "y": 0,
+      "z": 0,
+      "r": 34
+    },
+    {
+      "x": 110,
+      "y": 0,
+      "z": 0,
+      "r": 34
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -110,
+      "r": 34
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 110,
+      "r": 34
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": -78,
+      "r": 34
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": -78,
+      "r": 34
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": 78,
+      "r": 34
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": 78,
+      "r": 34
+    }
   ],
   "structures": [],
   "terrain": "terraced.bin",
@@ -19,11 +59,21 @@
   "heightScale": 2,
   "terrainPreset": 5,
   "fog": {
-    "color": [0.78, 0.66, 0.50],
+    "color": [
+      0.78,
+      0.66,
+      0.5
+    ],
     "distance": 170.0,
     "visible": 850.0
   },
-  "atmosphere": { "rayleigh": 1.0, "mie": 2.0, "sunIntensity": 1.05 },
-  "weather": { "dust": 0.9 },
-  "_notes": "Terraced = jittered bench steps (terrainPreset 5 badlands strata reads as ledges), dm"
+  "atmosphere": {
+    "rayleigh": 1.0,
+    "mie": 2.0,
+    "sunIntensity": 1.05
+  },
+  "weather": {
+    "dust": 0.9
+  },
+  "_notes": "hard-edged parallel bench ridges - thin linear terraces (preset 5 badlands). No recorded recipe. [audit: rel 142m, sd 22.7m, sat 0%]"
 }

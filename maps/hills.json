@@ -3,25 +3,67 @@
   "bots": 10,
   "botFill": 12,
   "spawns": [
-    { "x": -110, "y": 0, "z": 0 },
-    { "x": 110, "y": 0, "z": 0 },
-    { "x": 0, "y": 0, "z": -110 },
-    { "x": 0, "y": 0, "z": 110 },
-    { "x": -78, "y": 0, "z": -78 },
-    { "x": 78, "y": 0, "z": -78 },
-    { "x": -78, "y": 0, "z": 78 },
-    { "x": 78, "y": 0, "z": 78 }
+    {
+      "x": -110,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "x": 110,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -110
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 110
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": -78
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": -78
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": 78
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": 78
+    }
   ],
   "structures": [],
   "terrain": "hills.bin",
   "heightScale": 1.5,
   "terrainPreset": 2,
   "fog": {
-    "color": [0.64, 0.72, 0.80],
-    "horizon": [0.55, 0.68, 0.85],
+    "color": [
+      0.64,
+      0.72,
+      0.8
+    ],
+    "horizon": [
+      0.55,
+      0.68,
+      0.85
+    ],
     "distance": 160.0,
     "visible": 700.0
   },
-  "weather": { "ash": 0.35 },
-  "_notes": "hills = rolling grassland field (terrainPreset 2), open dm, no structures. Cool grey-blue haze (green -> grey -> blue); the explicit weather block drops the default ember/ash trio (neutral drift only). 2026-10-28: bin was MISSING from the tree (map silently fell back to the default field) — rebaked with genhills: per-octave integer shears + per-axis cells kill the axis-aligned diamond lattice; plains/belts are regional classes (smooth meadow vs ridged mountain wall) with octave amplitudes tilted to big features for long descents. terrainstats (hs 1.5): 21deg mean slope / 6% steep vs escalade's 33deg/26%."
+  "weather": {
+    "ash": 0.35
+  },
+  "_notes": "rolling hills DM - bold smooth sweeping ridgelines, soft shale-like ridges (preset 2 grassland). No recorded recipe. [audit: rel 188m, sd 28.0m, sat 0%]"
 }

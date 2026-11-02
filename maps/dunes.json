@@ -311,5 +311,5 @@
       }
     ]
   },
-  "_notes": "dunes = slagheap terrain at 1.5x verticality; flag homes re-snap to ground"
+  "_notes": "dunes = slagheap terrain at 1.5x verticality; flag homes re-snap to ground [audit: rel 188m, sd 34.2m, sat 0%]"
 }

@@ -94,5 +94,6 @@
     }
   ],
   "terrain": "quicksand.bin",
-  "interiors": []
+  "interiors": [],
+  "_notes": "TDM quicksand basin - near-saturated flat field (heights pinned high), relief only at the corner mounds. No recorded recipe. [audit: rel 125m, sd 19.5m, sat 0%]"
 }

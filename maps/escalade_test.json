@@ -1407,6 +1407,6 @@
     }
   ],
   "tileSize": 2048.0,
-  "heightScale": 1.582
-
+  "heightScale": 1.582,
+  "_notes": "T2 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 198m, sd 29.5m, sat 0%]"
 }

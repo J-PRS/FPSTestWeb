@@ -250,6 +250,6 @@
     "ash": 0.8,
     "dust": 0.3
   },
-  "_notes": "Crucible = volcanic crater CTF (terrainPreset 4). Sim-sculpted: genmap (central crater + resurgent dome + ring of peaks + secondary craters) -> simrock (8 rocks + mass-wasting) -> simwater (flow erosion) -> simsand (scree) -> simcellular (weathering). Base pads on opposite rim crests, the bowl is the transit. Bowl floor carries relief \u00e2\u20ac\u201d cirques, crag field, vent plug \u00e2\u20ac\u201d so the inside is cover, not a flat pit. heightScale 1.3 = 162m relief. tileSize 2048 (native T2 scale).",
+  "_notes": "Crucible = volcanic crater CTF (terrainPreset 4). Sim-sculpted: genmap (central crater + resurgent dome + ring of peaks + secondary craters) -> simrock (8 rocks + mass-wasting) -> simwater (flow erosion) -> simsand (scree) -> simcellular (weathering). Base pads on opposite rim crests, the bowl is the transit. Bowl floor carries relief \u00e2\u20ac\u201d cirques, crag field, vent plug \u00e2\u20ac\u201d so the inside is cover, not a flat pit. heightScale 1.3 = 162m relief. tileSize 2048 (native T2 scale). [audit: rel 162m, sd 22.7m, sat 0%]",
   "tileSize": 2048
 }

@@ -333,5 +333,6 @@
     "fmin": 15.7
   },
   "terrainTex": "t1/dangerouscrossing_t1/albedo.webp",
-  "sky": "t1/dangerouscrossing_t1/sky"
+  "sky": "t1/dangerouscrossing_t1/sky",
+  "_notes": "T1 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 284m, sd 48.5m, sat 0%]"
 }

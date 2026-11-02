@@ -5,26 +5,76 @@
   "bots": 10,
   "botFill": 12,
   "spawns": [
-    { "x": -110, "y": 0, "z": 0, "r": 34 },
-    { "x": 110, "y": 0, "z": 0, "r": 34 },
-    { "x": 0, "y": 0, "z": -110, "r": 34 },
-    { "x": 0, "y": 0, "z": 110, "r": 34 },
-    { "x": -78, "y": 0, "z": -78, "r": 34 },
-    { "x": 78, "y": 0, "z": -78, "r": 34 },
-    { "x": -78, "y": 0, "z": 78, "r": 34 },
-    { "x": 78, "y": 0, "z": 78, "r": 34 }
+    {
+      "x": -110,
+      "y": 0,
+      "z": 0,
+      "r": 34
+    },
+    {
+      "x": 110,
+      "y": 0,
+      "z": 0,
+      "r": 34
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -110,
+      "r": 34
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 110,
+      "r": 34
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": -78,
+      "r": 34
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": -78,
+      "r": 34
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": 78,
+      "r": 34
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": 78,
+      "r": 34
+    }
   ],
   "structures": [],
   "terrain": "rimrock.bin",
   "heightScale": 1.2,
   "terrainPreset": 5,
   "fog": {
-    "color": [0.78, 0.66, 0.50],
+    "color": [
+      0.78,
+      0.66,
+      0.5
+    ],
     "distance": 160.0,
     "visible": 820.0
   },
-  "atmosphere": { "rayleigh": 1.0, "mie": 2.2, "sunIntensity": 1.05 },
-  "weather": { "dust": 1.2 },
+  "atmosphere": {
+    "rayleigh": 1.0,
+    "mie": 2.2,
+    "sunIntensity": 1.05
+  },
+  "weather": {
+    "dust": 1.2
+  },
   "hidden": true,
-  "_notes": "Standing headhunt-1 — rimrock ruleset + 10 bots w/ 12 fill. Mirrors rimrock.json so the fallback-minted and spec-minted rooms are identical."
+  "_notes": "Standing headhunt-1 \u00e2\u20ac\u201d rimrock ruleset + 10 bots w/ 12 fill. Mirrors rimrock.json so the fallback-minted and spec-minted rooms are identical. [audit: rel 150m, sd 16.9m, sat 0%]"
 }

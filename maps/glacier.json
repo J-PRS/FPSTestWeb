@@ -103,5 +103,5 @@
   "weather": {
     "snow": 0.7
   },
-  "_notes": "Glacier = alpine ice field (terrainPreset 3 snow/ice/rock). Bases on plateaus, deep central cirque, sim-sculpted: genmap (ridged alpine) -> simrock (6 rocks + mass-wasting) -> simwater (glacial channels) -> simsand (scree) -> simcellular (weathering). heightScale 1.5 = 187m relief. Custom skybox (maps/glacier/) + snow weather + cold blue-grey fog. No structures yet."
+  "_notes": "Glacier = alpine ice field (terrainPreset 3 snow/ice/rock). Bases on plateaus, deep central cirque, sim-sculpted: genmap (ridged alpine) -> simrock (6 rocks + mass-wasting) -> simwater (glacial channels) -> simsand (scree) -> simcellular (weathering). heightScale 1.5 = 187m relief. Custom skybox (maps/glacier/) + snow weather + cold blue-grey fog. No structures yet. [audit: rel 188m, sd 31.0m, sat 1%]"
 }

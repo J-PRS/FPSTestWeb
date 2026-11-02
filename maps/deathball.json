@@ -13,5 +13,6 @@
     "max": 60
   },
   "terrain": "deathball.bin",
-  "hidden": true
+  "hidden": true,
+  "_notes": "DM ball arena - flat field with a single central pit; ball spawns fight over the hollow. No recorded recipe. [audit: rel 125m, sd 25.3m, sat 0%]"
 }

@@ -3,22 +3,70 @@
   "bots": 10,
   "botFill": 12,
   "spawns": [
-    { "x": 74, "y": 0, "z": 31, "r": 34 },
-    { "x": 31, "y": 0, "z": 74, "r": 34 },
-    { "x": -31, "y": 0, "z": 74, "r": 34 },
-    { "x": -74, "y": 0, "z": 31, "r": 34 },
-    { "x": -74, "y": 0, "z": -31, "r": 34 },
-    { "x": -31, "y": 0, "z": -74, "r": 34 },
-    { "x": 31, "y": 0, "z": -74, "r": 34 },
-    { "x": 74, "y": 0, "z": -31, "r": 34 }
+    {
+      "x": 74,
+      "y": 0,
+      "z": 31,
+      "r": 34
+    },
+    {
+      "x": 31,
+      "y": 0,
+      "z": 74,
+      "r": 34
+    },
+    {
+      "x": -31,
+      "y": 0,
+      "z": 74,
+      "r": 34
+    },
+    {
+      "x": -74,
+      "y": 0,
+      "z": 31,
+      "r": 34
+    },
+    {
+      "x": -74,
+      "y": 0,
+      "z": -31,
+      "r": 34
+    },
+    {
+      "x": -31,
+      "y": 0,
+      "z": -74,
+      "r": 34
+    },
+    {
+      "x": 31,
+      "y": 0,
+      "z": -74,
+      "r": 34
+    },
+    {
+      "x": 74,
+      "y": 0,
+      "z": -31,
+      "r": 34
+    }
   ],
   "structures": [],
   "terrain": "wyrd.bin",
   "heightScale": 1.5,
   "terrainPreset": 9,
   "fog": {
-    "color": [0.36, 0.30, 0.56],
-    "horizon": [0.52, 0.40, 0.85],
+    "color": [
+      0.36,
+      0.3,
+      0.56
+    ],
+    "horizon": [
+      0.52,
+      0.4,
+      0.85
+    ],
     "distance": 380.0,
     "visible": 1400.0
   },
@@ -30,6 +78,8 @@
     "starIntensity": 0.5,
     "mieDirectionalG": 0.55
   },
-  "weather": { "embers": 0.6 },
-  "_notes": "wyrd = arcane elysian meadow. Preset 9 (arcane): indigo/violet fae-grass, teal + amber regions, green hollows, lilac stone, emissive ley veins. Spawns: rimrock-style 8 spheres on an R=80 ring (r=34) — engine-sampled flattest ring (mean pad spread 24m vs rimrock's own 25m); tight ring = chaos-mode action. Terrain: genhills --seed=11; ~27% steep — ski tuning open."
+  "weather": {
+    "embers": 0.6
+  },
+  "_notes": "giant central crater arena - deep bowl with gullied walls and bright lobate rims (preset 9 arcane). No recorded recipe. [audit: rel 188m, sd 50.5m, sat 15%]"
 }
