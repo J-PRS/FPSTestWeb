@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { LightningBeam, SEGS, SPARKS } from './lightningBeam.js';
+import { SEGS, SPARKS, makeGlowTexture } from './beamShared.js';
+import type { LightningBeam } from './lightningBeam.js';
 import { markProbe } from '../core/fxDiag.js';
 
 // Scene-graph assembly: crossed-ribbon core+glow+arc+chain meshes
@@ -63,7 +64,7 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
     markProbe(b.arc, { kind: 'beam', label: 'lightning:arc' });
 
     // Contact glow — bright ball pinned at the hit point
-    const glowTex = LightningBeam.makeGlowTexture();
+    const glowTex = makeGlowTexture();
     b.hitGlow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: glowTex, color: tint?.hit ?? 0xAA_DD_FF, transparent: true, opacity: 0.9,
       blending: THREE.AdditiveBlending, depthWrite: false,

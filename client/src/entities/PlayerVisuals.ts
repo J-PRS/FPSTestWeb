@@ -85,9 +85,12 @@ export class PlayerVisuals {
   // Third-person chase cam — Tribes Ascend style: camera backs out along the
   // horizontal look axis and sits a little high, aim stays at screen center,
   // and the body renders in the lower third. No shoulder offset.
-  static readonly TP_BACK = 4.2;   // boom length
-  static readonly TP_UP = 1.7;     // constant lift — keeps the body under the crosshair
-  static readonly TP_FOCUS = 180;  // camera converges on the aim point at this range
+  // Camera boom constants moved to pvCam.ts (see pvCam.ts header) to break
+  // the PlayerVisuals <-> pvCam cycle. Re-exported here for callers that
+  // referenced PlayerVisuals.TP_*.
+  static readonly TP_BACK = pvCam.TP_BACK;
+  static readonly TP_UP = pvCam.TP_UP;
+  static readonly TP_FOCUS = pvCam.TP_FOCUS;
 
   // Update camera to final position — never let it go below the terrain
   // surface, or steep slopes put the eye inside the mesh and you see the

@@ -72,14 +72,15 @@ const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 // its from→to pair. Honest skiing is ~2-4m/frame even at 30fps; 8m only
 // fires on a real snap.
 const _posPrev = new THREE.Vector3();
-let _posPrimed = false;
+import { isPosPrimed, setPosPrimed, noteLocalSnap } from './posPrimed.js';
 
 /** Authoritative reseats (respawn, correction, gameState restore, journal
  *  rewind) teleport the body by design - the frame-jump watch must not
  *  read them as physics snaps. Snap paths call this after pos.set. */
-export function noteLocalSnap(): void {
-  _posPrimed = false;
-}
+// noteLocalSnap + _posPrimed state live in posPrimed.ts (shared with
+// world.ts to avoid a value cycle). Re-export for callers that still
+// import it from gameLoop.
+export { noteLocalSnap } from './posPrimed.js';
 const JUMP_FRAME_M = 8;
 // Knocked/skied hard enough to teleport = real teleport class, but a jet
 // burst + downhill ski can legitimately clear 8m mid-frame - spam once/s
@@ -409,7 +410,7 @@ bodyN += 1;
   // server disagrees. The hold covers the whole pending window, not just
   // the swap body's execution - the seat lands before the swap starts.
   if (!isTerrainSwapPending()) {player.update(dt);}
-  if (_posPrimed) {
+  if (isPosPrimed()) {
     const jump = player.pos.distanceTo(_posPrev);
     if (jump > JUMP_FRAME_M && performance.now() - _posJumpLastAt > 1000) {
       _posJumpLastAt = performance.now();
@@ -417,7 +418,7 @@ bodyN += 1;
     }
   }
   _posPrev.copy(player.pos);
-  _posPrimed = true;
+  setPosPrimed(true);
   terrain.update(player.pos.x, player.pos.z);
   syncFog(deps, terrain);
 

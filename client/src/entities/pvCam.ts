@@ -1,5 +1,12 @@
 import * as THREE from 'three';
-import { PlayerVisuals } from './PlayerVisuals.js';
+import type { PlayerVisuals } from './PlayerVisuals.js';
+
+// Camera boom constants live here (not on PlayerVisuals) so pvCam doesn't
+// depend on PlayerVisuals at runtime - PlayerVisuals imports pvCam for
+// method delegation, so a value import here was a real cycle.
+export const TP_BACK = 4.2;   // boom length
+export const TP_UP = 1.7;     // constant lift - keeps the body under the crosshair
+export const TP_FOCUS = 180;  // camera converges on the aim point at this range
 import type { Terrain } from '../world/terrain.js';
 
 const _obTarget = new THREE.Vector3(); // observer drift target — scratch
@@ -15,13 +22,13 @@ export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, 
       // aim yaw/pitch) and frames the body, so spinning the view never moves
       // the crosshair. Camera sits on the far side of `pos` from the orbit
       // direction — drag left to walk the view around him.
-      const back = dist ?? PlayerVisuals.TP_BACK;
+      const back = dist ?? TP_BACK;
       const ax = Math.cos(orbit.pitch) * Math.sin(orbit.yaw);
       const ay = Math.sin(orbit.pitch);
       const az = Math.cos(orbit.pitch) * Math.cos(orbit.yaw);
       camera.position.set(
         pos.x - ax * back,
-        pos.y - ay * back + PlayerVisuals.TP_UP,
+        pos.y - ay * back + TP_UP,
         pos.z - az * back,
       );
       const groundAtCam = terrain.getHeight(camera.position.x, camera.position.z);
@@ -39,9 +46,9 @@ export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, 
       const ay = Math.sin(pitch);
       const az = Math.cos(pitch) * Math.cos(yaw);
       camera.position.set(
-        pos.x - ax * PlayerVisuals.TP_BACK,
-        pos.y - ay * PlayerVisuals.TP_BACK + PlayerVisuals.TP_UP,
-        pos.z - az * PlayerVisuals.TP_BACK,
+        pos.x - ax * TP_BACK,
+        pos.y - ay * TP_BACK + TP_UP,
+        pos.z - az * TP_BACK,
       );
       const groundAtCam = terrain.getHeight(camera.position.x, camera.position.z);
       if (camera.position.y < groundAtCam + 0.25) {
@@ -51,7 +58,7 @@ export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, 
       // the slight downward tilt toward YOU is what drops the body into
       // the lower third and makes it feel like a chase cam, while the
       // crosshair still lands shots at typical engagement distances
-      const f = PlayerVisuals.TP_FOCUS;
+      const f = TP_FOCUS;
       const tx = pos.x + Math.cos(pitch) * Math.sin(yaw) * f;
       const ty = pos.y + Math.sin(pitch) * f;
       const tz = pos.z + Math.cos(pitch) * Math.cos(yaw) * f;

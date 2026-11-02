@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { buildBeam } from './beamBuild.js';
+import { SEGS, SPARKS, makeGlowTexture } from './beamShared.js';
+// Re-exported for callers that referenced them on LightningBeam / lightningBeam.
+export { SEGS, SPARKS, makeGlowTexture };
 
 // Quake-style lightning gun beam — juicy version.
 // Lines are 1px forever, so the beam is TWO camera-facing triangle-strip
@@ -7,14 +10,13 @@ import { buildBeam } from './beamBuild.js';
 // midpoint jag every ~35ms. On top: an additive hit-glow sprite + a
 // particle fountain boiling continuously at the contact point — the
 // "damage is being dealt HERE" read that actually sells the beam.
-export const SEGS = 16;
 const JITTER_TIME = 0.03;
 const FADE_TIME = 0.09;
 const JAG = 0.45;            // sideways jag amplitude
 const CORE_W = 0.07;
 const GLOW_W = 0.3;
 
-export const SPARKS = 26;           // hitpoint fountain particles
+// SPARKS moved to beamShared.ts
 const SPARK_LIFE = 0.28;
 const SPARK_SPEED = 7;
 
@@ -87,23 +89,7 @@ export class LightningBeam {
     buildBeam(this, scene, tint);
   }
 
-  private static _glowTex: THREE.Texture | null = null;
-  static makeGlowTexture(): THREE.Texture {
-    if (this._glowTex) {return this._glowTex;}
-    const c = document.createElement('canvas');
-    c.height = 64;
-    c.width = c.height;
-    const ctx = c.getContext('2d')!;
-    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.3, 'rgba(180,230,255,0.8)');
-    g.addColorStop(1, 'rgba(60,140,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 64, 64);
-    this._glowTex = new THREE.CanvasTexture(c);
-    return this._glowTex;
-  }
-
+  // makeGlowTexture moved to beamShared.ts.
   /** Every frame while held. from = muzzle, to = tip, camPos for
    *  billboarding, hasContact = the tip actually landed on something —
    *  the glow sprite + spark fountain are CONTACT VFX and must not float

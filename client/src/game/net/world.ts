@@ -11,7 +11,7 @@ import type { NetworkManager } from '../../networking/NetworkManager.js';
 import type { NetCtx } from './ctx.js';
 import { reconcileDeployables } from './deployables.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
-import { noteLocalSnap } from '../gameLoop.js';
+import { noteLocalSnap } from '../posPrimed.js';
 import type { DeployKind } from '../../../../shared/deployables.js';
 import type { TeamId } from '../../../../shared/teams.js';
 import { finiteVec } from '../../../../shared/wire.js';
