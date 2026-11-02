@@ -62,6 +62,20 @@ const lobbyRows = new Map<string, LobbyRow[]>();
 const joinIps = new Map<string, { count: number; start: number }>();
 const JOIN_IP_LIMIT = 30; // every client load calls this once — looser than the workers' minting 5/min
 const JOIN_IP_WINDOW_MS = 60_000;
+/** Least-full reported room across live workers - the no-mint fallback
+ *  seat when a joiner names nothing and minting is off (FPS_CLIENT_ROOMS=0). */
+function leastFullRoom(): LobbyRow | undefined {
+  let best: LobbyRow | undefined;
+  for (const [id, rows] of lobbyRows) {
+    if (!dir.workers.get(id)?.up) {continue;}
+    for (const r of rows) {
+      if ((r.players ?? 0) >= (r.maxPlayers ?? CONFIG.maxPlayers)) {continue;}
+      if (!best || (r.players ?? 0) < (best.players ?? 0)) {best = r;}
+    }
+  }
+  return best;
+}
+
 function joinThrottleAllow(ip: string | undefined | null): boolean {
   if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
   return windowAllow(joinIps, ip, wallNow(), JOIN_IP_WINDOW_MS, JOIN_IP_LIMIT, 1024);
@@ -183,6 +197,8 @@ Bun.serve({
           }
         }
         let room = best?.name;
+        if (!room && !CONFIG.clientRooms) {room = leastFullRoom()?.name;}
+        if (!room && !CONFIG.clientRooms) {return json({ room: undefined, mode });}
         if (!room) {
           // Mint fleet-wide-unique — a name that exists on ANY worker or
           // sits in a pending claim would silently land joiners there.
@@ -197,7 +213,11 @@ Bun.serve({
         if (!w) {return json({ error: 'no workers up' }, { status: 503 });}
         return json({ room, mode });
       }
-      const room = url.searchParams.get('room') ?? undefined;
+      let room = url.searchParams.get('room') ?? undefined;
+      // No-mint fleets: a bare join must reach a worker that HAS rooms -
+      // least-CCU resolve can hand out an empty worker and the worker's
+      // no-mint join then has nothing to land in ('Server full').
+      if (!room && !CONFIG.clientRooms) {room = leastFullRoom()?.name;}
       const w = dir.resolve(room, now);
       if (!w) {return json({ error: 'no workers up' }, { status: 503 });}
       const host = url.hostname;

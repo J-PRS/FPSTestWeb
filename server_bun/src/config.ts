@@ -144,6 +144,12 @@ export const CONFIG = {
   // 404. Off in dev where the full T2 port set stays playable.
   publicBeta: envStr('FPS_PUBLIC_BETA', '0') === '1',
 
+  // Room minting is an admin privilege in public deploys: untrusted
+  // joins may only seat existing rooms (FPS_CLIENT_ROOMS=0 on the fleet).
+  // A join carries no privileged params itself - 'trusted' (adminKey)
+  // is the per-connection override for ops drivers.
+  get clientRooms(): boolean { return envStr('FPS_CLIENT_ROOMS', '1') === '1'; },
+
   // Per-type rate limits live in wire.ts beside the validators and
   // handlers — one WIRE entry is the whole contract for a message type.
 

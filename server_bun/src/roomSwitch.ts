@@ -19,6 +19,7 @@ import { roomWord as word } from './wire.ts';
 export interface SwitchHost {
   roomOfPlayer(playerId: string): Room | undefined;
   roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): Room | null;
+  hasRoom(name: string): boolean;
   removePlayerCompletely(room: Room, playerId: string, reason: string): void;
   totalPlayers(): number;
   specRooms: Map<string, Room>;
@@ -46,8 +47,12 @@ export class RoomSwitcher {
     // terrainReady): no roster entry to tear down — re-point the session
     // so the stale deferred seat dies on the roomOf check, then seat the
     // target when its field lands.
+    // Mint gate mirrors the join path: untrusted traffic may hop into an
+    // existing room, never conjure one (roomFor mints missing names).
+    const mayMint = CONFIG.clientRooms || ws.data.trusted === true;
     if (!this.host.roomOfPlayer(playerId)) {
       const msg = raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean };
+      if (!mayMint && !this.host.hasRoom(word(msg.room) ?? 'default')) {return;}
       const to = this.host.roomFor(word(msg.room) ?? 'default', word(msg.mode) ?? '', word(msg.map) ?? '',
         typeof msg.bots === 'number' && Number.isFinite(msg.bots) ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined,
         msg.unlisted === true, msg.noCreatures === true, msg.noBalls === true);
@@ -57,7 +62,7 @@ export class RoomSwitcher {
       return;
     }
 
-    const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean });
+    const target = this.switchTarget(playerId, mayMint, raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean });
     if (!target) {return;}
     const { from, to, prev } = target;
 
@@ -90,7 +95,7 @@ export class RoomSwitcher {
 
   /** Everything that can deny a hop before teardown — null means the
    *  request dies here (with the client notified when it's worth it). */
-  private switchTarget(playerId: string, msg: { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean }): { from: Room; to: Room; prev?: PlayerState } | null {
+  private switchTarget(playerId: string, mayMint: boolean, msg: { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean }): { from: Room; to: Room; prev?: PlayerState } | null {
     const name = word(msg.room) ?? 'default';
     const from = this.host.roomOfPlayer(playerId);
     if (!from) {return null;}
@@ -109,6 +114,10 @@ export class RoomSwitcher {
 
     const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
       ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
+    if (!mayMint && !this.host.hasRoom(name)) {
+      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: `no room '${name}'` });
+      return null;
+    }
     const to = this.host.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots, msg.unlisted === true, msg.noCreatures === true, msg.noBalls === true);
     if (!to) {
       from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Server full — try again shortly' });

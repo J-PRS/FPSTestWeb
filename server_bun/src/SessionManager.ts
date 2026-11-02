@@ -21,7 +21,7 @@ export interface SessionDeps {
   /** Spectator sockets aren't players  -  roomOfPlayer can't find them. */
   specRooms: Map<string, Room>;
   roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): Room | null;
-  quickRoom(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean, preferHumans?: boolean): Room | null;
+  quickRoom(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean, preferHumans?: boolean, mayMint?: boolean): Room | null;
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
   /** Drain-deploys: armed via /admin/drain  -  new joins refused (reclaims
@@ -176,6 +176,7 @@ export class SessionManager {
     // Same secret + compare as the ops routes (serverRoutes.tokEq).
     const trusted = typeof handshake.adminKey === 'string' && CONFIG.adminToken !== '' &&
       timingSafeEqual(createHash('sha256').update(handshake.adminKey).digest(), createHash('sha256').update(CONFIG.adminToken).digest());
+    ws.data.trusted = trusted;
     // Join flood guard: joins bypass the per-player RateLimiter (they ARE
     // the registration), so throttle by source IP  -  5 joins/min is generous
     // for humans, lethal for a spammer script.
@@ -194,9 +195,17 @@ export class SessionManager {
     // map/mode/bots. Missing room + nothing to mint with = the
     // matchmaker's busiest seat instead.
     const creates = joinMap !== '' || roomMode !== '' || joinBots !== undefined || unlisted;
-    const room = !creates && !this.d.rooms.has(roomName)
-      ? this.d.quickRoom(roomMode, joinMap, joinBots, noCreatures, noBalls, true)
-      : this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted, noCreatures, noBalls);
+    // Untrusted joins never mint: a name that doesn't exist (or a pick
+    // nothing reusable matched) lands in the busiest live room instead.
+    // Public deploys set FPS_CLIENT_ROOMS=0 — the join flood's room-mint
+    // side-channel closes with the same gate.
+    const mayMint = CONFIG.clientRooms || trusted;
+    let room = !creates && !this.d.rooms.has(roomName)
+      ? this.d.quickRoom(roomMode, joinMap, joinBots, noCreatures, noBalls, true, mayMint)
+      : mayMint || this.d.rooms.has(roomName)
+        ? this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted, noCreatures, noBalls)
+        : null;
+    if (!room && !mayMint) {room = this.d.quickRoom('', '', undefined, noCreatures, noBalls, true, false);}
     if (!room) {
       ws.close(1013, 'Server full');
       return;

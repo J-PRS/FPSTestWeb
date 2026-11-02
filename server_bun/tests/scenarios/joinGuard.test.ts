@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from 'bun:test';
+import { describe, expect, it, afterEach, beforeEach } from 'bun:test';
 import { SessionManager } from '../../src/SessionManager.ts';
 import { SessionRegistry } from '../../src/sessionRegistry.ts';
 import { CONFIG } from '../../src/config.ts';
@@ -128,6 +128,77 @@ describe('join guards', () => {
     await flush();
     expect(bad.closed[1]?.reason).toBe('Invalid playerId');
     expect(room.playerCount()).toBe(0);
+  });
+
+  // Mint denial: public deploys run FPS_CLIENT_ROOMS=0 — untrusted joins
+  // may seat an EXISTING room but never conjure one (the room-count
+  // side-channel under the join flood). Admin key overrides.
+  describe('mint gate (FPS_CLIENT_ROOMS=0)', () => {
+    const origEnv = process.env.FPS_CLIENT_ROOMS;
+    const origTok = CONFIG.adminToken;
+    afterEach(() => {
+      if (origEnv === undefined) {delete process.env.FPS_CLIENT_ROOMS;}
+      else {process.env.FPS_CLIENT_ROOMS = origEnv;}
+      (CONFIG as unknown as { adminToken: string }).adminToken = origTok;
+    });
+    beforeEach(() => { process.env.FPS_CLIENT_ROOMS = '0'; });
+
+    const mkMintSessions = (room: ReturnType<typeof mkRoom>) => {
+      const calls = { roomFor: [] as string[], quickMint: [] as boolean[] };
+      const playerRoom = new Map<string, typeof room>();
+      const reg = new SessionRegistry();
+      const mgr = new SessionManager({
+        rooms: new Map([[room.name, room]]), playerRoom, specRooms: new Map(),
+        roomFor: (n) => { calls.roomFor.push(n); return room; },
+        quickRoom: (_m, _mp, _b, _nc, _nb, _ph, mm) => { calls.quickMint.push(mm ?? true); return room; },
+        roomOfPlayer: (id) => room.players.getPlayer(id) ? room : undefined,
+        totalPlayers: () => playerRoom.size,
+        ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0, joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0 },
+        registry: reg,
+        departSpectator: () => false,
+        removePlayerCompletely: () => undefined,
+      });
+      return { mgr, calls };
+    };
+
+    it('an untrusted join naming a missing room lands elsewhere — no mint', () => {
+      const room = mkRoom({}, 'tdm');
+      const { mgr, calls } = mkMintSessions(room);
+      // 'create params' (map) + a name the map doesn't hold = would mint.
+      mgr.handle(fakeWs() as never, { type: 'join', playerId: 'u1', room: 'nope-9', map: 'dunes' });
+      expect(calls.roomFor).toHaveLength(0); // never minted
+      expect(calls.quickMint).toContain(false); // no-mint fallback used
+      expect(room.players.getPlayer('u1')).toBeDefined(); // still seated
+    });
+
+    it('an untrusted join naming an EXISTING room reuses it', () => {
+      const room = mkRoom({}, 'tdm');
+      const { mgr, calls } = mkMintSessions(room);
+      mgr.handle(fakeWs() as never, { type: 'join', playerId: 'u2', room: room.name, map: 'dunes' });
+      expect(calls.roomFor).toEqual([room.name]); // reuse is not a mint
+      expect(room.players.getPlayer('u2')).toBeDefined();
+    });
+
+    it('the admin key mints even with the gate closed', () => {
+      (CONFIG as unknown as { adminToken: string }).adminToken = 'ops-secret';
+      const room = mkRoom({}, 'tdm');
+      const { mgr, calls } = mkMintSessions(room);
+      mgr.handle(fakeWs() as never, { type: 'join', playerId: 'op1', room: 'op-9', map: 'dunes', adminKey: 'ops-secret' });
+      expect(calls.roomFor).toEqual(['op-9']);
+      expect(room.players.getPlayer('op1')).toBeDefined();
+    });
+
+    it('untrusted quick-joins pass mayMint=false; trusted pass true', () => {
+      (CONFIG as unknown as { adminToken: string }).adminToken = 'ops-secret';
+      const room = mkRoom({}, 'tdm');
+      const { mgr, calls } = mkMintSessions(room);
+      // Bare joins to names the map doesn't hold take the quickRoom path.
+      mgr.handle(fakeWs() as never, { type: 'join', playerId: 'u3', room: 'missing' });
+      mgr.handle(fakeWs() as never, { type: 'join', playerId: 'op2', room: 'missing2', adminKey: 'ops-secret' });
+      expect(calls.quickMint).toEqual([false, true]);
+      expect(room.players.getPlayer('u3')).toBeDefined();
+      expect(room.players.getPlayer('op2')).toBeDefined();
+    });
   });
 
   // The seat caps are the last wall between a join flood and a packed

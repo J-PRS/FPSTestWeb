@@ -40,6 +40,9 @@ export interface WebSocketData {
    *  127.0.0.1, so upgrade stamps the last X-Forwarded-For hop (the same
    *  rule serverRoutes uses for ops auth: XFF only when peer is loopback). */
   clientIp?: string;
+  /** Join carried the ops admin key - the mint/ops override that survives
+   *  the session for mid-match surfaces like switchRoom. */
+  trusted?: boolean;
 }
 
 export interface PlayerState {

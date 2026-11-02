@@ -167,7 +167,7 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
       const noCreatures = url.searchParams.get('nocreatures') === '1';
       const noBalls = url.searchParams.get('noballs') === '1';
       const preferHumans = url.searchParams.get('humans') === '1';
-      const room = ctx.gameServer.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans);
+      const room = ctx.gameServer.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans, CONFIG.clientRooms);
       if (!room) {return corsResponse('Server full', { status: 503 });}
       return json({ room: room.name, mode: room.mode });
     },

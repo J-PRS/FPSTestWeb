@@ -16,7 +16,9 @@ Status and index: `readme.md`. HTTPS: `dns-https.md`. WebTransport: `webtranspor
   in sync when adding vars. Keys: `FPS_PORT`, `FPS_ADMIN_TOKEN`,
   `FPS_PUBLIC_BETA`, `FPS_WT_CERT`, `FPS_WT_KEY`, `FPS_WT_ADVERTISE_PORT=443`,
   `FPS_UDP_PORT=9898` (2026-10-27 — volatile datagram lane for the native shell;
-  NSG `anabatic-sl` carries the UDP 9898 ingress). Never print values.
+  NSG `anabatic-sl` carries the UDP 9898 ingress),
+  `FPS_CLIENT_ROOMS=0` (2026-11-02 — untrusted joins may only seat existing
+  rooms; minting stays with the admin key). Never print values.
 - Log: `~/kribes/server.log`.
 - Content gates: balls and creatures are OFF by default (PvP server). `FPS_ALLOW_BALLS=1` and
   `FPS_ALLOW_CREATURES=1` in `server.env` let clients request them again (for coop or offline-style play later).

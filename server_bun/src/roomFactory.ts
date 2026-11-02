@@ -234,7 +234,7 @@ export class RoomFactory {
    *  gates must ride the mint too — joining the freshly picked name
    *  with noBalls afterwards is a no-op (first joiner defines), so a
    *  bare quickRoom would silently ignore the host's toggles. */
-  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false): Room | null {
+  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false, mayMint = true): Room | null {
     let best: Room | undefined = undefined;
     let bestHumans = -1;
     for (const room of this.host.rooms.values()) {
@@ -262,8 +262,12 @@ export class RoomFactory {
       }
       if (!best || room.playerCount() > best.playerCount()) {best = room;}
     }
-    if (preferHumans && bestHumans < 0) {return this.quickRoom(mode, map, bots, noCreatures, noBalls);}
+    if (preferHumans && bestHumans < 0) {return this.quickRoom(mode, map, bots, noCreatures, noBalls, false, mayMint);}
     if (best) {return best;}
+    // Public deploys deny mints to untrusted traffic - the join falls back
+    // to the caller's no-mint retry or 'Server full' instead of growing
+    // the room set per request param.
+    if (!mayMint) {return null;}
     // Empty-server join still lands in a REAL match — pick the busiest
     // room (liveliest, not emptiest); if none exists, mint on the
     // default map so the joiner never gets a spec-less arena with

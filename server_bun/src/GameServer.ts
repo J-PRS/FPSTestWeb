@@ -123,7 +123,7 @@ export class GameServer {
       playerRoom: this.playerRoom,
       specRooms: this.specRooms,
       roomFor: (n, m, mp, b, u, nc, nb): Room | null => this.factory.roomFor(n, m, mp, b, u, nc, nb),
-      quickRoom: (m, mp, b, nc, nb, ph): Room | null => this.factory.quickRoom(m, mp ?? '', b, nc ?? false, nb ?? false, ph ?? false),
+      quickRoom: (m, mp, b, nc, nb, ph, mm): Room | null => this.factory.quickRoom(m, mp ?? '', b, nc ?? false, nb ?? false, ph ?? false, mm ?? true),
       roomOfPlayer: (id): Room | undefined => this.roomOfPlayer(id),
       totalPlayers: (): number => opsTotalPlayers(this),
       draining: this.draining,
@@ -144,6 +144,7 @@ export class GameServer {
     this.switcher = new RoomSwitcher({
       roomOfPlayer: (id): Room | undefined => this.roomOfPlayer(id),
       roomFor: (n, m, mp, b, u, nc, nb): Room | null => this.factory.roomFor(n, m, mp, b, u, nc, nb),
+      hasRoom: (n): boolean => this.rooms.has(n),
       removePlayerCompletely: (r, id, reason): void => this.removePlayerCompletely(r, id, reason),
       totalPlayers: (): number => opsTotalPlayers(this),
       specRooms: this.specRooms,
@@ -257,8 +258,8 @@ export class GameServer {
 
   totalPlayers(): number { return opsTotalPlayers(this); }
 
-  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false): Room | null {
-    return this.factory.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans);
+  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false, mayMint = true): Room | null {
+    return this.factory.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans, mayMint);
   }
 
   /** Route guard: does maps/<name>.json resolve? The catalog negative-
