@@ -149,3 +149,30 @@ are already spread; the shared kernel/steal budget is the bound).
   driver fires at 300-1200m targets; claim-path CPU + log spam)
 - drain-deploys (research doc only — deploys still hard-restart)
 - Bun-TLS experiment for the ~1.3-1.5k box
+
+## Addendum 2026-11-02 - Bun-TLS measured: the hypothesis holds
+
+A/B on the box (thin Bun ws sink, identical traffic: 500 conns x
+20 msg/s x 450B = 10k msgs/s inbound + 2.5k/s echo replies):
+
+| path | server-side CPU |
+|---|---|
+| wss -> Caddy -> ws:8401 | ~38% (Caddy 27.7 top + echo 10.6 cpuMs) |
+| wss -> Bun-TLS:8443 direct | ~14% (single process, TLS in uWS) |
+| plain ws:8401 | ~11% (floor) |
+
+Net: Bun-TLS adds ~3.5% inside the process vs plaintext but removes
+the whole Caddy process + double kernel copy - ~24% of a core at
+10k msgs/s, scaling with bytes (egress is heavier than this bench's
+inbound, so real saving trends toward the ~0.9 core the production
+top showed). Consistent with the est. 1.3-1.5k ceiling.
+
+Scripts: `_tools/tlsbench/{echow,spamws}.ts`; cert read directly from
+`~opc/.local/share/caddy/certificates/.../play.jprice.app.{crt,key}`
+(Caddy runs as opc). Caveats: loopback not WAN (same for both paths),
+inbound-weighted.
+
+Productionization sketch: workers take FPS_TLS_PORT + cert paths on
+the same listeners (server.ts serve() opts are reusable), NSG ingress
+per worker port, matchmaker host:port mode already exists
+(FPS_FLEET_PATH off), Caddy keeps :443 for matchmaker/metrics only.
