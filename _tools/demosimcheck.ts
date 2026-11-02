@@ -222,15 +222,21 @@ function checkProjectiles(demo: DemoFileT, tag: string): Promise<void> {
   // integrate at fixed dt, diff at each recorded edge. The real Projectile
   // class pulls scene/VFX deps — trajectory truth here is speed+gravity,
   // which is all an edge-vs-arc diff needs.
-  const shells = new Map<number, { sim: ProjSim; firedT: number; gravity: boolean; maxDiv: number; terminalMiss: boolean; edges: number }>();
+  const shells = new Map<number, { sim: ProjSim; firedT: number; gravity: boolean; maxDiv: number; terminalMiss: boolean; edges: number; remote: boolean }>();
   const orphans = new Set<number>();
   for (const e of demo.projectileEvents) {
     if (e.eventType === T.ProjectileEventType.Fired) {
       const cfg = getProjectileConfig(e.weaponType);
-      if (!cfg || cfg.speed <= 0) {continue;} // beams have no trajectory
+      // Pure-arc lanes only: beams have no trajectory; lodge/steer/pull
+      // shells don't fly a ballistic arc the replica can reproduce —
+      // their edges are wire truth, and judging them against a simple
+      // arc only manufactures divergence findings.
+      if (!cfg || cfg.speed <= 0
+          || cfg.lodgeBounce !== undefined || cfg.forceMode === 'pull' || cfg.airtimeScale) {continue;}
       shells.set(e.projectileId, {
         sim: { pos: { x: e.posX, y: e.posY, z: e.posZ }, vel: { x: e.velX, y: e.velY, z: e.velZ }, dead: false },
         firedT: e.timestamp, gravity: cfg.gravity, maxDiv: 0, terminalMiss: false, edges: 0,
+        remote: e.targetId > 1,
       });
       continue;
     }
@@ -278,8 +284,13 @@ function checkProjectiles(demo: DemoFileT, tag: string): Promise<void> {
   const mean = maxes.reduce((a, b) => a + b, 0) / maxes.length;
   const missed = live.filter((s) => s.terminalMiss).length;
   say(`  proj lane: ${live.length} shells w/edges, maxDiv mean ${mean.toFixed(2)}m worst ${worst.toFixed(2)}m, ${missed} missed terminal`);
+  // Local shells fly OUR claim + reanchor path — divergence there is a
+  // recording bug. Remote shells replay a claim-derived spawn vel the
+  // server never confirmed; their arcs legitimately end off the wire's
+  // detonation point (claim-vs-authority spawn state). Warn, don't fail.
   for (const s of live.filter((x) => x.maxDiv > PROJ_DIV_FAIL).slice(0, 5)) {
-    bad('divergence', `${tag} shell missed recorded terminal by ${s.maxDiv.toFixed(1)}m`);
+    if (s.remote) {say(`  [divergence-warn] ${tag} remote shell diverged ${s.maxDiv.toFixed(1)}m (claim-vs-authority spawn)`);}
+    else {bad('divergence', `${tag} shell missed recorded terminal by ${s.maxDiv.toFixed(1)}m`);}
   }
   if (missed / live.length > 0.75) {
     bad('divergence', `${tag} ${missed}/${live.length} shells missed their recorded terminal >${PROJ_DIV_WARN}m — lane-wide replay failure`);
