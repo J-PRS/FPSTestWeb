@@ -35,6 +35,7 @@ import type { BotRole } from '../../shared/flagGoals.ts';
 import { BotRoster } from './botRoster.ts';
 import { driveMove as driveMoveInto, legacyMove as legacyMoveInto } from './botDrive.ts';
 import { BotMpc } from './botMpc.ts';
+import { BotGreedy } from './botGreedy.ts';
 import { simNow } from './simClock.ts';
 import { wallNow } from './wallClock.ts';
 import { botRand } from '../../shared/botRand.ts';
@@ -88,7 +89,11 @@ export class ServerBots {
     this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id): void => this.untrack(id), ServerBots.THINK_DIV);
     this.sense = new ServerBotSenses(room, field, this.loadouts, this.roster.roleInfo, this.foeNear);
     this.sense.routing.sweatOf = (id): number => this.brains.get(id)?.sweatLevel ?? 0;
-    this.mpc = new BotMpc(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s));
+    // FPS_GREEDY: swap the committed-run driver to the path-free
+    // rollout pilot — same drive/release contract, same arm map.
+    this.mpc = process.env.FPS_GREEDY
+      ? new BotGreedy(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s))
+      : new BotMpc(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s));
   }
 
   /** The committed-run option: while a capper is outbound on the enemy
@@ -96,7 +101,7 @@ export class ServerBots {
    *  reactive stack's grabV plateau (~20 m/s vs 61-94 provable) is a
    *  horizon problem senses can't see past (2026-10-16_CAPPER_REACTIVE_
    *  LIMITS.md). Armed per think on the ctx flags; released on carry. */
-  private mpc: BotMpc;
+  private mpc: BotMpc | BotGreedy;
   private readonly mpcArm = new Map<string, BotVec>();
   /** MPC progress sampler — the watchdog seeds/compares net travel. */
   private readonly mpcProgress = new Map<string, { x: number; z: number; t: number }>();
