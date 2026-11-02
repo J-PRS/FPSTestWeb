@@ -29,8 +29,11 @@ if (DRIVER === 'greedy') {
 let grabs = 0, caps = 0;
 const armSpeed = new Map<string, { n: number; sum: number; max: number }>();
 let armSamples = 0;
+// Grabs read the flag sim's own state transitions (carried edges) —
+// there is no flagGrab event; flagUpdate is the only broadcast.
+const carry = new Map<string, string>();
+const lastState = new Map<string, string>();
 let msgs: ServerMessage[] = [];
-(room.connections as unknown as { broadcast: (m: ServerMessage) => void }).broadcast = ((orig => (m: ServerMessage): void => { msgs.push(m); }) as never)(0 as never);
 const origBc = room.connections.broadcast.bind(room.connections);
 room.connections.broadcast = ((m: ServerMessage): void => { msgs.push(m); origBc(m); }) as typeof room.connections.broadcast;
 
@@ -45,9 +48,18 @@ for (let t = 0; t < SIM_S; t += 0.05) {
     armSpeed.set(id, a);
     armSamples += 1;
   }
+  for (const [team, f] of room.flags!.flags) {
+    const prev = lastState.get(team);
+    if (f.state === 'carried' && f.carrier && carry.get(team) !== f.carrier) {
+      grabs += 1;
+      carry.set(team, f.carrier);
+    } else if (f.state !== 'carried' && prev === 'carried') {
+      carry.delete(team);
+    }
+    lastState.set(team, f.state);
+  }
   while (msgs.length) {
     const m = msgs.shift()!;
-    if (m.type === 'flagGrab') {grabs += 1;}
     if (m.type === 'teamScore') {caps += 1;}
   }
 }
