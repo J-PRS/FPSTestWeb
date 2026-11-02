@@ -546,6 +546,10 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordRemoteFired(serverId, position, velocity, weaponType, ownerId);
   }
 
+  recordRemoteProjectileBounce(serverId: string, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
+    this.recorder.recordRemoteBounce(serverId, position, velocity, surfaceNormal);
+  }
+
   recordRemoteProjectileDestroyed(serverId: string, position: Vec3): void {
     this.recorder.recordRemoteDestroyed(serverId, position);
   }

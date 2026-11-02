@@ -120,6 +120,12 @@ export function recordRemoteFired(b: DemoRecorder, serverId: string, position: V
     if (id !== 0) {b.remoteProjIdByServerId.set(serverId, id);}
   }
 
+export function recordRemoteBounce(b: DemoRecorder, serverId: string, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
+    const id = b.remoteProjIdByServerId.get(serverId);
+    if (id === undefined) {return;}
+    recordBounce(b, id, position, velocity, surfaceNormal);
+  }
+
 export function recordRemoteDestroyed(b: DemoRecorder, serverId: string, position: Vec3): void {
     const id = b.remoteProjIdByServerId.get(serverId);
     if (id === undefined) {return;} // fired edge predates the window — nothing to pair

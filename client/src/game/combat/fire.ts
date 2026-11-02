@@ -125,6 +125,9 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
       { x: velocity.x, y: velocity.y, z: velocity.z },
       config.weaponType
     );
+    p.onDemoBounce = (pos, vel, normal): void => {
+      if (p.demoProjectileId) {demoManager.recordProjectileBounce(p.demoProjectileId, pos, vel, normal);}
+    };
   }
 
   // Ray-burst discharge (remote railgun): beam flash along the slug's

@@ -192,6 +192,14 @@ export function wireProjectiles(ctx: NetCtx): void {
         : srvAge;
       localProjectile.reanchorTo(position, velocity,
         exactAge ?? Math.max(0, localProjectile.age - (nm().serverPingMs ?? nm().getPing()) / 2000));
+      // Demo: the authority just corrected this arc mid-flight — a Bounce
+      // edge is the format's "re-seat on recorded state" checkpoint, so
+      // validators/replay diff against the corrected arc, not the claim's.
+      if (localProjectile.demoProjectileId) {
+        deps.lazyDemoManager?.()?.recordProjectileBounce(
+          localProjectile.demoProjectileId,
+          localProjectile.pos, localProjectile.vel, localProjectile.vel.clone().normalize());
+      }
     }
     // Burst pellet binding is one-shot - the slot frees once linked.
     if (localProjectile.fanSlot) {
@@ -327,6 +335,9 @@ export function wireProjectiles(ctx: NetCtx): void {
     remoteProjectile.onExploded = (): void => {
       deps.lazyDemoManager?.()?.recordRemoteProjectileDestroyed(projectileId, remoteProjectile.pos);
       remoteProjectiles.delete(projectileId);
+    };
+    remoteProjectile.onDemoBounce = (pos, vel, normal): void => {
+      deps.lazyDemoManager?.()?.recordRemoteProjectileBounce(projectileId, pos, vel, normal);
     };
     deps.lazyDemoManager?.()?.recordRemoteProjectileFired(projectileId, position, velocity, weaponType ?? cfg.weaponType, ownerId);
     // Gun recoil kick on the shooter's remote model

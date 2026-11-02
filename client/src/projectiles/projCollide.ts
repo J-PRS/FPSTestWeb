@@ -53,6 +53,9 @@ export interface CollideHost extends SweepHost {
           remotePlayers?: Map<string, THREE.Vector3>): void;
   clampFuse(sec: number): void;
   explode(): void;
+  /** Demo bounce checkpoint — records the post-bounce pos/vel edge so the
+   *  replayed arc matches what actually flew (see Projectile.onDemoBounce). */
+  onDemoBounce?: (pos: THREE.Vector3, vel: THREE.Vector3, normal: THREE.Vector3) => void;
 }
 
 export class ProjCollide {
@@ -191,6 +194,7 @@ export class ProjCollide {
       h.prevPos.copy(h.pos);
       if (h.config.bounceSfx) {sfx.at(h.pos, h.config.bounceSfx, 0.5, 1.4, h.vel);}
       if (h.config.fuseAfterBounce !== undefined) {h.clampFuse(h.config.fuseAfterBounce);}
+      h.onDemoBounce?.(h.pos, h.vel, _tNormal);
       return true;
     }
     h.vel.addScaledVector(_tNormal, -(1 + (h.config.bounceRestitution ?? 0.5)) * vn);
@@ -209,6 +213,7 @@ export class ProjCollide {
       sfx.at(h.pos, `ricochet${1 + Math.floor(Math.random() * 3)}`, gain, 1, h.vel);
     }
     if (h.config.fuseAfterBounce !== undefined) {h.clampFuse(h.config.fuseAfterBounce);}
+    h.onDemoBounce?.(h.pos, h.vel, _tNormal);
     return true;
   }
 

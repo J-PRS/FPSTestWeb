@@ -497,6 +497,9 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   recordRemoteFired(serverId: string, position: Vec3, velocity: Vec3, weaponType: number, ownerId?: string): void {
     ev.recordRemoteFired(this, serverId, position, velocity, weaponType, ownerId);
   }
+  recordRemoteBounce(serverId: string, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
+    ev.recordRemoteBounce(this, serverId, position, velocity, surfaceNormal);
+  }
   recordRemoteDestroyed(serverId: string, position: Vec3): void {
     ev.recordRemoteDestroyed(this, serverId, position);
   }

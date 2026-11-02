@@ -149,6 +149,12 @@ export class Projectile {
   /** Local player's armor class - the body sweep needs its capsule. */
   localClass: (() => string | undefined) | null = null;
   demoProjectileId = 0; // demo recording tracking ID
+  /** Demo bounce checkpoint hook — set by the lane that owns this shell's
+   *  recording (local demoProjectileId vs remote serverId map). Fires after
+   *  a successful terrain bounce so the recorded arc re-seats on the
+   *  post-bounce state; without it the clip's terminal edges sit off the
+   *  pure ballistic arc and validators flag honest shells as diverging. */
+  onDemoBounce?: (pos: THREE.Vector3, vel: THREE.Vector3, normal: THREE.Vector3) => void;
   hitAccuracy = 0; // actual center-to-center dist at moment of hit
   hitAge = 0; // projectile age at hit (airtime)
   hitDistance = 0; // travel distance from shot origin
