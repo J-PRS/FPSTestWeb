@@ -426,6 +426,45 @@ const lockedSliders = new Set<string>(
 );
 const saveLocks = (): void => { localStorage.setItem('maplab_locks', JSON.stringify([...lockedSliders])); };
 
+// --- perf ring: each refresh/loadMap run records per-stage ms so Alt+Q
+// can dump "where the regen moment went" (last 12 runs, shareable). ---
+interface ProfRun { tag: string; total: number; stages: [string, number][] }
+const PROF: ProfRun[] = [];
+let lastRun: ProfRun | null = null;
+/** Returns a stage-marker: each call stamps elapsed-since-last under `name`.
+ *  Call sw('END') to close the run into the ring. */
+function swStart(tag: string): (name: string) => void {
+  const run: ProfRun = { tag, total: 0, stages: [] };
+  let last = performance.now();
+  return (name: string): void => {
+    const now = performance.now();
+    run.stages.push([name, now - last]);
+    last = now;
+    if (name === 'END') {
+      run.total = run.stages.reduce((a, [, ms]): number => a + ms, 0);
+      PROF.push(run); if (PROF.length > 12) { PROF.shift(); }
+      lastRun = run;
+    }
+  };
+}
+// Shader compiles are async to refresh() - they land on the next render.
+// Flag set alongside every mat.needsUpdate; the render loop measures the
+// stall and appends it to the run that caused it.
+let compileWatch = false;
+addEventListener('keydown', (e: KeyboardEvent): void => {
+  if (!e.altKey || e.code !== 'KeyQ') {return;}
+  e.preventDefault();
+  const info = renderer.info.render;
+  const text = PROF.map((r): string =>
+    `[${r.tag}] total ${r.total.toFixed(1)}ms\n` +
+    r.stages.map(([n, ms]): string => `  ${ms.toFixed(1).padStart(8)}ms  ${n}`).join('\n'),
+  ).join('\n') + `\nrenderer: ${info.calls} calls · ${info.triangles} tris · ${posAttr.count} verts · field ${field?.size ?? '?'}²`;
+  // oxlint-disable-next-line no-console -- the dump IS the feature
+  console.log(text);
+  navigator.clipboard?.writeText(text).catch((): void => {});
+  flash('prof → console + clipboard');
+});
+
 function refresh(): void {
   // An existing map is a fixed .bin, not a synth - fetch + paint it.
   // Re-load when the verb log changed too - verbs replay inside loadMap,
@@ -439,31 +478,33 @@ function refresh(): void {
   lastVerbSig = vsig;
   loadedMap = '';
   const t0 = performance.now();
-  const h = synthField(state);
+  const sw = swStart(`synth seed ${state.seed} ${state.size}²`);
+  const h = synthField(state); sw('synthField');
   if (!state.showRaw) {
-    faultPass(h, state.size, state);        // geometry: scarp before water reacts
-    if (state.smoothIters > 0) { smoothPass(h, state.size, state.smoothIters); }
-    streamPower(h, state.size, state);      // macro: coherent valley network
-    if (state.droplets > 0) { erode(h, state.size, state); } // micro: gullies
-    glacierPass(h, state.size, state);      // U-troughs on the drainage spine
-    if (state.talus > 0) { talusPass(h, state.size, state); }
+    faultPass(h, state.size, state); sw('fault');        // geometry: scarp before water reacts
+    if (state.smoothIters > 0) { smoothPass(h, state.size, state.smoothIters); sw('smooth'); }
+    streamPower(h, state.size, state); sw('stream');      // macro: coherent valley network
+    if (state.droplets > 0) { erode(h, state.size, state); sw('erode'); } // micro: gullies
+    glacierPass(h, state.size, state); sw('glacier');      // U-troughs on the drainage spine
+    if (state.talus > 0) { talusPass(h, state.size, state); sw('talus'); }
   }
-  flatsPass(h, state.size, state);          // base pads level last - not erosion
-  applyVerbs(h, state.size);                // one-shot ops replayed on top
+  flatsPass(h, state.size, state); sw('flats');          // base pads level last - not erosion
+  applyVerbs(h, state.size); sw('verbs');                // one-shot ops replayed on top
   // Flow map for the overlay - computed on the DISPLAYED field so the
   // channels you see are the ones the surface actually drains.
-  drain = state.flowOverlay ? drainage(h, state.size) : null;
+  drain = state.flowOverlay ? drainage(h, state.size) : null; sw('drainage');
   const N = state.size;
   const bytes = new Uint8Array(8 + N * N);
   for (let i = 0; i < N * N; i += 1) { bytes[8 + i] = Math.round(Math.min(1, Math.max(0, h[i]! * state.vscale)) * 255); }
   const dv = new DataView(bytes.buffer);
   dv.setUint32(0, N, true); dv.setUint32(4, N, true);
-  bakedBytes = bytes;
+  bakedBytes = bytes; sw('bake u8');
   activeHeightScale = state.heightScale;
-  field = hmParseBin(bytes, state.heightScale);
+  field = hmParseBin(bytes, state.heightScale); sw('hmParseBin');
   mat.defines.TERRAIN_PRESET = state.preset; // synth palette = the slider
-  mat.needsUpdate = true;
-  paintField(performance.now() - t0);
+  mat.needsUpdate = true; compileWatch = true;
+  paintField(performance.now() - t0, sw);
+  sw('END');
 }
 
 // Fetch an existing map's spec + terrain .bin off /maps (the same route
@@ -473,11 +514,14 @@ function refresh(): void {
 // omits terrainPreset.
 async function loadMap(name: string): Promise<void> {
   const t0 = performance.now();
+  const sw = swStart(`map ${name}`);
   try {
     const spec = await (await fetch(`/maps/${name}.json`, { cache: 'no-cache' })).json() as
       { terrain?: string; heightScale?: number; terrainPreset?: number };
+    sw('fetch spec');
     const file = spec.terrain ?? `${name}.bin`;
     const buf = new Uint8Array(await (await fetch(`/maps/${file}`, { cache: 'no-cache' })).arrayBuffer());
+    sw('fetch bin');
     if (state.map !== name) { return; }
     // Verbs apply to loaded maps too - decode → mutate → re-encode so
     // hmParseBin sees the edited field (the shipped .bin stays untouched).
@@ -487,14 +531,16 @@ async function loadMap(name: string): Promise<void> {
       for (let i = 0; i < N * N; i += 1) { h[i] = buf[8 + i]! / 255; }
       applyVerbs(h, N);
       for (let i = 0; i < N * N; i += 1) { buf[8 + i] = Math.round(Math.min(1, Math.max(0, h[i]!)) * 255); }
+      sw('verbs');
     }
     drain = null; // flow overlay is a synth product - an existing map has none
     activeHeightScale = spec.heightScale ?? 1;
-    field = hmParseBin(buf, activeHeightScale);
+    field = hmParseBin(buf, activeHeightScale); sw('hmParseBin');
     loadedMap = name;
     mat.defines.TERRAIN_PRESET = spec.terrainPreset ?? state.preset;
-    mat.needsUpdate = true;
-    paintField(performance.now() - t0);
+    mat.needsUpdate = true; compileWatch = true;
+    paintField(performance.now() - t0, sw);
+    sw('END');
     flash(`map ${name}`);
   } catch {
     flash(`map ${name} failed`);
@@ -503,26 +549,28 @@ async function loadMap(name: string): Promise<void> {
 
 // Shared tail of refresh()/loadMap(): push the parsed field to the GPU
 // palette, the mesh, the heightmap, the stats - and drop stale balls.
-function paintField(ms: number): void {
+function paintField(ms: number, sw?: (name: string) => void): void {
   mat.uniforms.hscale.value = HM_HEIGHT_SCALE * activeHeightScale;
-  clearBalls(); // field changed - old balls roll on stale terrain
-  paintMesh();
-  paintHeightmap();
-  paintStats(ms);
+  clearBalls(); sw?.('clearBalls'); // field changed - old balls roll on stale terrain
+  paintMesh(sw);
+  paintHeightmap(); sw?.('hillshade');
+  paintStats(ms); sw?.('stats');
 }
 
 // 3D mesh - displaced by the BAKED byte field through hmHeight (chord =
 // the rendered clipmap the sim walks on). Vertex colors: slope ramp -
 // ski-able flats read green, steep faces rock, tops snow.
 const _n = { x: 0, y: 0, z: 0 };
-function paintMesh(): void {
+function paintMesh(sw?: (name: string) => void): void {
   for (let i = 0; i < posAttr.count; i += 1) {
     const x = posAttr.getX(i), z = posAttr.getZ(i);
     const y = hmHeight(field, x, z);
     posAttr.setY(i, y);
   }
   posAttr.needsUpdate = true;
+  sw?.('mesh displace');
   geo.computeVertexNormals();
+  sw?.('computeNormals');
 }
 
 // Hillshade relief - same picture hillshade.cjs emits for shipped maps,
@@ -989,7 +1037,7 @@ function paintRail(): void {
       }
       state.preset = Math.floor(Math.random() * 10); // PRESETS 0-9
       mat.defines.TERRAIN_PRESET = state.preset;
-      mat.needsUpdate = true;
+      mat.needsUpdate = true; compileWatch = true;
       state.noiseType = Math.floor(Math.random() * 4); // fBm/billow/swiss/jordan
       state.tiltAxis = Math.random() < 0.5 ? 'x' : 'z';
       state.map = '';
@@ -1201,7 +1249,7 @@ function presetRow(): HTMLDivElement {
   sel.addEventListener('change', (): void => {
     state.preset = Number(sel.value);
     mat.defines.TERRAIN_PRESET = state.preset;
-    mat.needsUpdate = true; // preset is a compile-time define - recompiles once
+    mat.needsUpdate = true; compileWatch = true; // preset is a compile-time define - recompiles once
     save();
   });
   row.append(lab, stepBtn(sel, -1), sel, stepBtn(sel, 1));
@@ -1298,6 +1346,17 @@ renderer.setAnimationLoop((): void => {
   if (fpsT >= 0.5) { fpsEl.textContent = `${Math.round(fpsFrames / fpsT)} fps`; fpsFrames = 0; fpsT = 0; }
   if (player) {tickPlay(dt);} else {orbit.update();}
   if (balls.length > 0) {tickBalls(dt); skiScore(dt); ballHudT += dt; if (ballHudT >= 0.25) { ballHudT = 0; updateBallHud(); } }
-  renderer.render(scene, camera);
+  if (compileWatch) {
+    // First draw after needsUpdate=true pays the program recompile -
+    // the stall users feel as "the moment". Attribute it to that run.
+    compileWatch = false;
+    const ct = performance.now();
+    renderer.render(scene, camera);
+    const cms = performance.now() - ct;
+    lastRun?.stages.push(['render+compile', cms]);
+    if (lastRun) {lastRun.total += cms;}
+  } else {
+    renderer.render(scene, camera);
+  }
 });
 (window as any).__maplab = { state, refresh, field: () => field };
