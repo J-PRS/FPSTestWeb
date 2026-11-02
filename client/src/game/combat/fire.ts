@@ -23,7 +23,7 @@ import {
 import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
 import { swingArcView } from '../../effects/swingTrails.js';
-import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed, payShotCost } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed, payShotCost, spendAmmo } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { WorldState } from '../worldState.js';
 import type { BlastArgs } from '../blastForce.js';
@@ -288,6 +288,9 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
   // bot fire on one formula; a dry tank can't draw a ghost bolt.
   if (!payShotCost(def.config.weaponType, '', (): number => deps.lazyPlayer().energy,
     (_id, n): void => { const pl = deps.lazyPlayer(); pl.energy = Math.max(0, pl.energy - n); })) {return;}
+  // Pool ammo (PlasmaGun pilot): the predicted debit mirrors the server's
+  // intent gate - a desync reject just closes the ledger, no ghost bolt.
+  if (!spendAmmo(deps.lazyPlayer().ammoPool, def.config.weaponType, performance.now() / 1000)) {return;}
   deps.lazyViewModel()?.kick(def.kick);
   if (def.pellets) { spawnFan(deps, def.config, e, def.pellets.count, def.pellets.spread); return; }
   if (def.spread) {

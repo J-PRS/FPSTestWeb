@@ -188,7 +188,7 @@ body:has(#log-panel.show) #perf-hud {
    *  stays under the top-right rows (timer ends ~120px from the top). */
   max-height: calc(100vh - (12px + var(--lp-h) + 8px + 58px + 8px + 56px) - 120px) !important;
 }
-body:has(#log-panel.show) #shot-feed { bottom: calc(12px + var(--lp-h) + 12px); }
+body:has(#log-panel.show) #shot-feed { bottom: calc(12px + var(--lp-h) + 12px) !important; } /* inline-styled in shotFeed.ts — same !important case as #stale-badge */
 /* The stale-code badge is inline-styled in main.ts — the override needs
  * !important to beat the cssText, same as any inline style. */
 body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) !important; }
@@ -264,6 +264,17 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   font: 600 12px 'Rajdhani', 'Segoe UI', sans-serif;
   letter-spacing: 0.5px;
   color: #a8e6a3;
+  text-shadow: 0 0 6px rgba(0,0,0,0.9), 1px 1px 0 #000;
+  pointer-events: none;
+}
+/* Weapon pool ammo — under the crosshair readout column, plasma cyan.
+   Empty textContent = hidden (unlimited weapons paint nothing). */
+#wammo-readout {
+  position: absolute; top: calc(50% + 62px); left: 50%;
+  transform: translateX(-50%);
+  font: 600 13px 'Rajdhani', 'Segoe UI', sans-serif;
+  letter-spacing: 0.5px;
+  color: #66ccff;
   text-shadow: 0 0 6px rgba(0,0,0,0.9), 1px 1px 0 #000;
   pointer-events: none;
 }

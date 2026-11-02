@@ -123,6 +123,7 @@ export class PlayerManager {
       protectedUntil: simMs(simNow() + SPAWN_PROTECT_MS),
       healCredit: 0,
       beltCharges: BELT_MAX,
+      ammoPool: new Map(),
       heldTokens: 0,
       beltAcc: 0,
       armor: 0,
@@ -136,6 +137,7 @@ export class PlayerManager {
       chargeEchoed: 0,
       chargeEchoAt: wallMs(0),
       healthEchoAt: wallMs(0),
+      ammoEchoAt: wallMs(0),
     };
 
     // Bots stamp p.isBot after this returns — the counter must key on
@@ -147,6 +149,7 @@ export class PlayerManager {
       // an F5 must never tax your tokens or your belt stock.
       player.heldTokens = was.heldTokens;
       player.beltCharges = was.beltCharges;
+      player.ammoPool = was.ammoPool;
       player.kills = was.kills;
       player.deaths = was.deaths;
       player.streak = was.streak;
@@ -458,6 +461,7 @@ target.deaths += 1;
     player.lastDamageAt = simMs(simNow()); // a fresh life is a fresh ramp
     player.charge = 0;
     player.beltCharges = BELT_MAX;
+    player.ammoPool.clear(); // absent cell = full pool - clear IS the refill
     player.heldTokens = 0;
     player.beltAcc = 0;
     player.pendingRespawn = false;

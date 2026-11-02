@@ -69,7 +69,7 @@ const VOLATILE_TYPES = new Set([
 // gameState too: it's the largest frame type and a reclaimer's stale
 // copy is always superseded by the fresh one sent right after replay --
 // journaling it spends roster-sized replay bytes for nothing.
-const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'stateHash', 'ping', 'pong', 'srvPing', 'gameState']);
+const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'yourAmmo', 'stateHash', 'ping', 'pong', 'srvPing', 'gameState']);
 const VOLATILE_TTL_MS = 3000;
 /** FPS_WIRESPY=1 -- emit-time wire forensics (which pids a keepalive/
  *  broadcast actually targets). Hoisted once: env reads on a per-frame

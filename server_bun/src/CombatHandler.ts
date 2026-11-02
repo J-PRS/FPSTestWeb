@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost, spendAmmo } from '../../shared/weapons.ts';
 import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
@@ -590,6 +590,12 @@ win.violations += 1;
         (id): number | null => this.deps.energyOf?.(id) ?? 0,
         (id, n): void => this.deps.drainEnergy?.(id, n))) {
         this.hb('drop.tankDry'); this.reject(playerId, 'Shot', 'energy dry', undefined, msg.weaponType, msg.shotId); return;
+      }
+      // Pool ammo (PlasmaGun pilot): lazy fractional regen on the claim's
+      // own arrival clock - a dry pool rejects the intent and the verdict
+      // closes the shooter's predicted ledger instead of ghosting a bolt.
+      if (msg.weaponType !== undefined && !spendAmmo(player.ammoPool, msg.weaponType, now / 1000)) {
+        this.hb('drop.ammoDry'); this.reject(playerId, 'Shot', 'ammo dry', undefined, msg.weaponType, msg.shotId); return;
       }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;

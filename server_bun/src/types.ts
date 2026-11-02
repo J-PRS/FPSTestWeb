@@ -160,6 +160,10 @@ export interface PlayerState {
   // Belt/pack charges: BELT_MAX on spawn, −1 per belt toss, −2 per pack
   // deploy, +1 per nugget (gem/tag) touch — one pool, shared/weapons.ts.
   beltCharges: number;
+  /** Per-weapon pool rounds (ammoCap rows - PlasmaGun pilot). Lazy
+   *  accrual on this player's own fire clock; cleared on respawn =
+   *  refilled (absent cell reads full). shared/weapons.ts AmmoPool. */
+  ammoPool: Map<number, { ammo: number; t: number; shotAt: number }>;
   // Headhunt held tokens — the mode's live score, dropped wholesale on
   // death. Distinct from beltCharges: tokens are score, charges are ammo.
   heldTokens: number;
@@ -192,6 +196,8 @@ export interface PlayerState {
    *  throttle — healPerTick runs every tick, one echo per 500ms is enough
    *  to keep the client's HUD and state-hash view converged). */
   healthEchoAt: WallMs;
+  /** yourAmmo echo throttle - same 500ms cadence as healthEchoAt. */
+  ammoEchoAt: WallMs;
 }
 
 /** Uniform claim verdict — `true` = applied/accepted, a string = the

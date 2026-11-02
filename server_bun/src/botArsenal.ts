@@ -8,7 +8,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { classCapsule, classCanFire } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
-import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST, payShotCost } from '../../shared/weapons.ts';
+import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST, payShotCost, spendAmmo } from '../../shared/weapons.ts';
 import { SELF_SPLASH_MAX,aoeDamageAt, hitRadiusAt } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
@@ -298,6 +298,9 @@ s[kind] += 1; this.propels.set(id, s);
         (id, n): void => { this.room.moveSim.drainEnergy?.(id, n); })) {return;}
       if (tr.track === undefined) {this.markTrack(tr, wt0, aim);}
       if (!this.rateOk(p.id, wt0)) {return;}
+      // Pool ammo - same dry rule humans get on the intent path; bot
+      // pools live on their player record and accrue on the sim clock.
+      if (!spendAmmo(this.room.players.getPlayer(p.id)?.ammoPool ?? new Map(), wt0, this.clock / 1000)) {return;}
       weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
       if (wt0 === WeaponType.Melee) {
         const stats = getWeaponStats(WeaponType.Melee);
@@ -365,6 +368,9 @@ s[kind] += 1; this.propels.set(id, s);
       (id, n): void => { this.room.moveSim.drainEnergy?.(id, n); })) {return;}
     if (tr.track === undefined) {this.markTrack(tr, wt, aim);}
     if (!this.rateOk(p.id, wt)) {return;}
+    // Pool ammo - the cadence gate stamps first so a rate-blocked pull
+    // doesn't eat a round; a dry pool then refuses like a dry tank.
+    if (!spendAmmo(this.room.players.getPlayer(p.id)?.ammoPool ?? new Map(), wt, this.clock / 1000)) {return;}
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,

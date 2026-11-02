@@ -411,6 +411,7 @@ this.handlerThrows += 1;
       this.h.onYourHealth?.(data.health, data.armor);
     },
     yourCharge: (data): void | undefined => this.h.onYourCharge?.(data.charge),
+    yourAmmo: (data): void | undefined => this.h.onYourAmmo?.(data.ammo),
     playerKill: (data): void => this.handlePlayerKill(data),
     knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull, data.yank),
     jump: (data): void | undefined => this.h.onPlayerJump?.(data.playerId, data.position),

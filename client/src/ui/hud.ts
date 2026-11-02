@@ -104,6 +104,7 @@ export class HUD {
     this.sheepReadout = d.sheepReadout;
     this.energyReadout = d.energyReadout;
     this.groundReadout = d.groundReadout;
+    this.wammoReadout = d.wammoReadout;
     this.stats = new HudStats(this);
     this.minimap = new Minimap(this.el);
     this.cmdmap = new CommandMap(this.el);
@@ -115,6 +116,7 @@ export class HUD {
   sheepReadout: HTMLDivElement;
   energyReadout: HTMLDivElement;
   groundReadout: HTMLDivElement;
+  wammoReadout: HTMLDivElement  // public - HudStats family paints it;
 
   private lastSheepShown = -1;
   private lastEnergyShown = -1;

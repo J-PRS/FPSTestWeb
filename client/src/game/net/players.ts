@@ -422,6 +422,15 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (charge > 0) {sfx.lgSizzle(deps.lazyPlayer().pos);}
   };
 
+  // Pool ammo echo - the server owns the debit ledger, so its count is
+  // truth: stamp each cell at arrival and let the shared accrual resume.
+  networkManager.onYourAmmo = (rows): void => {
+    if (deps.world.playbackMode) {return;}
+    const player = deps.lazyPlayer();
+    const t = performance.now() / 1000;
+    for (const [wt, n] of rows) {player.ammoPool.set(wt, { ammo: n, t, shotAt: -Infinity });}
+  };
+
   // Server tells us to apply knockback/pull to our local player
   networkManager.onKnockback = (position, force, pull, yank): void =>
     wireKnockback(ctx, position, force, pull, yank);

@@ -49,9 +49,7 @@ export function directHitAoeBonus(weaponType: number): number {
  *  would pay like hits. airtime is server-validated on the claim, so the
  *  same formula on both ends can't drift. */
 export const AIRTIME_DMG_CAP = 4;
-const AIRTIME_SCALED = new Set<number>([
-  ...Object.entries(WEAPONS).filter(([, w]) => w.airtimeScale === true).map(([wt]) => Number(wt)),
-]);
+const AIRTIME_SCALED = new Set<number>(Object.entries(WEAPONS).filter(([, w]) => w.airtimeScale === true).map(([wt]) => Number(wt)));
 export function scaledDirectDamage(weaponType: number, airtime?: number): number {
   const w = WEAPONS[weaponType];
   if (!w) {return 0;}
@@ -118,9 +116,7 @@ export const BELT_THROW_COST = 1; // per belt toss
 /** Power-class weapons: a kill on DIRECT contact bursts the body into
  *  its chunk gibs. Splash from the same gun (and all bullet/hitscan
  *  kills) stays the Verlet ragdoll. */
-export const GIB_WEAPONS = new Set<number>([
-  ...Object.entries(WEAPONS).filter(([, w]) => w.gib === true).map(([wt]) => Number(wt)),
-]);
+export const GIB_WEAPONS = new Set<number>(Object.entries(WEAPONS).filter(([, w]) => w.gib === true).map(([wt]) => Number(wt)));
 // Pack items (turret/mine/station/…) are priced per-kind in
 // shared/deployItems.ts (turret 2, mortar 3, …) — not a flat constant.
 // WeaponTypes that ONLY exist as belt throws — any spawn claim carrying
@@ -174,6 +170,56 @@ export function payShotCost(
   if (cost <= 0) {return true;}
   if ((energyOf(id) ?? 0) < cost) {return false;}
   drainEnergy(id, cost);
+  return true;
+}
+
+/** Per-weapon pool rounds (ammoCap rows — PlasmaGun pilot). Fractional
+ *  lazy accrual: `t` is the last accrual stamp in the caller's own clock
+ *  seconds (wall ms/1000 on the intent path, sim clock for bots, perf
+ *  clock on the client). Each player only ever fires through ONE gate,
+ *  so the mixed epochs never share a cell - but the accrue guard
+ *  refuses a backwards stamp anyway. */
+export type AmmoPool = Map<number, { ammo: number; t: number; shotAt: number }>;
+
+function accrue(pool: AmmoPool, weaponType: number, nowS: number): { ammo: number; t: number; shotAt: number } | undefined {
+  const st = WEAPONS[weaponType];
+  if (!st?.ammoCap) {return undefined;}
+  let c = pool.get(weaponType);
+  if (!c) {
+    // Absent cell = full pool - clearing the map on respawn IS the refill.
+    c = { ammo: st.ammoCap, t: nowS, shotAt: -Infinity };
+    pool.set(weaponType, c);
+    return c;
+  }
+  if (nowS <= c.t) {return c;}
+  const interval = st.fireInterval ?? 0.5;
+  const regenS = interval * (st.ammoRegenMult ?? 1);
+  // Regen waits one fire interval past the last shot - the clip counts
+  // DOWN during a burst, never jitters up. Exception: a dry pool regens
+  // regardless, or an empty gun could never come back (that's the
+  // half-cadence trickle).
+  const start = c.ammo < 1 ? c.t : Math.max(c.t, c.shotAt + interval);
+  if (nowS > start) {c.ammo = Math.min(st.ammoCap, c.ammo + (nowS - start) / regenS);}
+  c.t = nowS;
+  return c;
+}
+
+/** Rounds currently banked - undefined when the weapon has no pool.
+ *  Pure read for gates that only preview (impulse, HUD): the accrual
+ *  advances `t` but never spends. */
+export function ammoOf(pool: AmmoPool, weaponType: number, nowS: number): number | undefined {
+  return accrue(pool, weaponType, nowS)?.ammo;
+}
+
+/** One-round debit gated on the pool - false when dry. Unlimited
+ *  weapons (no ammoCap row) always pass, same rule as payShotCost's
+ *  zero-cost skip: no clip on the row, no gate. */
+export function spendAmmo(pool: AmmoPool, weaponType: number, nowS: number): boolean {
+  const c = accrue(pool, weaponType, nowS);
+  if (!c) {return true;}
+  if (c.ammo < 1) {return false;}
+  c.ammo -= 1;
+  c.shotAt = nowS; // pauses regen for one fire interval (see accrue)
   return true;
 }
 

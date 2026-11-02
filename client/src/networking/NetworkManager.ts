@@ -145,6 +145,9 @@ export class NetworkManager {
    *  fresher event (the 'hp drop' ping-pong that warns). */
   public lastHealthEventAt = 0;
   public onYourCharge: ((charge: number) => void) | null = null;
+  /** Server pool-ammo echo ([weaponType, rounds]) - snaps the predicted
+   *  pool back to truth after rejects/accrual drift, ~2Hz while below cap. */
+  public onYourAmmo: ((ammo: [number, number][]) => void) | null = null;
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number> | undefined, winAt: number, deltaId?: string, deltaScore?: number, rm?: boolean) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;

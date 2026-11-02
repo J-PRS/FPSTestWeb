@@ -10,7 +10,7 @@ import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, v
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { heldBuffRates, POWERUP } from '../../shared/pickups.ts';
-import { BELT_MAX } from '../../shared/weapons.ts';
+import { BELT_MAX, ammoOf, WEAPONS } from '../../shared/weapons.ts';
 import { logger } from './logger.ts';
 import type { PlayerState } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
@@ -250,6 +250,7 @@ export class TickFanout {
       if (this.skipRecord(room, playerId, p, now)) {continue;}
       this.tickServerHeals(room, playerId, p, now, simT);
       this.tickChargeEcho(room, playerId, p, now, simT);
+      this.tickAmmoEcho(room, playerId, p, now);
       // forceSendUntil is WallMs (hit-window bookkeeping, types.ts:105) --
       // comparing it to simT only coincides while both clocks read
       // Date.now(): a warped sim clock would never lapse the window and
@@ -461,6 +462,26 @@ this.metrics.recordsIdleReaped += 1;
     }
   }
 
+  /** Pool ammo echo: the client predicts spends, so a rejected intent or
+   *  an accrual-epoch difference leaves its pool ~1 low. While any pool
+   *  sits below cap, echo the post-accrual counts at the healthEcho
+   *  cadence - self-converging, and silent once the clip refills. */
+  private tickAmmoEcho(room: Room, playerId: string, p: PlayerState, now: number): void {
+    // Humans only: bot pools accrue on the arsenal sim clock - a wall-clock
+    // accrual stamp here would freeze their regen (and bots have no socket).
+    if (p.isBot || p.ammoPool.size === 0 || now - p.ammoEchoAt < 500) {return;}
+    const rows: [number, number][] = [];
+    let belowCap = false;
+    for (const [wt] of p.ammoPool) {
+      const n = ammoOf(p.ammoPool, wt, now / 1000)!; // cells only exist for capped weapons
+      rows.push([wt, n]);
+      if (n < (WEAPONS[wt]?.ammoCap ?? 0) - 0.01) {belowCap = true;}
+    }
+    if (!belowCap) {return;}
+    p.ammoEchoAt = wallMs(now);
+    room.connections.sendToPlayer(playerId, { type: 'yourAmmo', ammo: rows });
+  }
+
   /** The carrier is the one client that can't see the CHARGED status bit
    *  (own records are excluded from fanout) -- echo their decayed bank at
    *  0.5Hz so a walking bomb can hear itself crackle. A final 0 lands the
@@ -630,7 +651,7 @@ this.metrics.recordsIdleReaped += 1;
               r.sparse = sparseV4Record(r.data, pr.encSparse);
               r.sparseTick = seq;
             }
-            cands.push(r.sparse!); candScore.push(engaged?.get(r.playerId!) !== undefined ? TickFanout.FAR_SCORE * TickFanout.ENGAGE_BOOST : TickFanout.FAR_SCORE);
+            cands.push(r.sparse!); candScore.push(engaged?.get(r.playerId!) === undefined ? TickFanout.FAR_SCORE : TickFanout.FAR_SCORE * TickFanout.ENGAGE_BOOST);
           }
         }
       }

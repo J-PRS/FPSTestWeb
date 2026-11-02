@@ -212,6 +212,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aimAxis: 'track',
     fireInterval: 0.1,
     tier: 'medium',
+    // Ammo pilot: 20-round pool regening at 2× the fire interval, paused
+    // while the trigger's hot - a clean 2s full-rate burst, then the gun
+    // trickles at half cadence once dry.
+    ammoCap: 20,
+    ammoRegenMult: 2,
 
     // Quake 2/3 plasma: rapid volley of fat bolts - chain-like cadence
     // (10/s, ~140dps) but a visible projectile you can dodge, so it

@@ -8,6 +8,7 @@ import { PlayerLoadout } from './playerLoadout.js';
 import { ChildLogger } from '../core/Logger.js';
 import { inv } from '../../../shared/invariants.js';
 import { finiteVec } from '../../../shared/wire.js';
+import { ammoOf } from '../../../shared/weapons.js';
 
 // Trigger + impulse family: weapon/belt fire intent and every
 // pos/vel writer that must sync back into the movement controller.
@@ -19,6 +20,11 @@ const logger = new ChildLogger('Impulse');
    *  and the server rejects every claim (same gate, appliedClass). */
 function wantFireWeapon(p: Player, wid: number, auto: boolean): boolean {
     if (p.throwLockT > 0 || PlayerLoadout.lockedForClass(p.appliedClass, wid)) {return false;}
+    // Pool ammo (PlasmaGun pilot): a dry pool doesn't burn fireTimer or
+    // play the anim - the next tick re-tries, so the trickle regen IS
+    // the sustained cadence once the clip drains. fire.ts does the spend.
+    // wid is a loadout SLOT index - the pool keys on the real weaponType.
+    if ((ammoOf(p.ammoPool, weaponDef(wid).weaponType, performance.now() / 1000) ?? 1) < 1) {return false;}
     if (p.armory.secondaryWid !== null) {return p.armory.secondaryDrawT <= 0;}
     return auto ? p.input.mouseHeld : (p.input.firePending || (p.input.mouseHeld && !p.input.needsRelease));
   }

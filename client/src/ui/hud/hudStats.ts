@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Player } from '../../entities/Player.js';
+import { weaponDef } from '../../weapons.js';
 
 /**
  * HudStats — the per-frame stat painter: vitals (health/energy/armor),
@@ -33,6 +34,7 @@ export interface StatsHost {
   dmgEdge: HTMLDivElement;
   dmgDir: HTMLDivElement;
   dmgDirArc: HTMLDivElement;
+  wammoReadout: HTMLDivElement;
 }
 
 export class HudStats {
@@ -45,6 +47,7 @@ export class HudStats {
   private lastWeapon = '';
   private lastArmor = -1;
   private lastBuffsKey = '';
+  private lastWammoCol = '';
   private ghostPct = 100;      // trails healthPct downward on damage
   private hitTimer = 0;
   private dmgT = 0;            // vignette decay
@@ -103,6 +106,26 @@ export class HudStats {
         s.textContent = `${i + 1} ${HudStats.WEAPON_SHORT[wid] ?? '?'}`;
         s.classList.toggle('active', i === player.weaponIndex);
       });
+    }
+
+    // Pool ammo readout under the crosshair - blank for unlimited weapons.
+    // loadout carries slot indices; the pool keys on the real weaponType.
+    // RAW cell read, no accrual: a HUD-side mint + the impulse gate's spend
+    // same frame showed '1' for one frame every trickle cycle. The gate's
+    // own preview accrues every frame anyway, so this is at most a frame
+    // stale - and a minted round spent same-frame never displays.
+    const wid = player.armory?.secondaryWid ?? player.loadout[player.weaponIndex];
+    const banked = wid === undefined || player.ammoPool === undefined
+      ? undefined : player.ammoPool.get(weaponDef(wid).weaponType)?.ammo;
+    if (h.wammoReadout) {
+      const n = banked === undefined ? -1 : Math.floor(banked);
+      // Yellow under 5, red at 1/0 - the low-clip tiers ride the cache key
+      // so a color flip repaints without touching the text every frame.
+      let col = '#66ccff';
+      if (n >= 0 && n <= 1) {col = '#f44';}
+      else if (n >= 0 && n < 5) {col = '#ffd54a';}
+      this.setText(h.wammoReadout, 'wammo', n < 0 ? '' : String(n));
+      if (this.lastWammoCol !== col) {this.lastWammoCol = col; h.wammoReadout.style.color = col;}
     }
 
     if (this.hitTimer > 0) {

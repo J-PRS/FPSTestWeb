@@ -136,6 +136,7 @@ export class Player {
     this.lastDamageSource = '';
     this.protectedUntil = performance.now() + SPAWN_PROTECT_MS;
     this.beltCharges = BELT_MAX;
+    this.ammoPool.clear(); // absent cell = full pool - the refill IS the clear
     this._heldHurtT = 0;
     this._beltAcc = 0;
     this.vel.set(0, 0, 0);
@@ -430,6 +431,10 @@ export class Player {
   /** Belt/pack charge mirror — BELT_MAX on respawn, server owns the truth.
    *  Belt throw −1, pack deploy −2, nugget +1 (shared/weapons.ts). */
   beltCharges = BELT_MAX;
+  /** Per-weapon pool rounds (ammoCap rows - PlasmaGun pilot): lazy
+   *  accrual on the perf clock; the server owns the same pool through
+   *  its own gate, prediction just previews/spends the same formula. */
+  ammoPool = new Map<number, { ammo: number; t: number; shotAt: number }>();
   /** Headhunt held tokens — server-owned count, HUD reads it raw. */
   heldTokens = 0;
   /** True when the held-token drip is live (≥3 tokens, 8s since last hit). */

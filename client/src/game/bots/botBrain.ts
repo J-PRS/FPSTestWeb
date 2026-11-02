@@ -32,7 +32,7 @@ import { botRand } from '../../../../shared/botRand.js';
 
 import { botWeaponHooks } from '../../../../shared/botWeaponHooks.js';
 
-import { type WeaponType } from '../../../../shared/weapons.js';
+import { type WeaponType, type AmmoPool } from '../../../../shared/weapons.js';
 
 import { STATUS } from '../../../../shared/status.js';
 
@@ -133,6 +133,10 @@ export class GameBot extends RemotePlayer {
   armorClass: ArmorClass = 'medium';
 
   botMaxHp = BOT_HP;
+
+  /** Per-weapon pool rounds (ammoCap rows) - the offline mirror of
+   *  PlayerState.ammoPool; botFire spends it, respawn() refills it. */
+  ammoPool: AmmoPool = new Map();
 
   /** Loadout perk modifiers — the same table the server multiplies
 
@@ -773,6 +777,8 @@ export class GameBot extends RemotePlayer {
     super.respawn(position);
 
     this.energy = this.energyCap;
+
+    this.ammoPool.clear(); // absent cell = full pool - the respawn refill
 
     this.moveState.onGround = true;
 

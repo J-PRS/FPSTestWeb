@@ -19,6 +19,7 @@ export interface HudDom {
   sheepReadout: HTMLDivElement;
   energyReadout: HTMLDivElement;
   groundReadout: HTMLDivElement;
+  wammoReadout: HTMLDivElement;
   hitMarker: HTMLDivElement;
   dmgVignette: HTMLDivElement;
   dmgEdge: HTMLDivElement;
@@ -84,6 +85,7 @@ export function createHudDom(): HudDom {
       <div id="sheep-readout"></div>
       <div id="energy-readout"></div>
       <div id="ground-readout"></div>
+      <div id="wammo-readout"></div>
       <div id="hit-marker"></div>
       <div id="dmg-vignette"></div>
       <div id="dmg-edge"><div class="wedge"></div><div class="grit"></div></div>
@@ -121,6 +123,7 @@ export function createHudDom(): HudDom {
     const sheepReadout = el.querySelector('#sheep-readout')! as HTMLDivElement;
     const energyReadout = el.querySelector('#energy-readout')! as HTMLDivElement;
     const groundReadout = el.querySelector('#ground-readout')! as HTMLDivElement;
+    const wammoReadout = el.querySelector('#wammo-readout')! as HTMLDivElement;
     const dmgVignette = el.querySelector('#dmg-vignette')! as HTMLDivElement;
     const dmgEdge = el.querySelector('#dmg-edge')! as HTMLDivElement;
     const dmgDir = el.querySelector('#dmg-dir')! as HTMLDivElement;
@@ -160,7 +163,7 @@ export function createHudDom(): HudDom {
 
   return { el, health, energy, ammo, speed, speedH, speedV, kills, state, ping, loss, jitter,
     fps, crosshair, sheepReadout, energyReadout, groundReadout, hitMarker, dmgVignette, dmgEdge, dmgDir, dmgDirArc, ghostBar,
-    playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
+    playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar, wammoReadout,
     armor, armorBar, buffsRow,
     scoreboard, sbRows, teamScore, tsA, tsB, heldCount, classicScore,
     matchStatus, matchClock, flagA, flagB, killFeed, connBanner };

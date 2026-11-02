@@ -181,6 +181,12 @@ export interface WeaponStats {
    *  the moveSim tank on the fire intent; the client predicts the same
    *  check so a dry tank can't draw a ghost bolt. */
   energyCost?: number;
+  /** Per-weapon pool rounds (plasma-gun pilot): clip size; absent =
+   *  unlimited. Regen is lazy — reads accrue on the shooter's own clock. */
+  ammoCap?: number;
+  /** Pool regen cadence as a multiple of fireInterval — 2 = one round
+   *  per 2× the shot interval, so a dry gun sustains at half rate. */
+  ammoRegenMult?: number;
   /** Sidearm (hold-out pull weapon): auto-derives the sidearm pool -
    *  same marker pattern as beltThrow, so a new sidearm registers here
    *  once instead of in a menu, a union type, and two tables. */

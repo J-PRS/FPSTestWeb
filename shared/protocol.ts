@@ -371,6 +371,10 @@ export type ServerMessage =
   // Your own banked LG charge — own tick records exclude the carrier, so
   // the server echoes it directly while >0 (and once more at 0).
   | { type: 'yourCharge'; charge: number }
+  // Server-authoritative pool ammo (ammoCap weapons) - [weaponType, rounds]
+  // pairs. The client predicts spends, so the echo only runs while some
+  // pool sits below cap: rejects/regen drift snap back to truth.
+  | { type: 'yourAmmo'; ammo: [number, number][] }
   // Combat claim refused — the shooter's predicted damage never happened.
   // Sent ONLY to the shooter so the client can log why a landed shot did
   // nothing (stale projectile, dead/friendly target, implausible claim).

@@ -14,7 +14,7 @@ import { aimSkillFor } from '../../../../shared/botSkill.js';
 import { getProjectileConfig } from '../../projectiles/index.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { SLOT_DEFS } from '../../weapons.js';
-import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../../../shared/weapons.js';
+import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, spendAmmo } from '../../../../shared/weapons.js';
 import { GRAVITY } from '../../../../shared/movement.js';
 import { MELEE_RANGE, MELEE_DAMAGE } from '../../core/config.js';
 import * as sfx from '../../core/sfx.js';
@@ -100,7 +100,7 @@ export class BotFire {
     const wt = melee || classCanFire(bot.armorClass, picked) ? picked
       : ([lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(bot.armorClass, w)) ?? -1);
     if (!melee && wt < 0) {return;}
-    if (!this.canFire(bot.playerId, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}
+    if (!this.canFire(bot, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}
     // Mirror the pick to the hand prop - offline bots never ride the wire
     // path that reveals a remote's weapon, so they held the generic gun
     // forever. Same convention: melee swings keep the last real gun out.
@@ -125,12 +125,15 @@ export class BotFire {
   /** The brain's volley cadence is weapon-blind — a 0.45s burst pick of
    *  Mortar would out-cadence a player holding the same gun (2.0s).
    *  Same gate the server's botArsenal applies to its bots. */
-  private canFire(botId: string, wt: WeaponType): boolean {
+  private canFire(bot: GameBot, wt: WeaponType): boolean {
     const interval = WEAPON_FIRE_INTERVAL_S[wt] ?? 0.1;
-    const last = this.lastShotAt.get(botId) ?? -interval * 1000;
+    const last = this.lastShotAt.get(bot.playerId) ?? -interval * 1000;
     const now = performance.now();
     if (now - last < interval * 1000) {return false;}
-    this.lastShotAt.set(botId, now);
+    // Pool ammo - offline bots obey the same clip rule humans do; the
+    // pool lives on the body so respawn() refills it like the server's.
+    if (!spendAmmo(bot.ammoPool, wt, now / 1000)) {return false;}
+    this.lastShotAt.set(bot.playerId, now);
     return true;
   }
 
