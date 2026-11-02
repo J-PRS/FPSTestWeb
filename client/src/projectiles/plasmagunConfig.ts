@@ -68,5 +68,6 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.18,
   ribbonLife: 0.1,
+  ribbonRampIn: 0.2, // line streak spawns thin at the muzzle, swells to full over 0.2s
   ribbonColor: 0x44_BB_FF,
 };

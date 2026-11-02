@@ -1,3 +1,4 @@
+import { WEAPONS } from '../../../shared/weapons.js';
 import { BOLT_CONFIG } from './boltConfig.js';
 import { DISC_CONFIG, BELT_DISC_CONFIG, BELT_DISC_PUSH_CONFIG } from './discConfig.js';
 import { GRENADE_CONFIG } from './grenadeConfig.js';
@@ -94,4 +95,12 @@ export function computeAccuracy(accRaw: number, directHit: boolean): number {
   let acc = 1 + (ACCURACY_MAX - 1) * Math.max(0, 1 - accRaw / ACCURACY_NORMALIZATION);
   if (directHit) {acc = ACCURACY_MAX;}
   return acc;
+}
+
+/** Hidden refire multiplier on shot score: slow deliberate weapons earn
+ *  their number per trigger pull, spam cadence pays for it (plasma's
+ *  ~0.1s interval ≈ ×0.1). Floor keeps the fastest weapons scoring. */
+export function shotScore(acc: number, dist: number, air: number, weaponType: number): number {
+  const interval = WEAPONS[weaponType]?.fireInterval ?? 1;
+  return Math.round(acc * dist * air * Math.max(0.1, interval));
 }

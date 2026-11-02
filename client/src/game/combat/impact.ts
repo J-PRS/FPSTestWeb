@@ -12,7 +12,7 @@ import * as THREE from 'three';
 
 import { Projectile } from '../../projectiles/Projectile.js';
 
-import { BOLT_CONFIG, BOMBLET_CONFIG, DISC_CONFIG, computeAccuracy } from '../../projectiles/index.js';
+import { BOLT_CONFIG, BOMBLET_CONFIG, DISC_CONFIG, computeAccuracy, shotScore } from '../../projectiles/index.js';
 
 import { Explosion } from '../../effects/explosion.js';
 
@@ -498,8 +498,8 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
 
       demoManager.autoClipOnHit(p.hitAge, 0.2, undefined, undefined, undefined, {
         weapon: p.config.displayName, distance: p.hitDistance,
-        // Same acc·dist·air the HUD frag score uses — the tile ranks by it.
-        score: Math.round(computeAccuracy(p.hitAccuracy, p.directHit) * p.hitDistance * p.hitAge),
+        // Same acc·dist·air·refire the HUD frag score uses — the tile ranks by it.
+        score: shotScore(computeAccuracy(p.hitAccuracy, p.directHit), p.hitDistance, p.hitAge, p.config.weaponType),
       });
 
     }
@@ -1079,7 +1079,7 @@ export function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'playe
 
   const air = p.hitAge;
 
-  const score = Math.round(acc * dist * air);
+  const score = shotScore(acc, dist, air, p.config.weaponType);
 
   deps.lazyPlayer().score += score;
 

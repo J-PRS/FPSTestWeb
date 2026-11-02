@@ -28,12 +28,21 @@ export function shrinkLanded(d: Debris, s: Shard): boolean {
 
 
 
+const FLASH_DUR = 0.12; // kill-pop: shards spawn white, ease to their color
+
 export function greyShard(d: Debris, s: Shard): void {
+    // Spawn-flash: white → target over FLASH_DUR, then grey lerp resumes
+    // as usual. Same curve the damage flash reads on a live body.
+    const ft   = Math.min(s.elapsed / FLASH_DUR, 1);
+    const inv  = 1 - ft;
+    const cr   = s.cr + (1 - s.cr) * inv;
+    const cg   = s.cg + (1 - s.cg) * inv;
+    const cb   = s.cb + (1 - s.cb) * inv;
     const gt   = Math.min(s.elapsed / GREY_DUR, 1);
-    const grey = s.cr * 0.299 + s.cg * 0.587 + s.cb * 0.114;
-    const r = s.cr + (grey - s.cr) * gt;
-    const g = s.cg + (grey - s.cg) * gt;
-    const b = s.cb + (grey - s.cb) * gt;
+    const grey = cr * 0.299 + cg * 0.587 + cb * 0.114;
+    const r = cr + (grey - cr) * gt;
+    const g = cg + (grey - cg) * gt;
+    const b = cb + (grey - cb) * gt;
     if (s.mat) {s.mat.color.setRGB(r, g, b);}
     else {d.writeShardColor(s, r, g, b);}
   }
