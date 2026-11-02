@@ -158,8 +158,14 @@ export class PlayerMats {
    *  material lives outside the clone set). */
   readonly extraRim: THREE.Material[] = [];
 
+  /** Last setRim color (0 = off) — adopt()/extraRim materials registered
+   *  AFTER a setRim call patch themselves on entry, so a late-registered
+   *  black/atlas material can't sit rim-less while its siblings glow. */
+  private rimCol = 0;
+
   setRim(hex: number | null): void {
     const col = hex === null ? 0 : hex;
+    this.rimCol = col;
     for (const m of [...this.clones.values(), ...this.extraRim]) {
       const sm = m as THREE.MeshStandardMaterial;
       if (!sm.isMeshStandardMaterial) {continue;}
@@ -192,6 +198,9 @@ export class PlayerMats {
     if (!this.flashMats.some((f): boolean => f.m === m)) {
       this.flashMats.push({ m, e: m.emissive.clone(), i: m.emissiveIntensity });
     }
+    // Materials adopted after a setRim call patch themselves on entry —
+    // a late black/atlas body can't sit rim-less while siblings glow.
+    if (this.rimCol) {this.setRim(this.rimCol);}
   }
 
   /** Per-model material clones - frees their GPU program refs; shared

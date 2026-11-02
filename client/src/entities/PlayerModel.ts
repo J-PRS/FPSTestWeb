@@ -100,9 +100,9 @@ const ATLAS_BLACK_LIT = typeof location !== 'undefined' && new URLSearchParams(l
 // back to the file's own set when present (unstripped rigs, mannequin).
 let _classAnimsP: Promise<THREE.AnimationClip[]> | null = null;
 function classAnims(loader: ReturnType<typeof mkGltfLoader>): Promise<THREE.AnimationClip[]> {
-  // Plain loadAsync, not the worker path: class_anims.glb is a mesh-less
-  // clips-only file and glbSer's mesh serialization rejects on it.
-  _classAnimsP ??= loader.loadAsync('/assets/models/class_anims.glb').then((g): THREE.AnimationClip[] => g.animations);
+  // Scout IS the pack — it keeps the shared 32-clip set embedded, so
+  // stripped variants reuse its rig fetch (loadGltfCached dedupes URLs).
+  _classAnimsP ??= loadGltfCached(loader, '/assets/models/class_scout.glb').then((g): THREE.AnimationClip[] => g.animations);
   return _classAnimsP;
 }
 
@@ -423,7 +423,20 @@ export class PlayerModel {
           performance.mark(`load:rigCloneDone:${this.variant}`);
           await atlasP; // bake file → _atlasGeoCache or null (live-bake fallback)
           const clips = gltf.animations.length > 0 ? gltf.animations : await classAnims(loader);
-          this.onModelLoaded({ scene, animations: clips.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
+          // Pack clips carry scout's root-motion track (scout.position) —
+          // each rig's root is named after its own variant, so rebind on
+          // the per-model CLONE (mutating the shared clip would poison
+          // every other variant's rename).
+          const renameRoot = gltf.animations.length === 0 && this.variant !== 'scout';
+          this.onModelLoaded({ scene, animations: clips.map((c): THREE.AnimationClip => {
+            const cl = c.clone();
+            if (renameRoot) {
+              for (const t of cl.tracks) {
+                if (t.name.startsWith('scout.')) {t.name = this.variant + t.name.slice('scout'.length);}
+              }
+            }
+            return cl;
+          }) }, mann, knight);
           performance.mark(`load:modelSetupDone:${this.variant}`);
           resolve();
           if (gunmetal) {
@@ -508,6 +521,7 @@ export class PlayerModel {
         ? new THREE.MeshStandardMaterial({ color: 0x33_33_33, roughness: 1, metalness: 0, name: 'atlas-black' })
         : new THREE.MeshBasicMaterial({ color: 0x00_00_00, name: 'atlas-black' });
       this.mats.extraRim.push(black); // rim patch skips non-Standard mats - lit black rides extraRim
+      if (black instanceof THREE.MeshStandardMaterial) {this.mats.adopt(black);} // damageFlash reach
       for (const sm of this.skinnedMeshes) {
         if ((sm.material as THREE.Material).userData.atlasMat !== true && sm.name !== 'atlas-body') {sm.material = black;}
       }
@@ -872,6 +886,7 @@ export class PlayerModel {
         : new THREE.MeshBasicMaterial({ color: 0x00_00_00, name: 'atlas-black' }))
       : (parts[0]!.material as THREE.Material).clone());
     if (ATLAS_BLACK) {this.mats.extraRim.push(mm.material as THREE.Material);} // rim/fresnel patch reach
+    if (ATLAS_BLACK && mm.material instanceof THREE.MeshStandardMaterial) {this.mats.adopt(mm.material);} // damageFlash reach
     mm.name = 'atlas-body';
     mm.castShadow = parts[0]!.castShadow;
     mm.receiveShadow = parts[0]!.receiveShadow;
