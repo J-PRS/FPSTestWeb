@@ -94,6 +94,7 @@ export class ServerBots {
     this.mpc = process.env.FPS_GREEDY
       ? new BotGreedy(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s))
       : new BotMpc(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s));
+    this.greedy = new BotGreedy(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s));
   }
 
   /** The committed-run option: while a capper is outbound on the enemy
@@ -102,6 +103,9 @@ export class ServerBots {
    *  horizon problem senses can't see past (2026-10-16_CAPPER_REACTIVE_
    *  LIMITS.md). Armed per think on the ctx flags; released on carry. */
   private mpc: BotMpc | BotGreedy;
+  /** Transit driver for every bot with a destination — rollout owns the
+   *  legs, driveMove keeps close-quarters/park handling. */
+  private readonly greedy: BotGreedy;
   private readonly mpcArm = new Map<string, BotVec>();
   /** MPC progress sampler — the watchdog seeds/compares net travel. */
   private readonly mpcProgress = new Map<string, { x: number; z: number; t: number }>();
@@ -729,10 +733,26 @@ hurtCount += 1;
       const tm2 = performance.now();
       const sh = this.room.moveSim.simState(id);
       const mpcTgt = this.mpcArm.get(id);
-      if (sh && !(mpcTgt && this.mpc.drive(id, mpcTgt))) {
-        if (mpcTgt) {this.mpcArm.delete(id); this.mpc.release(id); this.mpcProgress.delete(id); this.driveMove(id, p, out, sh, dt, now);}
-        else {this.driveMove(id, p, out, sh, dt, now);}
-      } else if (sh) {
+      let owned = false;
+      if (sh && mpcTgt && this.mpc.drive(id, mpcTgt)) {owned = true;}
+      else if (mpcTgt) {this.mpcArm.delete(id); this.mpc.release(id); this.mpcProgress.delete(id);}
+      // Transit legs: any bot with a destination and no park order gets
+      // the rollout — energy-banked movement is the default state, not a
+      // flag-mode luxury. driveMove keeps close-quarters/posted control.
+      if (sh && !owned) {
+        // Mid-range transit legs only (40-150m, no foe, no park):
+        // close approach is combat's job (strafe/aim), far routing is
+        // driveMove's continuous steer — a 0.9s rollout can't see a
+        // 300m stand line and shouldn't try. Between those, the rollout
+        // banks altitude into speed like a real skier.
+        const dd = out.dest ? Math.hypot(out.dest.x - p.position.x, out.dest.z - p.position.z) : 0;
+        const transit = out.dest !== undefined && !out.move?.park
+          && dd > 40 && dd < 150 && (this.foeNear.get(id) ?? 0) <= now;
+        if (transit && this.greedy.drive(id, out.dest)) {owned = true;}
+        else {this.greedy.release(id);}
+      }
+      if (sh && !owned) {this.driveMove(id, p, out, sh, dt, now);}
+      else if (sh) {
         // MPC owns inputs; the position commit still mirrors driveMove —
         // the shadow's write is the bot's whole wire truth.
         p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;

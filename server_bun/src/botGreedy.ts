@@ -81,6 +81,12 @@ export class BotGreedy {
     const baseYaw = st.yaw;
     const jetOk = energy > 15;
 
+    // Total mechanical energy the bot STARTS with (KE + PE, g=28 —
+    // shared/movement GRAVITY). The best rollout is the one that BANKS
+    // it: descent → speed, no wall bleed. Reference cancels so ΔE is
+    // the only term that matters.
+    const v02 = st.vel.x * st.vel.x + st.vel.y * st.vel.y + st.vel.z * st.vel.z;
+    const e0 = v02 / 2 + 28 * st.pos.y;
     let best: Held | null = null;
     let bestScore = -Infinity;
     for (const dyaw of DYAWS) {
@@ -97,10 +103,11 @@ export class BotGreedy {
         }
         const s = sc.state;
         const d1 = Math.hypot(tgt.x - s.pos.x, tgt.z - s.pos.z);
-        const v1 = Math.hypot(s.vel.x, s.vel.z);
-        // Arrival dominates; then speed carried, then walls hurt hard —
-        // a wall-pinned rollout self-scores out of contention.
-        const score = (d0 - d1) + 0.5 * v1 - 4 * pinnedTicks + (d1 < 8 ? 40 : 0);
+        const v12 = s.vel.x * s.vel.x + s.vel.y * s.vel.y + s.vel.z * s.vel.z;
+        const dE = (v12 / 2 + 28 * s.pos.y) - e0;
+        // progress + banked energy − wall bleed. 0.06·dE: a +30 m/s
+        // gain is worth ~27m of line; a 30m dead climb costs ~50.
+        const score = (d0 - d1) + 0.06 * dE - 4 * pinnedTicks + (d1 < 8 ? 40 : 0);
         if (score > bestScore) {bestScore = score; best = { yaw: baseYaw + dyaw, jet, ticks: DECIDE_TICKS, slow: 0 };}
       }
     }
