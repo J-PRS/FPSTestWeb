@@ -142,13 +142,20 @@ are already spread; the shared kernel/steal budget is the bound).
 
 ## Open threads
 
-- ~25% join-loss on local profload runs (did not reproduce on prod
-  this session — may be a local-socket artifact, worth one clean
-  local repro before calling it fixed)
+- ~~25% join-loss on local profload runs~~ RESOLVED 2026-11-03: not
+  join loss — serial-paced joins (~200ms each, 250 bots ≈ 50s) outrun
+  profload's fixed 18s settle, so it sampled a half-empty room.
+  profload.ts now seat-polls until >=75% before measuring (1078eca9).
 - `aoe-refuse` flood (~67k refused claims/50s in dense runs — bot
-  driver fires at 300-1200m targets; claim-path CPU + log spam)
+  driver fires at 300-1200m targets; claim-path CPU + log spam) —
+  bounded 2026-11-03: first 4/shooter+gate/2s keep forensics, rest
+  collapse (a0e01d43). Production shows zero refusals/hour; the flood
+  was soak-only netbot-vs-netbot (humans on the wire).
 - drain-deploys (research doc only — deploys still hard-restart)
-- Bun-TLS experiment for the ~1.3-1.5k box
+- ~~Bun-TLS experiment for the ~1.3-1.5k box~~ SHIPPED: direct wss
+  listeners live on all workers (:8443-8445), matchmaker routes
+  clients to them, cert-rotation rebind in place (9767412a, fed38f5d,
+  f0a7a08a). Canary measured Caddy 0% direct vs ~25-29% proxied.
 
 ## Addendum 2026-11-02 - Bun-TLS measured: the hypothesis holds
 
