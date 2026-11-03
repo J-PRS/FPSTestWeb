@@ -38,7 +38,7 @@ ssh -i "$KEY" "$HOST" "
     AKEY=\$(grep -h '^FPS_ADMIN_TOKEN' ~/$RDIR/.env ~/$RDIR/server.env 2>/dev/null | cut -d= -f2 | tr -d '\r' | head -1)
     for p in 8001 8002 8003; do curl -s -m 3 \"http://127.0.0.1:\$p/admin/drain?key=\$AKEY\" >/dev/null || true; done
     for i in \$(seq 1 24); do
-      humans=\$(for p in 8001 8002 8003; do curl -s -m 3 \"http://127.0.0.1:\$p/metrics?key=\$AKEY\"; done | python3 -c 'import json,sys;print(sum(json.loads(l).get(\"humans\",0) for l in sys.stdin.read().strip().split(chr(10)) if l.strip()))' 2>/dev/null || echo '?')
+      humans=\$(for p in 8001 8002 8003; do curl -s -m 3 \"http://127.0.0.1:\$p/metrics?key=\$AKEY\"; echo; done | python3 -c 'import json,sys;print(sum(json.loads(l).get(\"humans\",0) for l in sys.stdin if l.strip()))' 2>/dev/null || echo '?')
       echo \"deploy: drain wait \${i}x5s humans=\$humans\"
       [ \"\$humans\" = \"0\" ] && break
       sleep 5
