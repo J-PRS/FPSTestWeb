@@ -95,7 +95,7 @@ async function shutdown(): Promise<void> {
 // drain is never urgent (the deploy waits on it, players don't).
 setInterval((): void => {
   gameServer.afkSweep();
-  if (gameServer.draining && gameServer.totalPlayers() === 0) {
+  if (gameServer.draining && gameServer.totalHumans() === 0) {
     void shutdown();
   }
 }, 30_000).unref();
@@ -413,6 +413,7 @@ if (fleetReport) {
       body: JSON.stringify({
         port: CONFIG.port,
         tlsPort: directTlsPort || undefined,
+        draining: gameServer.draining || undefined,
         ccu: rooms.reduce((n, r): number => n + r.playerCount() + r.spectators.size, 0),
         rooms: rooms.map((r): string => r.name),
         list: gameServer.listRooms(true),

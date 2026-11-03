@@ -31,6 +31,18 @@ ssh -i "$KEY" "$HOST" "
   cd ~/$RDIR && tar -xzf /tmp/kribes_sync.tgz &&
   cp /tmp/kribes_build.txt server_bun/build.txt &&
   if systemctl cat kribes-fleet >/dev/null 2>&1; then
+    # Drain-deploy: arm the flag on every worker -> joins refused,
+    # humans finish or leave, then restart. Empty workers self-exit on
+    # the drain checker anyway; the cap keeps a parked human from
+    # blocking forever (fallback = the hard restart it replaced).
+    AKEY=\$(grep -h '^FPS_ADMIN_TOKEN' ~/$RDIR/.env ~/$RDIR/server.env 2>/dev/null | cut -d= -f2 | tr -d '\r' | head -1)
+    for p in 8001 8002 8003; do curl -s -m 3 \"http://127.0.0.1:\$p/admin/drain?key=\$AKEY\" >/dev/null || true; done
+    for i in \$(seq 1 24); do
+      humans=\$(for p in 8001 8002 8003; do curl -s -m 3 \"http://127.0.0.1:\$p/metrics?key=\$AKEY\"; done | python3 -c 'import json,sys;print(sum(json.loads(l).get(\"humans\",0) for l in sys.stdin.read().strip().split(chr(10)) if l.strip()))' 2>/dev/null || echo '?')
+      echo \"deploy: drain wait \${i}x5s humans=\$humans\"
+      [ \"\$humans\" = \"0\" ] && break
+      sleep 5
+    done
     sudo systemctl restart kribes-fleet; sleep 8; systemctl is-active kribes-fleet;
   else
     pgrep -f '^[^ ]*bin/bun src/server.ts' | xargs -r kill; sleep 2;

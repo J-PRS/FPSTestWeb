@@ -167,12 +167,13 @@ Bun.serve({
         return json({ error: 'loopback only' }, { status: 403 });
       }
       const body = await req.json().catch((): null => null) as
-        { port?: number; ccu?: number; rooms?: unknown; list?: unknown; tlsPort?: number } | null;
+        { port?: number; ccu?: number; rooms?: unknown; list?: unknown; tlsPort?: number; draining?: boolean } | null;
       const w = [...dir.workers.values()].find((x): boolean => x.port === body?.port);
       if (!body || !w) {return json({ error: 'unknown worker' }, { status: 400 });}
       const names = Array.isArray(body.rooms) ? body.rooms.filter((r): r is string => typeof r === 'string') : [];
       dir.beat(w.id, names, typeof body.ccu === 'number' ? body.ccu : 0, now,
-        typeof body.tlsPort === 'number' ? body.tlsPort : undefined);
+        typeof body.tlsPort === 'number' ? body.tlsPort : undefined,
+        body.draining === true ? true : undefined);
       lobbyRows.set(w.id, Array.isArray(body.list) ? body.list as LobbyRow[] : []);
       return json({ ok: true });
     }

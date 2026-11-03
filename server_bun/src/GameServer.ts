@@ -258,6 +258,14 @@ export class GameServer {
 
   totalPlayers(): number { return opsTotalPlayers(this); }
 
+  /** Humans only - bots are seats that exist to serve the humans, so a
+   *  bot-populated room must not hold a drain open. */
+  totalHumans(): number {
+    let n = 0;
+    for (const room of this.rooms.values()) {n += room.players.getHumanCount();}
+    return n;
+  }
+
   quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false, mayMint = true): Room | null {
     return this.factory.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans, mayMint);
   }

@@ -84,6 +84,7 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
       return {
       name: r.name,
       players: r.playerCount(),
+      humans: r.players.getHumanCount(),
       balls: r.ballSim.ballCount,
       clientStats: n ? { n, fpsAvg: Math.round(fpsSum / n), fpsMin, lossMax, pingMax } : undefined,
       scores: r.modeSpec?.teams ? Object.assign({}, r.scores) : undefined,
@@ -108,6 +109,7 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
     return {
       uptimeS,
       players: totalPlayers(g),
+      humans: [...g.rooms.values()].reduce((n, r): number => n + r.players.getHumanCount(), 0),
       memMB: {
         rss: Number((mem.rss / 1_048_576).toFixed(1)),
         heapUsed: Number((mem.heapUsed / 1_048_576).toFixed(1)),

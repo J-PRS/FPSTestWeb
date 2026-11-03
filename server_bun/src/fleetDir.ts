@@ -15,6 +15,9 @@ export interface FleetWorker {
    *  reported by the beat - /join answers host:tlsPort instead of the
    *  edge path route so game frames skip the proxy hop. */
   tlsPort?: number;
+  /** Drain-deploys: worker armed via /admin/drain - refusing new joins,
+   *  so resolve() must stop sending them. */
+  draining?: boolean;
 }
 
 export class FleetDirectory {
@@ -40,13 +43,14 @@ export class FleetDirectory {
     return w;
   }
 
-  beat(id: string, rooms: string[], ccu: number, now: WallMs, tlsPort?: number): void {
+  beat(id: string, rooms: string[], ccu: number, now: WallMs, tlsPort?: number, draining?: boolean): void {
     const w = this.workers.get(id);
     if (!w) {return;}
     w.lastBeat = now;
     w.up = true;
     w.ccu = ccu;
     w.tlsPort = tlsPort || undefined;
+    w.draining = draining || undefined;
     w.rooms = new Set(rooms);
     // Reconcile: drop this worker's homes it no longer reports (room
     // disposed/drained), adopt the ones it does.
@@ -82,7 +86,11 @@ export class FleetDirectory {
     let best: FleetWorker | null = null;
     let bestScore = Infinity;
     for (const w of this.workers.values()) {
-      if (!w.up) {continue;}
+      // Draining workers refuse new joins - placement skips them so a
+      // partial drain keeps routing joiners to live workers. A full
+      // drain returns null -> /join answers 503, which is the honest
+      // shape for a fleet going down.
+      if (!w.up || w.draining) {continue;}
       // Pending claims weigh like seats: on a ccu tie, consecutive
       // room mints still spread instead of piling onto the first-up
       // worker (a claimed room pre-beats is the join that lands next).
