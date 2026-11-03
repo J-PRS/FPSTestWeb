@@ -36,7 +36,7 @@ ssh -i "$KEY" "$HOST" "
     # the drain checker anyway; the cap keeps a parked human from
     # blocking forever (fallback = the hard restart it replaced).
     AKEY=\$(grep -h '^FPS_ADMIN_TOKEN' ~/$RDIR/.env ~/$RDIR/server.env 2>/dev/null | cut -d= -f2 | tr -d '\r' | head -1)
-    for p in 8001 8002 8003; do curl -s -m 3 \"http://127.0.0.1:\$p/admin/drain?key=\$AKEY\" >/dev/null || true; done
+    for p in 8001 8002 8003; do curl -s -m 3 -X POST -H \"Authorization: Bearer \$AKEY\" \"http://127.0.0.1:\$p/admin/drain\" >/dev/null || true; done
     for i in \$(seq 1 24); do
       humans=\$(for p in 8001 8002 8003; do curl -s -m 3 \"http://127.0.0.1:\$p/metrics?key=\$AKEY\"; echo; done | python3 -c 'import json,sys;print(sum(json.loads(l).get(\"humans\",0) for l in sys.stdin if l.strip()))' 2>/dev/null || echo '?')
       echo \"deploy: drain wait \${i}x5s humans=\$humans\"
