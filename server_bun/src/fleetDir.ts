@@ -83,13 +83,17 @@ export class FleetDirectory {
         return claimW;
       }
     }
+    return this.pickWorker(room, now);
+  }
+
+  /** Least-CCU live, non-draining worker. Draining workers refuse new
+   *  joins - placement skips them so a partial drain keeps routing to
+   *  live workers. A full drain returns null -> /join answers 503,
+   *  the honest shape for a fleet going down. */
+  private pickWorker(room: string | undefined, now: WallMs): FleetWorker | null {
     let best: FleetWorker | null = null;
     let bestScore = Infinity;
     for (const w of this.workers.values()) {
-      // Draining workers refuse new joins - placement skips them so a
-      // partial drain keeps routing joiners to live workers. A full
-      // drain returns null -> /join answers 503, which is the honest
-      // shape for a fleet going down.
       if (!w.up || w.draining) {continue;}
       // Pending claims weigh like seats: on a ccu tie, consecutive
       // room mints still spread instead of piling onto the first-up
