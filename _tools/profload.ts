@@ -196,15 +196,26 @@ try {
   // one proc, --rooms N --bots PER. Loopback is throttle-exempt, so pace 5ms.
   track(Bun.spawn(
     [BUN, '../tools/netbot/wideSoak.ts', '--rooms', String(ROOMS.length), '--bots', String(Math.ceil(BOTS / ROOMS.length)),
-      '--seconds', String(SETTLE + SECS + 30), '--pace', '5', '--join-parallel', JOINPAR, '--url', `ws://localhost:${PORT}/ws`, '--roombase', ROOMS[0] ?? 'prof'],
+      '--seconds', String(SETTLE + SECS + 150), '--pace', '5', '--join-parallel', JOINPAR, '--url', `ws://localhost:${PORT}/ws`, '--roombase', ROOMS[0] ?? 'prof'],
     { cwd: 'server_bun', stdout: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stderr: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stdin: 'ignore' },
   ), 'netBot');
   log(`${BOTS} bots across ${ROOMS.length} rooms -- settling ${SETTLE}s`);
   await sleep(SETTLE * 1000);
 
+  // Serial-paced joins outrun the settle window at any real bot count
+  // (~200ms each → 250 bots ≈ 50s) - poll until the herd seats instead
+  // of sampling once at the deadline, or the cpuPct is measured on a
+  // half-empty room and the per-seat cost reads falsely low.
+  let players = 0;
+  const seatDeadline = Date.now() + 120_000;
+  for (;;) {
+    const m = await metrics(PORT);
+    players = (m as { players?: number } | null)?.players ?? 0;
+    if (players >= Math.ceil(BOTS * 0.75) || Date.now() > seatDeadline) {break;}
+    await sleep(2000);
+  }
+  if (players < Math.ceil(BOTS * 0.75)) {log(`WARNING players=${players} < expected ${BOTS} after extended settle -- bots died or never joined (see profload_*.log); measurement is suspect`);}
   const m0 = await metrics(PORT);
-  const players = (m0 as { players?: number } | null)?.players ?? 0;
-  if (players < Math.ceil(BOTS * 0.75)) {log(`WARNING players=${players} < expected ${BOTS} -- bots died or never joined (see profload_*.log); measurement is suspect`);}
   log(`players=${players} -- measuring ${SECS}s`);
   measured = await cpuPct(serverPid, SECS, srv);
   const m1 = await metrics(PORT);
