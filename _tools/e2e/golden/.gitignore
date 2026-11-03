@@ -1,0 +1,3 @@
+# Goldens are the committed baseline set - the repo-wide *.png ignore
+# exists for screenshot scratch, not for regression baselines.
+!*.png

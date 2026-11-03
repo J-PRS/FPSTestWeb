@@ -1457,6 +1457,55 @@ renderer.setAnimationLoop((): void => {
   renderer.render(scene, camera);
 });
 
+// Deterministic-shot hook for the e2e gallery: advance the parked
+// preview by FIXED dt steps (mixer/species/uTime all ride previewLive)
+// then stop it - the pose freezes at a reproducible sim time regardless
+// of wall-clock frame pacing. Optional anim-state sets first (lineups).
+(window as any).__lab = {
+  hasAnims: (): boolean => Boolean(inspectAnchor?.userData.anims),
+  freeze: (animState?: string, steps = 90): void => {
+    const a = inspectAnchor?.userData.anims as
+      { set?(s: string): void; cur?(): string | undefined; bind?(): void } | undefined;
+    if (animState !== 'bind' && animState && a?.set) {
+      // set() no-ops when the state already matches - models then keep
+      // their load-timing-determined pose phase and shots flake. Force
+      // a different state first so the target restarts at action t=0.
+      if (a.cur?.() === animState) {a.set('hit');}
+      a.set(animState);
+    }
+    const t = previewLive.tick;
+    if (t) {
+      for (let i = 0; i < steps; i += 1) {t(1 / 60);}
+      previewLive.tick = null;
+    }
+    if (animState === 'bind' && a?.bind) {
+      // Authored T-pose - the only fully wall-clock-free pose a lineup
+      // has (mixer crossfade phase still lands run-to-run otherwise).
+      // Must run AFTER the ticks stop: m.update() would crossfade the
+      // rig straight back to its current anim state.
+      a.bind();
+    }
+    // Orbit damping settles over frames AFTER the fit - a shot taken
+    // mid-settle lands on a slightly different camera pose every run
+    // (whole-frame sub-pixel shift = uniform PSNR loss). Snap-frozen.
+    orbit.enableDamping = false;
+    orbit.update();
+    // vm pose rides wall-clock envelopes (kick spring, dips) - poseDelta
+    // is the measured offset from REST_POS, so subtracting it snaps the
+    // weapon + its inspect anchor to the canonical rest pose exactly.
+    (vm as unknown as { kickAmount?: number; kickVel?: number }).kickAmount = 0;
+    (vm as unknown as { kickVel?: number }).kickVel = 0;
+    vm.group.position.sub(vm.poseDeltaPos);
+    vm.group.rotation.x -= vm.poseDeltaRotX;
+    vm.group.rotation.z -= vm.poseDeltaRotZ;
+    if (inspectAnchor) {
+      const ip = inspectAnchor.userData.inspectPos as THREE.Vector3 | undefined;
+      if (ip) {inspectAnchor.position.copy(ip);}
+      inspectAnchor.rotation.set(0, 0, 0);
+    }
+  },
+};
+
 // HMR: a code edit re-imports this module - the fresh ViewModel above
 // picks up the new geo builders, state survives on window. dispose()
 // tears down THIS instance or every accept would stack renderers/pollers.
