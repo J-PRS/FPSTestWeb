@@ -338,19 +338,46 @@ if (CONFIG.wtPort > 0) {
 let directTlsPort = 0;
 if (CONFIG.tlsCertPath || CONFIG.tlsKeyPath) {
   try {
-    const { existsSync: fileExists } = await import('node:fs');
+    const { existsSync: fileExists, statSync } = await import('node:fs');
     const certPath = CONFIG.tlsCertPath;
     const keyPath = CONFIG.tlsKeyPath;
     if (!certPath || !keyPath || !fileExists(certPath) || !fileExists(keyPath)) {
       logger.warn('Direct TLS disabled - FPS_TLS_CERT/KEY unset or unreadable', { certPath, keyPath });
     } else {
-      const tls = Bun.serve<WebSocketData>({
-        port: CONFIG.tlsPort,
-        tls: { cert: Bun.file(certPath), key: Bun.file(keyPath) },
-        ...serveOpts,
-      });
-      directTlsPort = tls.port ?? 0;
-      logger.info('Direct wss listener up', { port: directTlsPort });
+      const bindTls = (): ReturnType<typeof Bun.serve<WebSocketData>> | null => {
+        try {
+          return Bun.serve<WebSocketData>({
+            port: CONFIG.tlsPort,
+            tls: { cert: Bun.file(certPath), key: Bun.file(keyPath) },
+            ...serveOpts,
+          });
+        } catch (error) {
+          logger.warn('Direct TLS bind failed', { error: (error as Error).message });
+          return null;
+        }
+      };
+      let tlsServer = bindTls();
+      directTlsPort = tlsServer?.port ?? 0;
+      if (tlsServer) {logger.info('Direct wss listener up', { port: directTlsPort });}
+      // Cert renewal watch: the ACME pair rotates (~60d) and Bun reads
+      // PEM at bind only - rebind on mtime change or the listener would
+      // keep serving the expired cert until restart. Rebind drops live
+      // TLS sockets; clients ride the normal reconnect chain.
+      let certMtime = statSync(certPath).mtimeMs;
+      setInterval((): void => {
+        let m: number;
+        try { m = statSync(certPath).mtimeMs; } catch { return; } // mid-rotation file gap
+        if (m !== certMtime) {
+          certMtime = m;
+          tlsServer?.stop(true);
+          tlsServer = null;
+        }
+        if (!tlsServer) {
+          tlsServer = bindTls();
+          directTlsPort = tlsServer?.port ?? 0;
+          if (tlsServer) {logger.info('Direct wss listener bound', { port: directTlsPort, renew: true });}
+        }
+      }, 60_000).unref();
     }
   } catch (error) {
     logger.warn('Direct TLS listener failed', { error: (error as Error).message });
