@@ -76,6 +76,21 @@ function leastFullRoom(): LobbyRow | undefined {
   return best;
 }
 
+/** Busiest reported room with seats - the named-miss landing spot when
+ *  minting is off. A joiner who asked for something should land where
+ *  the game already is, not in the emptiest room. */
+function busiestRoom(): LobbyRow | undefined {
+  let best: LobbyRow | undefined;
+  for (const [id, rows] of lobbyRows) {
+    if (!dir.workers.get(id)?.up) {continue;}
+    for (const r of rows) {
+      if ((r.players ?? 0) >= (r.maxPlayers ?? CONFIG.maxPlayers)) {continue;}
+      if (!best || (r.players ?? 0) > (best.players ?? 0)) {best = r;}
+    }
+  }
+  return best;
+}
+
 function joinThrottleAllow(ip: string | undefined | null): boolean {
   if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
   return windowAllow(joinIps, ip, wallNow(), JOIN_IP_WINDOW_MS, JOIN_IP_LIMIT, 1024);
@@ -220,11 +235,12 @@ Bun.serve({
       // no-mint join then has nothing to land in ('Server full'). Same
       // for a client-supplied name that isn't a live room: substitute an
       // existing room instead of routing the name to a worker that
-      // would mint it.
+      // would mint it. Busiest-with-seats: a drop-in lands where the
+      // game already is, not alone in the emptiest room.
       if (!CONFIG.clientRooms) {
         const names = dir.roomNames();
         for (const rows of lobbyRows.values()) {for (const r of rows) {names.add(r.name);}}
-        if (!room || !names.has(room)) {room = leastFullRoom()?.name;}
+        if (!room || !names.has(room)) {room = busiestRoom()?.name ?? leastFullRoom()?.name;}
       }
       const w = dir.resolve(room, now);
       if (!w) {return json({ error: 'no workers up' }, { status: 503 });}

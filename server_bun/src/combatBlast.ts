@@ -286,10 +286,26 @@ export class BlastRunner {
    *  is usually a bot, which is why victim-gating missed them). */
   private refuse(gate: string, ctx: BlastCtx, targetId: string, dist: number, isBot?: boolean, tpos?: Vec3, live?: Vec3): void {
     if (isBot && ctx.bot) {return;} // bot-on-bot sweep noise - the parity-miss population is human-involved
+    // Volume cap: a soak room of human clients sweeping splash produces
+    // thousands of refusals a second (seen: ~67k/50s) - keep the first
+    // few per shooter+gate each window with full forensics, count the
+    // rest into one suppressed line. Real parity-misses stay readable.
+    const key = `${ctx.shooterId}:${gate}`;
+    const r = this.refuseRate.get(key) ?? { n: 0, at: 0 };
+    const now = wallNow();
+    if (now - r.at > 2000) {r.at = now; r.n = 0;}
+    r.n += 1;
+    this.refuseRate.set(key, r);
+    if (r.n > 4) {
+      if (r.n === 5) {logger.warn('aoe-refuse (flood - further refusals suppressed)', { shooter: ctx.shooterId, gate, wt: ctx.weapon });}
+      return;
+    }
     logger.warn('aoe-refuse', { gate, victim: targetId, shooter: ctx.shooterId, dist: Number(dist.toFixed(1)), radius: ctx.radius, wt: ctx.weapon, at: [ctx.pos.x, ctx.pos.y, ctx.pos.z].map((v): number => Math.round(v)),
       ...(tpos && live ? { ghost: [Math.round(tpos.x), Math.round(tpos.y), Math.round(tpos.z)], live: [Math.round(live.x), Math.round(live.y), Math.round(live.z)],
         gM: Number(Math.hypot(tpos.x - live.x, tpos.y - live.y, tpos.z - live.z).toFixed(1)) } : {}) });
   }
+
+  private readonly refuseRate = new Map<string, { n: number; at: number }>();
 
   /** One target inside (or outside) a blast envelope: lag-comp position,
    *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
