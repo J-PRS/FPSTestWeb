@@ -479,7 +479,8 @@ export class ServerBots {
     const b = this.brains.get(id);
     if (!b) {return '?';}
     const hunt = b.h.hunt ? `${b.h.hunt.pos.x.toFixed(0)},${b.h.hunt.pos.z.toFixed(0)}` : '-';
-    return `hunt=${hunt} hold=${b.holding} jet=${b.jetDebug.why}/${b.jetDebug.out ? 'on' : 'off'}`;
+    const foe = Math.max(0, (this.foeNear.get(id) ?? 0) - simNow()) / 1000;
+    return `hunt=${hunt} hold=${b.holding} jet=${b.jetDebug.why}/${b.jetDebug.out ? 'on' : 'off'} foe=${foe > 0 ? foe.toFixed(0) + 's' : '-'}`;
   }
 
   /** Test hook — how many push-calls each team posted this match. */
