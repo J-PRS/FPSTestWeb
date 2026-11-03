@@ -46,8 +46,8 @@ describe('weapon ammo pool', () => {
 
   it('uncapped weapons never gate; a cleared pool reads full again', () => {
     const pool: AmmoPool = new Map();
-    expect(ammoOf(pool, WeaponType.Chaingun, 0)).toBeUndefined();
-    expect(spendAmmo(pool, WeaponType.Chaingun, 0)).toBe(true);
+    expect(ammoOf(pool, WeaponType.Disc, 0)).toBeUndefined();
+    expect(spendAmmo(pool, WeaponType.Disc, 0)).toBe(true);
     for (let i = 0; i < 25; i++) {spendAmmo(pool, WeaponType.PlasmaGun, i * 0.05);}
     expect(ammoOf(pool, WeaponType.PlasmaGun, 25 * 0.05)!).toBeLessThan(20);
     pool.clear(); // respawn path - absent cell = full pool

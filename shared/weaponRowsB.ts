@@ -7,6 +7,15 @@ export const WEAPONS_B: Record<number, WeaponStats> = {
   [WeaponType.Sprinkler]: {
     aimAxis: 'track',
     fireInterval: 0.1,
+    // Pool ammo, same pilot numbers as PlasmaGun: 20-round burst ~2s at
+    // cadence, regen paused one interval after the last shot, dry
+    // trickle at half rate.
+    ammoCap: 20,
+    ammoRegenMult: 2,
+    // Fixed hose cone - server-seeded draw, same law as the chaingun's
+    // bloom (its radius = base + accumulated bloom; the sprinkler's
+    // bloom stays 0 so this is a constant 0.05).
+    spreadBase: 0.05,
 
     // Sprinkler: plasma-gun cadence (~10/s ≈ 140dps on paper) but every bolt
     // arcs under world gravity inside a slight cone - mid-range area
