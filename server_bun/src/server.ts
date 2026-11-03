@@ -335,6 +335,7 @@ if (CONFIG.wtPort > 0) {
 // frames skip the Caddy decrypt/proxy hop entirely (bench: ~0.9 core
 // on the A1). Matchmaker/metrics keep Caddy; this only adds a port.
 // Failures are logged-and-continue like the WT tier.
+let directTlsPort = 0;
 if (CONFIG.tlsCertPath || CONFIG.tlsKeyPath) {
   try {
     const { existsSync: fileExists } = await import('node:fs');
@@ -348,7 +349,8 @@ if (CONFIG.tlsCertPath || CONFIG.tlsKeyPath) {
         tls: { cert: Bun.file(certPath), key: Bun.file(keyPath) },
         ...serveOpts,
       });
-      logger.info('Direct wss listener up', { port: tls.port });
+      directTlsPort = tls.port ?? 0;
+      logger.info('Direct wss listener up', { port: directTlsPort });
     }
   } catch (error) {
     logger.warn('Direct TLS listener failed', { error: (error as Error).message });
@@ -383,6 +385,7 @@ if (fleetReport) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         port: CONFIG.port,
+        tlsPort: directTlsPort || undefined,
         ccu: rooms.reduce((n, r): number => n + r.playerCount() + r.spectators.size, 0),
         rooms: rooms.map((r): string => r.name),
         list: gameServer.listRooms(true),

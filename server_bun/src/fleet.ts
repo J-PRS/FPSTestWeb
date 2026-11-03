@@ -152,11 +152,12 @@ Bun.serve({
         return json({ error: 'loopback only' }, { status: 403 });
       }
       const body = await req.json().catch((): null => null) as
-        { port?: number; ccu?: number; rooms?: unknown; list?: unknown } | null;
+        { port?: number; ccu?: number; rooms?: unknown; list?: unknown; tlsPort?: number } | null;
       const w = [...dir.workers.values()].find((x): boolean => x.port === body?.port);
       if (!body || !w) {return json({ error: 'unknown worker' }, { status: 400 });}
       const names = Array.isArray(body.rooms) ? body.rooms.filter((r): r is string => typeof r === 'string') : [];
-      dir.beat(w.id, names, typeof body.ccu === 'number' ? body.ccu : 0, now);
+      dir.beat(w.id, names, typeof body.ccu === 'number' ? body.ccu : 0, now,
+        typeof body.tlsPort === 'number' ? body.tlsPort : undefined);
       lobbyRows.set(w.id, Array.isArray(body.list) ? body.list as LobbyRow[] : []);
       return json({ ok: true });
     }
@@ -229,6 +230,13 @@ Bun.serve({
       if (!w) {return json({ error: 'no workers up' }, { status: 503 });}
       const host = url.hostname;
       const s = clientSchemes(req);
+      // A worker reporting a live direct-TLS listener gets its clients
+      // straight there (wss://host:tlsPort/ws) - the path route's Caddy
+      // decrypt+proxy hop disappears for game frames. Beats stop
+      // reporting the port and routing falls back automatically.
+      if (w.tlsPort) {
+        return json({ url: `wss://${host}:${w.tlsPort}/ws`, http: `https://${host}:${w.tlsPort}`, room, worker: w.id });
+      }
       // FPS_FLEET_PATH=1: workers sit behind an edge path route (/w0/ws →
       // :8001) — the public host only exposes 443. Default keeps
       // host:port for LAN/direct deployment.

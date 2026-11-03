@@ -11,6 +11,10 @@ export interface FleetWorker {
   rooms: Set<string>;
   lastBeat: WallMs;
   up: boolean;
+  /** Direct wss listener port when the worker exposes one (FPS_TLS_*),
+   *  reported by the beat - /join answers host:tlsPort instead of the
+   *  edge path route so game frames skip the proxy hop. */
+  tlsPort?: number;
 }
 
 export class FleetDirectory {
@@ -36,12 +40,13 @@ export class FleetDirectory {
     return w;
   }
 
-  beat(id: string, rooms: string[], ccu: number, now: WallMs): void {
+  beat(id: string, rooms: string[], ccu: number, now: WallMs, tlsPort?: number): void {
     const w = this.workers.get(id);
     if (!w) {return;}
     w.lastBeat = now;
     w.up = true;
     w.ccu = ccu;
+    w.tlsPort = tlsPort || undefined;
     w.rooms = new Set(rooms);
     // Reconcile: drop this worker's homes it no longer reports (room
     // disposed/drained), adopt the ones it does.
