@@ -762,7 +762,17 @@ hurtCount += 1;
         if (transit && this.greedy.drive(id, cruise)) {owned = true;}
         else {this.greedy.release(id);}
       }
-      if (sh && !owned) {this.driveMove(id, p, out, sh, dt, now);}
+      if (sh && !owned) {
+        this.driveMove(id, p, out, sh, dt, now);
+        // A parked bot that keeps facing its arrival yaw is blind: foes
+        // outside the ~113° sense cone never reach foeNear, so it sits
+        // next to enemies without firing. Face the remembered hunt spot
+        // — park means "hold this ground", not "stop looking".
+        const hunt = brain.h.hunt;
+        if (out.move?.park && hunt) {
+          p.rotation.yaw = Math.atan2(hunt.pos.x - p.position.x, hunt.pos.z - p.position.z);
+        }
+      }
       else if (sh) {
         // MPC owns inputs; the position commit still mirrors driveMove —
         // the shadow's write is the bot's whole wire truth.
