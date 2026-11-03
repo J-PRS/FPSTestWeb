@@ -4,7 +4,8 @@ import { POWERUP } from '../../shared/pickups.ts';
 
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost, spendAmmo } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow } from '../../shared/weapons.ts';
+import { idSeed } from '../../shared/weaponTable.ts';
 import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
@@ -599,6 +600,21 @@ win.violations += 1;
       }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;
+      let ndir = { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l };
+      // Server-owned bloom cone (chaingun): the client claims a RAW aim
+      // dir - we draw the seeded cone its predicted shell used, so a
+      // forged "center" claim still lands inside the same scatter.
+      // No shotId = no shared seed = no cone (old clients, relays).
+      const bs = bloomRadius(player.bloom, player.bloomAt, msg.weaponType ?? -1, now / 1000);
+      if (bs.radius > 0) {
+        // Server-side sequence seed, NOT the claimed shotId - a client
+        // that brute-forces favorable seeds gains nothing (the CSGO
+        // random_seed hole). It predicts the same counter per pull.
+        const [u1, u2] = jitter01(idSeed(playerId) ^ player.bloomSeq++);
+        ndir = coneDir(ndir, u1 * Math.PI * 2, Math.sqrt(u2) * bs.radius);
+      }
+      player.bloom = bloomGrow(bs.bloom, msg.weaponType ?? -1);
+      player.bloomAt = now / 1000;
       // Velocity inherit: the predicted shell draws playerVel*0.5 — using
       // the shadow velocity here diverges the echo by uplink-of-accel and
       // shows as a mid-air reanchor jink. Adopt the claim's vel verbatim
@@ -616,7 +632,7 @@ win.violations += 1;
       const lagS = (this.deps.transitOf?.(playerId) ?? 0) / 1000;
       const id = fireProjectile(playerId, msg.weaponType!,
         { x: at.x, y: at.y, z: at.z },
-        { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },
+        ndir,
         ownerVel, msg.shotId, lagS);
       if (id) {
         if (msg.shotId) {

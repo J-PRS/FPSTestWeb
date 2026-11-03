@@ -105,6 +105,7 @@ export class HUD {
     this.energyReadout = d.energyReadout;
     this.groundReadout = d.groundReadout;
     this.wammoReadout = d.wammoReadout;
+    this.bloomRing = d.bloomRing;
     this.stats = new HudStats(this);
     this.minimap = new Minimap(this.el);
     this.cmdmap = new CommandMap(this.el);
@@ -117,6 +118,7 @@ export class HUD {
   energyReadout: HTMLDivElement;
   groundReadout: HTMLDivElement;
   wammoReadout: HTMLDivElement  // public - HudStats family paints it;
+  bloomRing: HTMLDivElement     // public - bloom cone affordance, painted per-frame;
 
   private lastSheepShown = -1;
   private lastEnergyShown = -1;

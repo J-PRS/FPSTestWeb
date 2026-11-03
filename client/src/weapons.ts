@@ -18,7 +18,7 @@ import {
   BOLT_FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE,
   PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE,
   PISTOL_RATE, REVOLVER_RATE, BLASTER_RATE, STICKY_RATE, PLASMAGUN_RATE, BOMBARD_RATE,
-  SPRINKLER_RATE, SPRINKLER_SPREAD, REPAIR_RATE, MRV_RATE,
+  SPRINKLER_RATE, REPAIR_RATE, MRV_RATE,
   FLAK_SHARDS, FLAK_SPREAD, SG_PELLETS, SG_SPREAD,
 } from './core/config.js';
 
@@ -43,6 +43,10 @@ export interface WeaponDef {
   /** Projectile kind only: per-shot cone jitter (sprinkler - a stream that
    *  drifts, vs a fan that bursts). */
   readonly spread?: number;
+  /** Growing cone (chaingun): numbers live on the shared row - the
+   *  server seeds the cone off shotId, the client predicts the same
+   *  jittered dir and grows player.bloom in lockstep for the HUD arms. */
+  readonly bloom?: { readonly base: number; readonly rate: number; readonly exp: number; readonly decay: number; readonly max: number };
   /** Hold-out weapon - excluded from loadout slot menus (chosen via the
    *  sidearm row, not a primary slot). */
   readonly sidearm?: boolean;
@@ -51,7 +55,7 @@ export interface WeaponDef {
 const CONFIG_BY_TYPE = new Map<number, ProjectileConfig>(WEAPON_CONFIGS.map((c): [number, ProjectileConfig] => [c.weaponType, c]));
 
 function def(weaponType: WeaponType, rate: number | undefined,
-             kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; spread?: number; sidearm?: boolean } = {}): WeaponDef {
+             kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; spread?: number; bloom?: { base: number; rate: number; exp: number; decay: number; max: number }; sidearm?: boolean } = {}): WeaponDef {
   // Registry miss falls back to the bolt config rather than taking down
   //  firing - same rule weaponDef() applies to a corrupt wid.
   const config = CONFIG_BY_TYPE.get(weaponType) ?? CONFIG_BY_TYPE.get(WeaponType.BoltLauncher)!;
@@ -70,6 +74,9 @@ function def(weaponType: WeaponType, rate: number | undefined,
     auto: opts.auto ?? false,
     pellets: opts.pellets,
     spread: opts.spread,
+    bloom: (stats.bloomMax ?? stats.spreadBase) === undefined ? opts.bloom
+      : { base: stats.spreadBase ?? 0, rate: stats.bloomRate ?? 0, exp: stats.bloomExp ?? 1,
+          decay: stats.bloomDecay ?? 0, max: stats.bloomMax ?? stats.spreadBase ?? 0 },
     sidearm: opts.sidearm ?? (stats.sidearm === true || undefined),
   };
 }
@@ -80,6 +87,8 @@ function def(weaponType: WeaponType, rate: number | undefined,
 export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.BoltLauncher, BOLT_FIRE_RATE, 1),
   def(WeaponType.Disc, DISC_RATE, 1),
+  // Classic chaingun bloom (not pool ammo - it's the sustain weapon):
+  // tight taps, cone blows open under a held spray. Server-seeded.
   def(WeaponType.Chaingun, CHAINGUN_RATE, 0.4, { auto: true }),
   def(WeaponType.Mortar, MORTAR_RATE, 2),
   def(WeaponType.GrenadeLauncher, GL_RATE, 1.1),
@@ -94,7 +103,7 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.Revolver, REVOLVER_RATE, 1, { sidearm: true }),
   def(WeaponType.Sticky, STICKY_RATE, 1.2),
   def(WeaponType.PlasmaGun, PLASMAGUN_RATE, 0.6),
-  def(WeaponType.Sprinkler, SPRINKLER_RATE, 0.5, { auto: true, spread: SPRINKLER_SPREAD }),
+  def(WeaponType.Sprinkler, SPRINKLER_RATE, 0.5, { auto: true }),
   def(WeaponType.Repair, REPAIR_RATE, 0, { auto: true, sidearm: true }),
   def(WeaponType.MRVLauncher, MRV_RATE, 2.2),
   def(WeaponType.Bombard, BOMBARD_RATE, 2.4),

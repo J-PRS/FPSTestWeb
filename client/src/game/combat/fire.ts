@@ -23,7 +23,8 @@ import {
 import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
 import { swingArcView } from '../../effects/swingTrails.js';
-import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed, payShotCost, spendAmmo } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed, payShotCost, spendAmmo, jitter01, coneDir } from '../../../../shared/weapons.js';
+import { idSeed } from '../../../../shared/weaponTable.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { WorldState } from '../worldState.js';
 import type { BlastArgs } from '../blastForce.js';
@@ -103,17 +104,28 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // behind a fast skier and blended forward over ~150ms. The server
   // still rewinds its own authoritative shell; any arc divergence is
   // an echo-bind problem, not a feel problem — trajDiv watches it.)
-  const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, e.playerVel, config);
-  deps.world.projectiles.push(p);
-
   // Every spawn below claims a wire identity — the nonce is what binds
   // the projectileCreated echo back to this shell. Minting only for
   // needsServerTracking left untracked shells (bomblets, MRV children)
   // registering server-side with no id to link: 'no local shell' warns.
   // needsServerTracking keeps governing the damage-claim path; the nonce
   // costs a map entry, pruned on death.
+  const shotId = nextShotId(deps.world.projectileRegistry);
+  // Bloom weapons: the CLAIM ships the raw aim dir - the server seeds
+  // the cone itself off this shotId. The predicted shell draws the same
+  // jitter so prediction lands inside the server's scatter, not its own.
+  let spawnDir = e.dir;
+  if (e.bloomRadius !== undefined) {
+    // Counter-seeded cone - the server draws idSeed(playerId) ^ seq; the
+    // local player id mirrors the counter per pull (lockstep off rejects).
+    const [u1, u2] = jitter01(idSeed(deps.lazyNetworkManager().getLocalPlayerId()) ^ (e.bloomSeq ?? 0));
+    const jd = coneDir(e.dir, u1 * Math.PI * 2, Math.sqrt(u2) * e.bloomRadius);
+    spawnDir = _flakDir.set(jd.x, jd.y, jd.z).clone();
+  }
+  const p = new Projectile(deps.lazyScene(), _spawnOrigin, spawnDir, e.playerVel, config);
+  deps.world.projectiles.push(p);
   p.shooterTeam = deps.world.localTeam ?? null;
-  p.shotId = nextShotId(deps.world.projectileRegistry);
+  p.shotId = shotId;
   deps.world.projectileRegistry.byShotId.set(p.shotId, p);
 
   // Record projectile fired event for demo
@@ -293,6 +305,17 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
   if (!spendAmmo(deps.lazyPlayer().ammoPool, def.config.weaponType, performance.now() / 1000)) {return;}
   deps.lazyViewModel()?.kick(def.kick);
   if (def.pellets) { spawnFan(deps, def.config, e, def.pellets.count, def.pellets.spread); return; }
+  if (def.bloom) {
+    // Bloom: claim the RAW aim dir - the server owns the cone. The
+    // predicted shell jitters inside spawnProjectile off the same
+    // shotId seed. player.bloom drives both the jitter radius here and
+    // the HUD arms; it grows after the shot lands, like the server's.
+    const pl = deps.lazyPlayer();
+    spawnProjectile(deps, def.config, { origin: e.origin, dir: e.dir, playerVel: e.playerVel,
+      bloomRadius: def.bloom.base + pl.bloom, bloomSeq: pl.bloomSeq++ });
+    pl.bloom = Math.min(def.bloom.max, (pl.bloom + def.bloom.rate) * def.bloom.exp);
+    return;
+  }
   if (def.spread) {
     // Stream jitter: a random cone offset per bolt — same basis math as
     // the fan but a single drifting shot, so the volley reads as a hose.

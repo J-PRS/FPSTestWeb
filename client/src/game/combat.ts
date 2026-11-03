@@ -65,7 +65,7 @@ export interface CombatDeps extends GameContext {
   nuggets: Nugget[];
 }
 
-export type FireArgs = { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 };
+export type FireArgs = { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3; bloomRadius?: number; bloomSeq?: number };
 
 /** One explosion call - named args beat the old 15-positional-param
  *  signature where every call site had to comment which holes were empty. */

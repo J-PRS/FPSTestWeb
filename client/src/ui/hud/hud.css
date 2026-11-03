@@ -237,6 +237,35 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   border-radius: 50%;
   box-shadow: 0 0 3px rgba(0,0,0,0.8);
 }
+/* Bloom cone affordance - CS/Valorant-style expanding arms: four short
+   * ticks that push radially out from the dot as player.bloom grows. The
+   * gap reads as "current spread" without covering the aim point. The
+   * container moves via --gap (set per frame); arms sit at its edge. */
+/* Position snapped to whole pixels by JS (hudStats writes left/top) -
+ * centering via 50%/transform lands on .5px on odd viewports and
+ * whichever axis straddles renders its bars half-alpha (blurry-thin).
+ * Even-thickness ticks then tile pixels exactly on either parity. */
+#bloom-arms {
+  position: absolute; top: 0; left: 0;
+  width: 0; height: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+#bloom-arms .ba {
+  position: absolute;
+  background: rgba(255,255,255,0.9); /* same as the center dot */
+  box-shadow: 0 0 2px rgba(0,0,0,0.8);
+}
+#bloom-arms .ba-n, #bloom-arms .ba-s {
+  width: 2px; height: 8px; left: -1px;
+}
+#bloom-arms .ba-n { top: calc(-8px - var(--gap, 0px)); }
+#bloom-arms .ba-s { top: var(--gap, 0px); }
+#bloom-arms .ba-e, #bloom-arms .ba-w {
+  width: 8px; height: 2px; top: -1px;
+}
+#bloom-arms .ba-e { left: var(--gap, 0px); }
+#bloom-arms .ba-w { left: calc(-8px - var(--gap, 0px)); }
 /* Own sheep meter — small readout under the crosshair, same coloring
    * as the indicator badges so sheepish reads the same everywhere. */
 #sheep-readout {

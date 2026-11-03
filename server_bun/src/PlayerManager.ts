@@ -138,6 +138,9 @@ export class PlayerManager {
       chargeEchoAt: wallMs(0),
       healthEchoAt: wallMs(0),
       ammoEchoAt: wallMs(0),
+      bloom: 0,
+      bloomAt: 0,
+      bloomSeq: 0,
     };
 
     // Bots stamp p.isBot after this returns — the counter must key on
@@ -150,6 +153,9 @@ export class PlayerManager {
       player.heldTokens = was.heldTokens;
       player.beltCharges = was.beltCharges;
       player.ammoPool = was.ammoPool;
+      player.bloom = was.bloom;
+      player.bloomAt = was.bloomAt;
+      player.bloomSeq = was.bloomSeq;
       player.kills = was.kills;
       player.deaths = was.deaths;
       player.streak = was.streak;
@@ -462,6 +468,7 @@ target.deaths += 1;
     player.charge = 0;
     player.beltCharges = BELT_MAX;
     player.ammoPool.clear(); // absent cell = full pool - clear IS the refill
+    player.bloom = 0;
     player.heldTokens = 0;
     player.beltAcc = 0;
     player.pendingRespawn = false;

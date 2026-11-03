@@ -103,6 +103,15 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Chaingun]: {
     aimAxis: 'track',
     fireInterval: 0.09,
+    // Server-owned bloom cone: +0.001 then ×1.25 per slug (tight for the
+    // first ~5, blows open to max by ~15 ≈ 1.4s of spray), decayed 0.6/s
+    // once the trigger's been up an interval. Same math the client
+    // predicts; the cone itself is seeded off shotId so a forged center
+    // claim still draws a cone.
+    bloomRate: 0.001,
+    bloomExp: 1.25,
+    bloomDecay: 0.6,
+    bloomMax: 0.1,
     directDamage: 8, // ~89 dps at 11/s - below plasma (125) but hitscan-easy; 13 slugs to kill a player
 
     aoeDamage: 0,

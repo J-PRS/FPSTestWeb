@@ -35,6 +35,7 @@ export interface StatsHost {
   dmgDir: HTMLDivElement;
   dmgDirArc: HTMLDivElement;
   wammoReadout: HTMLDivElement;
+  bloomRing?: HTMLDivElement;
 }
 
 export class HudStats {
@@ -48,6 +49,10 @@ export class HudStats {
   private lastArmor = -1;
   private lastBuffsKey = '';
   private lastWammoCol = '';
+  private lastBloomPx = -1;
+  private lastBloomAlpha = -1;
+  private lastBloomW = -1;
+  private lastBloomH = -1;
   private ghostPct = 100;      // trails healthPct downward on damage
   private hitTimer = 0;
   private dmgT = 0;            // vignette decay
@@ -126,6 +131,33 @@ export class HudStats {
       else if (n >= 0 && n < 5) {col = '#ffd54a';}
       this.setText(h.wammoReadout, 'wammo', n < 0 ? '' : String(n));
       if (this.lastWammoCol !== col) {this.lastWammoCol = col; h.wammoReadout.style.color = col;}
+    }
+
+    // Bloom cone arms: alpha fades in on sqrt(normalized bloom) - they
+    // ramp in FASTER than linear early (quadratic would do the reverse),
+    // invisible at rest, full strength by bloom.max. Gap still rides the
+    // real cone so the arms sit where slugs can land.
+    if (h.bloomRing) {
+      const bloomDef = wid === undefined ? undefined : weaponDef(wid).bloom;
+      // Deadband: hidden for the first ~5% of the cone (the tight taps) -
+      // sqrt then ramps the rest of the way to full at bloom.max.
+      const t = bloomDef ? Math.min(1, Math.max(0, player.bloom / bloomDef.max - 0.05) / 0.95) : 0;
+      const alpha = Math.round(Math.sqrt(t) * 20) / 20; // 5% steps - cache-friendly
+      const px = bloomDef === undefined ? 0
+        : Math.max(4, Math.round(player.bloom * window.innerHeight * 0.5));
+      if (px !== this.lastBloomPx || alpha !== this.lastBloomAlpha) {
+        this.lastBloomPx = px;
+        this.lastBloomAlpha = alpha;
+        h.bloomRing.style.setProperty('--gap', `${px}px`);
+        h.bloomRing.style.opacity = String(alpha);
+      }
+      // Snap the origin to whole pixels or the tick edges anti-alias.
+      const bw = window.innerWidth, bh = window.innerHeight;
+      if (bw !== this.lastBloomW || bh !== this.lastBloomH) {
+        this.lastBloomW = bw; this.lastBloomH = bh;
+        h.bloomRing.style.left = `${Math.round(bw / 2)}px`;
+        h.bloomRing.style.top = `${Math.round(bh / 2)}px`;
+      }
     }
 
     if (this.hitTimer > 0) {

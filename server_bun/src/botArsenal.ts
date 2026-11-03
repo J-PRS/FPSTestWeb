@@ -8,7 +8,8 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { classCapsule, classCanFire } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
-import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST, payShotCost, spendAmmo } from '../../shared/weapons.ts';
+import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow } from '../../shared/weapons.ts';
+import { idSeed } from '../../shared/weaponTable.ts';
 import { SELF_SPLASH_MAX,aoeDamageAt, hitRadiusAt } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
@@ -401,6 +402,8 @@ s[kind] += 1; this.propels.set(id, s);
     const az = aim.z - muzzle.z;
     const alen = (ax * ax + ay * ay + az * az) ** 0.5 || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
+    const me0 = this.room.players.getPlayer(p.id);
+    if (me0) {this.bloomCone(me0, dir, wt);}
     // Human imperfection: occasionally skip self-splash checks entirely,
     // simulating "fuck it" moments or not paying attention. No absolutes.
     const imperfect = botRand() < 0.05;
@@ -484,6 +487,8 @@ s[kind] += 1; this.propels.set(id, s);
     const dir = { x: dx / dist + j(), y: dy / dist + j(), z: dz / dist + j() };
     const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
     dir.x /= l; dir.y /= l; dir.z /= l;
+    const me2 = this.room.players.getPlayer(p.id);
+    if (me2) {this.bloomCone(me2, dir, wt);}
     // Human imperfection: occasionally skip self-splash checks entirely,
     // simulating "fuck it" moments or not paying attention. No absolutes.
     const imperfect = botRand() < 0.05;
@@ -514,6 +519,21 @@ s[kind] += 1; this.propels.set(id, s);
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
+  }
+
+  /** Server-bot bloom: the same seeded cone the intent path applies to
+   *  humans - bot shots have no shotId, so a per-arsenal sequence mixes
+   *  with the id hash for the draw (deterministic per run order). */
+  private bloomSeq = 0;
+  private bloomCone(me: { id: string; bloom: number; bloomAt: number }, dir: Vec3, wt: number): void {
+    const bs = bloomRadius(me.bloom, me.bloomAt, wt, this.clock / 1000);
+    if (bs.radius > 0) {
+      const [u1, u2] = jitter01(idSeed(me.id) ^ this.bloomSeq++);
+      const jd = coneDir(dir, u1 * Math.PI * 2, Math.sqrt(u2) * bs.radius);
+      dir.x = jd.x; dir.y = jd.y; dir.z = jd.z;
+    }
+    me.bloom = bloomGrow(bs.bloom, wt);
+    me.bloomAt = this.clock / 1000;
   }
 
   /** Self-radius clearance: an AOE shell that detonates on terrain or a

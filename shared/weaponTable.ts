@@ -187,6 +187,16 @@ export interface WeaponStats {
   /** Pool regen cadence as a multiple of fireInterval — 2 = one round
    *  per 2× the shot interval, so a dry gun sustains at half rate. */
   ammoRegenMult?: number;
+  /** Base cone radius always applied (sprinkler's fixed 0.05 hose) -
+   *  sits UNDER any bloom growth, drawn from the same server-side seed. */
+  spreadBase?: number;
+  /** Bloom cone (chaingun): per-shot growth = +rate then ×exp, radius in
+   *  dir-offset units capped at bloomMax. Decay starts one fireInterval
+   *  after the last shot (lazy, applied on the next use). */
+  bloomRate?: number;
+  bloomExp?: number;
+  bloomDecay?: number;
+  bloomMax?: number;
   /** Sidearm (hold-out pull weapon): auto-derives the sidearm pool -
    *  same marker pattern as beltThrow, so a new sidearm registers here
    *  once instead of in a menu, a union type, and two tables. */

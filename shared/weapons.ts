@@ -207,6 +207,60 @@ function accrue(pool: AmmoPool, weaponType: number, nowS: number): { ammo: numbe
 /** Rounds currently banked - undefined when the weapon has no pool.
  *  Pure read for gates that only preview (impulse, HUD): the accrual
  *  advances `t` but never spends. */
+/** Bloom weapons (chaingun): the SERVER owns the cone - it jitters the
+ *  claimed dir deterministically from the shotId seed, so a forged
+ *  "center" claim draws the same cone an honest pull computed. The
+ *  client predicts its local shell with the same seed + radius, so the
+ *  echo lands on the same arc. */
+export function jitter01(seed: number): [number, number] {
+  // Two decorrelated u32 -> [0,1) draws (integer mix, deterministic).
+  let h = (seed >>> 0) || 1;
+  h = Math.imul(h ^ (h >>> 15), h | 1);
+  h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
+  const u1 = ((h ^ (h >>> 14)) >>> 0) / 4_294_967_296;
+  h = (Math.imul(h ^ 0x9E_37_79_B9, 2_654_435_761)) >>> 0;
+  return [u1, h / 4_294_967_296];
+}
+
+/** Cone-jittered copy of dir: dir + right*cos(a)*r + up*sin(a)*r over an
+ *  orthonormal basis, renormalized. Same basis math the client fan uses -
+ *  one implementation so server spawn and prediction can't drift. */
+export function coneDir(dir: { x: number; y: number; z: number }, angle: number, radius: number): { x: number; y: number; z: number } {
+  // right = dir × (0,1,0)
+  let rx = -dir.z, ry = 0, rz = dir.x;
+  const rl = Math.hypot(rx, ry, rz);
+  if (rl < 1e-8) { rx = 1; } else { rx /= rl; rz /= rl; }
+  // up = right × dir (unit by construction)
+  const ux = ry * dir.z - rz * dir.y;
+  const uy = rz * dir.x - rx * dir.z;
+  const uz = rx * dir.y - ry * dir.x;
+  const ca = Math.cos(angle) * radius, sa = Math.sin(angle) * radius;
+  const x = dir.x + rx * ca + ux * sa;
+  const y = dir.y + ry * ca + uy * sa;
+  const z = dir.z + rz * ca + uz * sa;
+  const l = Math.hypot(x, y, z) || 1;
+  return { x: x / l, y: y / l, z: z / l };
+}
+
+/** One bloom step: lazy decay (nothing for a fireInterval after the
+ *  last shot - the "trigger up" window the client mirrors), then the
+ *  returned radius is the decayed cone BEFORE this shot's grow. Caller
+ *  applies coneDir, then calls bloomGrow + stamps bloomAt. */
+export function bloomRadius(bloom: number, bloomAt: number, weaponType: number, nowS: number): { bloom: number; radius: number } {
+  const st = WEAPONS[weaponType];
+  if (!st?.bloomMax && !st?.spreadBase) {return { bloom, radius: 0 };}
+  const gapS = Math.max(0, nowS - bloomAt - (st.fireInterval ?? 0.5));
+  const b = Math.max(0, bloom - (st.bloomDecay ?? 0) * gapS);
+  return { bloom: b, radius: (st.spreadBase ?? 0) + b };
+}
+
+/** After the shot: +rate then ×exp, clamped to the row's max. */
+export function bloomGrow(bloom: number, weaponType: number): number {
+  const st = WEAPONS[weaponType];
+  if (!st?.bloomMax) {return bloom;}
+  return Math.min(st.bloomMax, (bloom + (st.bloomRate ?? 0)) * (st.bloomExp ?? 1));
+}
+
 export function ammoOf(pool: AmmoPool, weaponType: number, nowS: number): number | undefined {
   return accrue(pool, weaponType, nowS)?.ammo;
 }

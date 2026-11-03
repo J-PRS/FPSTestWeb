@@ -13,7 +13,7 @@ import { inv } from '../../../shared/invariants.js';
 import { PlayerStatus } from './playerStatus.js';
 
 import { MovementController, type MovementState } from './movement.js';
-import { type WeaponDef } from '../weapons.js';
+import { type WeaponDef, weaponDef } from '../weapons.js';
 import { settings } from '../core/settings.js';
 import * as read from './playerRead.js';
 import { PlayerInput } from './player/input.js';
@@ -137,6 +137,7 @@ export class Player {
     this.protectedUntil = performance.now() + SPAWN_PROTECT_MS;
     this.beltCharges = BELT_MAX;
     this.ammoPool.clear(); // absent cell = full pool - the refill IS the clear
+    this.bloom = 0;
     this._heldHurtT = 0;
     this._beltAcc = 0;
     this.vel.set(0, 0, 0);
@@ -435,6 +436,12 @@ export class Player {
    *  accrual on the perf clock; the server owns the same pool through
    *  its own gate, prediction just previews/spends the same formula. */
   ammoPool = new Map<number, { ammo: number; t: number; shotAt: number }>();
+  /** Bloom cone radius for def.bloom weapons (chaingun): grows per shot,
+   *  decays in tickTimers. Dir-offset units - 0 = pixel tight. */
+  bloom = 0;
+  /** Predicted cone draw counter - mirrors the server's bloomSeq so the
+   *  jitter seed (idSeed(id) ^ seq) matches the authoritative draw. */
+  bloomSeq = 0;
   /** Headhunt held tokens — server-owned count, HUD reads it raw. */
   heldTokens = 0;
   /** True when the held-token drip is live (≥3 tokens, 8s since last hit). */
@@ -676,6 +683,11 @@ export class Player {
     this.throwLockT = Math.max(0, this.throwLockT - dt);
     this.armory.secondaryDrawT = Math.max(0, this.armory.secondaryDrawT - dt);
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
+    // Bloom decays only while the trigger's UP (per-shot decay would
+    // swallow the +rate add at any firing cadence) - a holstered spray
+    // holds its cone until the gun comes back out.
+    const bloomDef = weaponDef(this.armory.secondaryWid ?? this.loadout[this.weaponIndex]).bloom;
+    if (bloomDef && !this.input.mouseHeld) {this.bloom = Math.max(0, this.bloom - bloomDef.decay * dt);}
     this.skills.tickCooldowns(dt);
     this.skills.updateBeacon(dt);
     this.skills.updateCloak(dt);

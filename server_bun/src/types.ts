@@ -198,6 +198,14 @@ export interface PlayerState {
   healthEchoAt: WallMs;
   /** yourAmmo echo throttle - same 500ms cadence as healthEchoAt. */
   ammoEchoAt: WallMs;
+  /** Bloom cone state (chaingun): accumulated radius in dir-offset
+   *  units + the last-shot stamp the lazy decay measures from. The
+   *  server owns the cone - it jitters the claimed dir by this. */
+  bloom: number;
+  bloomAt: number;
+  /** Per-shooter cone draw counter - the seed is server-side, so a
+   *  client can't brute-force favorable shotIds (CSGO random_seed class). */
+  bloomSeq: number;
 }
 
 /** Uniform claim verdict — `true` = applied/accepted, a string = the
