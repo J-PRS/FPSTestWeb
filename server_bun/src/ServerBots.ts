@@ -106,6 +106,9 @@ export class ServerBots {
   /** Transit driver for every bot with a destination — rollout owns the
    *  legs, driveMove keeps close-quarters/park handling. */
   private readonly greedy: BotGreedy;
+  /** Stale-park stamp per bot — a foeless park that outlives the window
+   *  gets overridden into a roam so energy-default beats the latch. */
+  private readonly parkSince = new Map<string, number>();
   private readonly mpcArm = new Map<string, BotVec>();
   /** MPC progress sampler — the watchdog seeds/compares net travel. */
   private readonly mpcProgress = new Map<string, { x: number; z: number; t: number }>();
@@ -751,6 +754,16 @@ hurtCount += 1;
         // banked energy instead of bleeding to a stand. Park orders and
         // foes still hand control back to driveMove.
         const sp = Math.hypot(p.velocity.x, p.velocity.z);
+        // Stale-park override: a bot parked 8s+ with no sensed foe isn't
+        // "holding" anything — its park latch beats the default-state
+        // cruise and it reads dead-still forever. Synthesize the roam
+        // target so the rollout takes it back to speed.
+        const foeCold = (this.foeNear.get(id) ?? 0) <= now;
+        if (out.move?.park && foeCold) {
+          const since = this.parkSince.get(id) ?? 0;
+          if (since === 0) {this.parkSince.set(id, now);}
+          else if (now - since > 8000) {out.move.park = false;}
+        } else {this.parkSince.delete(id);}
         const cruise = out.dest === undefined && !out.move?.park
           ? (sp > 8
             ? { x: p.position.x + p.velocity.x * 4, y: p.position.y, z: p.position.z + p.velocity.z * 4 }
