@@ -11,6 +11,7 @@
 
 import { WeaponType, type WeaponStats } from './weaponTable.js';
 import { WEAPONS } from './weaponRows.js';
+import { dcos, dsin, dhypot3 } from './dmath.js';
 export const AOE_VFX_SCALE = 0.8;
 
 /** Melee cone half-angle (cos) — ~57°. The client swings this cone for
@@ -228,17 +229,17 @@ export function jitter01(seed: number): [number, number] {
 export function coneDir(dir: { x: number; y: number; z: number }, angle: number, radius: number): { x: number; y: number; z: number } {
   // right = dir × (0,1,0)
   let rx = -dir.z, ry = 0, rz = dir.x;
-  const rl = Math.hypot(rx, ry, rz);
+  const rl = dhypot3(rx, ry, rz);
   if (rl < 1e-8) { rx = 1; } else { rx /= rl; rz /= rl; }
   // up = right × dir (unit by construction)
   const ux = ry * dir.z - rz * dir.y;
   const uy = rz * dir.x - rx * dir.z;
   const uz = rx * dir.y - ry * dir.x;
-  const ca = Math.cos(angle) * radius, sa = Math.sin(angle) * radius;
+  const ca = dcos(angle) * radius, sa = dsin(angle) * radius;
   const x = dir.x + rx * ca + ux * sa;
   const y = dir.y + ry * ca + uy * sa;
   const z = dir.z + rz * ca + uz * sa;
-  const l = Math.hypot(x, y, z) || 1;
+  const l = dhypot3(x, y, z) || 1;
   return { x: x / l, y: y / l, z: z / l };
 }
 
