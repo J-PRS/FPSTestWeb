@@ -252,7 +252,7 @@ player.consecutiveRejects += 1;
     // position covers resync/reconnect/respawn snaps (respawnPlayer
     // already wrote the record at the spawn). The beacon's landing is
     // client-owned, but an accepted skillUse inside the window is
-    // evidence a legal warp exists. Anything else is a forged reseat —
+    // evidence a legal warp exists. Anything else is a forged reseat:
     // honoring put the authoritative shadow wherever the claim pointed.
     // Judge mode keeps the honor-everything contract: position is
     // already client-truth there, and the force-accept resync would

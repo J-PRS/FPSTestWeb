@@ -125,12 +125,12 @@ describe('RoomPickups', () => {
     expect(p.health).toBe(70); // claims can't re-spend a heal already applied
   });
 
-  it('heal claims land bounded on sim authorities, ffa included', () => {
+  it('heal claims are refused on sim authorities, ffa included', () => {
     const room = new Room('f', null, '', FFA_SPEC);
     const p = addAt(room, 'p1', undefined, 0, 0);
     p.health = 50;
     p.protectedUntil = simMs(0);
     room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
-    expect(p.health).toBe(75); // no server pickups in ffa — the bounded claim is the lane
+    expect(p.health).toBe(50); // dedicated sims pickups itself — no free-form heal lane
   });
 });
