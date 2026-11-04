@@ -8,7 +8,7 @@ const secs = Number(process.argv[2] ?? 15);
 const stack = await upStack();
 let c: Awaited<ReturnType<typeof launchClient>> | null = null;
 try {
-  c = await launchClient(stack.clientUrl('&room=democap&map=rimrock&mode=ctf&bots=8&autopilot'));
+  c = await launchClient(stack.clientUrl(`&room=democap&map=${process.env.DEMOCAP_MAP ?? 'rimrock'}&mode=${process.env.DEMOCAP_MODE ?? 'ctf'}&bots=8&autopilot`));
   await c.waitFor(`t.networkManager && t.networkManager.isConnected()`, 45000);
   await c.waitFor(`window.__demoManager`, 10000);
   const t0 = await c.page.evaluate(`window.__demoManager.recorder.elapsedTime`) as number;

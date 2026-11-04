@@ -93,6 +93,7 @@ function makePlaybackRig(): {
     player: { demoData: null },
     ui: { setStatus: noop, setPlaying: noop },
     fetchCoolShotsFromServer: noop, startRecording: noop, setRemoteSource: noop, setTargetSnapshotSource: noop,
+    getRoster: (): string[] => ['local', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
     seekReconstructing: { on: false },
   } as unknown as DemoManager;
   const life = createDemoLifecycle({
@@ -102,10 +103,10 @@ function makePlaybackRig(): {
     lazyPlayer: (): Player => ({ pos: new THREE.Vector3(0, 0, 0) } as unknown as Player),
     lazyDemoManager: (): DemoManager => mgr,
     lazyViewModel: (): ViewModel => viewmodel as unknown as ViewModel,
-    lazyNetworkManager: (): NetworkManager => ({ getPlayers: (): Map<string, never> => new Map<string, never>() } as unknown as NetworkManager),
+    lazyNetworkManager: (): NetworkManager => ({ getPlayers: (): Map<string, never> => new Map<string, never>(), getLocalPlayerId: (): string => 'local' } as unknown as NetworkManager),
     damageNumberManager: (): DamageNumberManager => ({ spawn: noop } as unknown as DamageNumberManager),
     fragMessages: (): FragMessages => ({ showScore: noop } as unknown as FragMessages),
-    lazyHud: (): HUD => ({ showHitMarker: noop } as unknown as HUD),
+    lazyHud: (): HUD => ({ showHitMarker: noop, feedKill: noop } as unknown as HUD),
     balls,
     targets,
     crawlers: [], scarabs: [], gnats: [], snakes: [], banelings: [],
