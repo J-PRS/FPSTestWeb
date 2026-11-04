@@ -64,4 +64,30 @@ describe('scenario: move-authority corrections', () => {
     } as never);
     expect(sent.filter((m) => m.type === 'correction').length).toBe(0);
   });
+
+  it('a declared warp nowhere explainable is refused — the shadow stays put', () => {
+    const room = mkRoom({ bots: 1 }, '', 1337, true);
+    const p = firstPlayer(room);
+    room.moveSim.track(p.id, p.position, 0, p.perk);
+    pin(room, p.id, { x: 0, y: 31, z: 0 });
+    const before = { ...p.position };
+    // A 400m teleport claim: not near the record, no skillUse — a
+    // forged reseat. Judge mode would honor it; authority must not.
+    room.messages.handleMessage(p.id, {
+      type: 'teleport',
+      position: { x: 400, y: 31, z: 400 },
+      velocity: { x: 0, y: 0, z: 0 },
+      rotation: { yaw: 0, pitch: 0 },
+    } as never);
+    expect(p.position).toEqual(before);
+    // A resync-shaped warp (snap onto the server's own record) is the
+    // legit use — same message, explainable landing.
+    room.messages.handleMessage(p.id, {
+      type: 'teleport',
+      position: { x: before.x + 2, y: before.y, z: before.z },
+      velocity: { x: 0, y: 0, z: 0 },
+      rotation: { yaw: 0, pitch: 0 },
+    } as never);
+    expect(p.position.x).toBeCloseTo(before.x + 2, 5);
+  });
 });

@@ -174,8 +174,13 @@ export class RoomDeployables {
     if (k === 'nugget') {
       // Thrown pod: the claim now carries the lob velocity at release -
       // the pickup sim owns the flight and settles to truth itself.
-      // The old landing-claim path (no vel) still mints in place.
-      this.room.pickups?.spawn(vel ? Object.assign({}, pos) : Object.assign({}, p2), 'gem', NUGGET_ARM_S, 1, undefined, 0, vel);
+      // The old landing-claim path (no vel) still mints in place. The
+      // lob is claim-supplied: clamp to a real throw (~17 lob + 0.6x
+      // player speed, ~65 worst) so a forged vel can't arc a gem into
+      // orbit - over-bound claims mint at rest rather than refuse, the
+      // thrower spent the charges either way.
+      const lob = vel && Math.hypot(vel.x, vel.y, vel.z) <= 80 ? vel : undefined;
+      this.room.pickups?.spawn(lob ? Object.assign({}, pos) : Object.assign({}, p2), 'gem', NUGGET_ARM_S, 1, undefined, 0, lob);
       return true;
     }
     const owned = [...this.items.values()].filter((d): boolean => d.owner === playerId && d.kind === k);

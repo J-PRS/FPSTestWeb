@@ -111,7 +111,7 @@ export class MoveClaims {
       if (msg.seq !== undefined && msg.seq > player.lastSeq) {player.lastSeq = msg.seq;}
       player.hasReceivedPosition = true;
       this.h.announceIfInWorld(player);
-      if (msg.ping !== undefined) {player.ping = Math.max(1, msg.ping);}
+      if (msg.ping !== undefined) {player.ping = Math.min(Math.max(1, msg.ping), 2000);}
       pushRewindSample(player, now); // player.position is sim truth
       return;
     }
@@ -125,7 +125,7 @@ export class MoveClaims {
     this.h.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
     this.h.announceIfInWorld(player);
-    if (msg.ping !== undefined) {player.ping = Math.max(1, msg.ping);}
+    if (msg.ping !== undefined) {player.ping = Math.min(Math.max(1, msg.ping), 2000);}
     pushRewindSample(player, now);
     // Don't broadcast immediately — batched in tickUpdate
   }
@@ -247,6 +247,31 @@ player.consecutiveRejects += 1;
       }
     }
     this.lastTeleport.set(playerId, now + 3000);
+    // Authority mode: the shadow owns position, so a declared warp only
+    // reseats where the server can explain it. Near the recorded
+    // position covers resync/reconnect/respawn snaps (respawnPlayer
+    // already wrote the record at the spawn). The beacon's landing is
+    // client-owned, but an accepted skillUse inside the window is
+    // evidence a legal warp exists. Anything else is a forged reseat —
+    // honoring put the authoritative shadow wherever the claim pointed.
+    // Judge mode keeps the honor-everything contract: position is
+    // already client-truth there, and the force-accept resync would
+    // land it anyway.
+    if (this.h.moveAuthority()) {
+      const drift = Math.hypot(
+        msg.position.x - player.position.x,
+        msg.position.y - player.position.y,
+        msg.position.z - player.position.z);
+      const skilled = player.lastSkillUse !== undefined && now - player.lastSkillUse < 4000;
+      if (drift > 25 && !skilled) {
+        this.h.hb('teleportForged');
+        if ((this.lastTeleportWarn.get(playerId) ?? 0) <= now) {
+          this.lastTeleportWarn.set(playerId, now + 5000);
+          this.h.sendToPlayer(playerId, { type: 'serverWarn', text: 'teleport refused' });
+        }
+        return;
+      }
+    }
     // A declared warp landing under the floor is the same buried-body
     // seed a bad spawn is — counted, never refused (the client already
     // moved; refusing recreates the warp as impossibly-fast reports).
