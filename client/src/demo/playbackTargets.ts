@@ -57,21 +57,37 @@ const PLAYBACK_HARD_SNAP_DIST = 1.5; // meters - large desync -> hard snap
 // so motion stays smooth between the ~5-10Hz keyframes.
 const PLAYBACK_BLEND_HZ = 12;
 
-function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number, evx: number, evy: number, evz: number]): void {
-  const [ex, ey, ez, evx, evy, evz] = rest;
+function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number, evx: number, evy: number, evz: number, et: number]): void {
+  const [ex, ey, ez, evx, evy, evz, et] = rest;
   const dx = ball.pos.x - ex, dy = ball.pos.y - ey, dz = ball.pos.z - ez;
   const drift = Math.hypot(dx, dy, dz);
-  const pb = ball as Ball & { pbTarget?: THREE.Vector3; pbTargetVel?: THREE.Vector3 };
+  const pb = ball as Ball & { pbTarget?: THREE.Vector3; pbTargetVel?: THREE.Vector3; pbEdge?: { x: number; y: number; z: number; vx: number; vy: number; vz: number; t: number } };
   pb.pbTarget ??= new THREE.Vector3();
   pb.pbTargetVel ??= new THREE.Vector3();
   pb.pbTarget.set(ex, ey, ez);
   pb.pbTargetVel.set(evx, evy, evz);
+  // Teleport = the RECORDED EDGES can't be connected by the recorded
+  // velocity (ball jumped in the data itself), not the sim-vs-edge drift.
+  // A fast ball legitimately drifts 25m+ between sparse edges — popping
+  // the spawn spring on each one reads as rhythmic pulsation.
+  let edgeJump = true;
+  if (pb.pbEdge) {
+    const dt = et - pb.pbEdge.t;
+    const px = pb.pbEdge.x + pb.pbEdge.vx * dt;
+    const py = pb.pbEdge.y + pb.pbEdge.vy * dt - 0.5 * GRAVITY * dt * dt;
+    const pz = pb.pbEdge.z + pb.pbEdge.vz * dt;
+    edgeJump = Math.hypot(ex - px, ey - py, ez - pz) > 8;
+  }
+  pb.pbEdge ??= { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, t: 0 };
+  pb.pbEdge.x = ex; pb.pbEdge.y = ey; pb.pbEdge.z = ez;
+  pb.pbEdge.vx = evx; pb.pbEdge.vy = evy; pb.pbEdge.vz = evz;
+  pb.pbEdge.t = et;
   if (drift >= PLAYBACK_HARD_SNAP_DIST) {
     // Re-seat class: wire 'teleport' segments land here as Bounce edges.
     // Live snaps instantly (hard segment); blending through renderOffset
     // would sweep the mesh hundreds of meters midair — a flight the ball
     // never flew. Jump the render pos too: no offset, no sweep.
-    if (drift >= 25) {
+    if (drift >= 25 && edgeJump) {
       ball.pos.set(ex, ey, ez);
       ball.vel.set(evx, evy, evz);
       ball.renderOffset.set(0, 0, 0);
@@ -172,7 +188,7 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
 
   if (ev.eventType === TargetEventType.Bounce || ev.eventType === TargetEventType.StateChanged) {
     // Correct toward recorded keyframe; hard-snap only on large drift
-    smoothSnapBall(ball, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ);
+    smoothSnapBall(ball, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ, ev.timestamp);
     ball.update(0, terrain, playerPos);
   } else if (ev.eventType === TargetEventType.Hit) {
     // Snap ball to recorded hit position to ensure explosion aligns
