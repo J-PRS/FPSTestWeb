@@ -634,6 +634,9 @@ export class Room {
       // wound; the client still sells dust + thud for the impact).
       // Everyone in earshot hears the slam  -  the owner's local sim
       // already dressed it; this echo is for remote observers only.
+      // Unless the lander is cloaked: the impact pos is the same leak
+      // the jump/teleport/record gates close.
+      if (this.cloakHiddenOf(pid)) {return;}
       const landWid = this.wireIds.get(pid);
       if (landWid === undefined) {this.connections.broadcast({ type: 'landed', playerId: pid, pos: p.position, impact });}
       else {this.connections.broadcastBinaryReliable(encodeWidPos(WIRE_E_LANDED, landWid, p.position, impact), 'volatile');}
@@ -1111,6 +1114,16 @@ export class Room {
   /** MessageHandler's room-facing surface  -  same lazy-callback pattern
    *  as matchHost: moveSim/matchClock/ballSim are built after `messages`,
    *  so every reference resolves at call time, not at construction. */
+  /** Wire-invisible cloak predicate — masked CLOAK claim, modeled tank
+   *  alive, shoot-reveal window closed (lastFireSim is sim-ms domain). */
+  private cloakHiddenOf(pid: string): boolean {
+    const tp = this.players.getPlayer(pid);
+    return tp !== undefined
+      && (tp.status & STATUS.CLOAK) !== 0
+      && (this.moveSim.energyOf(pid) ?? 1) > 0
+      && simNow() - tp.lastFireSim >= SHOOT_REVEAL_S * 1000;
+  }
+
   private handlerInfo(roomName: string): RoomInfo {
     return {
       room: roomName,
@@ -1285,13 +1298,7 @@ export class Room {
       // Wire-invisible cloak predicate — same terms as the tickRecords
       // hidden flag: masked CLOAK claim, modeled tank alive, shoot-
       // reveal window closed (lastFireSim is sim-ms domain).
-      cloakHidden: (pid): boolean => {
-        const tp = this.players.getPlayer(pid);
-        return tp !== undefined
-          && (tp.status & STATUS.CLOAK) !== 0
-          && (this.moveSim.energyOf(pid) ?? 1) > 0
-          && simNow() - tp.lastFireSim >= SHOOT_REVEAL_S * 1000;
-      },
+      cloakHidden: (pid): boolean => this.cloakHiddenOf(pid),
       moveResync: (pid, pos, yaw, fullEnergy): void => {
         this.moveSim.resync(pid, pos, yaw, fullEnergy);
         // Resync re-anchors the shadow  -  also refresh the class speed
