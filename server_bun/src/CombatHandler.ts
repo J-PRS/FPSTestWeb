@@ -230,10 +230,20 @@ export class CombatHandler {
   }
 
   /** The claim's measured uplink age (ms) — sendShotFired stamps fireAt
-   *  on the client's server-clock estimate; absence = 0 (bot/legacy). */
-  private uplinkMsOf(msg: { fireAt?: number; arrivedAt?: number }): number {
-    return typeof msg.fireAt === 'number'
-      ? Math.min(Math.max((msg.arrivedAt ?? wallNow()) - msg.fireAt, 0), 5000) : 0;
+   *  on the client's server-clock estimate; absence = 0 (bot/legacy).
+   *  Bounded by the MEASURED path, not the stamp itself: a forged deep-
+   *  past fireAt would otherwise rewind the attack origin across the
+   *  whole journal (peek, retreat, keep beaming "from" the exposed
+   *  spot). transit is capped at TRANSIT_EMA_CAP_MS and jitter is pong-
+   *  measured only (feedUplink never touches transitVar), so a claim
+   *  can't inflate this bound; the floor covers join grace + resend
+   *  slack on a clean link. */
+  private uplinkMsOf(playerId: string, msg: { fireAt?: number; arrivedAt?: number }): number {
+    if (typeof msg.fireAt !== 'number') {return 0;}
+    const age = Math.max((msg.arrivedAt ?? wallNow()) - msg.fireAt, 0);
+    const bound = (this.deps.transitOf?.(playerId) ?? 0)
+      + 3 * (this.deps.transitVarOf?.(playerId) ?? 0) + 200;
+    return Math.min(age, Math.max(bound, 400));
   }
 
   /** Claim-driven origin: the shooter's reported eye/muzzle point,
@@ -425,7 +435,7 @@ w.n += 1;
       const meleeStats = getWeaponStats(WeaponType.Melee);
       const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
       // The creature half of the swing pays here too — same derived
       // origin, same dir — so the client's predicted contact never
       // needs a creatureHit claim.
@@ -458,7 +468,7 @@ w.n += 1;
       recent.push(now);
       this.beamFireTimes.set(playerId, recent);
       player.protectedUntil = simMs(0);
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -475,7 +485,7 @@ w.n += 1;
       if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return; }
       this.lastLance.set(playerId, now);
       player.protectedUntil = simMs(0);
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.lancePay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -489,7 +499,7 @@ w.n += 1;
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.beamFireTimes.set(playerId, recent);
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       const id = this.deps.repairTarget(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -507,7 +517,7 @@ w.n += 1;
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.beamFireTimes.set(playerId, recent);
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       const c = this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -566,7 +576,7 @@ win.violations += 1;
     // Spawn epoch from the CLAIM, not a transit heuristic: the shooter
     // reports the muzzle pos it drew from + a fireAt stamp; uplinkMs is
     // the measured claim age (also the lagS lead below).
-    const uplinkMs = this.uplinkMsOf(msg);
+    const uplinkMs = this.uplinkMsOf(playerId, msg);
     const at = this.claimOrigin(player, uplinkMs, msg.pos);
     // Claimless pilot: a server-simmed intent spawns an authoritative
     // shell — the intent IS the whole claim; contact/blast outcomes

@@ -154,7 +154,7 @@ describe('scenario: bot shells hit creatures like player shots', () => {
         if (!p.isBot) {continue;}
         const lo = bots.loadouts.get(p.id)!;
         const held = new Set<number>([lo.near, lo.mid, lo.far, lo.side]);
-        expect(held.has(p.weapon)).toBe(true);
+        expect(p.weapon !== undefined && held.has(p.weapon)).toBe(true);
       }
     }
   });
