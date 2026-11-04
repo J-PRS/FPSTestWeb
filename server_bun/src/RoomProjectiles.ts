@@ -24,7 +24,7 @@ import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballSim.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage, directHitAoeBonus, RIDE_CATCH_R, canHostRide } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage, directHitAoeBonus, RIDE_CATCH_R, canHostRide, BELT_THROW_WEAPONS } from '../../shared/weapons.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3, ServerMessage } from './types.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
@@ -227,7 +227,11 @@ export class RoomProjectiles {
     if (!stats || stats.speed <= 0) {return null;} // hitscan-class — no body
     const owner = this.room.players.getPlayer(ownerId);
     if (!owner) {return null;}
-    owner.weapon = weaponType; // roster gun reveal — a bot's silhouette reads before its first shot edge lands
+    // Roster gun reveal — a bot's silhouette reads before its first shot
+    // edge lands. Belt throws are tossed, not held: stamping one would
+    // advertise a type with no hand model and leave the remote wearing
+    // the generic prop until the next real gun shot.
+    if (!BELT_THROW_WEAPONS.has(weaponType)) {owner.weapon = weaponType;}
     const id = `sp-${((this.nextId += 1) - 1)}`;
     const inh = stats.inherit ?? 0.5;
     const vel: Vec3 = {

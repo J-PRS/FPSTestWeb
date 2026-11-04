@@ -129,4 +129,33 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     bots.arsenal.fireAt(b, 'victim', { x: 50, y: 32, z: 0 });
     expect(w.count('projectileCreated')).toBe(2); // rate elapsed — legal again
   });
+
+  it('a belt toss never advertises the thrown type as the held gun', () => {
+    const room = mkRoom({ bots: 1 }, 'tdm');
+    const b = bot(room);
+    freeze(room, b.id, { x: 0, y: 31, z: 0 });
+    b.weapon = WeaponType.Disc;
+    // Grenade has a projectile body (belt pulls spawn real shells) but
+    // no hand model: stamping it would leave the remote wearing the
+    // generic prop until the next gun shot.
+    room.projectiles.spawn(b.id, WeaponType.Grenade,
+      { x: 0, y: 31.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    expect(b.weapon).toBe(WeaponType.Disc);
+    room.projectiles.spawn(b.id, WeaponType.BoltLauncher,
+      { x: 0, y: 31.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    expect(b.weapon).toBe(WeaponType.BoltLauncher);
+  });
+
+  it('the roster reveal reads the post-adapt kit, never a stale slot', () => {
+    for (let i = 0; i < 12; i++) {
+      const room = mkRoom({ bots: 6 }, 'tdm');
+      const bots = room.bots as unknown as { loadouts: Map<string, (typeof BOT_LOADOUTS)[number]> };
+      for (const p of room.players.getAllPlayers().values()) {
+        if (!p.isBot) {continue;}
+        const lo = bots.loadouts.get(p.id)!;
+        const held = new Set<number>([lo.near, lo.mid, lo.far, lo.side]);
+        expect(held.has(p.weapon)).toBe(true);
+      }
+    }
+  });
 });

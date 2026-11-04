@@ -93,6 +93,13 @@ export class BotRoster {
       if (isSuper(id)) {p.health = 400;} // superbot tanks a beating
       p.lastSeen = wallNow();
       this.room.assignTeam(p);
+      this.brains.set(id, new BotBrain(p.position, this.tierFor(p.team)));
+      // The spawn pick is thoughtful, not flat: the fresh brain's skill
+      // matrix rerolls every open slot toward what this bot hits with.
+      this.adaptOnRespawn(id, (w): number => aimSkillFor(this.brains.get(id)!.skill, w, 0), 'spawn');
+      // Reveal the post-adapt gun: adapt can swap the near slot, and
+      // the roster/broadcast read p.weapon as the held silhouette.
+      p.weapon = this.loadouts.get(id)!.near;
       this.room.broadcast(spawnPayload(WORLD_MODEL.player!, id, 'playerId', {
         name: p.name,
         internalId: p.internalId,
@@ -105,10 +112,6 @@ export class BotRoster {
         health: p.health,
         isDead: p.isDead,
       }) as ServerMessage);
-      this.brains.set(id, new BotBrain(p.position, this.tierFor(p.team)));
-      // The spawn pick is thoughtful, not flat: the fresh brain's skill
-      // matrix rerolls every open slot toward what this bot hits with.
-      this.adaptOnRespawn(id, (w): number => aimSkillFor(this.brains.get(id)!.skill, w, 0), 'spawn');
       if (wildcard) {logger.info('Bot wildcard kit', { id, room: this.room.name, kit: { near: this.loadouts.get(id)!.near, mid: this.loadouts.get(id)!.mid, far: this.loadouts.get(id)!.far, belt: this.loadouts.get(id)!.belt, side: this.loadouts.get(id)!.side, perk: loadout.perk } });}
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
