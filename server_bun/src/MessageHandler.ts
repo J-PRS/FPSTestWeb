@@ -198,6 +198,9 @@ export interface RoomInfo {
   /** Arrival-time muzzle relay already flashed this shotId. */
   earlyRelayed?: (playerId: string, shotId?: string) => boolean;
   energyOf?: (playerId: string) => number | null;
+  /** Wire-invisible cloak: position-bearing emits must not leak to
+   *  non-teammates while this holds (records, relays, snapshots). */
+  cloakHidden?: (playerId: string) => boolean;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'
    *  notice to the squad. Player chat lands as 'chat' — Room keyword-
@@ -597,7 +600,10 @@ export class MessageHandler {
 
     // Humans that never reported a position aren't in-world yet — listing
     // them spawns a frozen ghost mesh at the spawn default for the joiner.
-    const roster = this.inWorldRoster().filter((p): boolean => p.id !== playerId);
+    // Cloak-hidden seats are out of the snapshot too: the joiner's mesh
+    // for them spawns when the record stream re-admits them post-reveal.
+    const roster = this.inWorldRoster().filter((p): boolean => p.id !== playerId
+      && !(this.roomInfo.cloakHidden?.(p.id) && (player.team === undefined || player.team !== p.team)));
     // Spawn pacing (Nucleus model): an unpaced world sends its biggest
     // tick to the peer least able to take it. The nearest JOIN_INLINE_SEATS
     // ride gameState; the rest admit a few per fanout tick via direct
@@ -670,7 +676,9 @@ export class MessageHandler {
   announceIfInWorld(player: PlayerState): void {
     // Held-off-spawn seats must not announce — their position reports
     // during the veil warmup would otherwise mint the remote mesh early.
-    if (player.joinAnnounced || player.awaitingReady) {return;}
+    // A cloaked seat's announce carries position to enemies too; leave
+    // the flag unset so the first uncloaked report announces it instead.
+    if (player.joinAnnounced || player.awaitingReady || this.roomInfo.cloakHidden?.(player.id)) {return;}
     player.joinAnnounced = true;
     this.announceJoin(player);
   }
@@ -804,12 +812,16 @@ export class MessageHandler {
   inputSeqOf(playerId: string): number { return this.roomInfo.inputSeqOf?.(playerId) ?? -1; }
   moveResync(playerId: string, pos: Vec3, yaw: number): void { this.roomInfo.moveResync?.(playerId, pos, yaw); }
   moveMute(playerId: string): void { this.roomInfo.moveMute?.(playerId); }
+  cloakHidden(playerId: string): boolean { return this.roomInfo.cloakHidden?.(playerId) ?? false; }
 
   // jump/jetpack are pure presence relays — same shape, dead check, echo
   // to everyone but the sender for remote-side jump-dust/jet FX.
   relayPresenceEvent(playerId: string, msg: Extract<ClientMessage, { type: 'jump' | 'jetpack' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) {return;}
+    // Cloak secrecy: a jet-flash edge carries the claimed position, so
+    // relaying it to enemies peels the wire-side hide.
+    if (this.roomInfo.cloakHidden?.(playerId)) {return;}
     const wid = this.roomInfo.widOf?.(playerId);
     if (wid !== undefined && this.roomInfo.wireCast) {
       this.roomInfo.wireCast(encodeWidPos(msg.type === 'jump' ? WIRE_E_JUMP : WIRE_E_JET, wid, msg.position), 'volatile', playerId);
@@ -819,8 +831,14 @@ export class MessageHandler {
   }
 
   handleSnapshotRequest(playerId: string): void {
+    // Same secrecy rule as the roster snapshot: hidden enemies don't
+    // exist for the requester; their mesh re-spawns when the record
+    // stream re-admits them after the reveal window.
+    const requester = this.playerManager.getPlayer(playerId);
     const players: SnapshotPlayer[] = [];
     for (const [, p] of this.playerManager.getAllPlayers()) {
+      if (p.id !== playerId && this.roomInfo.cloakHidden?.(p.id)
+          && (requester === undefined || requester.team === undefined || requester.team !== p.team)) {continue;}
       players.push({
         id: p.id,
         internalId: p.internalId,

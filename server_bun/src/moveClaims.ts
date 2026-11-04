@@ -34,6 +34,9 @@ export interface MoveHost {
     { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
   moveResync(playerId: string, pos: Vec3, yaw: number): void;
   moveMute(playerId: string): void;
+  /** Wire-invisible cloak: position-bearing relays must not leak to
+   *  non-teammates while this holds (same predicate as tickRecords). */
+  cloakHidden?(playerId: string): boolean;
 }
 
 export class MoveClaims {
@@ -298,8 +301,12 @@ player.consecutiveRejects += 1;
     // lets lag-comp rewind land the shooter/target back at the corpse.
     player.history.length = 0;
     pushRewindSample(player, now);
-    // Relay so observers snap instead of interpolating across the gap
-    this.h.broadcast(eventPayload(WORLD_MODEL.player!, 'teleport', 'playerId', playerId, { position: msg.position, velocity: msg.velocity }) as ServerMessage, playerId);
+    // Relay so observers snap instead of interpolating across the gap;
+    // unless the warp lands on a cloaked seat, whose snap position IS
+    // the leak the record gate just closed.
+    if (!this.h.cloakHidden?.(playerId)) {
+      this.h.broadcast(eventPayload(WORLD_MODEL.player!, 'teleport', 'playerId', playerId, { position: msg.position, velocity: msg.velocity }) as ServerMessage, playerId);
+    }
   }
 
   /** Resync claim (alt-tab catch-up): the client is about to snap onto

@@ -55,6 +55,7 @@ import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { ServerWebSocket } from 'bun';
 
 import { simNow, simMs } from './simClock.ts';
+import { STATUS, SHOOT_REVEAL_S } from '../../shared/status.ts';
 import { wallNow, wallMs, type WallMs } from './wallClock.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
 import { SimJournal } from './simJournal.ts';
@@ -1281,6 +1282,16 @@ export class Room {
       },
       onThrowFlag: (pid): void | undefined => this.flags?.throwFor(pid),
       energyOf: (pid): number | null => this.moveSim.energyOf(pid),
+      // Wire-invisible cloak predicate — same terms as the tickRecords
+      // hidden flag: masked CLOAK claim, modeled tank alive, shoot-
+      // reveal window closed (lastFireSim is sim-ms domain).
+      cloakHidden: (pid): boolean => {
+        const tp = this.players.getPlayer(pid);
+        return tp !== undefined
+          && (tp.status & STATUS.CLOAK) !== 0
+          && (this.moveSim.energyOf(pid) ?? 1) > 0
+          && simNow() - tp.lastFireSim >= SHOOT_REVEAL_S * 1000;
+      },
       moveResync: (pid, pos, yaw, fullEnergy): void => {
         this.moveSim.resync(pid, pos, yaw, fullEnergy);
         // Resync re-anchors the shadow  -  also refresh the class speed
