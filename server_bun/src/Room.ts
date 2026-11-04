@@ -1267,7 +1267,10 @@ export class Room {
         if (!p) {return 'gone';}
         // Identity check: a claim naming a skill the seat never declared
         // is a forged press  -  declared skills are the only legal ones.
-        if (p.skill !== undefined && skill !== undefined && skill !== p.skill) {return 'gone';}
+        // A seat with NO declared skill has nothing legal to press at
+        // all; accepting there would stamp lastSkillUse and open the
+        // authority teleport window without a real beacon.
+        if (p.skill === undefined || (skill !== undefined && skill !== p.skill)) {return 'gone';}
         // Cooldown floor: client skills all sit at 1s; 850ms of slack
         // eats jitter, a faster claim is a script.
         const now = wallNow();
