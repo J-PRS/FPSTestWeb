@@ -283,9 +283,9 @@ export class SessionManager {
     // Same for a SUPERSEDED join: a room hop mid-load re-begins the
     // session under the new room; seating this socket into the old room
     // here would register it against the corpse  -  the zombie-seat race.
-    if (room.terrainReady) {void room.terrainReady.then((): void => {
+    if (room.terrainReady) {room.joinDone.set(playerId, room.terrainReady.then((): void => {
       if (ws.readyState === 1 && this.d.registry.roomOf(playerId) === room.name) {finishJoin();}
-    });}
+    }));}
     else {finishJoin();}
   }
 

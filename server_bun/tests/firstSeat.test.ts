@@ -16,7 +16,11 @@ interface Peek {
 }
 const fakeWs = () => ({
   sent: [] as unknown[], data: {} as { playerId?: string }, remoteAddress: '127.0.0.1', readyState: 1,
-  send(m: string | Uint8Array) { this.sent.push(m); return typeof m === 'string' ? m.length : m.byteLength; }, close() {},
+  // uWS copies a sent frame synchronously — the mock must too: outbound
+  // batches are VIEWS into connections' shared batchScratch arena, so a
+  // retained reference silently rewrites to the NEXT tick's batch
+  // (the firstSeat flake: ping batches morphed into pingless ones).
+  send(m: string | Uint8Array) { this.sent.push(typeof m === 'string' ? m : m.slice()); return typeof m === 'string' ? m.length : m.byteLength; }, close() {},
 // oxlint-disable-next-line no-explicit-any
 } as any);
 // Decode what a real client sees: live traffic arrives as WIRE_BATCH
@@ -49,11 +53,11 @@ describe('first-seat wire vitality', () => {
       // finishJoin waits on terrainReady (async map-file load) — await it
       // for real or the seats never register.
       await room!.terrainReady;
-      // Registration itself is a deferred microtask chain past the file
-      // load — a fixed flush count races (~25% flake): pings pushed to an
+      // Registration rides a deferred continuation past the file load —
+      // a fixed flush count races it (~25% flake): pings pushed to an
       // unregistered pid queue then silently drop at flushOutboxes
-      // (q cleared even with no ws). Poll the real gate instead.
-      for (let i = 0; i < 400 && room!.connections.getConnectionCount() < 2; i += 1) {await Promise.resolve();}
+      // (q cleared even with no ws). joinDone exposes the real settle.
+      await Promise.all([room!.joinDone.get('seat1'), room!.joinDone.get('seat2')]);
       console.log(`conns=${room!.connections.getConnectionCount()} players=${room!.playerCount()} s1=${room!.players.getPlayer('seat1') ? 'in' : 'MISSING'} s2=${room!.players.getPlayer('seat2') ? 'in' : 'MISSING'}`);
       ws1.sent.length = 0;
       ws2.sent.length = 0; // drop the join bursts — measure live traffic only

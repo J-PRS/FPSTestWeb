@@ -549,6 +549,12 @@ export class Room {
    *  (authored anchor y under the real surface = the buried-seat snap). */
   terrainReady: Promise<Heightfield | null> | null = null;
 
+  /** Test seam, keyed by playerId: resolves once a terrain-deferred
+   *  join's continuation has run (seated OR stale-skipped). Only set for
+   *  deferred joins  -  awaiting it is the deterministic alternative to
+   *  flushing microtasks or sleeping until connections catch up. */
+  readonly joinDone = new Map<string, Promise<void>>();
+
   /** maps/<X>.json filename this room's spec came from  -  the scoreboard's
    *  map title when the spec has no authored `name`. Factory sets it at
    *  birth; mapCatalog's rotation + GameServer's reload keep it current. */
