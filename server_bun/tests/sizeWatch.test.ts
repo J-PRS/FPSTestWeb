@@ -66,6 +66,12 @@ const GRANDFATHERED: Record<string, number> = {
   // Crossed via the bot-brain decision tables — bots legitimately
   // aggregates behaviors. Pinned; +15% alarms.
   'client/src/game/bots/index.ts': 904,
+  // Crossed via the server-authoritative spread + ammo-pool claims —
+  // the damage funnel legitimately aggregates intents. Pinned; +15% alarms.
+  'server_bun/src/CombatHandler.ts': 909,
+  // Crossed via the parked-bot hunt-memory + arsenal work — the bot
+  // roster orchestrator legitimately aggregates. Pinned; +15% alarms.
+  'server_bun/src/ServerBots.ts': 916,
 };
 
 function* walk(dir: string): Generator<string> {

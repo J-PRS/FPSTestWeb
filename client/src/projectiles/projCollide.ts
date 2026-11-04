@@ -10,7 +10,7 @@ import { segSolidHit, type ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
 import type { SweepObstacle } from './Projectile.js';
 
-// Collision policy — the swept-contact rules (terrain bounce/fuse, wall
+// Collision policy - the swept-contact rules (terrain bounce/fuse, wall
 // hits, bolt interception, target hits + hit-record accounting). The
 // segment math itself lives in sweep.ts; this file owns "what an impact
 // does", split out of Projectile so the class stays lifecycle/mesh.
@@ -40,10 +40,10 @@ export interface CollideHost extends SweepHost {
   readonly bodiesLive: boolean;
   readonly canBounce: boolean;
   sweepLocal: (() => THREE.Vector3 | null) | null;
-  /** Shooter's team — team-filtered solids (shield gates) pass this
+  /** Shooter's team - team-filtered solids (shield gates) pass this
    *  shell through when it matches. null = teamless. */
   readonly shooterTeam: string | null;
-  /** Local player's armor class — the sweep needs its capsule size. */
+  /** Local player's armor class - the sweep needs its capsule size. */
   localClass: (() => string | undefined) | null;
   solids(): readonly StructureCollider[];
   solidIdx(): ColliderIndex | null;
@@ -53,7 +53,7 @@ export interface CollideHost extends SweepHost {
           remotePlayers?: Map<string, THREE.Vector3>): void;
   clampFuse(sec: number): void;
   explode(): void;
-  /** Demo bounce checkpoint — records the post-bounce pos/vel edge so the
+  /** Demo bounce checkpoint - records the post-bounce pos/vel edge so the
    *  replayed arc matches what actually flew (see Projectile.onDemoBounce). */
   onDemoBounce?: (pos: THREE.Vector3, vel: THREE.Vector3, normal: THREE.Vector3) => void;
 }
@@ -65,7 +65,7 @@ export class ProjCollide {
   // something and exploded (records hit target + accuracy data).
   checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>, ballSweepPos?: Map<Targetable, THREE.Vector3>): boolean {
     const {h} = this;
-    // Earliest-contact arbitration: a 50ms cell covers meters of flight —
+    // Earliest-contact arbitration: a 50ms cell covers meters of flight -
     // the terrain sample can report a contact BEHIND a ball/player the
     // shell hit earlier in the same step (the 'tunneled through the ball'
     // complaint). Compute the terrain contact t, then let bodies win only
@@ -76,7 +76,7 @@ export class ProjCollide {
       const len = h.pos.distanceTo(h.prevPos) || 1e-6;
       h.tMax = Math.max(0, Math.min(1, h.hitPoint.distanceTo(h.prevPos) / len));
     } else {h.tMax = 1;}
-    // Map structures next — walls stop shells like terrain does; without
+    // Map structures next - walls stop shells like terrain does; without
     // this a mortar splashes the generator room straight through the roof.
     const solids = h.solids();
     const dyn = h.dynSolids();
@@ -95,15 +95,15 @@ export class ProjCollide {
       }
     }
     // Obstacles (turret bolts) before targets: an interception is the
-    // earliest contact worth reporting — the blast usually takes the
+    // earliest contact worth reporting - the blast usually takes the
     // enemy anyway, and the cookoff is the interesting outcome.
-    // passThroughTargets shells (MRV carrier) phase through bodies — a
+    // passThroughTargets shells (MRV carrier) phase through bodies - a
     // contact pop would turn a timed airburst into a fast mortar. Bolts
     // and fields still intercept: shooting it down stays counterplay.
     if (h.config.passThroughTargets) {return this.checkObstacles(obstacles);}
-    // Unarmed shells (mortar pre-armTime) phase through bodies — a
+    // Unarmed shells (mortar pre-armTime) phase through bodies - a
     // point-blank pop is exactly what the arming fuse exists to deny.
-    // (GL excepted: bodiesLive=0 — it pops bodies while still bouncing
+    // (GL excepted: bodiesLive=0 - it pops bodies while still bouncing
     // off dirt.) Bolts and shield domes still intercept: shooting it
     // down is counterplay, and a dome shouldn't let a dud inside.
     if (!h.bodiesLive) {return this.checkObstacles(obstacles) || (terrHit && this.applyTerrain(terrain));}
@@ -128,19 +128,19 @@ export class ProjCollide {
     let best: SweepObstacle | null = null, bestT = Infinity;
     for (const o of obstacles) {
       // Filtered obstacles (shield domes) decide per-shell; unfiltered
-      // ones (turret bolts) never intercept hitscan slugs — the guard
+      // ones (turret bolts) never intercept hitscan slugs - the guard
       // moved per-obstacle so a field still eats those.
       if (o.blocks ? !o.blocks(h as never) : h.config.noExplosion) {continue;}
       if (sweepObstacle(h, o) && h.hitT < bestT) { best = o; bestT = h.hitT; }
     }
     if (!best) {return false;}
     // Re-run the winning sweep so hitPoint/hitT describe ITS contact, not
-    // a later bolt's — hitAt was overwritten by each tested obstacle.
+    // a later bolt's - hitAt was overwritten by each tested obstacle.
     sweepObstacle(h, best);
     best.onBlocked?.(h as never);
     h.hitBolt = best;
     if (h.config.sticks) {
-      // Shot down mid-flight — cook off on the spot, the bolt eats the pop.
+      // Shot down mid-flight - cook off on the spot, the bolt eats the pop.
       h.explode();
       return true;
     }
@@ -149,15 +149,15 @@ export class ProjCollide {
   }
 
   // Reflect velocity off the heightfield normal at hitPoint. Returns false
-  // when the impact was too weak to bounce — caller should treat it as a
+  // when the impact was too weak to bounce - caller should treat it as a
   // detonation instead of letting the shell sink or jitter in place.
   bounceOffTerrain(terrain: Terrain): boolean {
     const {h} = this;
     h.bouncesTaken += 1;
     if (h.config.maxBounces !== undefined && h.bouncesTaken > h.config.maxBounces) {
-      return false; // out of bounces — treat as impact
+      return false; // out of bounces - treat as impact
     }
-    // Lodge: first dirt contact plants the shell (stuck path) — only the
+    // Lodge: first dirt contact plants the shell (stuck path) - only the
     // clamped fuse ends it. Mirrors the server's lodgeBounce attach.
     if (h.config.lodgeBounce !== undefined && h.bouncesTaken === 1) {
       h.stickAt(h.hitPoint);
@@ -167,7 +167,7 @@ export class ProjCollide {
     const e = 0.5;
     // Sample the normal at the SEGMENT-END pos (where the server's
     // bounceOffField reads hmNormal(p.pos)), not at the mid-segment
-    // contact — on curved ground these normals differ, and a bounced
+    // contact - on curved ground these normals differ, and a bounced
     // arc diverges from authority every skip after it.
     const {x} = h.pos, {z} = h.pos;
     _tNormal.set(
@@ -178,12 +178,12 @@ export class ProjCollide {
 
     const vn = h.vel.dot(_tNormal);
     // Server depenetration (bounceOffField): keep the segment-end x/z,
-    // snap y to field+radius — a hitPoint+normal-offset reposition made
+    // snap y to field+radius - a hitPoint+normal-offset reposition made
     // every post-bounce arc start from a different point than authority.
     const depenetrate = h.config.bodyRadius + 0.05;
     // Grazing/resting contact: armed shells detonate; unarmed (mortar
     // pre-arm) shells bleed off the normal component and slide until the
-    // fuse arms them — the T2 mortar bounces off dirt before it can pop.
+    // fuse arms them - the T2 mortar bounces off dirt before it can pop.
     if (vn >= -2) {
       if (h.armed) {return false;}
       h.vel.addScaledVector(_tNormal, -vn);
@@ -208,7 +208,7 @@ export class ProjCollide {
     h.pos.y = terrain.getHeight(h.pos.x, h.pos.z) + depenetrate;
     h.prevPos.copy(h.pos);
     if (h.config.bounceSfx) {
-      // Harder hits ping louder; weak grazes stay quiet — sells mass.
+      // Harder hits ping louder; weak grazes stay quiet - sells mass.
       const gain = Math.min(1, -vn / 40);
       sfx.at(h.pos, `ricochet${1 + Math.floor(Math.random() * 3)}`, gain, 1, h.vel);
     }
@@ -226,7 +226,7 @@ export class ProjCollide {
         this.recordHit(h.minHitDist - ball.radius);
         h.hitBall = ball;
         if (h.config.sticks) {
-          // Glued to a live victim — it rides the target at the contact
+          // Glued to a live victim - it rides the target at the contact
           // offset until the fuse pops it on top of them.
           h.stickAt(h.hitPoint, ball);
           return true;

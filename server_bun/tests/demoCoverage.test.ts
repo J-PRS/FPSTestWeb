@@ -59,6 +59,7 @@ const EXEMPT: Record<string, string> = {
   buff: 'local-state echo — local frames own hp/armor',
   yourHealth: 'local-state echo',
   yourCharge: 'local-state echo',
+  yourAmmo: 'local-state echo',
   playerShot: 'hitscan cosmetic relay — no actor persists',
   playerHit: 'hit feedback — remote frames carry the damage result',
   jump: 'remote anim relay — remote frames already carry pos/flags',

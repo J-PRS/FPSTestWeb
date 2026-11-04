@@ -1,6 +1,6 @@
-// posPrimed — shared flag for the per-frame position-jump watch in
+// posPrimed - shared flag for the per-frame position-jump watch in
 // gameLoop. Extracted from gameLoop so world.ts can reset it on a local
-// snap (terrain swap, teleport) without importing gameLoop — which was
+// snap (terrain swap, teleport) without importing gameLoop - which was
 // a real value cycle (gameLoop -> world for sessionVeil, world ->
 // gameLoop for noteLocalSnap).
 let _posPrimed = false;

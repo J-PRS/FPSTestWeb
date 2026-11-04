@@ -1,12 +1,12 @@
 /**
- * botGreedy — path-free local driver: every decide window (~4Hz) it
+ * botGreedy - path-free local driver: every decide window (~4Hz) it
  * rolls ~14 candidate inputs ~0.9s forward through the REAL MoveSim
  * and commits the argmax (progress toward tgt + terminal speed, hard
- * penalty for wall-pinned ticks). Nothing is stored between decides —
+ * penalty for wall-pinned ticks). Nothing is stored between decides -
  * the stuck-on-track freeze class (a replayed plan reading on-line
  * while pinned) cannot exist because there is no track.
  *
- * Same drive(id, tgt): boolean contract as botMpc — ServerBots swaps
+ * Same drive(id, tgt): boolean contract as botMpc - ServerBots swaps
  * the driver behind the arm via FPS_GREEDY, keeping driveMove as the
  * fallback whenever a decide can't run.
  */
@@ -15,16 +15,16 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import type { RoomMoveSim } from './RoomMoveSim.ts';
 import type { BotVec } from '../../shared/botVec.ts';
 
-/** Candidate yaw offsets (rad) around current heading — the ±90° pair
+/** Candidate yaw offsets (rad) around current heading - the ±90° pair
  *  is what a wall-pinned bot needs to find a new line. */
 const DYAWS = [-1.4, -0.9, -0.45, 0, 0.45, 0.9, 1.4];
-/** Rollout horizon in sim ticks — ~0.9s at 60Hz. Long enough to read a
+/** Rollout horizon in sim ticks - ~0.9s at 60Hz. Long enough to read a
  *  face's descent line, short enough that a bad pick costs <1s. */
 const ROLL_TICKS = 54;
-/** Ticks between decides — 4Hz. Reactive enough that a stale pick ages
+/** Ticks between decides - 4Hz. Reactive enough that a stale pick ages
  *  out in a quarter second; cheap enough to run per armed bot inline. */
 const DECIDE_TICKS = 15;
-/** Live speed below this while driving forward counts as pinned —
+/** Live speed below this while driving forward counts as pinned -
  *  forces an early re-decide instead of riding the held input. */
 const PINNED_SPEED2 = 1;
 const PINNED_TICKS = 10;
@@ -63,7 +63,7 @@ export class BotGreedy {
     return true;
   }
 
-  /** Score each candidate by a private rollout — restore the bot's live
+  /** Score each candidate by a private rollout - restore the bot's live
    *  snapshot into the scratch sim, drive the candidate, read where it
    *  lands. The snapshot/restore machinery is the same one the MPC
    *  beam uses, so the rollout IS the bot's physics. */
@@ -81,7 +81,7 @@ export class BotGreedy {
     const baseYaw = st.yaw;
     const jetOk = energy > 15;
 
-    // Total mechanical energy the bot STARTS with (KE + PE, g=28 —
+    // Total mechanical energy the bot STARTS with (KE + PE, g=28 -
     // shared/movement GRAVITY). The best rollout is the one that BANKS
     // it: descent → speed, no wall bleed. Reference cancels so ΔE is
     // the only term that matters.
@@ -116,7 +116,7 @@ export class BotGreedy {
     return best;
   }
 
-  /** Same cold-start the beam uses — warm ground bookkeeping carries a
+  /** Same cold-start the beam uses - warm ground bookkeeping carries a
    *  phantom touchdown into every rollout and poisons descent lines. */
   private cold(sc: MoveSim, snap: ReturnType<MoveSim['snapshot']>): void {
     sc.restore(snap);
