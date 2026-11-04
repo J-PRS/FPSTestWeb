@@ -82,39 +82,25 @@ function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number
   pb.pbEdge.x = ex; pb.pbEdge.y = ey; pb.pbEdge.z = ez;
   pb.pbEdge.vx = evx; pb.pbEdge.vy = evy; pb.pbEdge.vz = evz;
   pb.pbEdge.t = et;
-  if (drift >= PLAYBACK_HARD_SNAP_DIST) {
-    // Re-seat class: wire 'teleport' segments land here as Bounce edges.
-    // Live snaps instantly (hard segment); blending through renderOffset
-    // would sweep the mesh hundreds of meters midair — a flight the ball
-    // never flew. Jump the render pos too: no offset, no sweep.
-    if (drift >= 25 && edgeJump) {
-      ball.pos.set(ex, ey, ez);
-      ball.vel.set(evx, evy, evz);
-      ball.renderOffset.set(0, 0, 0);
-      ball._rpos.copy(ball.pos);
+  if (edgeJump) {
+    // Real teleport (edges unreachable via their own recorded vel): the
+    // old tails must end here — snap everything, no sweep, trail cuts.
+    ball.pos.set(ex, ey, ez);
+    ball.vel.set(evx, evy, evz);
+    ball.renderOffset.set(0, 0, 0);
+    ball._rpos.copy(ball.pos);
+    if (drift >= 25) {
       ball.spawnPopT = SPAWN_POP_S;
       ball.retireRibbons();
       ball.trails.burst(12, ball.pos, ball.radius, ball.color);
-      breakDropDebugPin(ball, ball.pos); // declared break - the strip ends at the old spot
-      return;
     }
-    // Only small corrections get the renderOffset glide: a 1.5-4m drift
-    // blends invisibly, but anything bigger sweeping midair is fake
-    // flight (the ball never traveled that chord) - snap it like a live
-    // hard segment instead of manufacturing a sweep.
-    if (drift >= 4) {
-      ball.pos.set(ex, ey, ez);
-      ball.vel.set(evx, evy, evz);
-      ball.renderOffset.set(0, 0, 0);
-      ball._rpos.copy(ball.pos);
-      ball.retireRibbons();
-      breakDropDebugPin(ball, ball.pos);
-      return;
-    }
-    ball.renderOffset.set(ball.pos.x - ex, ball.pos.y - ey, ball.pos.z - ez);
-    ball.pos.set(ex, ey, ez);
-    ball.vel.set(evx, evy, evz);
+    breakDropDebugPin(ball, ball.pos); // declared break - the strip ends at the old spot
+    return;
   }
+  // Continuous edges: NEVER teleport pos. The blend target (set above)
+  // converges sim+render+trail smoothly onto the recorded arc; a mid-air
+  // pos jump is what chopped trails and popped the spawn spring at
+  // every sparse-edge correction.
   // Small drift: no positional write - the per-frame blend converges
   // pos/vel onto pbTarget smoothly instead of a 25% nudge per event.
 }
