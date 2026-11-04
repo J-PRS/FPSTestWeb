@@ -116,7 +116,9 @@ export class ConnectionManager {
   private readonly outbox = new Map<string, Uint8Array[]>();
   /** Batch-encode scratch -- ws.send consumes the bytes synchronously, so
    *  one growable buffer serves every conn's batch (per-conn arenas are
-   *  for frames that OUTLIVE their encode, the batch doesn't). */
+   *  for frames that OUTLIVE their encode, the batch doesn't). Test mocks
+   *  that keep the sent Uint8Array MUST .slice() it -- a retained view
+   *  silently rewrites to the next conn's batch (firstSeat flake). */
   private batchScratch = new Uint8Array(64 * 1024);
   /** Per-conn tick-frame arena -- the outbox RETAINS the encoded view
    *  until flush, so every conn needs its own buffer: a shared arena
