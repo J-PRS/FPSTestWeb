@@ -49,7 +49,11 @@ describe('first-seat wire vitality', () => {
       // finishJoin waits on terrainReady (async map-file load) — await it
       // for real or the seats never register.
       await room!.terrainReady;
-      await Promise.resolve(); await Promise.resolve();
+      // Registration itself is a deferred microtask chain past the file
+      // load — a fixed flush count races (~25% flake): pings pushed to an
+      // unregistered pid queue then silently drop at flushOutboxes
+      // (q cleared even with no ws). Poll the real gate instead.
+      for (let i = 0; i < 400 && room!.connections.getConnectionCount() < 2; i += 1) {await Promise.resolve();}
       console.log(`conns=${room!.connections.getConnectionCount()} players=${room!.playerCount()} s1=${room!.players.getPlayer('seat1') ? 'in' : 'MISSING'} s2=${room!.players.getPlayer('seat2') ? 'in' : 'MISSING'}`);
       ws1.sent.length = 0;
       ws2.sent.length = 0; // drop the join bursts — measure live traffic only
