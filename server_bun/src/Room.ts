@@ -1116,7 +1116,7 @@ export class Room {
    *  so every reference resolves at call time, not at construction. */
   /** Wire-invisible cloak predicate — masked CLOAK claim, modeled tank
    *  alive, shoot-reveal window closed (lastFireSim is sim-ms domain). */
-  private cloakHiddenOf(pid: string): boolean {
+  cloakHiddenOf(pid: string): boolean {
     const tp = this.players.getPlayer(pid);
     return tp !== undefined
       && (tp.status & STATUS.CLOAK) !== 0

@@ -513,10 +513,15 @@ this.metrics.recordsIdleReaped += 1;
   private drainAdmits(room: Room, recipientId: string, pending: Set<string>): void {
     let n = TickFanout.ADMIT_PER_TICK;
     const roster = room.players.getAllPlayers();
+    const rt = room.players.getPlayer(recipientId)?.team;
     for (const pid of pending) {
       const p = roster.get(pid);
       pending.delete(pid);
       if (!p) {continue;} // left mid-pacing -- drop silently
+      // A cloaked seat stays queued: the admit wire position is the same
+      // leak announceIfInWorld already gates. Retries each fanout tick;
+      // the row lands on the first uncloaked drain.
+      if (room.cloakHiddenOf(pid) && (rt === undefined || rt !== p.team)) {pending.add(pid); continue;}
       room.connections.sendToPlayer(recipientId, spawnPayload(WORLD_MODEL.player!, p.id, 'playerId', {
         name: p.name,
         internalId: p.internalId,
