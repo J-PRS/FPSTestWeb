@@ -260,8 +260,14 @@ export class TickFanout {
       const sheep = room.bots.sheepOf(playerId);
       // Buff bits are server-owned (stripped from client claims at
       // inputMove) so they must be OR-ed on here, not read off p.status.
+      // The toggle bits ARE claim truth: a legit client drops CLOAK/
+      // SHIELD/MEND the tick its tank empties, so a claim holding one
+      // past the shadow's modeled dry point is a forged channel — mask
+      // it off the wire copy (the record keeps the claim for refill).
       // Computed before suppression so a transition breaks the window.
-      const wireStatus = p.status
+      const tankDry = (room.moveSim.energyOf(playerId) ?? 1) <= 0;
+      const claimed = tankDry ? p.status & ~(STATUS.CLOAK | STATUS.SHIELD | STATUS.MEND) : p.status;
+      const wireStatus = claimed
         | (simT < p.regenUntil ? STATUS.REGEN : 0)
         | (simT < p.ddUntil ? STATUS.DD : 0)
         | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
