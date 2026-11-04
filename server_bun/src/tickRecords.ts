@@ -7,7 +7,7 @@
  */
 import type { Room } from './Room.ts';
 import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, v4Last, sparseV4Record, type TickEncodeScratch, type WireTickPlayer } from '../../shared/wire.ts';
-import { STATUS } from '../../shared/status.ts';
+import { STATUS, SHOOT_REVEAL_S } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { heldBuffRates, POWERUP } from '../../shared/pickups.ts';
 import { BELT_MAX, ammoOf, WEAPONS } from '../../shared/weapons.ts';
@@ -271,6 +271,11 @@ export class TickFanout {
         | (simT < p.regenUntil ? STATUS.REGEN : 0)
         | (simT < p.ddUntil ? STATUS.DD : 0)
         | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
+      // Wire-invisible cloak: the masked claim's CLOAK bit outside the
+      // shoot-reveal window (lastFireSim is sim-ms domain, like simT)
+      // means the record itself must not reach non-teammates — a hide
+      // done only client-side still ships the position on the wire.
+      const hidden = (claimed & STATUS.CLOAK) !== 0 && simT - p.lastFireSim >= SHOOT_REVEAL_S * 1000;
       if (lastSent && !forceSend && recordSuppressed(p, lastSent, now, sheep, wireStatus)) {
 this.metrics.recordsSuppressed += 1;
         continue; // Skip -- within extrapolation tolerance
@@ -342,6 +347,7 @@ this.metrics.recordsSuppressed += 1;
       const fullRecord = freshWireId || room.tickSeq - room.introSeq < 20
         || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0;
       rec.force = forceSend || fullRecord;
+      rec.hidden = hidden;
       // Delta basis follows the wireId, never the slot -- a slot-carried
       // `last` encodes this player's mask against whoever held the slot
       // last tick after every roster shuffle.
@@ -646,6 +652,7 @@ this.metrics.recordsIdleReaped += 1;
           if (nearKeys.has(key)) {continue;}
           for (const r of bucket) {
             if (r.playerId === recipientId || pending?.has(r.playerId)) {continue;}
+            if (r.hidden && (rp.team === undefined || rp.team !== players.get(r.playerId)?.team)) {continue;}
             if ((r.spd ?? 0) <= 12) {
               this.metrics.recordsTierSkipped += 1;
               this.metrics.recordsStopped += 1;
@@ -681,6 +688,10 @@ this.metrics.recordsIdleReaped += 1;
         // wait for the paced playerJoined (their hit/kill EDGES still ride
         // the reliable broadcast; a damage event is never admission-gated).
         if (pending?.has(r.playerId)) {continue;}
+        // Cloaked targets don't exist for non-teammates: FFA (no team)
+        // counts every other seat as hostile. Teammates still get the
+        // record so their client can render the ghost shimmer.
+        if (r.hidden && (rp.team === undefined || rp.team !== players.get(r.playerId)?.team)) {continue;}
         const dx = r.pos.x - rx;
         const dy = r.pos.y - ry;
         const dz = r.pos.z - rz;

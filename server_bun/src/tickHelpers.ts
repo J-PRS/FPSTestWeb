@@ -106,4 +106,7 @@ export interface TickRecord {
    *  ~370 seats). A recycled wireId may inherit a stale tier for one
    *  eval, bounded because fresh mints are forced anyway. */
   wireId?: number;
+  /** Wire-invisible cloak: emit skips this record for any recipient the
+   *  target counts as an enemy (a visual-only hide still ships position). */
+  hidden?: boolean;
 }
