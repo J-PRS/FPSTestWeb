@@ -48,7 +48,7 @@ import { AoeGizmo } from '../../effects/aoeGizmo.js';
 
 import { urlParams } from '../../core/params.js';
 
-import { processProjectileExplosion, type CombatCtx } from '../combat.js';
+import { processProjectileExplosion, type CombatCtx, type CombatDeps } from '../combat.js';
 
 import type { Targetable } from '../../entities/balls.js';
 import { simRand } from '../../../../shared/simRand.js';
@@ -488,7 +488,11 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
 
   // to bank. Player shells leave shooterId unset; bots carry 'bot:*'.
 
-  if ((p.hitBall || p.hitPlayerId) && !p.shooterId) {
+  // demoProjectileId is the hard lane check: only locally-fired shells
+  // carry one (remote/deploy/bot shells go through the serverId lane and
+  // never set it), so !shooterId alone can't be bypassed by a spawn path
+  // that forgot to stamp ownership.
+  if ((p.hitBall || p.hitPlayerId) && !p.shooterId && p.demoProjectileId) {
 
     const hitWho = p.hitBall ? `ball#${p.hitBall.id}` : (p.hitPlayerId ?? '?');
 
@@ -622,7 +626,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 
     const hitPos = p.hitPointValid ? p.hitPoint : p.pos;
 
-    kineticHitFx(c, p, hitPos);
+    kineticHitFx(c.deps, p, hitPos);
 
     // Bullet hole on terrain hits only - enemy/player hits already get
 
@@ -639,7 +643,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // Crumble weapons (bombard) present a shard burst, not a blast dome -
   // spawn it here and flag the blast presenter to skip the dome. Claim,
   // force and splash still ride the standard path below.
-  if (p.config.crumbles) {spawnCrumbleShards(c, p, p.hitPointValid ? p.hitPoint : p.pos);}
+  if (p.config.crumbles) {spawnCrumbleShards(c.deps, p, p.hitPointValid ? p.hitPoint : p.pos);}
 
   // One AOE message for all weapons - the shared weapon table carries
 
@@ -801,7 +805,7 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
 
   if (p.config.noExplosion) {
 
-    kineticHitFx(c, p, pos);
+    kineticHitFx(c.deps, p, pos);
 
     if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) {deps.lazyEffects().spawnBulletMark(pos);}
 
@@ -812,7 +816,7 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
   if (p.config.crumbles) {
 
     // Crumble weapons present shards, not a dome - on remote replicas too.
-    spawnCrumbleShards(c, p, pos);
+    spawnCrumbleShards(c.deps, p, pos);
 
     return;
 
@@ -996,6 +1000,10 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
 const _crumbCol = new THREE.Color();
 
+/** Subset of CombatDeps the kinetic-pop path touches - also satisfied by
+ *  NetDeps so the wire 'gone' repaint can share it. */
+type ImpactFxDeps = Pick<CombatDeps, 'lazyEffects' | 'lazyScene' | 'lazyTerrain' | 'world'>;
+
 
 
 /** Kinetic-hit feedback for noExplosion shells - the bullet puff is the
@@ -1009,9 +1017,7 @@ const _crumbCol = new THREE.Color();
  *  creature death would. No dome, just the mass coming apart. Shared by
  *  the local impact path (which also runs the standard splash) and by
  *  remote replicas. */
-function spawnCrumbleShards(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
-
-  const {deps} = c;
+function spawnCrumbleShards(deps: ImpactFxDeps, p: Projectile, pos: THREE.Vector3): void {
 
   deps.lazyEffects().spawnImpact(pos, p.vel);
 
@@ -1039,21 +1045,23 @@ function spawnCrumbleShards(c: CombatCtx, p: Projectile, pos: THREE.Vector3): vo
 
 }
 
-function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
+export function kineticHitFx(deps: ImpactFxDeps, p: Projectile, pos: THREE.Vector3): void {
 
-  const {deps} = c;
-
-  if (p.config.crumbles) {spawnCrumbleShards(c, p, pos); return;}
+  if (p.config.crumbles) {spawnCrumbleShards(deps, p, pos); return;}
 
   deps.lazyEffects().spawnImpact(pos, p.vel);
 
-  if (p.config.embeds === undefined) {return;}
+  // noExplosion shells can still declare a VFX pop - energy bolts get the
+  // compact 'bolt' snap instead of nothing, embedding spears keep 'punch'.
+  const vfx = p.config.vfx ?? (p.config.embeds === undefined ? undefined : 'punch');
+
+  if (vfx === undefined) {return;}
 
   deps.world.explosions.push(new Explosion(
 
     deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(),
 
-    3.4 / EXPLOSION_VFX_RADIUS, p.config.damageColor, 'punch',
+    3.4 / EXPLOSION_VFX_RADIUS, p.config.damageColor, vfx,
 
   ));
 
