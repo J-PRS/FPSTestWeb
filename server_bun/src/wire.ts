@@ -339,11 +339,16 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'heal', amount: obj.amount, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    // Heals stay claimed on every tier: ambient pickups (nuggets, gems)
-    // have no server-side entity to adjudicate an intent against. The
-    // bounds live in handleHeal — 25/call, 1.5s cadence, healCredit in
-    // team rooms — not in re-derivation, so the claim gate doesn't apply.
-    handle: (h, id, m): void => h.claimAck(id, 'heal', m.claimSeq, h.combat.handleHeal(id, m)),
+    // Dedicated sims every pickup server-side — a legit heal always
+    // arrives via onCollect, never a client claim. P2P hosts still
+    // accept (their ambient nuggets have no server entity). Without
+    // this the free-form non-team branch is a 25hp/1.5s regen window
+    // any client could open — and team rooms already refuse every
+    // claim ('nocredit'), so nothing legit changes there either.
+    handle: (h, id, m): void => {
+      if (h.acceptClaims === false) { h.claimAck(id, 'heal', m.claimSeq, 'outcomes are server-simmed'); return; }
+      h.claimAck(id, 'heal', m.claimSeq, h.combat.handleHeal(id, m));
+    },
   },
 
   creatureHit: {
