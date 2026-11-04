@@ -580,9 +580,9 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       let renderLag: Record<string, number> | undefined = undefined;
       if (obj.renderLag !== null && typeof obj.renderLag === 'object' && !Array.isArray(obj.renderLag)) {
         renderLag = {};
-        // Per-target lag table: a room can't have >128 remotes — a bigger
-        // map is forged keys, not measurement, and only feeds lookups
-        // that miss anyway.
+        // Per-target lag table: a room can't have >128 remotes, so a
+        // bigger map is forged keys, not measurement, and only feeds
+        // lookups that miss anyway.
         for (const [k, v] of Object.entries(obj.renderLag as Record<string, unknown>).slice(0, 128)) {
           if (isFiniteNumber(v) && k.length <= 64) {renderLag[k] = v;}
         }
