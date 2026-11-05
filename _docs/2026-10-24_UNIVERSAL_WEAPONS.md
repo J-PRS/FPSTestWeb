@@ -103,7 +103,7 @@ picked. Dead design space unless it has a draw-speed niche.
 alpha sidearm. Competes with Shocklance for the "one big pocket hit"
 niche.
 
-### Shotgun (13) — 10 pellets × 7 ≈ 70 point-blank, tighter cone than
+### Shotgun (13) — 10 pellets × 5 ≈ 50 point-blank, tighter cone than
 Flak's lob. The mid-band scattergun to Flak's doorway — and the *reason*
 Flak can be medium-locked: the universal shotgun is the floor so
 non-mediums aren't disarmed.
