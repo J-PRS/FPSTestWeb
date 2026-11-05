@@ -70,6 +70,9 @@ export interface LiveProj {
    *  A riding projectile stops integrating, centers on the host, and
    *  detonates where the host dies. */
   rides?: string;
+  /** fuseOnly carriers: bodies this shell already bonked — each body
+   *  reflects it once (no re-trigger next tick inside the capsule). */
+  bodyBounced?: Set<string>;
 }
 
 // Player aim height — matches where the client sweeps the capsule center.

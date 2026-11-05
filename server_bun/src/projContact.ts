@@ -176,10 +176,33 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
       r.detonate(proj, at);
       return true;
     }
-    // Fuse-only carriers (MRV) phase through bodies — contact pops would
-    // make a timed airburst into a strictly-better mortar. Terrain, walls,
-    // and domes above already stopped it; skip the body sweeps entirely.
-    if (stats.fuseOnly) {return false;}
+    // Fuse-only carriers (MRV, ClusterBomb) BOUNCE off bodies instead of
+    // phasing: a thunk keeps cooking and pops wherever it lands. Contact
+    // pops would make the timed airburst a strictly-better mortar — so
+    // the body reflects the shell, once per body. Terrain, walls, and
+    // domes above already stopped it; no damage sweep at all.
+    if (stats.fuseOnly) {
+      const e = stats.bounceRestitution ?? 0.5;
+      for (const [pid, target] of r.room.players.getAllPlayers()) {
+        if (pid === proj.ownerId || target.isDead || proj.bodyBounced?.has(pid)) {continue;}
+        const cap = classCapsule(target.armorClass);
+        const center = capsuleCenter(target);
+        const pc = { x: center.x, y: center.y, z: center.z };
+        const pd = segCapsuleDist(from, p.pos, pc.x, pc.y - cap.half, pc.y + cap.half, pc.z);
+        if (pd <= cap.radius + stats.bodyRadius + 0.3) {
+          const nx = p.pos.x - pc.x, ny = p.pos.y - pc.y, nz = p.pos.z - pc.z;
+          const nl = dhypot3(nx, ny, nz) || 1;
+          const d = (p.vel.x * nx + p.vel.y * ny + p.vel.z * nz) / nl;
+          if (d < 0) {
+            p.vel.x -= (1 + e) * d * nx / nl;
+            p.vel.y -= (1 + e) * d * ny / nl;
+            p.vel.z -= (1 + e) * d * nz / nl;
+          }
+          (proj.bodyBounced ??= new Set()).add(pid);
+        }
+      }
+      return false;
+    }
     // Arming fuse (T2 mortar): bodies phase through until the shell is
     // armed — terrain, walls, and domes above already stopped it. GL
     // overrides with bodyArmTime=0: its shells bounce off dirt yet pop
