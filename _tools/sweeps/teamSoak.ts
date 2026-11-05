@@ -184,13 +184,20 @@ const kitOf = (w: WeaponType, second: WeaponType | null): BotLoadout => ({
 // rng keeps a wild run's sim byte-identical to the same room without it.
 let wrs = (SEED * 2654435761) >>> 0 || 1;
 const wrand = (): number => ((wrs = (wrs * 1664525 + 1013904223) >>> 0) / 4294967296);
-// Cycle pool = every fireable WeaponType — the exclusions are mechanical,
-// not curated: submunitions only exist inside their parent's detonation,
-// heals/tools aim at allies, Slam is a skill not a trigger. A weapon that
-// can't fire as a primary still enters the pool and reports a zero-shot
-// dud row — that IS the answer for it.
+// Cycle pool = every fireable WeaponType — minus the utility rows:
+// heals/tools/buffs/debuffs (Repair, Satchel, *Grenade buffs, EMP,
+// Concussion, Hook) aren't kill weapons and just fill the table with
+// bookkeeping noise. --all-weapons restores the full pool for when
+// the question IS "what does the utility row do".
+const ALL_WEAPONS = has('all-weapons');
+const UTILITY_WTS = new Set<number>([
+  WeaponType.ClusterBomblet, WeaponType.MRVBomblet, WeaponType.Slam,
+  WeaponType.HealBeam, WeaponType.Repair, WeaponType.HealGrenade,
+  WeaponType.ArmorGrenade, WeaponType.SatchelCharge, WeaponType.EMP,
+  WeaponType.Concussion, WeaponType.Hook,
+]);
 const CYCLE_POOL = (Object.keys(WEAPONS).map(Number) as WeaponType[]).filter((w) =>
-  ![WeaponType.ClusterBomblet, WeaponType.MRVBomblet, WeaponType.HealBeam, WeaponType.Repair, WeaponType.Slam].includes(w));
+  ALL_WEAPONS || !UTILITY_WTS.has(w));
 const arm = (p: { id: string }, w: WeaponType): void => {
   const kit = kitOf(w, null);
   ctl.loadouts.set(p.id, kit);
@@ -353,6 +360,11 @@ const lastKills = new Map<string, number>();
 // reports the legs it walks: speed (did anyone move), nearest foe (is
 // there anything to shoot) and hunt% (did the brain agree).
 const contact = { spd: 0, nfoe: 0, hunt: 0, n: 0 };
+// Held-time ledger: sim-seconds each weapon spent carried by a LIVE
+// bot (the bench's kit, not the fired slot - k/10r prices kills by
+// exposure, k/10s by time-on-trigger; together they split "never
+// drew" from "drew and whiffed").
+const held = new Map<number, number>();
 for (; ticks < maxTicks; ticks += BATCH) {
   if ((performance.now() - wall0) / 1000 > WALL_S) {break;}
   simNowAdvance(dt * 1000 * BATCH);
@@ -398,6 +410,8 @@ for (; ticks < maxTicks; ticks += BATCH) {
         const s = sideOf.get(p.id);
         if (s) {seat(s.team, s.i);}
       }
+      const hw = wOf.get(p.id);
+      if (hw !== undefined) {held.set(hw, (held.get(hw) ?? 0) + dt * BATCH);}
     }
   }
 }
@@ -479,15 +493,16 @@ const mark = (wid: string): string => {
 // that's the column that makes a 10/s belt spam and a 2.5s rocket
 // comparable.
 const intervalOf = (wt: number): number => WEAPON_FIRE_INTERVAL_S[wt as WeaponType] ?? 0.1;
-console.log(`\nweapon            | side | shots | hits | conn% |  dmg  |  kills |   up(s) | dmg/10s | k/10s`);
+console.log(`\nweapon            | side | shots | hits | conn% |  dmg  |  kills |   up(ts) |  s | dmg/10ts | k/10ts | k/10s`);
 for (const r of rows) {
   const wt = Number(r.k.slice(1));
   const name = WeaponType[wt] ?? r.k;
   const up = r.shots * intervalOf(wt);
+  const hs = held.get(wt) ?? 0;
   // conn% = pulls that tagged ≥1 victim, deduped by shotId — the honest
   // connect rate. `hits` stays pellet/victim-level for damage accounting
   // (a flak burst is 1 connect of ~8 hits).
-  console.log(`${name.padEnd(17)} |  ${mark(r.k)}   | ${String(r.shots).padStart(5)} | ${String(r.hits).padStart(4)} | ${(r.shots ? (100 * r.conn / r.shots) : 0).toFixed(1).padStart(5)} | ${String(Math.round(r.damage)).padStart(5)} | ${String(r.kills).padStart(5)} | ${up.toFixed(0).padStart(7)} | ${(10 * r.damage / Math.max(1, up)).toFixed(0).padStart(7)} | ${(10 * r.kills / Math.max(1, up)).toFixed(2).padStart(6)}`);
+  console.log(`${name.padEnd(17)} |  ${mark(r.k)}   | ${String(r.shots).padStart(5)} | ${String(r.hits).padStart(4)} | ${(r.shots ? (100 * r.conn / r.shots) : 0).toFixed(1).padStart(5)} | ${String(Math.round(r.damage)).padStart(5)} | ${String(r.kills).padStart(5)} | ${up.toFixed(0).padStart(7)} | ${hs.toFixed(0).padStart(8)} | ${(10 * r.damage / Math.max(1, up)).toFixed(0).padStart(7)} | ${(10 * r.kills / Math.max(1, up)).toFixed(2).padStart(7)} | ${(10 * r.kills / Math.max(1, hs)).toFixed(2).padStart(5)}`);
 }
 // Range curve: shots vs hits/dmg/kills per engagement band, delta'd like
 // the table above. The payoff of --force — where a gun actually works.
