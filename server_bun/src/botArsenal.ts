@@ -380,6 +380,23 @@ s[kind] += 1; this.propels.set(id, s);
       aim.x = gx; aim.z = gz;
       aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : aim.y - 1.5;
     }
+    // Flak feet-serve, conditionally: a ground-skip beats the LEAD, not
+    // the lob - it pays vs fast lateral movers whose jink inside the
+    // ~0.3s flight undoes velocity lead, and only on ground they can
+    // land/cross. Direct lob wins vs straight runners and standoffs
+    // (bench: unconditional serve cost 11% kills).
+    else if (wt === WeaponType.Flak && dist > 8 && dist < 30) {
+      const tv = target.velocity;
+      const ux = dx0 / dist, uz = dz0 / dist; // unit shooter->target
+      const lat = Math.abs(tv.x * -uz + tv.z * ux); // lateral speed across the aim axis
+      const grounded = (this.room.field ? target.position.y - hmHeight(this.room.field, target.position.x, target.position.z) : 0) < 4;
+      if (lat > 8 && grounded) {
+        const ts = Math.hypot(tv.x, tv.z) || 1;
+        const gx = aim.x + (tv.x / ts) * 4, gz = aim.z + (tv.z / ts) * 4;
+        aim.x = gx; aim.z = gz;
+        aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : aim.y - 1.4;
+      }
+    }
     if (stF?.fuseOnly && stF.maxLifetime != null && stF.speed > 0) {
       const f = stF.maxLifetime, inh = stF.inherit ?? 0.5;
       const tv = target.velocity;
