@@ -55,9 +55,11 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
       // Pool hoses: apex is <25m but a 12m orbit paid approach deaths vs
       // standoff guns. 20m keeps the 10-25 band without the knife dive.
       if (w === WeaponType.PlasmaGun || w === WeaponType.Sprinkler) {return 20;}
-      // GL-as-far holds its measured standoff (7.1%/shot at 60-120),
-      // not the generic 30m far orbit.
-      if (w === lo.far) {return w === WeaponType.GrenadeLauncher ? 60 : 30;}
+      // Disc pays airtime-scaled damage (x4 at 2s flight): the 30m far
+      // orbit earns 1.4x, an 80m stand earns ~2.2x per hit - the long
+      // prayer is the weapon's designed payoff (hitMax grows to 8m to
+      // catch it).
+      if (w === lo.far) {return w === WeaponType.Disc ? 80 : w === WeaponType.GrenadeLauncher ? 60 : 30;}
       return undefined;
     },
     // Trigger rhythm — the legal cadence the client trigger enforces,
