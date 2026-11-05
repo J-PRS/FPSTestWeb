@@ -282,7 +282,13 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
     // bot NEVER draw its best gun off-band - chaingun was un-drawable at
     // 40m despite still converting there (force-matrix band data). 0.08
     // keeps off-band picks rare but possible; skill decides if it leaks.
-    let s = Math.max(fit(slot), 0.08) * Math.max(0.1, skill(w));
+    let s = Math.max(fit(slot), 0.08);
+    // Measured forced-band conversion: the bolt slug kills at <10m as well
+    // as the near guns (10.2%/shot vs shotgun 10.6%, flak 12.7%) - a
+    // carrier doesn't holster a 50dmg slug for a hold-out at knife range.
+    // Only weapons with measured close conversion earn this lane.
+    if (slot === 'far' && w === WeaponType.BoltLauncher) {s = Math.max(s, fit('near') * 0.9);}
+    s *= Math.max(0.1, skill(w));
     if (aoe > 0 && dist < aoe * 0.8) {s *= 0.08 + courage * 0.5;}
     if (s > best.s) {best = { w, s };}
   }

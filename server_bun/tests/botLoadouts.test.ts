@@ -66,7 +66,7 @@ describe('botLoadouts', () => {
   });
 
   it('an enemy inside self-blast range discounts aoe for the cautious, not the bold', () => {
-    const kit = lo({ near: WeaponType.Disc }); // aoe launcher in the near band
+    const kit = lo({ near: WeaponType.Disc, far: WeaponType.Disc }); // aoe launcher everywhere - the bolt slug would honestly beat the sidearm at 6m (its 5m splash can't reach back), which is not what this assertion is about
     // dist 6 sits inside the disc's 10m blast — the cautious draw the
     // splash-free sidearm while a disc specialist with nerve keeps it.
     const skill = (w: number) => w === WeaponType.Disc ? 1 : 0.3;
