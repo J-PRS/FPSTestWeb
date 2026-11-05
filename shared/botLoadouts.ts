@@ -60,13 +60,13 @@ export const BOT_LOADOUTS: BotLoadout[] = [
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Railgun], belt: [WeaponType.ImpactGrenade], side: [WeaponType.Revolver] },
   },  // chaser - light frame, so no medium-locked PlasmaGun
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar, WeaponType.GrenadeLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
   },  // siege
   { perk: 'armored',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver,
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.MissileLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] },
   },  // anchor - heavies can't shoulder medium-only Cannon either
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc, WeaponType.GrenadeLauncher], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] },
   },  // skirmisher
   { perk: 'lifesteal',    near: WeaponType.Sprinkler, mid: WeaponType.Chaingun, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol,
     alts: { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
@@ -93,7 +93,7 @@ export const BOT_LOADOUTS: BotLoadout[] = [
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.BoltLauncher], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] },
   },  // medic - beam on the push, burst for the pack
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,        belt: WeaponType.HealGrenade,   side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Disc], far: [WeaponType.Disc], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Disc], far: [WeaponType.Disc, WeaponType.GrenadeLauncher], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] },
   },  // field medic - fighter first, heals what it walks past
   { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.HealBeam,
     alts: { near: [WeaponType.Shotgun, WeaponType.Flak], mid: [WeaponType.Cannon, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ClusterBomb, WeaponType.ArmorGrenade], side: [WeaponType.Pistol] },
@@ -126,7 +126,10 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   // cap - a far-slot draw was a weapon the bot could never legally pull
   // (fuse-solve refuses under-carry targets). Belt keeps it: lobAt's
   // fuse-waypoint solver serves the long arc properly.
-  far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun],
+  // GL earns a far draw too: forced bench conversion peaks at 60-120m
+  // (7.1%/shot vs 5.2% at 25-60) - the skipping shell covers ground the
+  // mid triangle (dead past ~57m) could never open for it.
+  far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.GrenadeLauncher],
   // Every player belt throw (derived from beltThrow markers) + MRV -
   //  the carrier isn't a throw type but fields through this slot.
   //  Parity both ways: a wildcard bot fields what a player can equip.
