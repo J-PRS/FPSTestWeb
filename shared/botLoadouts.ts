@@ -68,9 +68,9 @@ export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] },
   },  // skirmisher
-  { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol,
+  { perk: 'lifesteal',    near: WeaponType.Sprinkler, mid: WeaponType.Chaingun, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol,
     alts: { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
-  },  // hose - area denial
+  },  // hose - area denial; sprinkler is a <15m weapon, not mid
   { perk: 'armored',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver,
     alts: { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Mortar], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] },
   },  // bruiser - big slugs (Railgun is light-frame gear, Cannon medium)
@@ -87,7 +87,7 @@ export const BOT_LOADOUTS: BotLoadout[] = [
     alts: { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Basilisk], far: [WeaponType.Mortar], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] },
   },  // trapper
   { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.ArmorGrenade,  side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.GrenadeLauncher, WeaponType.Sprinkler], far: [WeaponType.BoltLauncher], belt: [WeaponType.Grenade, WeaponType.Javelin], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Chaingun, WeaponType.Sprinkler], mid: [WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.Grenade, WeaponType.Javelin], side: [WeaponType.Revolver] },
   },  // support - plates the push
   { perk: 'lifesteal',    near: WeaponType.HealBeam, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.HealGrenade,   side: WeaponType.Pistol,
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.BoltLauncher], belt: [WeaponType.ArmorGrenade], side: [WeaponType.Revolver] },
@@ -115,10 +115,12 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   // Slot pools follow the measured range curves (teamSoak --force band
   // table, 2026-10): chaingun peaks at 25-60m, lightning dies past 60m,
   // rocket connects best at 25-60 - all mid-band guns, not near/far.
-  near: [WeaponType.Shotgun, WeaponType.Flak],
+  // Sprinkler fights inside 15m - a 120m/s lob is flat at knife range,
+  // the cone fits inside its pop; at mid band it just arcs short.
+  near: [WeaponType.Shotgun, WeaponType.Flak, WeaponType.Sprinkler],
   // Bombard lives in mid - a 160dmg... a direct-hit slug has no business
   // in the far band where only splash reach matters.
-  mid: [WeaponType.Chaingun, WeaponType.Lightning, WeaponType.Disc, WeaponType.Cannon, WeaponType.Gonne, WeaponType.Basilisk, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard, WeaponType.MissileLauncher],
+  mid: [WeaponType.Chaingun, WeaponType.Lightning, WeaponType.Disc, WeaponType.Cannon, WeaponType.Gonne, WeaponType.Basilisk, WeaponType.GrenadeLauncher, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard, WeaponType.MissileLauncher],
   // MRV stays out of far: its ~82m fuse carry exceeds the 45m acquire
   // cap - a far-slot draw was a weapon the bot could never legally pull
   // (fuse-solve refuses under-carry targets). Belt keeps it: lobAt's
