@@ -369,7 +369,11 @@ s[kind] += 1; this.propels.set(id, s);
     // Arm-gated ordnance under the arm window plays the BOUNCE-SERVE:
     // lob the dirt ~10m AHEAD of the runner's path - the shell thuds,
     // skids forward still cooking, and pops where they're headed.
-    if ((stF?.armTime ?? 0) > 0 && stF.speed > 0 && dist < stF.speed * (stF.armTime ?? 0) * 0.35 && dist > 8) {
+    // Gate on the BODY arm time: GL's armTime is only its dirt-skip
+    // window (bodyArmTime 0 pops bodies at any age), so lobbing the
+    // dirt ahead at knife range throws away a hit it already has.
+    const bodyArmF = stF?.bodyArmTime ?? stF?.armTime;
+    if ((bodyArmF ?? 0) > 0 && stF.speed > 0 && dist < stF.speed * (bodyArmF ?? 0) * 0.35 && dist > 8) {
       const tv = target.velocity, ts = Math.hypot(tv.x, tv.z);
       const lx = ts > 2 ? (tv.x / ts) * 10 : 0, lz = ts > 2 ? (tv.z / ts) * 10 : 0;
       const gx = aim.x + lx, gz = aim.z + lz;

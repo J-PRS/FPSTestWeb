@@ -47,7 +47,11 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
       // at 30m fires shells that physically cannot pop (armTime 1.5s at
       // 80m/s = ~120m ballistic travel) - ~0.7x the arm travel lands
       // inside the measured 60-120m apex band.
-      if ((st.armTime ?? 0) > 0 && st.speed > 0) {return st.speed * (st.armTime ?? 0) * 0.7;}
+      // Gate on the BODY arm time, not armTime: GL's armTime is only its
+      // dirt-skip window (bodyArmTime 0 pops bodies at any age) and
+      // parking it at 42m standoff wastes a mid-slot brawler.
+      const bodyArm = st.bodyArmTime ?? st.armTime;
+      if ((bodyArm ?? 0) > 0 && st.speed > 0) {return st.speed * (bodyArm ?? 0) * 0.7;}
       if (w === lo.far) {return 30;}
       return undefined;
     },
