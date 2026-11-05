@@ -22,7 +22,10 @@ Index: `readme.md`.
   when the server disagreed. Mitigation: `Player.deadConfirmedByWire`, and a server hit on a
   predicted corpse revives the seat (`game/net/players.ts`). Not verified live.
 - **Remote ghost offset on WebTransport.** `ghosts.max` reached 51 m on fast movers, mostly on
-  the wire-to-ghost gap (`wg`). Tracked in the netcode audit.
+  the wire-to-ghost gap (`wg`). Tracked in the netcode audit. Re-measured 2026-11-05 after the
+  `remoteDeployables` flash-bind fix (`ghostsoak.ts --secs 120 --bots 12 --map lagoon --net wt`,
+  commit 8b0e3e26): `rg` p95 0.19 m / max 1.9 m, `rw`/`wg` p95 ~9 m / max ~31 m — the spawn
+  exceptions were spamming the remote-entity path; still worth a WAN re-check before beta.
 - **Hit-desync logs:** `[StateHash] DESYNC DETECTED` appears on death edges, as in the
   2026-10-24 diagnostic dump (`isDead: client=true server=false`).
 
