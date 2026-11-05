@@ -115,7 +115,13 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // is untouched. Loiter expires — some run beats never — but at
         // 60s, not the staging orbit's 35.
         if (ctx.runner && !ctx.running) {
-          const hot = ctx.enemies.some((e): boolean => e.alive && dist3(e.pos, pos) < 180);
+          // Speed is the capper's armor: a runner already carrying
+          // >20m/s IS the fast mover who slips a hot lane - parking
+          // him mid-route for a lull that never comes just makes him
+          // the stationary target the loiter exists to avoid. Only a
+          // slow/stalled capper waits out the kill zone.
+          const slow = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) < 20 : true;
+          const hot = slow && ctx.enemies.some((e): boolean => e.alive && dist3(e.pos, pos) < 180);
           const waveNear = (ctx.allies ?? []).some((a): boolean => dist3(a, ctx.objective!) < 130);
           if (!hot || waveNear) {
             // Decay, don't zero — `hot` flickers every few seconds on a

@@ -149,8 +149,12 @@ const room = mkRoom({
   } : {}),
 }, MODE, SEED, false, field);
 // The soak drives the roster itself — an honored botFill would cull the
-// injected fleet back to the map's own count on the first tick.
-room.spec.botFill = 0;
+// injected fleet back to the map's own count on the first tick. When
+// --per exceeds the spec.bots clamp (16 total), the fill floor is the
+// way up instead: maintain() tops the fleet to the target on tick 1.
+// --wild only: top-up bots mint with roster kits, which a pinned bench
+// would read as un-dealt ringers.
+room.spec.botFill = PER > 8 && (WILD || CYCLE) ? PER * 2 : 0;
 
 const ctl = room.bots as unknown as {
   loadouts: Map<string, BotLoadout>;
@@ -447,7 +451,10 @@ for (const [name, s] of verdict) {
 if (room.flags) {
   const caps = room.flags.capLog.length;
   const carried = [...room.flags.flags.values()].filter((f) => f.carrier).length;
-  console.log(`flags  caps=${caps} liveCarriers=${carried} states=${[...room.flags.flags.values()].map((f) => f.state).join(',')}`);
+  const grabs = room.flags.grabLog.length;
+  const returns = room.flags.retLog.length;
+  const holds = room.flags.capLog.map((c) => Math.round(c.holdMs / 1000)).join(',');
+  console.log(`flags  caps=${caps} grabs=${grabs} returns=${returns} liveCarriers=${carried} holdS=[${holds}] states=${[...room.flags.flags.values()].map((f) => f.state).join(',')}`);
 }
 const nBatches = Math.max(1, Math.round(ticks / BATCH));
 console.log(`contact meanSpeed=${(contact.spd / Math.max(1, contact.n)).toFixed(1)}m/s nearestFoe=${(contact.nfoe / Math.max(1, contact.n)).toFixed(0)}m hunt=${(100 * contact.hunt / nBatches).toFixed(0)}% over ${nBatches} samples`);
