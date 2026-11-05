@@ -364,6 +364,7 @@ const lastKills = new Map<string, number>();
 // reports the legs it walks: speed (did anyone move), nearest foe (is
 // there anything to shoot) and hunt% (did the brain agree).
 const contact = { spd: 0, nfoe: 0, hunt: 0, n: 0 };
+const capStats: Record<string, { carry: number; route: number; other: number } | undefined> = {};
 // Held-time ledger: sim-seconds each weapon spent carried by a LIVE
 // bot (the bench's kit, not the fired slot - k/10r prices kills by
 // exposure, k/10s by time-on-trigger; together they split "never
@@ -389,6 +390,25 @@ for (; ticks < maxTicks; ticks += BATCH) {
     contact.spd += Math.hypot(p.velocity.x, p.velocity.z);
   }
   if (room.bots) {contact.hunt += room.bots.huntUptime();}
+  // Capper cycle audit — where a runner's alive-time actually goes:
+  // carrying (grabbed), on-route (goal is the enemy stand), or other
+  // (respawn idle, hunting, wandering). Low route share = dead cycle.
+  if (room.flags && room.bots) {
+    for (const [id, role] of (room.bots as unknown as { roster: { roles: Map<string, string> } }).roster.roles) {
+      if (role !== 'capper') {continue;}
+      const p = room.players.getPlayer(id);
+      if (!p || p.isDead || !p.team) {continue;}
+      const brain = (room.bots as unknown as { brains: Map<string, { goalS?: { goal?: BotVec } }> }).brains.get(id);
+      const g = brain?.goalS?.goal;
+      const enemy = room.flags.flags.get(p.team === 'alpha' ? 'bravo' : 'alpha');
+      const own = room.flags.flags.get(p.team);
+      const s = capStats[p.team] ??= { carry: 0, route: 0, other: 0 };
+      if (enemy?.carrier === id) {s.carry += dt * BATCH;}
+      else if (g && enemy && Math.hypot(g.x - enemy.pos.x, g.z - enemy.pos.z) < 60) {s.route += dt * BATCH;}
+      else {s.other += dt * BATCH;}
+      void own;
+    }
+  }
   if (CYCLE) {
     for (const r of room.scoring.matchPlayers()) {
       const k = r.kills;
@@ -455,6 +475,11 @@ if (room.flags) {
   const returns = room.flags.retLog.length;
   const holds = room.flags.capLog.map((c) => Math.round(c.holdMs / 1000)).join(',');
   console.log(`flags  caps=${caps} grabs=${grabs} returns=${returns} liveCarriers=${carried} holdS=[${holds}] states=${[...room.flags.flags.values()].map((f) => f.state).join(',')}`);
+  for (const [team, s] of Object.entries(capStats)) {
+    if (!s) {continue;}
+    const t = s.carry + s.route + s.other;
+    console.log(`  ${team} cappers: route=${(100 * s.route / Math.max(1, t)).toFixed(0)}% carry=${(100 * s.carry / Math.max(1, t)).toFixed(0)}% other=${(100 * s.other / Math.max(1, t)).toFixed(0)}% of ${(t / 60).toFixed(0)}min alive`);
+  }
 }
 const nBatches = Math.max(1, Math.round(ticks / BATCH));
 console.log(`contact meanSpeed=${(contact.spd / Math.max(1, contact.n)).toFixed(1)}m/s nearestFoe=${(contact.nfoe / Math.max(1, contact.n)).toFixed(0)}m hunt=${(100 * contact.hunt / nBatches).toFixed(0)}% over ${nBatches} samples`);

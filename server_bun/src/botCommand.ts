@@ -51,7 +51,11 @@ export interface CommandMember {
 const WANT: Record<CommandKind, number> = {
   chase: 2,
   return: 1,
-  escort: 2,
+  // A live carrier is the whole scoreline: real CTF doctrine escorts
+  // the carrier home over everything else, and soak funnels show the
+  // run home is where carries die - a pair reads thin on a 16-man
+  // squad, so live carries pull a deeper screen.
+  escort: 4,
   // A called push wants a real flood — three bodies reads as a patrol,
   // not a wave; four is most of the eligible pool arriving together.
   // Long transit legs bleed members before arrival (katabatic's 500m
