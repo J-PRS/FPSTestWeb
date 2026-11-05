@@ -178,7 +178,7 @@ const badKits: string[] = [];
 const kitOf = (w: WeaponType, second: WeaponType | null): BotLoadout => ({
   perk: 'none',
   near: second ?? w, mid: second ?? w, far: w,
-  belt: WeaponType.Grenade, side: WeaponType.Pistol,
+  belt: WeaponType.Grenade, side: w, // each gun finishes with itself - a hardcoded Pistol side made it collect every weapon's finisher kills
 });
 // Own seeded stream for wildcard rolls — keeping the bench off the room's
 // rng keeps a wild run's sim byte-identical to the same room without it.
