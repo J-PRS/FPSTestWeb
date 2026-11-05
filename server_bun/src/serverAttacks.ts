@@ -55,6 +55,16 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
     // — falling back to it keeps bot punches non-zero. airtime feeds the
     // skillshot ramp for sim shells (melee/beam callers pass none).
     const stats = getWeaponStats(weaponType);
+    // Reach is judged at CONTACT time, not aim time: the swing may be
+    // aimed at a lastSeen memory point while the live target skis away
+    // — a 4.5m punch landing at 100m was real (melee probe: 60-137m
+    // hits). Same contract fireAtBall's bug punch already honors.
+    if (weaponType === WeaponType.Melee) {
+      const target = h.playerManager.getPlayer(targetId);
+      if (!target || target.isDead) {return;}
+      const d = Math.hypot(target.position.x - shooter.position.x, target.position.y - shooter.position.y, target.position.z - shooter.position.z);
+      if (d > (stats?.aoeRadius ?? 3.2) + 2.4) {return;} // swing radius + capsule
+    }
     let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
     // Bot beams ramp down like human ones — the beam-rider loadout pays
     // the same hold-decay a client's beam does.
