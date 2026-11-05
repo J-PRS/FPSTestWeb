@@ -300,7 +300,14 @@ function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | n
   // dueling every midfield contact is the soak's "wave never arrives"
   // defect (d530m, near0%): suppression travels WITH the flood, not
   // instead of it.
-  const orbit = (ctx.runner || ctx.wave) ? Math.min(st.orbitFar, 45) : st.orbitFar;
+  // Fuse carriers fight at carry range, not the duel ring - MRV's
+  // ~120m airburst is unreachable inside orbitFar, so the engage ring
+  // inherits the weapon's preferred distance (falls back to orbitFar
+  // for every gun whose preferred band is close).
+  const prefer = ctx.preferredRange?.(dist3(pos, best?.pos ?? pos), best?.hpFrac);
+  const orbit = (ctx.runner || ctx.wave)
+    ? Math.min(Math.max(st.orbitFar, prefer ?? 0), 45)
+    : Math.max(st.orbitFar, prefer ?? 0);
   if (best && !fearing && dist3(pos, best.pos) <= orbit) {
     if (prevFight && st.fightHold > 0 &&
         ctx.groundY(prevFight.x, prevFight.z) - ctx.groundY(pos.x, pos.z) <= 4) {

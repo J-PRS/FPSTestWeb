@@ -156,10 +156,12 @@ export class BotRoster {
     const prev = this.classes.get(p.id) ?? cls;
     this.classes.set(p.id, cls);
     // Heavies shoulder the mortar — tier-locked ordnance is what makes the
-    // class read as an anchor instead of just a slower medium.
+    // class read as an anchor instead of just a slower medium. MRV is the
+    // one legal peer pick: a fuse carrier the bot now engages at carry
+    // range (preferredRange/fuse solve) rather than a dead far slot.
     if (cls === 'heavy') {
       const lo = this.loadouts.get(p.id);
-      if (lo && lo.far !== WeaponType.Mortar) {this.loadouts.set(p.id, Object.assign({}, lo, {far: WeaponType.Mortar}));}
+      if (lo && lo.far !== WeaponType.Mortar && lo.far !== WeaponType.MRVLauncher) {this.loadouts.set(p.id, Object.assign({}, lo, {far: WeaponType.Mortar}));}
     }
     const delta = CLASS_STATS[cls].maxHealth - CLASS_STATS[prev].maxHealth;
     p.maxHealth += delta;

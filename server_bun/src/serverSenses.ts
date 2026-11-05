@@ -250,7 +250,7 @@ export class ServerBotSenses {
         }
         if (sharedEnv.thinkProf) {sharedEnv.thinkProf.set('sense:groundY', (sharedEnv.thinkProf.get('sense:groundY') ?? 0) + sharedEnv.wallPerf!() - t0);}
         return y;
-      },route: this.routing.routeOf(p),others: parties.others,allies: parties.allies,engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,thief: this.routing.thiefOf(p.team ?? ''),flagsHome: this.flagsHome()}, botWeaponHooks(
+      },route: this.routing.routeOf(p),others: parties.others,allies: parties.allies,engageRange: ((): number | undefined => { const far = this.loadouts.get(id)?.far; return far === WeaponType.Mortar || far === WeaponType.MRVLauncher ? 95 : undefined; })(),thief: this.routing.thiefOf(p.team ?? ''),flagsHome: this.flagsHome()}, botWeaponHooks(
         (d): WeaponType => pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage) as WeaponType,
         this.loadouts.get(id) ?? BOT_LOADOUTS[0]!,
       ), (skill ? {

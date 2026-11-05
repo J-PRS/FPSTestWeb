@@ -39,6 +39,10 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
         return Math.min(45, Math.max(6, (0.5 / st.pelletSpread) * Math.sqrt(maxDmg / need)));
       }
       if (w === lo.near || w === lo.side) {return 10;}
+      // Fuse carriers fight at carry range, not the duel band - MRV's
+      // ~82m airburst is the attack; orbiting at 30m overflies the pop
+      // and the fuse-solve refuses every volley.
+      if (st.fuseOnly && st.maxLifetime && st.speed > 0) {return st.speed * st.maxLifetime;}
       if (w === lo.far) {return 30;}
       return undefined;
     },
