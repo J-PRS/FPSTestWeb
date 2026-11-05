@@ -31,14 +31,14 @@
  *   --mode M              tdm | ctf | dm (default tdm)
  *   --class T             pin every body to light|medium|heavy (default:
  *                         kit-faithful — the loadout picks the chassis)
- *   --seat ring|map|wide  ring = two facing lines at +-RING (default);
- *                         map = hand spawning to the real spawnPicker —
- *                         foe-clearance scoring over the flat `spawns`
- *                         pool, randomized inside each sphere;
- *                         wide = re-seat each respawn at a random range
- *                         (60-200m) from a random enemy — mixes the fight
- *                         distances so far guns aren't starved by the
- *                         picker's max-clearance rim spawns
+ *   --seat ring|map|wide  ring = two facing lines at +-RING (bench default
+ *                         — forced contact for weapon soaks, but the two
+ *                         lines' asymmetric terrain is a measured side
+ *                         bias); map = the real spawnPicker (mode-soak
+ *                         default); wide = re-seat each respawn at a
+ *                         random range (60-200m) from a random enemy —
+ *                         mixes fight distances so far guns aren't
+ *                         starved by the picker's max-clearance rim spawns
  *   --berserk             never holster the primary (pickBotWeapon as-is,
  *                         not pickBotWeaponSafe) — artillery keeps firing
  *   --arena M             XZ arena radius in metres, 0 = map's own bound
@@ -87,7 +87,6 @@ const RING = Number(arg('ring', MODE === 'ctf' ? 0 : 70));
 // stays off unless asked for.
 const ARENA = Number(arg('arena', 0));
 const BERSERK = has('berserk');
-const SEAT = arg('seat', 'ring');
 const MIX = has('mix');
 // --wild: every bot rolls a wildcard kit — the lobby read, not the
 // matchup. The weapon ledger is the payload; the side table is noise.
@@ -99,6 +98,12 @@ const FORCE = has('force');
 // --cycle: every kill walks the killer to the next pool weapon — one run
 // exercises every gun across every fight instead of a 120-run matrix.
 const CYCLE = has('cycle');
+// Seat default is mode-shaped: bench runs (--force/--mix/--cycle) need
+// the facing-lines contact density or fights starve, so they keep the
+// ring. Mode soaks read the side rows, where the ring's asymmetric
+// terrain lines were a measured bias (bravo K/D ~1.15-2.0 on ring vs
+// dead-even on map/wide) - mode runs default to the real spawnPicker.
+const SEAT = arg('seat', (FORCE || MIX || CYCLE) ? 'ring' : 'map');
 const A_W = weapon(arg('alpha', 'Railgun'));
 const B_W = weapon(arg('bravo', 'Mortar'));
 // Secondary: when set, slots 2+3 use it — the bot still carries the primary

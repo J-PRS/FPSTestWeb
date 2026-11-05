@@ -113,7 +113,15 @@ export class BotRoster {
         isDead: p.isDead,
       }) as ServerMessage);
       if (wildcard) {logger.info('Bot wildcard kit', { id, room: this.room.name, kit: { near: this.loadouts.get(id)!.near, mid: this.loadouts.get(id)!.mid, far: this.loadouts.get(id)!.far, belt: this.loadouts.get(id)!.belt, side: this.loadouts.get(id)!.side, perk: loadout.perk } });}
-      this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
+      // Phase by name-hash, not roster order: sequential assignment put
+      // every alternating team's brain first in a majority of phase
+      // groups (alphas think+fire before bravos in 3 of 5 groups every
+      // tick) - a small first-mover edge that headhunt's economy then
+      // amplified into a side bias (map-seat soaks measured alpha
+      // K/D ~1.4-1.56 from this alone).
+      let ph = 0;
+      for (const c of id) {ph = (ph * 31 + c.charCodeAt(0)) >>> 0;}
+      this.thinkPhase.set(id, ph % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
       this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk, p.team, true, cls);
