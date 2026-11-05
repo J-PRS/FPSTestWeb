@@ -384,8 +384,16 @@ s[kind] += 1; this.propels.set(id, s);
       const qz = target.position.z + tv.z * f - muzzle.z - p.velocity.z * inh * f;
       const sf = stF.speed * f;
       const ul = Math.hypot(qx, qy, qz) / sf;
-      if (ul < 0.85 || ul > 1.15) {return;} // past ~1.15x carry the burst always overshoots (soak: 282 volleys at 120+m, 0 hits)
-      aim.x = muzzle.x + qx / sf; aim.y = muzzle.y + qy / sf; aim.z = muzzle.z + qz / sf;
+      if (ul < 0.85) {
+        // Too close for the fuse solve? Pop the carrier on the GROUND
+        // ~10m short of the led point - terrain contact detonates it
+        // point-blank and the rain falls on their path (the human
+        // 3-kills/min lane the carry band refused to model at all).
+        const bx = aim.x - (dx0 / dist) * 10, bz = aim.z - (dz0 / dist) * 10;
+        aim.x = bx; aim.z = bz;
+        aim.y = this.room.field ? hmHeight(this.room.field, bx, bz) : target.position.y - 1.4;
+      } else if (ul > 1.15) {return;} // past ~1.15x carry the burst always overshoots (soak: 282 volleys at 120+m, 0 hits)
+      else {aim.x = muzzle.x + qx / sf; aim.y = muzzle.y + qy / sf; aim.z = muzzle.z + qz / sf;}
       fuseSolved = true;
     }
     // Energy-paid weapons (Blaster): bots drain their own moveSim tank
