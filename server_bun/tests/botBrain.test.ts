@@ -146,7 +146,11 @@ describe('botBrain', () => {
     // The step dest arcs with the ski-line planner (roundabout cap routes
     // by design) — the commitment lives in the picked goal itself.
     expect(runner.goalS.goal.x).toBeCloseTo(120, 0);
-    const idle = new BotBrain(origin);
+    // Coin-greed is a spawn-hash trait: origin hashes to ~0 (dead to
+    // piles), (-30,0,0) hashes ~0.96 - the idle leg needs a greedy spawn
+    // or the lone coin can't outbid the weight-1 objective (ba5f9f95
+    // pile pricing: lone coin ~0.55x, personality-scaled).
+    const idle = new BotBrain({ x: -30, y: 0, z: 0 });
     const ci = ctx({ objective: { x: 120, y: 0, z: 0 }, pickup: { x: -50, y: 0, z: 0 } });
     for (let i = 0; i < 40; i++) { ci.now += 350; idle.think(0.35, ci); }
     expect(idle.goalS.goal.x).toBeCloseTo(-50, 0);

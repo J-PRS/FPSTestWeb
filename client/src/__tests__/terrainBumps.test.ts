@@ -35,7 +35,7 @@ describe('terrain sediment lips', (): void => {
     expect(lifted).toBeGreaterThan(80);
     // The collision field wrapper still reads the RAW bytes.
     const field = getHeightfield()!;
-    expect(field.data[(0 * N + 0) * 4]).toBe(80);
+    expect(byteAt(field.data, 0, 0)).toBe(80);
     expect(field.data[(3 * N + 2) * 4]).toBe(80);
   });
 

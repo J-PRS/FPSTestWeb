@@ -27,7 +27,9 @@ const GRANDFATHERED: Record<string, number> = {
   'client/src/entities/remoteInterp.ts': 913,
   'client/src/effects/vertexAO.ts': 956,
   'shared/botTaunts.ts': 1360,
-  'shared/botBrain.ts': 910,
+  // Re-pinned at 1083 after the CTF flag-passing + headhunt hoard brain
+  // growth — bots legitimately aggregates behaviors; still alarms at +15%.
+  'shared/botBrain.ts': 1083,
   'client/src/main.ts': 1252, // re-pinned at demo-clip WIP size — still alarms at +15%
   'client/src/game/gameLoop.ts': 1123, // ditto
   // Pinned after the alarm tripped (ROADMAP next-list: burn down the

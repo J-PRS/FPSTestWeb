@@ -30,11 +30,12 @@ Index: `readme.md`.
 
 | Check | Result | Date |
 |-------|--------|------|
-| Client `tsc --noEmit` | clean after the latest client edits | 2026-10-24 |
-| Full server `bun test` | 1502 pass, 0 fail, 13 skip | 2026-10-24 |
-| Client `vitest run` | 672 pass, 1 fail: `workerTransportDrain` "still dispatches when ticks coalesce". Deterministic. No changed file touches `WorkerTransport`. Treat as pre-existing, investigate separately | 2026-10-24 |
-| Client `oxlint src` | warnings only. `main.ts` `reviveLocal` complexity 19 (max 15) is the one touched by this work | 2026-10-24 |
-| `bash _tools/check.sh` | not run | - |
+| Client `tsc --noEmit` | clean | 2026-11-05 |
+| Server `bunx tsc --noEmit` | clean | 2026-11-05 |
+| Full server `bun test` | 1572 pass, 1 fail: `capper run > real T2 Katabatic stands` — the only remaining scenario red, failing on clean HEAD since at least 2026-10-24. Real bot-capability gap, not test debt | 2026-11-05 |
+| Client `vitest run` | 683 pass, 0 fail — the `workerTransportDrain` failure is gone (fixed by intervening commits) | 2026-11-05 |
+| Client `oxlint src` | exit 0, warnings only (main.ts complexity cluster is the bulk) | 2026-11-05 |
+| `bash _tools/check.sh` | not run this cycle; rootcheck verified green standalone | 2026-11-05 |
 | WebTransport browser handshake to `play.jprice.app:443` | READY | 2026-10-24 |
 | WebTransport live match (direct IP) | 14 bots, ~48 ms ping, 5% loss, held through respawns | 2026-10-24 |
 | Headhunt token behaviour live | not done | - |
@@ -45,6 +46,10 @@ Three scenario failures predate this work. They also fail on a clean `HEAD` expo
 - `capper run on real terrain > real T2 Katabatic stands`
 
 ## Uncommitted repo changes from this work
+
+> Historical (2026-10-24 snapshot) — superseded; see `git status` for the
+> live tree. The casing note below is resolved: git tracks `deployment/`
+> lowercase consistently.
 
 Server (`server_bun/src`):
 - `roomScore.ts`: headhunt creature-drop tokens launch from the corpse with velocity.

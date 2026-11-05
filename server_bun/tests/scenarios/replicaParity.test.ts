@@ -20,7 +20,7 @@ describe('scenario: wire replica stays in parity with room truth', () => {
       bases: { alpha: { x: -70, y: 60, z: 0 }, bravo: { x: 70, y: 60, z: 0 } } }, 'ctf');
     // pin clears spawn protection — applyDamage respects protectedUntil
     // and a shielded bot reads as a damage assert failing, not parity.
-    for (const p of room.players.getAllPlayers().values()) pin(room, p.id, p.position);
+    for (const p of room.players.getAllPlayers().values()) {pin(room, p.id, p.position);}
     const r = replica(room);
     try {
       step(room, 20); // join records + wireIds land
@@ -44,6 +44,12 @@ describe('scenario: wire replica stays in parity with room truth', () => {
       // Move — positions are the 'sim' channel at 1m granularity.
       pin(room, p.id, { x: p.position.x + 40, y: p.position.y, z: p.position.z });
       step(room, 4);
+      // Stop-tier (ee824357) suppresses far+static seats' records and
+      // resyncs them on staggered heal-fulls (~750ms+): a loitering bot's
+      // replica pos legitimately trails truth inside that window, and a
+      // sub-meter trail can straddle the 1m rounding edge. Parity asserts
+      // must wait out the heal window, not sample mid-suppression.
+      step(room, 20);
       assertParity(r);
       // Removal — playerLeft must evict, or the replica holds a ghost
       // the server's hash doesn't count.

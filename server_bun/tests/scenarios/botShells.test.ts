@@ -76,9 +76,11 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     const b = bot(room);
     const victim = room.players.addPlayer('victim');
     pin(room, b.id, { x: 0, y: 31, z: 0 });
-    pin(room, 'victim', { x: 10, y: 31, z: 0 }); // inside the 15m near band
-    // Force the beam-rider kit (index 8) — near band draws Lightning, which
-    // has no projectile body and routes through fireSpeedless.
+    pin(room, 'victim', { x: 30, y: 31, z: 0 }); // mid band - near draws Chaingun since 8b82850e
+    // Force the beam-rider kit (index 8) — the mid band draws Lightning,
+    // which has no projectile body and routes through fireSpeedless.
+    // (Projectile guns need step()ed flight time; the beam pays on
+    // discharge, which is why this test never ticks the room.)
     const bots = room.bots as unknown as {
       arsenal: { fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, t: string, aim: Vec3): void; testAdvance(ms: number): void };
       loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
@@ -90,7 +92,7 @@ describe('scenario: bot shells hit creatures like player shots', () => {
       bots.arsenal.testAdvance(60); // LG tick 50ms — stay legal
       // Aim at the capsule's axis midpoint — pos.y is the eye, so the
       // body center sits ~0.9m under it for a medium.
-      bots.arsenal.fireAt(b, 'victim', { x: 10, y: 30.1, z: 0 });
+      bots.arsenal.fireAt(b, 'victim', { x: 30, y: 30.1, z: 0 });
     }
     expect(victim.health < hp0 || victim.armor < armor0).toBe(true);
   });
@@ -100,14 +102,14 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     const b = bot(room);
     const victim = room.players.addPlayer('victim');
     pin(room, b.id, { x: 0, y: 31, z: 0 });
-    pin(room, 'victim', { x: 10, y: 31, z: 0 });
+    pin(room, 'victim', { x: 30, y: 31, z: 0 });
     const bots = room.bots as unknown as {
       arsenal: { fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, t: string, aim: Vec3): void };
       loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
     };
     bots.loadouts.set(b.id, BOT_LOADOUTS[8]!);
     // Aim 4m over the victim's head — the ray must not "hit" anyway.
-    bots.arsenal.fireAt(b, 'victim', { x: 10, y: 36, z: 0 });
+    bots.arsenal.fireAt(b, 'victim', { x: 30, y: 36, z: 0 });
     expect(victim.health).toBe(victim.maxHealth);
   });
 
