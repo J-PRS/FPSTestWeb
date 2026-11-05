@@ -132,6 +132,10 @@ export interface BrainCtx {
   spots?: BotEnemy[];
   /** Ground pickup to chase (nugget) - outranks wander. */
   pickup?: BotVec | null;
+  /** A second capper's route lands within ~15s of mine - paired-run
+   *  window. The staging orbit holds a beat longer while the pair's
+   *  ETAs line up so the runners hit the ring together. */
+  capSync?: boolean;
   /** Score-deficit x time-pressure, ~0..2 - endgame desperation. Rises
    *  only when the team is behind AND the clock is nearly done; the
    *  goal picker turns it into vault-hunt weight, so a losing squad
@@ -280,6 +284,11 @@ export interface BrainOut {
   status?: number;
   /** Belt throw this step (grenade arc at the hunt target). */
   belt?: boolean;
+  /** Flag pass to a teammate (standoff pass or pre-death handoff) -
+   *  the host resolves the toss through the same throwFor a human's
+   *  throwFlag intent reaches. Carries the receiver's position so the
+   *  host can face the carrier at it for the arc. */
+  passFlag?: BotVec;
   /** Deployable claim this step (turret/mine/station) - the same shape a
    *  human's deploy message carries; the host validates + caps it. */
   deploy?: { kind: string; pos: BotVec };
@@ -518,6 +527,9 @@ export class BotBrain {
   /** Lateral weave drive armed by pickDest - the runner's serpentine,
    *  applied inside the steering field rather than as a fake waypoint. */
   weave = 0;
+  /** Flag-pass cooldown - a tossed flag changes hands on its own, so
+   *  this only throttles the wounded-carrier roll between passes. */
+  private passT = 0;
 
   /** Current hunt target - the belt intent carries no aim of its own,
    *  so hosts resolve the throw's arc off this. */
@@ -1004,7 +1016,21 @@ export class BotBrain {
     pm('moves', tp);
     this.lastPark = Boolean(move?.park);
     this.lastPosted = ctx.posted ?? 0;
-    return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };
+    // Flag pass: a carrier about to eat the spill hands the flag
+    // forward - a live teammate's grip beats the corpse drop, which is
+    // also how the standoff pass game keeps the flag alive. 70% roll
+    // so a wounded runner isn't a predictable hot-potato machine.
+    let passFlag: BotVec | undefined;
+    this.passT = Math.max(0, this.passT - dt);
+    if (ctx.running && (ctx.healthFrac ?? 1) < 0.4 && this.passT <= 0) {
+      let mate: BotVec | null = null, mateD = 35;
+      for (const a of ctx.allies ?? []) {
+        const d = dist3(pos, a);
+        if (d < mateD) { mate = a; mateD = d; }
+      }
+      if (mate && botRand() < 0.7) { passFlag = { x: mate.x, y: mate.y, z: mate.z }; this.passT = 4; }
+    }
+    return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say, passFlag };
   }
 
   /** Stall verdict for a goal the bot can't walk to: climbable face →

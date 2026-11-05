@@ -159,6 +159,14 @@ export class CtfBridge {
     this.ctf.throwLocal('local', p.pos, p.vel ?? _flagBurst.set(0, 0, 0), p.yaw, p.pitch);
   }
 
+  /** Bot flag pass - same arc rules as a human G-press, with the toss
+   *  aimed at the receiver's position (a standoff handoff needs a
+   *  target, not just a lob). */
+  throwBot(bot: { playerId: string; position: THREE.Vector3; velocity: THREE.Vector3 }, at: { x: number; z: number }): void {
+    const yaw = Math.atan2(-(at.x - bot.position.x), -(at.z - bot.position.z));
+    this.ctf.throwLocal(bot.playerId, bot.position, bot.velocity, yaw, 0);
+  }
+
   private carrierPos(id: string): THREE.Vector3 | null {
     if (id === 'local') { const p = this.deps.lazyPlayer(); return p.isDead ? null : p.pos; }
     const rp = this.deps.world.remotePlayers.get(id);

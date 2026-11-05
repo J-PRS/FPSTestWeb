@@ -344,7 +344,7 @@ export class ServerBots {
   /** Everything the brain asked to shoot or plant this tick - primary
    *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
    *  deploy claims re-validated through the human message path. */
-  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; rotation: { yaw: number }; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
     const { goal, now, sh, nuggetNear, ctx } = s;
     if (out.fire) {this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);}
     // Stand suppression: a committed runner with clear LOS takes a few
@@ -410,6 +410,14 @@ export class ServerBots {
       this.arsenal.lobAt(p, shell);
       this.gearLobT.set(id, now + (push ? 2500 : 4000));
       logger.debug('Push lob', { id, x: Number(shell.x.toFixed(1)), z: Number(shell.z.toFixed(1)) });
+    }
+    // Flag pass: the carrier's intent carries the receiver's pos - face
+    // the target for the toss arc, then the same throwFor a human's
+    // throwFlag claim reaches (arc inherits carrier speed either way).
+    if (out.passFlag && this.room.flags) {
+      p.rotation.yaw = Math.atan2(
+        -(out.passFlag.x - p.position.x), -(out.passFlag.z - p.position.z));
+      this.room.flags.throwFor(id);
     }
     // Deploy claims run the same handleDeploy a human's message does -
     // kind, plant distance, and per-player cap are all re-validated.

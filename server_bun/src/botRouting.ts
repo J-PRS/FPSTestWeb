@@ -256,6 +256,27 @@ export class BotRouting {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
+  /** Paired-run read: a second capper's route lands within ~15s of
+   *  mine. Humans time arrivals together - two runners hitting the
+   *  ring seconds apart is unguardable where one every 90s feeds the
+   *  defense a drip. The staging orbit holds a beat longer while the
+   *  pair's ETAs line up, then they land as a pair. */
+  capSyncFor(p: { id: string; team?: string; position: Vec3 }): boolean {
+    const {flags} = this.room;
+    if (!flags || !p.team || this.roles.get(p.id) !== 'capper') {return false;}
+    const stand = flags.flags.get(p.team === 'alpha' ? 'bravo' : 'alpha');
+    if (!stand || stand.state !== 'home') {return false;}
+    const mine = Math.hypot(p.position.x - stand.pos.x, p.position.z - stand.pos.z) / 24;
+    for (const [id, role] of this.roles) {
+      if (id === p.id || role !== 'capper') {continue;}
+      const q = this.room.players.getPlayer(id);
+      if (!q || q.isDead || q.team !== p.team) {continue;}
+      const theirs = Math.hypot(q.position.x - stand.pos.x, q.position.z - stand.pos.z) / 24;
+      if (Math.abs(theirs - mine) < 15) {return true;}
+    }
+    return false;
+  }
+
   // oxlint-disable-next-line max-lines-per-function, complexity -- the CTF goal decision body; its branches are tuned as one surface
   flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number; kout?: boolean } | null {
     const {flags} = this.room;

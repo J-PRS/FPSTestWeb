@@ -439,6 +439,9 @@ bn += 1;
     if (!online) {
       if (bot.wantBelt) {this.fire.throwBelt(bot);}
       if (bot.wantDeploy) {this.tryDeploy(bot);}
+      // Flag pass: the carrier's intent carries the receiver's pos -
+      // same arc a human G-press resolves, aimed at the teammate.
+      if (bot.wantPass) {this.ctf?.throwBot(bot, bot.wantPass); bot.wantPass = null;}
       if (bot.wantRepair) {
         // Welding — the heal rate mirrors a human trigger hold (~50hp/s
         // at think cadence). A welded item counts as productive work for
@@ -499,6 +502,9 @@ bn += 1;
   private offlineActs(bot: GameBot, hasShot: boolean): void {
     if (bot.wantBelt) {this.fire.throwBelt(bot);}
     if (bot.wantDeploy) {this.tryDeploy(bot);}
+    // Flag pass: the carrier's intent carries the receiver's pos -
+    // same arc a human G-press resolves, aimed at the teammate.
+    if (bot.wantPass) {this.ctf?.throwBot(bot, bot.wantPass); bot.wantPass = null;}
     if (bot.wantRepair) {
       // Welding — the heal rate mirrors a human trigger hold (~50hp/s
       // at think cadence). A welded item counts as productive work for

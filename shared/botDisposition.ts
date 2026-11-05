@@ -88,7 +88,10 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // a flood that hasn't formed by 35s isn't forming by 55
         // (seed 7 14g/8c->6g/5c, seed 11 9g/2c->5g/2c).
         if (!wave && !wingman && !(ctx.marshal && ctx.pushLive)) {
-          const limit = ctx.marshal && !ctx.runner ? 45 : 35;
+          // Paired runs: a second capper ~15s from the same ring earns
+          // extra patience - two runners landing together is the
+          // unguardable push; the solo clock keeps running otherwise.
+          const limit = (ctx.marshal && !ctx.runner ? 45 : 35) + (ctx.capSync ? 15 : 0);
           if (b.stageT < limit) {
             b.stageT += dt;
             // Hold-off repeller around the defended ring: the dest stays

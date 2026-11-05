@@ -225,6 +225,12 @@ export class GameBot extends RemotePlayer {
 
   wantRepair: string | null = null;
 
+  /** Flag-pass intent - the receiver's position; the bridge aims the
+
+   *  toss at it through the same arc a human G-press resolves. */
+
+  wantPass: { x: number; y: number; z: number } | null = null;
+
   /** Situation chatter edge from the shared brain — TeamBots routes it
 
    *  through the taunt pools + local chat sink. */
@@ -593,6 +599,8 @@ export class GameBot extends RemotePlayer {
     this.wantDeploy = out.deploy ?? null;
 
     this.wantRepair = out.repair ?? null;
+
+    this.wantPass = out.passFlag ?? null;
 
     this.wantSay = out.say ?? null;
 
