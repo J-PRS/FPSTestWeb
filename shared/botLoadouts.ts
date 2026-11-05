@@ -227,7 +227,10 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
   // ALLIES through the support path; picking it at an enemy is a dry pull.
   if (!skill) {
     let slotPick = lo.mid;
-    if (dist < BOT_SIDEARM_M) {slotPick = lo.side;}
+    // Hold-out is situational: draw it at knife range only when the
+    // near slot can't pay (no near gun, or an arm-gated shell that
+    // can't arm this close) - a real gun outperforms the pistol.
+    if (dist < BOT_SIDEARM_M && (lo.near === lo.side || (getWeaponStats(lo.near).armTime ?? 0) > 0)) {slotPick = lo.side;}
     else if (dist < BOT_NEAR_M) {slotPick = lo.near;}
     else if (dist > BOT_FAR_M) {slotPick = lo.far;}
     return beltOut(slotPick, lo.mid);
@@ -254,6 +257,11 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
           default: { const _exhaustive: never = slot; return _exhaustive; }
 }
   };
+  // The hold-out earns its draw situationally: a flat half-strength
+  // handicap means it can only beat a primary that's already penalized -
+  // out of band, self-splash priced, or a gun the bot can't use - not
+  // just because the target happens to be close. A pistol at 10m still
+  // loses to a shotgun that was built for 10m.
   let best: { w: number; s: number } = { w: lo.mid, s: 0 };
   // First combat-usable non-explosive - the `nonAoeOnly` fallback when
   // every band score is 0, so the gate can't hand back a launcher it
@@ -283,6 +291,7 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
     // 40m despite still converting there (force-matrix band data). 0.08
     // keeps off-band picks rare but possible; skill decides if it leaks.
     let s = Math.max(fit(slot), 0.08);
+    if (slot === 'side') {s = fit('side') * 0.5;}
     // Measured forced-band conversion: the bolt slug kills at <10m as well
     // as the near guns (10.2%/shot vs shotgun 10.6%, flak 12.7%) - a
     // carrier doesn't holster a 50dmg slug for a hold-out at knife range.

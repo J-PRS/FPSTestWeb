@@ -45,7 +45,7 @@ describe('botLoadouts', () => {
   it('range bands: melee < 4.5, sidearm < 8, near < 25, mid to 40, far beyond', () => {
     const kit = lo();
     expect(pickBotWeapon(kit, 2, 2)).toBe(WeaponType.Melee);
-    expect(pickBotWeapon(kit, 6, 6)).toBe(kit.side);
+    expect(pickBotWeapon(kit, 6, 6)).toBe(kit.near); // hold-out is situational: a real near gun beats the pistol at 6m
     expect(pickBotWeapon(kit, 12, 12)).toBe(kit.near);
     expect(pickBotWeapon(kit, 25, 25)).toBe(kit.mid);
     expect(pickBotWeapon(kit, 60, 60)).toBe(kit.far);
