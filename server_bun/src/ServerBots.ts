@@ -706,7 +706,7 @@ hurtCount += 1;
         // objective is already his own stand, and the carry leg needs
         // the same speed-out-of-danger the approach did (matchSim:
         // every ~20 m/s carry died inside 10s at the stand ring).
-        if ((ctx.runner || ctx.running) && ctx.objective && this.field) {
+        if (ctx.runner && ctx.objective && this.field) {
           const tgt = ctx.running ? ctx.objective : (ctx.flagPos ?? ctx.objective);
           // MPC pays a beam search per retarget - a CARRIED flag moves
           // faster than solves land (rabbit: 23% of solves were retarget

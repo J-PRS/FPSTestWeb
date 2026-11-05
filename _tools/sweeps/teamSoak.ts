@@ -461,6 +461,13 @@ const verdict: [string, ReturnType<typeof byGroup>][] = MIX
 const score = `${room.scores.alpha ?? 0}-${room.scores.bravo ?? 0}`;
 
 console.log(`score ${score}   ${simS.toFixed(0)}s sim in ${wallS.toFixed(1)}s wall (${(simS / wallS).toFixed(1)}x)`);
+// FFA modes bank on ffaScores (rabbit hold-seconds, dm frags) - the
+// team columns are dead for them, so print the real leaderboard.
+if (room.modeSpec?.ffa) {
+  const top = [...(room.scoring as unknown as { ffaScores: Map<string, number> }).ffaScores.entries()]
+    .toSorted((a, b): number => b[1] - a[1]).slice(0, 5);
+  console.log(`ffa  top: ${top.map(([id, s]): string => `${id.replace('bot:', '')} ${s}`).join('  ')} (winAt ${room.modeSpec.winAt})`);
+}
 console.log(`${(MIX ? 'weapon' : 'side').padEnd(12)} bots   K    D    K/D    medLife(s)`);
 for (const [name, s] of verdict) {
   console.log(`${name.padEnd(12)} ${String(s.n).padStart(4)} ${String(s.k).padStart(4)} ${String(s.d).padStart(4)}  ${s.kd.toFixed(2).padStart(5)}   ${med(lives.get(name) ?? []).padStart(6)}`);

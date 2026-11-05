@@ -288,14 +288,20 @@ export class BotRouting {
       const flag = flags.flags.get('alpha');
       if (!flag || flag.state === 'unspawned') {return null;}
       if (flag.state === 'carried' && flag.carrier === p.id) {
-        return { pos: this.waitSpotFor(p.id, flag.home, duty), infiltrating: false, running: true, runner: true };
+        // A hold-circuit isn't a committed run - the waitSpot re-rolls
+        // ~15s, so arming mpc here pays a deep solve per orbit for
+        // nothing the reactive stack can't already do.
+        return { pos: this.waitSpotFor(p.id, flag.home, duty), infiltrating: false, running: true, runner: false };
       }
       const rabbitP = flag.carrier ? this.room.players.getPlayer(flag.carrier) : null;
       const pos = flag.state === 'carried' && rabbitP ? rabbitP.position : flag.pos;
       // Runner commitment: the flag IS rabbit — without it the objective
       // bids 1.0 against pickups/heard fights and loses, which is why the
-      // flag sat loose untouched for minutes.
-      return { pos, infiltrating: false, running: true, runner: true };
+      // flag sat loose untouched for minutes. flagPos rides along so the
+      // mpc arm sees the carried flag as a moving target and skips the
+      // re-solve-per-think churn (the >30m retarget kills it - rabbit
+      // measured 31 solves/sim-s vs ~2 on ctf).
+      return { pos, flagPos: pos, infiltrating: false, running: true, runner: true };
     }
     if (!p.team) {return null;}
     const me = p.team as TeamId;
@@ -315,7 +321,9 @@ export class BotRouting {
       // flag returns. A slack carrier draws the wider shells.
       if (own.state === 'carried') {
         const w = this.waitSpotFor(p.id, own.home, duty);
-        return { pos: w, infiltrating: false, running: true, runner: true };
+        // Same hold-circuit: the orbit re-rolls ~15s - mpc's deep solve
+        // per re-roll is wasted compute on a defensive hold.
+        return { pos: w, infiltrating: false, running: true, runner: false };
       }
       // The home run is the map's most predictable line — scent the
       // approach around the intercept blob when far out; inside ~200m
