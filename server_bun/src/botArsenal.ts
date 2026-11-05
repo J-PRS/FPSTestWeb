@@ -174,9 +174,14 @@ s[kind] += 1; this.propels.set(id, s);
         // gets tracked clean even by modest aim, a jinking one doesn't.
         if (live) {
           if (!tr.lag) {tr.lag = Object.assign({}, live);}
-          tr.lag.x += (live.x - tr.lag.x) * 0.85;
-          tr.lag.y += (live.y - tr.lag.y) * 0.85;
-          tr.lag.z += (live.z - tr.lag.z) * 0.85;
+          // Beams pursue tighter: 0.85/tick is ~230ms of lag = ~2.3m of
+          // permanent miss on a strafing target - fair for a lobbed bolt,
+          // but a hitscan shaft owes no flight time; ~115ms still leaves
+          // honest jink reaction without trailing the runner by a body.
+          const chase = (tr.wt !== undefined && (getWeaponStats(tr.wt)?.speed ?? 1) === 0) ? 0.93 : 0.85;
+          tr.lag.x += (live.x - tr.lag.x) * chase;
+          tr.lag.y += (live.y - tr.lag.y) * chase;
+          tr.lag.z += (live.z - tr.lag.z) * chase;
           // Instantaneous velocity + its turn rate — the difficulty
           // signal humans price in when they decide a shot is easy.
           if (tr.lastPos && dt > 0) {
@@ -191,7 +196,12 @@ s[kind] += 1; this.propels.set(id, s);
           }
         }
         const e = tr.err, s = (dt) ** 0.5;
-        const sig = tr.sig * (0.35 + 1.3 * tr.diff);
+        // Beams (speed-0) wander far less than projectile aim - a shaft
+        // misses through tracking lag, not ballistic uncertainty; full-
+        // strength scatter just sweeps the ray across the target instead
+        // of dwelling (~22% uptime measured vs the ~85% a human holds).
+        const beam = tr.wt !== undefined && (getWeaponStats(tr.wt)?.speed ?? 1) === 0;
+        const sig = tr.sig * (0.35 + 1.3 * tr.diff) * (beam ? 0.45 : 1);
         // Unit motion axis for ahead/behind weighting (zero speed → isotropic).
         const v = tr.tv, vl = v ? Math.hypot(v.x, v.y, v.z) : 0;
         const ax = vl > 1 ? v!.x / vl : 1, ay = vl > 1 ? v!.y / vl : 0, az = vl > 1 ? v!.z / vl : 0;
