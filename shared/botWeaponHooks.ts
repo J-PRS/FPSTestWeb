@@ -52,6 +52,10 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
       // parking it at 42m standoff wastes a mid-slot brawler.
       const bodyArm = st.bodyArmTime ?? st.armTime;
       if ((bodyArm ?? 0) > 0 && st.speed > 0) {return st.speed * (bodyArm ?? 0) * 0.7;}
+      // The 10/s pool hoses are dodgeable bolts - their measured apex is
+      // point-blank (PG 5.8%/shot <10m, Sprinkler 3.0%), not the mid
+      // stand (~1%). Fight inside the band where a bolt can't be dodged.
+      if (w === WeaponType.PlasmaGun || w === WeaponType.Sprinkler) {return 12;}
       // GL-as-far holds its measured standoff (7.1%/shot at 60-120),
       // not the generic 30m far orbit.
       if (w === lo.far) {return w === WeaponType.GrenadeLauncher ? 60 : 30;}
