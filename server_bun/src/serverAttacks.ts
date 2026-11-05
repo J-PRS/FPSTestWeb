@@ -7,17 +7,17 @@ import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
-// Server-owned attacks — no client claim to validate because the sim
+// Server-owned attacks - no client claim to validate because the sim
 // (creature AI, server bots) IS the attacker. They still route through
 // serverHit/applyHit so kill credit and respawns stay in lockstep.
 
-// Structural slice — geometry reads + the damage funnels, nothing else.
+// Structural slice - geometry reads + the damage funnels, nothing else.
 export type AttackHost = Pick<CombatHandler,
   '_solids' | 'solidIndex' | 'chargeBank' | 'playerManager' | 'hb' | 'friendly' | 'serverHit'
 > & { deps: Pick<CombatDeps, 'energyOf' | 'drainEnergy'> };
 
 export function crawlerAttack(h: AttackHost, targetId: string, damage: number, species = 'crawler', from?: { x: number; y: number; z: number }): void {
-    // A creature wedged inside/behind geometry can't bite through it —
+    // A creature wedged inside/behind geometry can't bite through it -
     // contact range is the sim's gate; the wall is ours.
     if (from && h._solids.length > 0) {
       const target = h.playerManager.getPlayer(targetId);
@@ -36,7 +36,7 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
     if (!shooter || shooter.isDead) {return;}
     // Heal beam: same tick/cadence path as the damage beam, but the
     // payload is HP on a friend and the ammo is the shooter's own jet
-    // tank — pocket-healing a push costs the bot its climb out.
+    // tank - pocket-healing a push costs the bot its climb out.
     if (weaponType === WeaponType.HealBeam) {
       const target = h.playerManager.getPlayer(targetId);
       if (!target || target.isDead || !h.friendly(shooterId, targetId)) {return;}
@@ -52,12 +52,12 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
     }
     shooter.protectedUntil = simMs(0); // firing breaks your own spawn shield
     // Melee carries its damage on the aoe line (instant cone, directDamage 0)
-    // — falling back to it keeps bot punches non-zero. airtime feeds the
+    // - falling back to it keeps bot punches non-zero. airtime feeds the
     // skillshot ramp for sim shells (melee/beam callers pass none).
     const stats = getWeaponStats(weaponType);
     // Reach is judged at CONTACT time, not aim time: the swing may be
     // aimed at a lastSeen memory point while the live target skis away
-    // — a 4.5m punch landing at 100m was real (melee probe: 60-137m
+    // - a 4.5m punch landing at 100m was real (melee probe: 60-137m
     // hits). Same contract fireAtBall's bug punch already honors.
     if (weaponType === WeaponType.Melee) {
       const target = h.playerManager.getPlayer(targetId);
@@ -66,7 +66,7 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
       if (d > (stats?.aoeRadius ?? 3.2) + 2.4) {return;} // swing radius + capsule
     }
     let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
-    // Bot beams ramp down like human ones — the beam-rider loadout pays
+    // Bot beams ramp down like human ones - the beam-rider loadout pays
     // the same hold-decay a client's beam does.
     if (weaponType === WeaponType.Lightning) {
       const n = h.chargeBank.step(shooterId, targetId);

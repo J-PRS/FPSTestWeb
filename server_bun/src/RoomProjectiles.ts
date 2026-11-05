@@ -1,5 +1,5 @@
 /**
- * Server-side ballistic sim — bots-as-legal-players phase 2.
+ * Server-side ballistic sim - bots-as-legal-players phase 2.
  *
  * A bot fire no longer means "broadcast a tracer, roll damage". It spawns
  * a real projectile the room integrates through shared/projSim.ts: swept
@@ -8,11 +8,11 @@
  * (applyHit → kill credit, weapon attribution, friendly gate, respawn).
  *
  * Clients render the replica off the existing projectileCreated /
- * projectileDestroyed pair — remote projectiles already fly
+ * projectileDestroyed pair - remote projectiles already fly
  * deterministically client-side, so nothing new is needed there.
  *
  * Deliberate simplifications vs the client Projectile: no terrain bounce
- * (a server shell pops on contact — bounces are cosmetic anyway since
+ * (a server shell pops on contact - bounces are cosmetic anyway since
  * clients resolve their own arcs). Stickies DO chain: a blast ages every
  * sibling in its radius to fuse, so server pops match the client's
  * visible cook-off. Ray-burst IS modeled:
@@ -38,14 +38,14 @@ export interface LiveProj {
   id: string;
   ownerId: string;
   weaponType: number;
-  /** Stats are weapon-table constants — resolved once at spawn instead of
+  /** Stats are weapon-table constants - resolved once at spawn instead of
    *  re-looked-up every tick/discharge per projectile. */
   stats: NonNullable<ReturnType<typeof getWeaponStats>>;
   p: SimProjectile;
   /** Age at which the parabola could first reach the terrain ceiling.
-   *  Before it, segFieldHit is skipped — provably nothing below. */
+   *  Before it, segFieldHit is skipped - provably nothing below. */
   terrainAt: number;
-  /** This shell's fuse — maxLifetime jittered per id so burst weapons
+  /** This shell's fuse - maxLifetime jittered per id so burst weapons
    *  (flak) pop raggedly. Client replicas derive the same value from the
    *  projectileId, so both ends' pops line up. */
   ttl: number;
@@ -56,27 +56,27 @@ export interface LiveProj {
   stuck?: { playerId?: string; off: Vec3 };
   /** Debug: whether this sticky was cooked by a sibling detonation. */
   cooked?: boolean;
-  /** Terrain hits taken — maxBounces ends the shell on the Nth. */
+  /** Terrain hits taken - maxBounces ends the shell on the Nth. */
   bounces?: number;
-  /** Owner's team at spawn — team-filtered solids (shield gates) let the
+  /** Owner's team at spawn - team-filtered solids (shield gates) let the
    *  shell through when it matches. undefined = teamless/owner gone. */
   ownerTeam?: string;
   /** Trigger-pull identity: the intent's shotId when claimed, this
    *  shell's own id when not (bots carry no nonce). All pellets of one
-   *  fan share it — the ledger dedupes per-pull connects on it. */
+   *  fan share it - the ledger dedupes per-pull connects on it. */
   pull: string;
-  /** Belt-sticky combo: this shell caught a ridable bomb — no wait,
+  /** Belt-sticky combo: this shell caught a ridable bomb - no wait,
    *  the other direction: set ON THE RIDER, value = the host shell's id.
    *  A riding projectile stops integrating, centers on the host, and
    *  detonates where the host dies. */
   rides?: string;
-  /** fuseOnly carriers: bodies this shell already bonked — each body
+  /** fuseOnly carriers: bodies this shell already bonked - each body
    *  reflects it once (no re-trigger next tick inside the capsule). */
   bodyBounced?: Set<string>;
 }
 
-// Player aim height — matches where the client sweeps the capsule center.
-// Failsafe TTL for weapons that forgot a fuse — nothing should orbit forever.
+// Player aim height - matches where the client sweeps the capsule center.
+// Failsafe TTL for weapons that forgot a fuse - nothing should orbit forever.
 const HARD_TTL_S = 8;
 // Below this altitude the shell is irrecoverably underground / off-map.
 const FLOOR_Y = -220;
@@ -87,7 +87,7 @@ const FLOOR_Y = -220;
  *  a floor for skipping terrain sweeps: no heightfield texel exceeds the
  *  precomputed max, so a miss before this time is impossible. */
 function timeToCeiling(y0: number, vy: number, g: number, ceiling: number): number {
-  if (y0 <= ceiling) {return 0;}                       // already inside — check now
+  if (y0 <= ceiling) {return 0;}                       // already inside - check now
   const target = ceiling - y0;                        // negative drop needed
   if (g === 0) {
     if (vy >= 0) {return Infinity;}                    // flat/rising forever
@@ -108,16 +108,16 @@ function timeToCeiling(y0: number, vy: number, g: number, ceiling: number): numb
 
 /** The slice of a live authority RoomProjectiles needs: everything a
  *  blast touches in one bag so a Room AND a P2P host can own the sim.
- *  Optional members are the roster sims a host legitimately lacks —
+ *  Optional members are the roster sims a host legitimately lacks -
  *  their `?.` sites already degrade (no creature casualties off shells). */
 export interface ProjHost {
   players: PlayerManager;
   messages: MessageHandler;
   broadcast(msg: unknown, exclude?: string): void;
-  /** Binary edge lane (dedicated). Absent on the P2P host — its edges
+  /** Binary edge lane (dedicated). Absent on the P2P host - its edges
    *  stay JSON, small rooms don't need the byte win. */
   connections?: { broadcastBinaryReliable(data: Uint8Array): void };
-  /** playerId → wireId — needed to name the shooter on binary spawns. */
+  /** playerId → wireId - needed to name the shooter on binary spawns. */
   wireIds?: Map<string, number>;
   rng(): number;
   tickSeq: number;
@@ -136,7 +136,7 @@ export interface ProjHost {
   };
   deployables?: {
     shieldBlock(from: Vec3, to: Vec3, shooterId: string): number | null;
-    /** Live gear hulls — a shell detonates on contact instead of
+    /** Live gear hulls - a shell detonates on contact instead of
      *  phasing through a generator and popping on the wall behind it. */
     solidCols?: readonly StructureCollider[];
   };
@@ -146,19 +146,19 @@ export interface ProjHost {
 export class RoomProjectiles {
   readonly room: ProjHost;
   field: Heightfield | null;
-  /** Highest terrain height anywhere on the map — a shell above it
+  /** Highest terrain height anywhere on the map - a shell above it
    *  cannot touch ground this step, so segFieldHit can be skipped. */
   fieldMax = -Infinity;
-  /** Solid map geometry — shells pop on walls like they do on terrain,
+  /** Solid map geometry - shells pop on walls like they do on terrain,
    *  so a mortar can't splash through the base roof. */
   solids: readonly StructureCollider[] = [];
-  /** Structure occluders — the beam contact check reads the same set the
+  /** Structure occluders - the beam contact check reads the same set the
    *  flight sweep detonates against. */
   get solidColliders(): readonly StructureCollider[] { return this.solids; }
   solidIndex: ColliderIndex | null = null;
   private projs = new Map<string, LiveProj>();
   private nextId = 1;
-  /** Reused start-of-step position — feeds swept collision + detonate;
+  /** Reused start-of-step position - feeds swept collision + detonate;
    *  read synchronously each iteration, never retained. */
   private readonly stepScratch: Vec3 = { x: 0, y: 0, z: 0 };
 
@@ -169,7 +169,7 @@ export class RoomProjectiles {
   }
 
   /** Map rotation / admin reload can swap the terrain under a live
-   *  room — shells must sweep the field players actually stand on. */
+   *  room - shells must sweep the field players actually stand on. */
   attachField(field: Heightfield | null): void {
     this.field = field;
     // One full scan per field swap; ticks then solve vs this bound.
@@ -179,12 +179,12 @@ export class RoomProjectiles {
       for (let i = 0; i < d.length; i += s) {if (d[i]! > maxByte) {maxByte = d[i]!;}}
     }
     this.fieldMax = (maxByte / HM_DIVISOR) * HM_HEIGHT_SCALE;
-    // Schedules were solved against the old ceiling — resweep until each
+    // Schedules were solved against the old ceiling - resweep until each
     // arc re-earns its skip against the new field.
     for (const proj of this.projs.values()) {proj.terrainAt = 0;}
   }
 
-  /** Structures ride the same lifecycle as the field — spec load and
+  /** Structures ride the same lifecycle as the field - spec load and
    *  admin reload both refresh them. */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
     this.solids = structureColliders(list);
@@ -193,7 +193,7 @@ export class RoomProjectiles {
 
   /** Fire a real projectile. `dir` is normalized; muzzle velocity = dir*speed
    *  + 50% of the shooter's velocity (same inheritance the client applies).
-   *  Burst weapons (flak/shotgun) fire the whole pellet fan — a pull
+   *  Burst weapons (flak/shotgun) fire the whole pellet fan - a pull
    *  registers `burst` shells fanned by golden-angle cone offsets, same
    *  coverage the client spawnFan produces. */
   spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS = 0): string | null {
@@ -201,10 +201,10 @@ export class RoomProjectiles {
     const burst = stats?.burst ?? 1;
     const spread = stats?.pelletSpread ?? 0;
     if (burst <= 1 || spread <= 0) {return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId, undefined, lagS);}
-    // One pull = one nonce for every pellet — unclaimed (bot) fans get a
+    // One pull = one nonce for every pellet - unclaimed (bot) fans get a
     // minted pull id so the ledger can dedupe connects per trigger pull.
     const pullId = shotId ?? `pf-${(this.nextId += 1)}`;
-    // Fan basis: right = dir × up0, up = right × dir — deterministic
+    // Fan basis: right = dir × up0, up = right × dir - deterministic
     // Vogel-spiral coverage (no rng: every pellet's offset is fixed by
     // index, so sim replicas fan identically).
     let rx = -dir.z, rz = dir.x; const ry = 0;
@@ -227,10 +227,10 @@ export class RoomProjectiles {
 
   private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, pellet?: number, lagS = 0): string | null {
     const stats = getWeaponStats(weaponType);
-    if (!stats || stats.speed <= 0) {return null;} // hitscan-class — no body
+    if (!stats || stats.speed <= 0) {return null;} // hitscan-class - no body
     const owner = this.room.players.getPlayer(ownerId);
     if (!owner) {return null;}
-    // Roster gun reveal — a bot's silhouette reads before its first shot
+    // Roster gun reveal - a bot's silhouette reads before its first shot
     // edge lands. Belt throws are tossed, not held: stamping one would
     // advertise a type with no hand model and leave the remote wearing
     // the generic prop until the next real gun shot.
@@ -252,13 +252,13 @@ export class RoomProjectiles {
       ownerTeam: owner.team,
       ttl: jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S,
     });
-    // shotId/pellet are the intent's nonce — the shooter's predicted
+    // shotId/pellet are the intent's nonce - the shooter's predicted
     // shell binds its server identity off this echo (linkOwnProjectile).
     this.edgeSpawn(id, ownerId, origin, vel, weaponType, shotId, pellet, lagS);
     return id;
   }
 
-  /** Binary edge (~46B+shotId vs ~200B JSON) — the create/gone pair was
+  /** Binary edge (~46B+shotId vs ~200B JSON) - the create/gone pair was
    *  ~44% of client egress at a full room. Owner wireId is how receivers
    *  resolve the shooter; an owner with no wireId yet (first-tick fire)
    *  or a host without the binary lane falls back to JSON. */
@@ -289,12 +289,12 @@ export class RoomProjectiles {
   }
 
   tick(dt: number): void {
-    // Map iterators tolerate mid-loop delete (detonate) — no snapshot.
+    // Map iterators tolerate mid-loop delete (detonate) - no snapshot.
     for (const proj of this.projs.values()) {
       const {stats} = proj;
       const {p} = proj;
       const prevAge = p.age;
-      // Combo rider: centered on the host shell — no integration, no
+      // Combo rider: centered on the host shell - no integration, no
       // contact; the host's detonation cascades into this pop. A missing
       // host (cleared without detonate) just drops the ride.
       if (proj.rides) {
@@ -304,7 +304,7 @@ export class RoomProjectiles {
         p.age += dt;
         continue;
       }
-      // A glued bomb rides its victim — position follows the player it
+      // A glued bomb rides its victim - position follows the player it
       // stuck to (feet + the contact offset), so the fuse pops wherever
       // they carried it. Dead victim keeps the last riding point.
       if (proj.stuck) {p.age += dt;} // a glued bomb's fuse still burns
@@ -316,17 +316,17 @@ export class RoomProjectiles {
           p.pos.z = t.position.z + proj.stuck.off.z;
         }
       }
-      // stepScratch feeds swept collision + detonate — consumed
+      // stepScratch feeds swept collision + detonate - consumed
       // synchronously each iteration (catchRiders/stepContact/detonate
       // all read fields inline), so one reused Vec3 per room is enough.
       const from = this.stepScratch;
       if (proj.stuck) {from.x = p.pos.x; from.y = p.pos.y; from.z = p.pos.z;}
       else {projStep(p, dt, stats.gravity ? GRAVITY : 0, from);}
       if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { from.x = p.pos.x; from.y = p.pos.y; from.z = p.pos.z; this.detonate(proj, from); continue; }
-      if (proj.stuck) {continue;} // frozen — only the fuse ends it now
+      if (proj.stuck) {continue;} // frozen - only the fuse ends it now
 
       // Ray-burst discharge (remote railgun): crossing rayDelay turns the
-      // shell's velocity line into a hitscan beam — the earliest contact
+      // shell's velocity line into a hitscan beam - the earliest contact
       // along it is where the payload detonates.
       if (stats.rayDelay && prevAge < stats.rayDelay && p.age >= stats.rayDelay) {
         this.dischargeRay(proj, stats.rayRange ?? 160);
@@ -338,7 +338,7 @@ export class RoomProjectiles {
       // dies inside the catch still carries its riders into the blast.
       if (!stats.rides && canHostRide(proj.weaponType, stats)) {this.catchRiders(proj, from);}
       if (this.stepContact(proj, stats, from, dt)) {continue;}
-      // No contact — still flying; survives to the next tick.
+      // No contact - still flying; survives to the next tick.
     }
   }
 
@@ -353,7 +353,7 @@ export class RoomProjectiles {
     dischargeRay(this, proj, range);
   }
 
-  /** Glue a contact-frozen bomb at `at` — on a player it rides them
+  /** Glue a contact-frozen bomb at `at` - on a player it rides them
    *  (`off` in body space), anywhere else it sits until the fuse. */
   attach(proj: LiveProj, at: Vec3, playerId?: string): void {
     if (playerId) {
@@ -366,7 +366,7 @@ export class RoomProjectiles {
     proj.p.vel.x = 0; proj.p.vel.y = 0; proj.p.vel.z = 0;
   }
 
-  /** Combo catch — a same-owner airborne belt sticky inside the swept
+  /** Combo catch - a same-owner airborne belt sticky inside the swept
    *  segment glues dead-center onto this shell (Painkiller stake+nade).
    *  The edge tells replicas to parent the same pair, so every client
    *  rides the same combined trail. */
@@ -389,7 +389,7 @@ export class RoomProjectiles {
   }
 
   detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean, crawlerId?: number): void {
-    // Riders pop where the host died — collect before deleting, their
+    // Riders pop where the host died - collect before deleting, their
     // own detonate() mutates the same map.
     for (const r of [...this.projs.values()].filter((s): boolean => s.rides === proj.id)) {
       this.detonate(r, at);
@@ -406,7 +406,7 @@ export class RoomProjectiles {
 
     if (directHitId) {this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge, proj.pull);}
     // A shell that lands on a creature deals its direct line, then the
-    // blast splashes the rest of the swarm — same outcome a player-caused
+    // blast splashes the rest of the swarm - same outcome a player-caused
     // hit + aoeShot pair produces, minus the claims.
     if (ballId !== undefined) {
       const dmg = scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage;
@@ -419,9 +419,9 @@ export class RoomProjectiles {
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
-    // Rope dart: contact IS the payload — a body connect yanks the victim,
+    // Rope dart: contact IS the payload - a body connect yanks the victim,
     // anything else yanks the owner. Fuse expiry is a snapped line, not a
-    // reel — a mid-air pop dragging the shooter reads as a bug.
+    // reel - a mid-air pop dragging the shooter reads as a bug.
     if (proj.weaponType === WeaponType.Hook) {
       if (directHitId != null || proj.p.age < proj.ttl) {
         this.room.messages.grapple(proj.ownerId, at, directHitId ?? null);
@@ -429,13 +429,13 @@ export class RoomProjectiles {
       return;
     }
     // Direct-body hits bloom the blast radius 1.5× (Bolt/Disc contract,
-    // shared/weapons.ts) — replicas predict the grown envelope for
+    // shared/weapons.ts) - replicas predict the grown envelope for
     // splash/shove/knock, so the server must pay it or every entity in
     // the annulus reads as a prediction miss (kb-echo + nugrest snaps).
     const radiusScale = bodyDirect ? directHitAoeBonus(proj.weaponType) : 1;
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null, { shotId: proj.pull, air: proj.p.age, radiusScale });
     // Cluster carriers (MRV, ClusterBomb): the claim path scatters bomblet
-    // blasts around the burst point — sim shells must pay the same way or
+    // blasts around the burst point - sim shells must pay the same way or
     // bot-fired cluster weapons ship only the weak carrier pop.
     if (proj.stats.cluster) {
       const bomblet = proj.weaponType === WeaponType.MRVLauncher
@@ -446,7 +446,7 @@ export class RoomProjectiles {
         const r = this.room.rng() * proj.stats.cluster.radius;
         const bx = at.x + Math.cos(ang) * r;
         const bz = at.z + Math.sin(ang) * r;
-        // Bomblets are contact bombs — the blast lands where the rain
+        // Bomblets are contact bombs - the blast lands where the rain
         // lands (ground under the scatter point), not on the carrier's
         // mid-air burst plane where it out-ranges nothing above it.
         const bAt = {
@@ -455,10 +455,10 @@ export class RoomProjectiles {
             this.room.moveSim?.structureTop(bx, bz) ?? -Infinity),
           z: bz,
         };
-        // Credit the carrier — bomblet stats drive the envelope, but
+        // Credit the carrier - bomblet stats drive the envelope, but
         // the launcher's weapon row is where the rain's damage belongs.
         this.room.messages.serverBlast(proj.ownerId, bAt, bomblet, null, { shotId: proj.id, attribWeaponType: proj.weaponType });
-        // serverBlast sweeps players only — the rain must pay creatures
+        // serverBlast sweeps players only - the rain must pay creatures
         // and balls the same way the carrier's own pop does below.
         if (bStats.aoeRadius > 0) {
           this.room.ballSim?.splashDamage(proj.ownerId, bAt, bStats.aoeRadius, bStats.aoeDamage);
@@ -472,7 +472,7 @@ export class RoomProjectiles {
       this.room.creatureSim?.splashDamage(proj.ownerId, at, br, proj.stats.aoeDamage, crawlerId);
     }
 
-    // Sticky chain: a blast cooks every sibling bomb in its radius — the
+    // Sticky chain: a blast cooks every sibling bomb in its radius - the
     // client already rips the chain visually; aging siblings to fuse lets
     // the same cascade happen server-side so blasts land when shown.
     // Age to sib.ttl (not maxLifetime): jitteredTtl may roll past
@@ -492,12 +492,12 @@ export class RoomProjectiles {
     }
   }
 
-  /** Per-tick XZ shell grid — incomingNear ran once per think was
+  /** Per-tick XZ shell grid - incomingNear ran once per think was
    *  O(projs × thinks); cells prune XZ, the 3D checks below stay exact.
    *  Indices sort back to map order so results are identical to the
    *  flat scan, insertion order included. */
   private shellGrid: { seq: number; cells: Map<number, number[]>; list: LiveProj[] } | null = null;
-  // Reused result scratches — shellsNear feeds only incomingNear, which
+  // Reused result scratches - shellsNear feeds only incomingNear, which
   // consumes it synchronously per bot think before the next call.
   private readonly shellIdx: number[] = [];
   private readonly shellOut: LiveProj[] = [];
@@ -532,7 +532,7 @@ export class RoomProjectiles {
     return out;
   }
 
-  /** Shells inside `radius` that are closing on `pos` — feeds bot threat
+  /** Shells inside `radius` that are closing on `pos` - feeds bot threat
    *  sense so brains can sidestep incoming fire like a human reading a
    *  rocket's approach. A shell flying away is no threat regardless of
    *  distance. */
@@ -543,13 +543,13 @@ export class RoomProjectiles {
       const d = Math.hypot(dx, dy, dz);
       if (d > radius) {continue;}
       const closing = proj.p.vel.x * dx + proj.p.vel.y * dy + proj.p.vel.z * dz;
-      if (closing <= 0) {continue;} // moving away — ignore
+      if (closing <= 0) {continue;} // moving away - ignore
       out.push(proj.p.pos);
     }
     return out;
   }
 
-  /** Drop an owner's live shells — disconnect/reap cleanup like the
+  /** Drop an owner's live shells - disconnect/reap cleanup like the
    *  client-side destroy path. */
   clearOwner(ownerId: string): void {
     for (const [id, proj] of this.projs) {

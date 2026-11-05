@@ -1,7 +1,7 @@
 import { getWeaponStats, WEAPON_FIRE_INTERVAL_S, WeaponType } from './weapons.js';
 import type { BotLoadout } from './botLoadouts.js';
 
-/** The pick-based weapon senses the brain ctx reads — ONE factory both
+/** The pick-based weapon senses the brain ctx reads - ONE factory both
  *  the server senses and the offline brain feed build their hooks from.
  *  `pick(d)` returns the weapon this bot would draw at range `d`, so
  *  every hook below answers about the same draw: aim lead, fuse clock,
@@ -64,11 +64,11 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
       }
       return undefined;
     },
-    // Trigger rhythm — the legal cadence the client trigger enforces,
+    // Trigger rhythm - the legal cadence the client trigger enforces,
     // so a drawn chaingun streams and a drawn mortar deliberates.
     fireInterval: (d: number): number =>
       WEAPON_FIRE_INTERVAL_S[pick(d) as WeaponType] ?? 0.45,
-    // Blast geometry of the same pick — the self-splash read prices
+    // Blast geometry of the same pick - the self-splash read prices
     // what this shell would do to its own shooter.
     weaponAoe: (d: number): { r: number; dmg: number } => {
       const w = getWeaponStats(pick(d));
