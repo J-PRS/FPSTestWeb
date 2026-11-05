@@ -366,6 +366,16 @@ s[kind] += 1; this.propels.set(id, s);
     // honestly has no shot), and confetti past ~1.4x is waste.
     let fuseSolved = false;
     const stF = getWeaponStats(wt);
+    // Arm-gated ordnance under the arm window plays the BOUNCE-SERVE:
+    // lob the dirt ~10m AHEAD of the runner's path - the shell thuds,
+    // skids forward still cooking, and pops where they're headed.
+    if ((stF?.armTime ?? 0) > 0 && stF.speed > 0 && dist < stF.speed * stF.armTime * 0.35 && dist > 8) {
+      const tv = target.velocity, ts = Math.hypot(tv.x, tv.z);
+      const lx = ts > 2 ? (tv.x / ts) * 10 : 0, lz = ts > 2 ? (tv.z / ts) * 10 : 0;
+      const gx = aim.x + lx, gz = aim.z + lz;
+      aim.x = gx; aim.z = gz;
+      aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : aim.y - 1.5;
+    }
     if (stF?.fuseOnly && stF.maxLifetime != null && stF.speed > 0) {
       const f = stF.maxLifetime, inh = stF.inherit ?? 0.5;
       const tv = target.velocity;

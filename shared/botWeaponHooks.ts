@@ -43,6 +43,11 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
       // ~82m airburst is the attack; orbiting at 30m overflies the pop
       // and the fuse-solve refuses every volley.
       if (st.fuseOnly && st.maxLifetime && st.speed > 0) {return st.speed * st.maxLifetime;}
+      // Arm-gated ordnance holds the arm window too: a mortar orbiting
+      // at 30m fires shells that physically cannot pop (armTime 1.5s at
+      // 80m/s = ~120m ballistic travel) - ~0.7x the arm travel lands
+      // inside the measured 60-120m apex band.
+      if ((st.armTime ?? 0) > 0 && st.speed > 0) {return st.speed * st.armTime * 0.7;}
       if (w === lo.far) {return 30;}
       return undefined;
     },
