@@ -1028,7 +1028,15 @@ export class BotBrain {
         const d = dist3(pos, a);
         if (d < mateD) { mate = a; mateD = d; }
       }
-      if (mate && botRand() < 0.7) { passFlag = { x: mate.x, y: mate.y, z: mate.z }; this.passT = 4; }
+      // A pass that goes BACKWARD is a fumble, not a handoff - the toss
+      // inherits carrier speed, so a mate parked at the stand the carrier
+      // is leaving gets a flag that lands inside his own reach but still
+      // on the enemy side, and the route pays the reset either way. Only
+      // deliver forward: the receiver has to be meaningfully closer to
+      // the carrier's objective (his own stand) than the carrier is.
+      if (mate && ctx.objective
+        && dist3(mate, ctx.objective) < dist3(pos, ctx.objective) - 10
+        && botRand() < 0.7) { passFlag = { x: mate.x, y: mate.y, z: mate.z }; this.passT = 4; }
     }
     return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say, passFlag };
   }

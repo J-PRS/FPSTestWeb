@@ -3,7 +3,7 @@
  * room's tick thread (fallback) or inside botMpcWorker (normal path).
  * Pure function: one scratch sim, snapshot nodes, projection scoring.
  */
-import { MoveSim, type MoveSurface, type SimSnapshot, type MoveState } from '../../shared/movement.ts';
+import { MoveSim, MOVEMENT_CONFIG, type MoveSurface, type SimSnapshot, type MoveState } from '../../shared/movement.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import type { BotVec } from '../../shared/botVec.ts';
 
@@ -29,8 +29,20 @@ interface Node {
   snap: SimSnapshot; e: number; parent: number;
   act: { yaw: number; jet: boolean };
   sample: { x: number; z: number; y: number };
+  /** Accumulated T1 fall-damage fraction along the plan - the arrival
+   *  price the planner used to ignore entirely (katabatic autopsy: the
+   *  capper's route was mechanically correct; it simply died to 5-8
+   *  strikes at 45-77 m/s that proj's speed-only currency couldn't see). */
+  dmg: number;
   proj: number;
 }
+
+/** Only PREDICTED-LETHAL impact is priced - a quarter-bar of light
+ *  landings is normal transit wear on rolling maps, and taxing it
+ *  slowed every route (peaks regression: timid approach + carry). The
+ *  hard veto keeps the beam off the fatality basin; below it speed wins. */
+const IMPACT_DEATH = 0.45;
+const IMPACT_DEATH_K = 500;
 
 const q = (n: number, s: number) => Math.round(n / s);
 function key(s: SimSnapshot['st'], e: number): number {
@@ -77,7 +89,7 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
     x.groundGraceT = 0; x.acc = 0; x.bandDist = Infinity; x.impulseT = 0; x.lastJumpableNormal.x = 0; x.lastJumpableNormal.y = 1; x.lastJumpableNormal.z = 0;
   };
   const arena: Node[] = [{
-    snap: job.snap, e: job.e0, parent: -1,
+    snap: job.snap, e: job.e0, parent: -1, dmg: 0,
     act: { yaw: job.snap.st.yaw, jet: false },
     sample: { x: job.snap.st.pos.x, z: job.snap.st.pos.z, y: job.snap.st.pos.y },
     proj: -Infinity,
@@ -99,8 +111,10 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
           scratch.state.yaw += dOff;
           scratch.setInput({ forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: jet });
           let hit = false;
+          let imp = 0;
           for (let t = 0; t < TICKS; t++) {
             scratch.update(1 / 60);
+            if (scratch.landingImpact > imp) {imp = scratch.landingImpact;}
             const sp = scratch.state.pos;
             // Squared test, not Math.hypot: this runs 9x per child
             // (~500k times a search) and hypot's overflow-safe scaling
@@ -114,6 +128,7 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
           const child: Node = {
             snap: scratch.snapshot(), e, parent: ni, act: { yaw: s.yaw, jet },
             sample: { x: s.pos.x, z: s.pos.z, y: s.pos.y },
+            dmg: n.dmg + Math.max(0, imp - MOVEMENT_CONFIG.fallDamageMinSpeed) * MOVEMENT_CONFIG.fallDamageScale,
             proj: -Infinity,
           };
           arena.push(child);
@@ -121,7 +136,7 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
           const k = key(child.snap.st, e);
           if (seen.has(k)) {continue;}
           seen.add(k);
-          child.proj = proj(field, s.pos.x, s.pos.z, s.pos.y, s.vel.x, s.vel.z, e, B);
+          child.proj = proj(field, s.pos.x, s.pos.z, s.pos.y, s.vel.x, s.vel.z, e, B) - (child.dmg > IMPACT_DEATH ? IMPACT_DEATH_K : 0);
           next.push(arena.length - 1);
         }
       }

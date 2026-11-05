@@ -35,7 +35,7 @@ Index: `readme.md`.
 |-------|--------|------|
 | Client `tsc --noEmit` | clean | 2026-11-05 |
 | Server `bunx tsc --noEmit` | clean | 2026-11-05 |
-| Full server `bun test` | 1572 pass, 1 fail: `capper run > real T2 Katabatic stands` — the only remaining scenario red, failing on clean HEAD since at least 2026-10-24. Real bot-capability gap, not test debt | 2026-11-05 |
+| Full server `bun test` | 1573 pass, 0 fail — `capper run > real T2 Katabatic stands` fixed 2026-11-05 via MPC arrival-impact pricing (see changelog) | 2026-11-05 |
 | Client `vitest run` | 683 pass, 0 fail — the `workerTransportDrain` failure is gone (fixed by intervening commits) | 2026-11-05 |
 | Client `oxlint src` | exit 0, warnings only (main.ts complexity cluster is the bulk) | 2026-11-05 |
 | `bash _tools/check.sh` | not run this cycle; rootcheck verified green standalone | 2026-11-05 |
@@ -43,10 +43,18 @@ Index: `readme.md`.
 | WebTransport live match (direct IP) | 14 bots, ~48 ms ping, 5% loss, held through respawns | 2026-10-24 |
 | Headhunt token behaviour live | not done | - |
 
-Three scenario failures predate this work. They also fail on a clean `HEAD` export:
-- `blast knockback distance > disc pull blast displaces the victim but does not catapult them`
-- `capper run on real terrain > 300m stands on peaks.bin`
-- `capper run on real terrain > real T2 Katabatic stands`
+Historical: the Katabatic/peaks capper failures closed 2026-11-05 — the
+root cause was fall-damage transit (5-8 strikes at 45-77 m/s per leg on
+katabatic; the capper's route was mechanically correct, it simply died).
+The MPC beam in `botMpcSearch.ts` now accumulates predicted T1
+fall-damage along each plan (`scratch.landingImpact` per tick, T1
+25 m/s floor, 0.005/m scale) and hard-vetoes plans past ~45% of a bar
+(`IMPACT_DEATH`), with lighter hits free — verified on all three
+capRun maps: peaks caps (grab@214.5 passV=43.6), dunes caps
+(grab@67.6 passV=28.6), katabatic caps (grab@84.7/63.9 carry ~104-118s,
+avgSpeed 18-19 m/s, full `bun test` 1573/0). The bot-side passFlag gate
+(`botBrain.ts`) now refuses backward handoffs — a pass to a mate parked
+at the stand being left is a fumble, not a handoff.
 
 ## Uncommitted repo changes from this work
 
