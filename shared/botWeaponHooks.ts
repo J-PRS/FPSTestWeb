@@ -1,4 +1,4 @@
-import { getWeaponStats, WEAPON_FIRE_INTERVAL_S, type WeaponType } from './weapons.js';
+import { getWeaponStats, WEAPON_FIRE_INTERVAL_S, WeaponType } from './weapons.js';
 import type { BotLoadout } from './botLoadouts.js';
 
 /** The pick-based weapon senses the brain ctx reads — ONE factory both
@@ -52,7 +52,9 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
       // parking it at 42m standoff wastes a mid-slot brawler.
       const bodyArm = st.bodyArmTime ?? st.armTime;
       if ((bodyArm ?? 0) > 0 && st.speed > 0) {return st.speed * (bodyArm ?? 0) * 0.7;}
-      if (w === lo.far) {return 30;}
+      // GL-as-far holds its measured standoff (7.1%/shot at 60-120),
+      // not the generic 30m far orbit.
+      if (w === lo.far) {return w === WeaponType.GrenadeLauncher ? 60 : 30;}
       return undefined;
     },
     // Trigger rhythm — the legal cadence the client trigger enforces,
