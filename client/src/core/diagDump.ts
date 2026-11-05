@@ -214,14 +214,14 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
     // ~-0.5m means the wire is holding the body under the visible ground
     // (server-side dip; the render lift in remoteAnim covers the rest).
     const terrD = rp?.terrain ? (ps.position.y - rp.eyeOff) - rp.terrain.getRenderedHeight(ps.position.x, ps.position.z) : Number.NaN;
-    lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m at=${fmt(rp.position)} terrΔ=${Number.isFinite(terrD) ? `${terrD.toFixed(1)}m` : '?'} sim=${rp.isSimulating}` : ' NOT-RENDERED'}`);
+    lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m at=${fmt(rp.position)} terrΔ=${Number.isFinite(terrD) ? `${terrD.toFixed(1)}m` : '?'} sim=${rp.isSimulating}${rp.isDead ? ` scale=${rp.scale.toFixed(2)}${rp.staleHidden ? ' STALE' : ''}${rp.frustumHidden ? ' FRUSTUM' : ''}` : ''}` : ' NOT-RENDERED'}`);
   }
   // Rendered but absent from the wire roster - local bots, dummies,
   // stale ghosts the roster never told us about.
   for (const [id, rp] of ctx.remotePlayers) {
     if (wire.has(id)) {continue;}
     const {team} = (rp as { team?: string });
-    lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}`);
+    lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}${rp.isDead ? ` scale=${rp.scale.toFixed(2)}${rp.staleHidden ? ' STALE' : ''}` : ''}`);
   }
   if (verbose) {pushBots(lines, ctx);}
   lines.push(
