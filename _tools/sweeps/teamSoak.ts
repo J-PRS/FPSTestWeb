@@ -44,7 +44,7 @@
  *   --arena M             XZ arena radius in metres, 0 = map's own bound
  *   --seed S              room seed
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { hmParseBin, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { WeaponType, WEAPONS, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
@@ -521,5 +521,25 @@ for (const r of rows) {
     return `${b.padStart(5)}:${String(sh).padStart(4)}|${String(h).padStart(4)}|${String(d).padStart(5)}|${String(k).padStart(3)}`;
   }).join('  ');
   console.log(`${(WeaponType[Number(r.k.slice(1))] ?? r.k).padEnd(17)} |  ${mark(r.k)}   | ${line}`);
+}
+
+// Results ledger: every pinned/mixed match appends one JSONL row so
+// weaponRank.ts can ladder weapons over history (Glicko-lite kill-share
+// scoring). Cycle/wild runs don't fit the A-vs-B shape.
+if (!CYCLE && !WILD) {
+  const rowOf = (wt: number): object | null => {
+    const r = rows.find((x): boolean => Number(x.k.slice(1)) === wt);
+    if (!r) {return null;}
+    const up = r.shots * intervalOf(wt);
+    return { kills: r.kills, shots: r.shots, hits: r.hits, conn: +(r.shots ? 100 * r.conn / r.shots : 0).toFixed(1), dmg: Math.round(r.damage), upTs: +up.toFixed(0), heldS: +(held.get(wt) ?? 0).toFixed(0) };
+  };
+  const line = JSON.stringify({
+    ts: Date.now(), seed: SEED, map: SPEC_NAME, mode: MODE, per: PER, simS: Math.round(simS), mix: MIX,
+    a: WeaponType[A_W], b: WeaponType[B_W],
+    score: [room.scores.alpha ?? 0, room.scores.bravo ?? 0],
+    A: rowOf(A_W), B: rowOf(B_W),
+  });
+  mkdirSync(resolve(import.meta.dir, 'out'), { recursive: true });
+  appendFileSync(resolve(import.meta.dir, 'out', 'weapon_results.jsonl'), line + '\n');
 }
 process.exit(0);
