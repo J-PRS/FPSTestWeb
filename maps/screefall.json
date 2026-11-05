@@ -1,0 +1,62 @@
+{
+  "name": "Screefall",
+  "mode": "dm",
+  "bots": 10,
+  "botFill": 12,
+  "spawns": [
+    {
+      "x": -513,
+      "y": 0,
+      "z": 409,
+      "r": 30
+    },
+    {
+      "x": -316,
+      "y": 0,
+      "z": -556,
+      "r": 30
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "r": 50
+    },
+    {
+      "x": 400,
+      "y": 0,
+      "z": 300,
+      "r": 50
+    },
+    {
+      "x": -150,
+      "y": 0,
+      "z": -250,
+      "r": 50
+    },
+    {
+      "x": 300,
+      "y": 0,
+      "z": -400,
+      "r": 50
+    },
+    {
+      "x": -450,
+      "y": 0,
+      "z": -50,
+      "r": 50
+    },
+    {
+      "x": 150,
+      "y": 0,
+      "z": 500,
+      "r": 50
+    }
+  ],
+  "structures": [],
+  "terrain": "screefall.bin",
+  "heightScale": 4,
+  "tileSize": 1500,
+  "terrainPreset": 1,
+  "_notes": "maplab synth seed 9541, size 449: freq 1.05, detail 1.5, noiseType 3 (jordan), warp 0.45, curl 0.65, ridge 0.85, elong 1.25, glacier 0.6, smoothIters 30, flats 2 padR 25, bowlR 110 depth 0.7, plateauR 140 lift 0.95, seaR 240 depth 0.55, vscale 0.9, droplets 30 (inertia .55 erode .35 dep .2 evap .055 cap .25), stream 0.2x2, talus 16 @ .005; verbs: terrace, scree x5. Rebake: bun _tools/mapbake/genscreefall.ts. Central plateau ringed by a bowl; scree-softened ridges everywhere else. [audit: rel 98m@hs1, sd 13.5m, slp 14.9deg, steep 0%]"
+}
