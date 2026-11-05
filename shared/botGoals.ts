@@ -1,7 +1,7 @@
 /**
- * botGoals — idle-goal selection for BotBrain. Reflex overrides run
+ * botGoals - idle-goal selection for BotBrain. Reflex overrides run
  * first (revenge, rally, the cloak-fuel errand), then the goal itself is
- * utility-scored: every candidate — objective, gem, heard fight, wander —
+ * utility-scored: every candidate - objective, gem, heard fight, wander -
  * gets weight × distance-falloff × danger-discount, argmax wins with a
  * hysteresis margin so goals don't dither. Runs on the slow think
  * cadence; botBrain keeps the per-tick destination resolution. The
@@ -14,16 +14,16 @@ import { distSq } from './botVec.ts';
 import { ENERGY } from './movement.ts';
 import type { BotVec, BrainCtx } from './botBrain.ts';
 
-/** Mutable goal/wander/revenge state — the brain owns the bag, the
+/** Mutable goal/wander/revenge state - the brain owns the bag, the
  *  picker mutates it in place. */
 export interface GoalState {
   /** The committed destination think() reads when nothing presses. */
   goal: BotVec;
-  /** Revenge timer — being shot by an unseen attacker outranks every
+  /** Revenge timer - being shot by an unseen attacker outranks every
    *  idle drive until it decays. */
   revengeT: number;
   revengeFrom: BotVec;
-  /** Wander pacing — personal clock so a squad doesn't caravan. */
+  /** Wander pacing - personal clock so a squad doesn't caravan. */
   wanderT: number;
   wanderWp: BotVec;
 }
@@ -36,9 +36,10 @@ export class BotGoals {
     private nearDeath: (p: { x: number; z: number }) => boolean,
     private duty: () => number = (): number => 1,
     private social: () => number = (): number => 0.5,
+    private greed: () => number = (): number => 0.5,
   ) {}
 
-  /** The bot's nerve — where on the solo↔social dial it sits right now.
+  /** The bot's nerve - where on the solo↔social dial it sits right now.
    *  High social + low confidence (losing, dying) pushes toward company;
    *  a confident loner barely registers allies exist. */
   private nerve(ctx: BrainCtx): number {
@@ -51,9 +52,9 @@ export class BotGoals {
     const s = this.s();
     if (s.revengeT > 0) {
       // Hit from somewhere unseen: push toward the shooter rather than
-      // continue a patrol — the flinch already spent the recoil. A
+      // continue a patrol - the flinch already spent the recoil. A
       // posted anchor doesn't take the bait: the revenge push is what
-      // shelled HoFs off their stand — he answers with fire, not feet.
+      // shelled HoFs off their stand - he answers with fire, not feet.
       if (!(ctx.posted && ctx.objective && Math.sqrt(distSq(s.revengeFrom, ctx.objective)) > ctx.posted)) {
         s.goal = Object.assign({}, s.revengeFrom);
         return;
@@ -62,18 +63,26 @@ export class BotGoals {
     // Rally threshold breathes with nerve: a rattled gregarious bot folds
     // at ~30% HP, a confident loner only at the brink (a 0-social nerve
     // barely moves the base 15%).
-    const rallyAt = 0.15 * (0.4 + this.nerve(ctx) * 1.6);
-    if ((ctx.healthFrac ?? 1) < rallyAt && ctx.allies && ctx.allies.length > 0 && !ctx.posted) {
+    const rallyAt = 0.15 * (0.4 + this.nerve(ctx) * 1.6)
+      // A hoarder's spill belongs to the team: rich carriers fold
+      // toward friendlies much earlier (the corpse drops the pile on
+      // a re-grab lane) - but only mostly; a predictable turtle just
+      // gets pinched between hunters, so the extension rolls 70%.
+      + (ctx.held === undefined ? 0 : Math.min(0.4, ctx.held * 0.004));
+    const foldOk = ctx.held === undefined
+      || (ctx.healthFrac ?? 1) < 0.15 * (0.4 + this.nerve(ctx) * 1.6)
+      || botRand() < 0.7;
+    if ((ctx.healthFrac ?? 1) < rallyAt && foldOk && ctx.allies && ctx.allies.length > 0 && !ctx.posted) {
       const rally = this.rallyGoal(ctx, pos, rallyAt);
       if (rally) {s.goal = rally;}
       return;
     }
-    // A dry infiltrator can't hold the veil — the nugget loop IS its
+    // A dry infiltrator can't hold the veil - the nugget loop IS its
     // stealth economy, so feeding the tank outranks pressing the stand.
     if (ctx.infiltrating && ctx.energy !== undefined && ctx.energy < ENERGY.cloakCost + 30 && ctx.pickup) {
       s.goal = Object.assign({}, ctx.pickup); return;
     }
-    // Utility pick — nothing is first-past-the-post anymore: a gem 30m
+    // Utility pick - nothing is first-past-the-post anymore: a gem 30m
     // out can outscore a flag 400m off, a distant objective beats a
     // death-scented fight. duty tempers the danger discount (dutiful
     // bots press through scent, sightseers route around it); weight is
@@ -86,7 +95,7 @@ export class BotGoals {
       const d = Math.sqrt(distSq(pos, goal));
       const reach = 1 / (1 + d / 140);
       // Experience memory on top of the shared scent: a spot where THIS
-      // bot already died reads extra dangerous to it personally — the
+      // bot already died reads extra dangerous to it personally - the
       // map's graveyard is everyone else's history, this one is mine.
       const personal = this.nearDeath(goal) ? 0.2 : 0;
       const scent = ignoreScent ? 0
@@ -96,18 +105,35 @@ export class BotGoals {
     // A runner's objective is a commitment, not a candidate: the cap
     // route is the job, so midfield noise has to beat a heavy weight to
     // pull the legs. Fights en route get answered by the fire layer
-    // while the feet keep the line — humans run and shoot.
+    // while the feet keep the line - humans run and shoot.
     // A posted anchor's objective is the same kind of commitment the
-    // cap route is — nothing midfield outbids the pole.
+    // cap route is - nothing midfield outbids the pole.
     // The committed objective (cap route / posted pole / wave flood) is
-    // exempt from the scent discount: a hot lane is the ROUTE's problem —
-    // the entry scorer already prices detours — not a license to wander
+    // exempt from the scent discount: a hot lane is the ROUTE's problem -
+    // the entry scorer already prices detours - not a license to wander
     // midfield. A named wave member's task slot is the same commitment:
-    // soak showed ~86% of wave ticks holding a goal 60m+ off the flood —
+    // soak showed ~86% of wave ticks holding a goal 60m+ off the flood -
     // every heard fight outbid the 1.0-weight objective, so the called
     // push walked in alone.
     const committed = ctx.runner || ctx.posted || ctx.wave;
-    offer(ctx.objective, committed ? 3.5 : 1, Boolean(committed));
+    // Broke hunters chase the hoard like a commitment - a 0-token pocket
+    // has nothing to spill, so the vault hunt outbids corridor loot and
+    // heard fights up to ~3x (par at 40+ held, where the carrier is the
+    // one worth guarding, not chasing). ctx.held is undefined outside
+    // headhunt - other modes keep the flat 1 weight.
+    const huntW = (ctx.held === undefined ? 1 : 1 + 2 * Math.max(0, 1 - ctx.held / 40))
+      // Losing late? The vault IS the win button - desperation stacks
+      // on top of poverty instead of replacing it.
+      + (ctx.desperate ?? 0);
+    offer(ctx.objective, committed ? 3.5 : huntW, Boolean(committed));
+    // Escort the piñata: a 20+ friendly hoard draws its team like the
+    // carrier is a walking objective - committed roles already hold
+    // their task, everyone else drifts to guard the vault.
+    offer(ctx.convoy, 1.5);
+    // Corpse-watch beats the pickup offer it's about to become -
+    // camping the dying carrier wins the spill; arriving late reads
+    // as the enemy team's tokens. Greed still decides who circles.
+    offer(ctx.spillSoon, 1.8 * (0.5 + this.greed()));
     if (!(ctx.posted && ctx.objective && ctx.pickup && distSq(ctx.pickup, ctx.objective) > ctx.posted * ctx.posted)) {
       // Corridor loot: a nugget on the way to the objective is nearly
       // free and worth a bump; one off the line drops to a passing whim.
@@ -120,30 +146,44 @@ export class BotGoals {
         const detour = Math.sqrt(distSq(pos, ctx.pickup)) + Math.sqrt(distSq(ctx.pickup, ctx.objective)) - Math.sqrt(distSq(pos, ctx.objective));
         w = detour < 12 ? 1.1 : detour > 30 ? 0.3 : w;
       }
-      offer(ctx.pickup, w);
+      // Pile size x personality x appetite: a 27-coin spill pulls ~2x
+      // a lone coin's ~0.55x; a lobby hoover (greed 1) multiplies by
+      // ~1.7 where a deathmatch-brained bot (greed 0) cares 0.3x -
+      // same field, different people. Held-hoarders stay hungry on top.
+      const pileW = 0.5 + Math.min(ctx.pickupVal ?? 1, 40) / 40 * 1.5;
+      // Vulture pull: broke hunters dive free loot (nothing on their
+      // own corpse to lose) on top of the hoarder's appetite.
+      const hunger = ctx.held === undefined ? 1
+        : 1 + Math.min(1, ctx.held * 0.02) + Math.max(0, 1 - ctx.held / 15) * 0.6;
+      offer(ctx.pickup, w * pileW * (0.3 + this.greed() * 1.4) * hunger);
     }
-    // A posted defender hears the same gunfire — he just doesn't go
+    // A posted defender hears the same gunfire - he just doesn't go
     // look. Beyond the leash it's someone else's job; wandering is
     // off the table entirely, feet stay on the post.
+    // Appetite grows with eating: a rich hoarder is emboldened by the
+    // regen/plating his pile buys - he hunts the action like an
+    // ultrahunter instead of hiding (the drip still argues for the
+    // bail-then-drip rhythm the fear floor gives him).
+    const greedy = ctx.held === undefined ? 1 : 1 + Math.min(1.5, ctx.held * 0.02);
     if (heard && !(ctx.posted && ctx.objective && distSq(heard, ctx.objective) > ctx.posted * ctx.posted)) {
-      offer(heard, 0.2 + this.duty() * 0.5);
+      offer(heard, (0.2 + this.duty() * 0.5) * greedy);
     }
     // Opportunity heat as a destination, not just a steering nudge: gem
     // drops, hits and corpses all splat it, so a bot that sees no gem
     // and hears no fight still drifts toward where the money/action is
-    // — the pull a spawn-clustered team needs before first contact.
+    // - the pull a spawn-clustered team needs before first contact.
     // Committed roles (posted/wave) hold their post, same as heard.
     const hot = ctx.posted || ctx.wave ? null : ctx.imapHottest?.(pos);
-    if (hot && hot.v > 0.3) {offer({ x: hot.x, y: ctx.groundY(hot.x, hot.z) + BOT_EYE, z: hot.z }, 0.6);}
+    if (hot && hot.v > 0.3) {offer({ x: hot.x, y: ctx.groundY(hot.x, hot.z) + BOT_EYE, z: hot.z }, 0.6 * greedy);}
     // Ally drift: no objective pulling (flag modes have their own squad
-    // machinery — this is the TDM/nuggets hint of cohesion), nobody
+    // machinery - this is the TDM/nuggets hint of cohesion), nobody
     // already in company range, and a teammate in real reach. Weight is
     // nerve-shaped so confident/loner bots keep their solo roam while a
-    // rattled social one finds a buddy — pairs form and dissolve as the
+    // rattled social one finds a buddy - pairs form and dissolve as the
     // drifted-to ally's own goals move it on, never a formed unit.
     const buddy = this.buddyAnchor(ctx, pos);
     if (buddy) {offer(buddy, this.nerve(ctx) * 0.55);}
-    // A same-team VGS callout left a pin: commited roles hold their post —
+    // A same-team VGS callout left a pin: commited roles hold their post -
     // everyone else weighs the call like a heard fight, duty-scaled so a
     // loner bot can still shrug off "cover me".
     if (ctx.radio && !committed) {offer(ctx.radio, 0.35 + this.duty() * 0.45);}
@@ -151,17 +191,17 @@ export class BotGoals {
     if (cands.length > 0) {
       let best = cands[0]!;
       for (const c of cands) {if (c.score > best.score) {best = c;}}
-      // Hysteresis: the incumbent needs beating by a margin — flipping
+      // Hysteresis: the incumbent needs beating by a margin - flipping
       // goals on a 1% re-score reads as bot dithering, not judgment.
       const incumbent = cands.find((c): boolean => distSq(c.goal, s.goal) < 25 * 25);
       s.goal = incumbent && incumbent.score > best.score * 0.85 ? incumbent.goal : ((((((Object.assign({}, best.goal)))))));
       return;
     }
     // Wander always offers a candidate, so an empty board only happens
-    // when even the roll produced nothing — hold the line.
+    // when even the roll produced nothing - hold the line.
   }
 
-  /** The wander slot as a utility candidate — a fresh roll when the
+  /** The wander slot as a utility candidate - a fresh roll when the
    *  pacing clock says so, else the leg already underway. */
   private wanderCandidate(ctx: BrainCtx, pos: BotVec): BotVec | null {
     const s = this.s();
@@ -173,15 +213,15 @@ export class BotGoals {
     return s.wanderWp;
   }
 
-  /** Roll a few candidate waypoints; downhill lines win — picking the
+  /** Roll a few candidate waypoints; downhill lines win - picking the
    *  low ground is what makes wander read as skiing runs instead of a
    *  jog across flats. Death spots are skipped outright. */
   private rollWander(ctx: BrainCtx, pos: BotVec): BotVec | null {
     const g0 = ctx.groundY(pos.x, pos.z);
-    // A cold field's best pull is the crowd — every live body's position
+    // A cold field's best pull is the crowd - every live body's position
     // is already a legal sense (retreat folds read it), and a lobby
     // drifts toward where everyone is. The cone blends toward the crowd
-    // centroid with distance — no hard gate, so a team rim-camped ~300m
+    // centroid with distance - no hard gate, so a team rim-camped ~300m
     // out still drifts inward instead of lapping the perimeter forever.
     const h0 = this.headingVec();
     let hv = h0, pull = 0;
@@ -196,10 +236,10 @@ export class BotGoals {
     let best: BotVec | null = null;
     let bestDrop = -Infinity;
     for (let tries = 0; tries < 3; tries += 1) {
-      // Committed lines: a skier picks a direction and holds it — the
+      // Committed lines: a skier picks a direction and holds it - the
       // roll is a forward cone off the current heading with real run
       // length, not a fresh random bearing that reverses mid-carve.
-      // The cone narrows as the crowd pull grows — a far wanderer
+      // The cone narrows as the crowd pull grows - a far wanderer
       // beelines for the lobby, it doesn't slalom to it.
       const a = Math.atan2(hv.z, hv.x) + (botRand() - 0.5) * 2.4 * (1 - pull);
       const r = (25 + botRand() * 55) * this.wanderlust();
@@ -223,13 +263,13 @@ export class BotGoals {
     let ad = Infinity;
     for (const o of ctx.allies) {
       const d = distSq(pos, o);
-      if (d < 60 * 60) {return null;} // already has company — a pull here would herd
+      if (d < 60 * 60) {return null;} // already has company - a pull here would herd
       if (d < ad && d < 260 * 260) { ad = d; ally = o; }
     }
     return ally ? ((((((Object.assign({}, ally))))))) : null;
   }
 
-  /** Hurt with nobody shooting back at: fold toward the nearest ALLY —
+  /** Hurt with nobody shooting back at: fold toward the nearest ALLY -
    *  folding onto an enemy while at 15% hp was worse than running solo. */
   private rallyGoal(ctx: BrainCtx, pos: BotVec, rallyAt = 0.15): BotVec | null {
     if ((ctx.healthFrac ?? 1) >= rallyAt || !ctx.allies || ctx.allies.length === 0) {return null;}

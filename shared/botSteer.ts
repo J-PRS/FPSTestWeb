@@ -277,6 +277,26 @@ export class BotSteer {
       }
     }
 
+    // Piñata kiting: a rich hoarder plays keep-away - slots that close
+    // on the nearest hunter read as danger scaled by the pile. The
+    // regen drip refills a disengaged carrier, so steering off contact
+    // IS the play; a 60m comfort gap keeps it from sprinting at walls.
+    const heldTokens = ctx.held ?? 0;
+    if (heldTokens >= 15 && ctx.enemies) {
+      let ex = 0, ez = 0, ed = Infinity;
+      for (const e of ctx.enemies) {
+        if (!e.alive) {continue;}
+        const d = Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z);
+        if (d < ed) { ed = d; ex = e.pos.x - pos.x; ez = e.pos.z - pos.z; }
+      }
+      if (ed < 60) {
+        const toward = (dx * ex + dz * ez) / ed;
+        if (toward > 0.2) {
+          danger = Math.min(1, danger + toward * Math.min(0.6, heldTokens * 0.01) * (1 - ed / 60));
+        }
+      }
+    }
+
     // Separation and trail memory are transit instincts — a posted body
     // holds ground: it stacks on the stand with its squad and re-walks
     // its own patrol arc, so neither applies while posted.

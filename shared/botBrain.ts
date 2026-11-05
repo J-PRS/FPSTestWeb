@@ -1,7 +1,7 @@
 /**
- * BotBrain — the shared decision core for every fake player, offline
+ * BotBrain - the shared decision core for every fake player, offline
  * (client GameBot) and online (server_bun ServerBots). Pure logic on plain
- * vectors: no THREE, no sockets, no scene — both runtimes supply those at
+ * vectors: no THREE, no sockets, no scene - both runtimes supply those at
  * the edges and consume the same "where to move / when to fire / where to
  * aim" answers, so bot personality is tuned once and ships to both.
  *
@@ -34,17 +34,17 @@ import { BOT_TUNING as T } from './botTuning.ts';
 
 const f = (v: BotVec): string => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
 
-// Combat half lives in botHunt.ts — re-export so existing imports keep
+// Combat half lives in botHunt.ts - re-export so existing imports keep
 // resolving (losClear/BOT_EYE/BOT_FIRE_RANGE are the public surface).
 export { losClear, losMemoReset, BOT_EYE, BOT_FIRE_RANGE } from './botHunt.ts';
 export type { BotVec } from './botVec.ts';
 
-/** Brawl range — the "a live enemy is right here" evidence the sheep
+/** Brawl range - the "a live enemy is right here" evidence the sheep
  *  meter's ignore debit and every foeNear check measure by. One radius
  *  for wire humans, wire bots, offline bots, and the self readout. */
 export const BRAWL_RANGE = 45;
 /** View-cone gate for that evidence: the foe must be inside the ~113°
- *  frontal cone (dot(facing, toFoe) > -0.4) — charging a body for
+ *  frontal cone (dot(facing, toFoe) > -0.4) - charging a body for
  *  "ignoring" an enemy directly behind it is a false positive. */
 export const FOE_CONE_MIN_DOT = -0.4;
 
@@ -54,41 +54,41 @@ export interface BotEnemy {
   vel: BotVec;
   alive: boolean;
   /** Vertical offset from `pos` (the eye point for players, ball center
-   *  for creatures) to the natural aim point — the hit capsule's axis
+   *  for creatures) to the natural aim point - the hit capsule's axis
    *  midpoint. Negative for players (the chest sits below the eyes),
    *  ~0 for creatures. Omitted → the brain aims a medium's center. */
   aimY?: number;
-  /** Health as a 0..1 fraction — the finisher read: a wounded runner
+  /** Health as a 0..1 fraction - the finisher read: a wounded runner
    *  is worth an easy chip weapon instead of another heroic lob. */
   hpFrac?: number;
-  /** Headhunt tokens this enemy carries — the bounty read: acquisition
+  /** Headhunt tokens this enemy carries - the bounty read: acquisition
    *  prices hoards closer than their raw distance. */
   held?: number;
 }
 
 export interface BrainCtx {
-  /** The bot's own id — also the FPS_TRACE selector for soak debugging. */
+  /** The bot's own id - also the FPS_TRACE selector for soak debugging. */
   id?: string;
   /** The bot's own position. */
   pos: BotVec;
-  /** The bot's own velocity — ski policy keys off speed, jet off climbs. */
+  /** The bot's own velocity - ski policy keys off speed, jet off climbs. */
   vel?: BotVec;
-  /** skill.movement — times the hop-descent tap: skilled bots jet only the
+  /** skill.movement - times the hop-descent tap: skilled bots jet only the
    *  falling arc; undefined reads as skilled (hosts without a skill matrix). */
   moveSkill?: number;
   enemies: BotEnemy[];
-  /** Objective anchor (CTF flag/base) — outranks pickup and wander. */
+  /** Objective anchor (CTF flag/base) - outranks pickup and wander. */
   objective?: BotVec | null;
   /** The real flag position when `objective` is an offset AIM point
-   *  (committed capper passes aim past/beside the pole) — altitude
+   *  (committed capper passes aim past/beside the pole) - altitude
    *  vetoes that mean "over the flag" must measure this, not the aim. */
   flagPos?: BotVec | null;
   /** This bot is carrying the objective (flag carrier running home):
-   *  the route rules the feet — hunt press/orbit yields to the line,
+   *  the route rules the feet - hunt press/orbit yields to the line,
    *  while fire stays live for opportunistic shots on the way. */
   running?: boolean;
   /** Route-first movement (carrier or capper): the line planner may
-   *  swing wider and weight downhill harder — momentum preservation
+   *  swing wider and weight downhill harder - momentum preservation
    *  beats directness, which is how real cap routes arc roundabout. */
   runner?: boolean;
   /** Named wave member (push/escort): feet committed to the flood like
@@ -97,154 +97,171 @@ export interface BrainCtx {
   /** Push-task member: mass-orbits ~110m out until the flood converges
    *  (escorts share wave but never hold off a moving carrier). */
   marshal?: boolean;
-  /** The capper's push call is live — he's committed and inside the ETA
+  /** The capper's push call is live - he's committed and inside the ETA
    *  window. Marshal members release on this so the flood lands WITH
    *  him instead of trickling in on their own patience clocks. */
   pushLive?: boolean;
-  /** The objective is an enemy-held position this bot is pressing —
+  /** The objective is an enemy-held position this bot is pressing -
    *  CTF offense heading for the enemy stand. Lets the status sense
    *  read the approach as an infiltration (cloak) rather than a roam. */
   infiltrating?: boolean;
-  /** Posted-anchor leash (meters) — home defenders fire on anything
+  /** Posted-anchor leash (meters) - home defenders fire on anything
    *  they can see but only leave the objective for a fight inside this
    *  radius. 0/omitted → not posted, hunts move feet freely. */
   posted?: number;
   /** The enemy carrying OUR flag, when the host tracks flags and this
    *  bot's role chases the thief. Carrier position+velocity are beacon
-   *  info (the flag broadcasts the carrier — Tribes' command circuit),
+   *  info (the flag broadcasts the carrier - Tribes' command circuit),
    *  so engaging the thief is legal without LOS. */
   thief?: BotEnemy | null;
-  /** CTF quiet phase — both flags on their stands. Route roles read
+  /** CTF quiet phase - both flags on their stands. Route roles read
    *  it as "enemy offense is ignorable": mid-field passerby get
    *  discounted in acquisition (spot, don't figit) while stand press
    *  and brawl-range reflexes stay untouched. Flag state is broadcast
    *  wire info, so the read is legal everywhere. */
   flagsHome?: boolean;
-  /** The tryhard scalar — brain-owned, injected into ctx at think
+  /** The tryhard scalar - brain-owned, injected into ctx at think
    *  time (hosts never set it). 0 for most bots; ~12% roll a sweaty
    *  comp-pub personality that extends figit discipline to posted
    *  roles and announces its cap timing. */
   sweat?: number;
-  /** Squad spot-report: enemies a teammate had eyes on recently —
+  /** Squad spot-report: enemies a teammate had eyes on recently -
    *  stale-decayed snapshots, same legality as the thief beacon. Lets
    *  a bot commit to a contact it never personally saw, the way a
    *  squad's callouts work. */
   spots?: BotEnemy[];
-  /** Ground pickup to chase (nugget) — outranks wander. */
+  /** Ground pickup to chase (nugget) - outranks wander. */
   pickup?: BotVec | null;
-  /** Terrain height at x,z — wander waypoints clamp to ground. */
+  /** Score-deficit x time-pressure, ~0..2 - endgame desperation. Rises
+   *  only when the team is behind AND the clock is nearly done; the
+   *  goal picker turns it into vault-hunt weight, so a losing squad
+   *  throws everything at the hoard instead of playing out the string. */
+  desperate?: number;
+  /** Denomination of the chased pickup (headhunt tokens 1/3/9/27) -
+   *  the goal picker scales the offer by pile size: a purple spill is
+   *  worth a walk, a lone 1-coin is opportunism. */
+  pickupVal?: number;
+  /** Terrain height at x,z - wander waypoints clamp to ground. */
   groundY: (x: number, z: number) => number;
   /** Leg-scale route probe (flow field): the next waypoint toward a
    *  far goal, ~`ahead` meters along the cheapest-cost terrain route.
    *  Hosts without a coarse grid omit it and lines fall back to the
    *  local fan. */
   route?: (fx: number, fz: number, tx: number, tz: number, ahead: number) => BotVec | null;
-  /** Nearby bodies (allies, the local player, self ok — skipped by
+  /** Nearby bodies (allies, the local player, self ok - skipped by
    *  distance) for the separation sense. Optional; steering works
    *  without it. */
   others?: BotVec[];
-  /** Teammates only — the rally/fold sense. In team modes a hurt bot
+  /** Teammates only - the rally/fold sense. In team modes a hurt bot
    *  folding onto an ENEMY is worse than going it alone, so the rally
    *  reads this channel instead of `others`. FFA hosts leave it absent
    *  (there's no one to rally to). */
   allies?: BotVec[];
-  /** How far out this bot's armament can productively engage — a mortar
+  /** Richest friendly headhunt hoard worth guarding - a 20+ token
+   *  carrier is a map-visible piñata, so teammates drift to its escort.
+   *  Absent outside headhunt and when no teammate is rich enough. */
+  convoy?: BotVec | null;
+  /** A rich teammate visibly dying nearby - the spill hasn't landed
+   *  yet but vultures circle the body. Lets the goal picker camp the
+   *  corpse before it drops instead of chasing the pickup after. */
+  spillSoon?: BotVec | null;
+  /** How far out this bot's armament can productively engage - a mortar
    *  heavy suppresses at ~95m where a chaingun medium would just waste
    *  ammo. Hosts compute it from the loadout's long-range weapon; absent
    *  → the default duel range. */
   engageRange?: number;
-  /** How this bot's match is going, 0..1 — the host folds team score
+  /** How this bot's match is going, 0..1 - the host folds team score
    *  margin and personal K/D into one "nerve" the goal picker reads:
    *  rattled bots seek company, confident ones spread out and hunt.
    *  Omit where there's no scoreboard; 0.5 (neutral) is assumed. */
   confidence?: number;
-  /** Wall/sim time in ms — brain cooldowns key off this, not frames. */
+  /** Wall/sim time in ms - brain cooldowns key off this, not frames. */
   now: number;
-  /** Modeled energy tank (server shadow truth) — skills/jet gate on it.
+  /** Modeled energy tank (server shadow truth) - skills/jet gate on it.
    *  Omitted on hosts without an energy model; hints assume a full tank. */
   energy?: number;
-  /** Own health as a 0..1 fraction — mend decision input. */
+  /** Own health as a 0..1 fraction - mend decision input. */
   healthFrac?: number;
-  /** Own held tokens (headhunt) — the hoard-protection read: carriers
+  /** Own held tokens (headhunt) - the hoard-protection read: carriers
    *  break contact earlier so the regen drip can top them back up. */
   held?: number;
   /** Positions of projectiles closing on the bot (host pre-filters to
-   *  inbound shells) — the dodge sense. Omit where no projectile sim
+   *  inbound shells) - the dodge sense. Omit where no projectile sim
    *  exists (offline bots, legacy path). */
   threats?: BotVec[];
-  /** Recent loud events within earshot (host pre-filters radius + age) —
+  /** Recent loud events within earshot (host pre-filters radius + age) -
    *  the hearing sense. No LOS required: a fight over the ridge pulls
    *  an idle bot toward it, which is how scouting emerges. */
   sounds?: BotVec[];
   /** A room event the bot noticed this think (host already mapped it to
-   *  this bot's side — cheer/groan/alert/reply). `actor` is whoever
+   *  this bot's side - cheer/groan/alert/reply). `actor` is whoever
    *  caused it, so lines can name them ({t}). Each bot sees it on its
-   *  own think phase — reactions dribble out; brains only emit edges. */
+   *  own think phase - reactions dribble out; brains only emit edges. */
   notice?: { kind: ChatterKind; actor?: string; goal?: BotVec } | null;
   /** A live radio callout's implied position (host resolved the chord
-   *  to a spot — defend-the-stand, chase-the-carrier, cover-the-caller).
+   *  to a spot - defend-the-stand, chase-the-carrier, cover-the-caller).
    *  Brain-owned: set each think, consumed by the goal picker. */
   radio?: BotVec | null;
   /** Nuggets-style economy rooms: when no player threatens, prefer
-   *  creature targets (id prefix `b:`) — farming is the objective, and a
+   *  creature targets (id prefix `b:`) - farming is the objective, and a
    *  human would do the same. Enemies still outrank food when close. */
   huntCreatures?: boolean;
-  /** A friendly deployable that needs a weld — the host's nearest
+  /** A friendly deployable that needs a weld - the host's nearest
    *  damaged item (key is host-opaque: server id, client candId).
    *  Only builders act on it; everyone else ignores the channel. */
   repair?: { key: string; pos: BotVec; frac: number } | null;
-  /** Map-structure colliders for wall occlusion in LOS — hosts that model
+  /** Map-structure colliders for wall occlusion in LOS - hosts that model
    *  solid structures pass them so bots don't stare into walls; hosts
    *  without one fall back to terrain-only LOS like before. */
   solids?: readonly StructureCollider[];
   solidIndex?: ColliderIndex | null;
-  /** The bot's team — team-filtered solids (shield gates) don't block
+  /** The bot's team - team-filtered solids (shield gates) don't block
    *  its own LOS/aim probes. */
   team?: string;
   /** Host hook: muzzle speed of the weapon the bot would pick at `dist`
-   *  — aim lead divides range by real flight speed instead of a fixed
+   *  - aim lead divides range by real flight speed instead of a fixed
    *  60 m/s guess (a mortar under-leads and a disc over-leads at 60).
-   *  0 means hitscan — zero flight time, no lead. */
+   *  0 means hitscan - zero flight time, no lead. */
   weaponSpeed?(dist: number): number;
   /** Host hook: effective reach of the weapon the bot would pick at
-   *  `dist` — the brain holds fire beyond it (a beam stops at its ray
+   *  `dist` - the brain holds fire beyond it (a beam stops at its ray
    *  length; hosing air past reach is a whiff the stats count). Omit
    *  → no limit (projectiles reach past any sane engagement). */
   weaponRange?(dist: number): number | undefined;
   /** Host hook: fuse seconds of the weapon the bot would pick at `dist`
-   *  when it's a fuseOnly carrier (MRV — the airburst IS the attack).
+   *  when it's a fuseOnly carrier (MRV - the airburst IS the attack).
    *  Intercept time caps at the fuse: the aim solves "carrier at fuse =
    *  target at fuse", not a body crossing it phases through. Omit → no
    *  fuse, plain intercept timing. */
   weaponFuse?(dist: number): number | undefined;
   /** Host hook: preferred duel distance for the weapon the bot would
-   *  draw at `dist`, against a target at `targetHpFrac` health — a Flak
+   *  draw at `dist`, against a target at `targetHpFrac` health - a Flak
    *  brawler hugs a full-hp foe but won't chase a straggler it can chip
    *  from mid. Omit → the generic orbit midpoint. */
   preferredRange?(dist: number, targetHpFrac?: number): number | undefined;
   /** Host hook: legal refire (s between shots) of the weapon the bot
-   *  would pick at `dist` — the volley cadence scales with it so a
+   *  would pick at `dist` - the volley cadence scales with it so a
    *  chaingun streams while a mortar deliberates. Omit → 0.45s. */
   fireInterval?(dist: number): number;
   /** Host hook: whether the weapon the bot would pick at `dist` is
-   *  gravity-bent — the aim point gets the drop added back so lobbed
+   *  gravity-bent - the aim point gets the drop added back so lobbed
    *  shells don't land short. Omit → flat trajectories. */
   weaponGravity?(dist: number): boolean;
-  /** Blast of the weapon the pick would take at `dist` — feeds the
+  /** Blast of the weapon the pick would take at `dist` - feeds the
    *  self-splash read (r=0 for hitscan/melee). */
   weaponAoe?(dist: number): { r: number; dmg: number };
   /** Host hook: the bot's skill multiplier for the weapon it would pick
-   *  at `dist`, against a target moving at `targetSpeed` — feeds the
+   *  at `dist`, against a target moving at `targetSpeed` - feeds the
    *  skill matrix (snap/track/arc axes, moving vs still split, form).
    *  Omit → every bot shoots at 1×. */
   aimSkill?(dist: number, targetSpeed: number): number;
-  /** Spatial-memory hooks — the host's influence map. QuietDir points
+  /** Spatial-memory hooks - the host's influence map. QuietDir points
    *  at the least-danger-scented ring cell ~160m out (where MY team is
    *  NOT getting hurt); hottest returns the strongest opportunity cell
    *  within ~190m (fights, gems, flag events). Absent without a map. */
   imapQuietDir?(pos: BotVec): { x: number; z: number };
   imapHottest?(pos: BotVec): { x: number; z: number; v: number } | null;
-  /** Raw danger scent at a spot on the caller's team layer — utility
+  /** Raw danger scent at a spot on the caller's team layer - utility
    *  scoring reads it to discount goals in graveyards. */
   imapDanger?(pos: BotVec): number;
 }
@@ -252,24 +269,24 @@ export interface BrainCtx {
 export interface BrainOut {
   /** Where the caller should move the bot this step. */
   dest: BotVec;
-  /** Legal-input hints for the host sim — same keys a human holds.
+  /** Legal-input hints for the host sim - same keys a human holds.
    *  Omitted fields mean "not held". */
   move?: { ski?: boolean; jet?: boolean; jump?: boolean; park?: boolean };
   /** Fire command when the bot wants to shoot this step. */
   fire?: { targetId: string; aim: BotVec };
-  /** Claimed toggle bits — same STATUS mask a human's inputMove carries.
+  /** Claimed toggle bits - same STATUS mask a human's inputMove carries.
    *  The host applies rising-edge antes + drains, so the brain only
    *  picks bits it can afford; omit → keep current status. */
   status?: number;
   /** Belt throw this step (grenade arc at the hunt target). */
   belt?: boolean;
-  /** Deployable claim this step (turret/mine/station) — the same shape a
+  /** Deployable claim this step (turret/mine/station) - the same shape a
    *  human's deploy message carries; the host validates + caps it. */
   deploy?: { kind: string; pos: BotVec };
-  /** Repair-beam tick on the ctx.repair target — the host resolves the
+  /** Repair-beam tick on the ctx.repair target - the host resolves the
    *  key and runs the same heal path a human's repair claim does. */
   repair?: string;
-  /** Situation chatter edge — the senses noticed something worth a line.
+  /** Situation chatter edge - the senses noticed something worth a line.
    *  The host resolves kind→text through botTaunts.chatter (chance +
    *  cooldown live there), so brains never speak directly. */
   say?: { kind: ChatterKind; target?: string; d?: string; h?: string };
@@ -277,18 +294,18 @@ export interface BrainOut {
 
 const FLINCH_S = 0.4;
 
-// Fear / hero — both are sense tuning, never new moves or info. Below
+// Fear / hero - both are sense tuning, never new moves or info. Below
 // FEAR_HP the bot breaks contact (retreat, sloppy suppression on purpose);
 // a rare hero roll on entering that state instead sharpens every sense a
 // human could sharpen: cadence, aim, dodge horizon, acquisition range.
-// Tribes players don't scatter at the first scratch — FEAR_HP sits near
+// Tribes players don't scatter at the first scratch - FEAR_HP sits near
 // death, and the hero roll is a real coin flip toward a last stand.
 
  // per hurt episode, rolled on the rising edge
         // seconds of hero before it cools off
 
 const DEATH_MS = 15_000;  // a death spot stays scary this long
-const DEATH_RANGE = 10;  // m — repel radius around each remembered death
+const DEATH_RANGE = 10;  // m - repel radius around each remembered death
 
 
 export class BotBrain {
@@ -307,6 +324,7 @@ export class BotBrain {
     const h03 = ((Math.sin(spawn.x * 73.1562 + spawn.z * 52.2354 + spawn.y * 9.1512) * 58_342.2154) % 1 + 1) % 1;
     const h04 = ((Math.sin(spawn.x * 27.6197 + spawn.z * 57.5831 + spawn.y * 19.9176) * 31_415.9265) % 1 + 1) % 1;
     const h05 = ((Math.sin(spawn.x * 51.4237 + spawn.z * 93.1157 + spawn.y * 11.1313) * 58_342.2154) % 1 + 1) % 1;
+    const h06 = ((Math.sin(spawn.x * 91.3317 + spawn.z * 41.7213 + spawn.y * 63.2741) * 47_231.8113) % 1 + 1) % 1;
     this.thinkT = h01 * T.brain.thinkS;
     this.beltT = 4 + h02 * 4;
     this.deployT = 8 + h02 * 25;
@@ -315,19 +333,24 @@ export class BotBrain {
     this.duty = T.brain.dutyBase + h03 * T.brain.dutyRand;
     this.social = h04;
     this.sweat = h05 >= 0.88 ? h05 : 0;
+    // Coin-greed trait: hoovers every spill vs plays deathmatch and
+    // barely registers the floor. The goal picker scales pile weight
+    // by it, so the same drop pulls some bots cross-map and leaves
+    // others fighting through it.
+    this.greed = h06;
     this.orbitA = h02 * Math.PI * 2;
     this.orbitDir = h01 < 0.5 ? 1 : -1;
     this.orbitFlipT = 1 + h03 * 1.5;
   }
 
   private thinkT = T.brain.thinkS;
-  // Hunt-stall window — see the comment at the probe site below. Tracks
+  // Hunt-stall window - see the comment at the probe site below. Tracks
   // whether a chase is actually closing; the escape counters can't see
   // the treadmill shape (wobble resets them every window).
   private huntWin = { id: '', t: 0, ax: 0, az: 0, d0: 0, fails: 0 };
   private goalClimbs = 0;
   private goalWin = { t: 0, d: Infinity, ax: 0, az: 0 };
-  /** Wall-walk waypoint — armed when the goal line hits an unclimbable
+  /** Wall-walk waypoint - armed when the goal line hits an unclimbable
    *  face; pickDest steers feet to the gap/low section the probe found. */
   breachGoal: BotVec = { x: 0, y: 0, z: 0 };
   breachUntil = 0;
@@ -335,7 +358,7 @@ export class BotBrain {
   flinchT = 0;
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
   private beltT = 8; // staggered in the constructor along with thinkT
-  // Stuck/dodge senses live in botEscape.ts — escapeS is their state bag.
+  // Stuck/dodge senses live in botEscape.ts - escapeS is their state bag.
   private readonly escapeS: EscapeState = {
     stuckStreak: 0,
     orbitStreak: 0,
@@ -353,10 +376,10 @@ export class BotBrain {
     goal: { x: 0, y: 0, z: 0 }, // kept in sync with goalS.goal each think
   };
   private readonly steerer = new BotSteer();
-  // Meso-scale terrain routing lives in botLines.ts — turns a raw goal
+  // Meso-scale terrain routing lives in botLines.ts - turns a raw goal
   // into a committed landing spot so the steerer walks ski lines.
   private readonly lines = new BotLines();
-  // Idle-goal ladder lives in botGoals.ts — goalS is the state bag it
+  // Idle-goal ladder lives in botGoals.ts - goalS is the state bag it
   // reads/writes so the brain's goal/wander/revenge fields stay private.
   readonly goalS: GoalState = {
     goal: { x: 0, y: 0, z: 0 },
@@ -372,43 +395,44 @@ export class BotBrain {
     (p): boolean => this.nearDeath(p),
     (): number => this.duty,
     (): number => this.social,
+    (): number => this.greed,
   );
-  // Ski/jet/jump hint intents live in botMoves.ts — host closures read
+  // Ski/jet/jump hint intents live in botMoves.ts - host closures read
   // the escape burst latch and the live hunt target.
   private readonly moves = new BotMoves({
     escapeJetT: (): number => this.escapeS.escapeJetT,
     huntPos: (): BotVec | null => this.h.hunt?.pos ?? null,
   });
-  // Death memory — where the host reported this body dying. Souring
+  // Death memory - where the host reported this body dying. Souring
   // goals near a death spot is how map denial emerges: nobody scripts
   // "that corner is dangerous", the squad just stops wandering back.
   private deaths: { x: number; z: number; t: number }[] = [];
   private heroT = 0;      // hero-mode seconds remaining
   private hurtLatch = false; // rising-edge detector for the hero roll
-  // Chatter edge latches — the say field is edge-triggered (fires once
+  // Chatter edge latches - the say field is edge-triggered (fires once
   // per situation), never a steady-state flag.
   private threatLatch = false;
   private boredLatch = false;
-  /** takeHit arms a 'getting shot' line for the next think — flinchT
+  /** takeHit arms a 'getting shot' line for the next think - flinchT
    *  decays silently, but the flinch event is worth one remark. */
   private hitSay = false;
-  // Deploy intent — only some bots are builders, so a stand gets a couple
+  // Deploy intent - only some bots are builders, so a stand gets a couple
   // of sentries rather than a turret farm. Arriving at a defensive anchor
   // (objective in reach, nobody shooting) is the whole trigger: the
   // emplacement emerges from "a defender with time on their hands",
   // not a scripted base layout.
-  // Field-init draws can't use botRand — they run at construction, before a
+  // Field-init draws can't use botRand - they run at construction, before a
   // harness installs a seeded stream, so they made same-seed rooms diverge.
   // Both get re-seeded from the spawn hash inside the constructor instead.
   deployT = 8;
   builder = false;
 
-  /** Hosts can pin the builder trait — a technician role shouldn't be
+  /** Hosts can pin the builder trait - a technician role shouldn't be
    *  a dice roll away from never touching the deploy kit. */
   setBuilder(v: boolean): void { this.builder = v; }
 
   /** Host reports the bot's corpse spot on death, stamped with the
-   *  same clock ctx.now rides — shared sim code never reads wall-clock
+   *  same clock ctx.now rides - shared sim code never reads wall-clock
    *  itself (test harnesses step sim-time, not real time). */
   private now = 0;
   markDeath(pos: BotVec, now: number): void {
@@ -427,39 +451,45 @@ export class BotBrain {
     }
     return false;
   }
-  // Personality scalars — ±20-30% per bot so a squad doesn't read as one
+  // Personality scalars - ±20-30% per bot so a squad doesn't read as one
   // centipede: different preferred ranges, wander appetites, tempers.
-  // Spawn-hash seeded (see constructor) — a field-init botRand here would
+  // Spawn-hash seeded (see constructor) - a field-init botRand here would
   // diverge same-seed rooms before any seeded stream is installed.
   private readonly wanderlust = T.brain.wanderBase;
-  /** How much this bot minds the objective vs the scenery — high duty
+  /** How much this bot minds the objective vs the scenery - high duty
    *  chases heard fights and holds roles, low duty goes sightseeing.
    *  Independent of wanderlust: a hyper tourist and a lazy pro both
    *  exist in a real lobby. */
   private readonly duty = T.brain.dutyBase;
-  /** Gregariousness 0..1 — how much company this bot seeks when the
+  /** Gregariousness 0..1 - how much company this bot seeks when the
    *  match isn't going its way. A 0-social bot is a career lone wolf:
    *  it rallies at the same near-death HP a human soloer would, while
    *  a 1-social bot rattled by a losing match drifts toward teammates
    *  long before it's cornered. */
   private readonly social: number = 0.5;
-  /** Tryhard scalar — 0 for ~88% of bots; the rare sweatlord plays
+  /** Tryhard scalar - 0 for ~88% of bots; the rare sweatlord plays
    *  comp-pub: posted roles still don't figit, and a runner announces
-   *  its cap timing instead of just going. Charm is the rarity — a
+   *  its cap timing instead of just going. Charm is the rarity - a
    *  uniform squad of callers would read as scripted, not sweaty. */
   private readonly sweat: number = 0;
-  /** Held-position strafe orbit — angle advances each pickDest step.
+  /** Coin-greed trait 0..1 - how hard token piles pull the goal pick.
+   *  Near-0 bots play the mode as deathmatch (the pile has to be at
+   *  their feet to outbid a fight); near-1 bots are lobby hoovers who
+   *  cross midfield for a purple spill. Hashed per spawn like the
+   *  rest of the personality. */
+  private readonly greed: number = 0.5;
+  /** Held-position strafe orbit - angle advances each pickDest step.
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads
    *  as a carousel. */
-  // Field-init draws stay literal — the constructor re-seeds them from the
+  // Field-init draws stay literal - the constructor re-seeds them from the
   // spawn hash (botRand here would diverge same-seed rooms pre-stream).
   orbitA = 0;
   orbitDir = 1;
   orbitFlipT = 1;
   orbitMul = 1;
   /** Combat-dance beat: duels alternate a settled "burst" phase (orbit
-   *  crawls — feet quiet, aim steady) with a "relocate" swing (orbit
+   *  crawls - feet quiet, aim steady) with a "relocate" swing (orbit
    *  races to a new angle). The rhythm is what reads human; a constant
    *  carousel doesn't. beatMove=true means the swing is live. */
   beatT = 1;
@@ -469,33 +499,33 @@ export class BotBrain {
   /** Rising-edge latch for the sweatlord's cap call. */
   private pushLatch = false;
   beatMove = false;
-  /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
+  /** Last think resolved to stand-and-shoot - a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
   holding = false;
-  /** Last think's destination — watchdog forensics only: a stuck bot
+  /** Last think's destination - watchdog forensics only: a stuck bot
    *  grinding toward X needs X logged, not just where it is. */
   lastDest: BotVec = { x: 0, y: 0, z: 0 };
-  /** Capper staging patience — seconds spent orbiting outside the
+  /** Capper staging patience - seconds spent orbiting outside the
    *  defended ring waiting for the push wave to catch up. */
   stageT = 0;
-  /** Contested-transit loiter clock — seconds the capper has held at the
+  /** Contested-transit loiter clock - seconds the capper has held at the
    *  edge of a live kill zone waiting for the fight to thin or his wave
    *  to join (pickDest arm/reset). */
   loiterT = 0;
-  /** Hold-off repeller the steerer applies this think — pickDest sets
+  /** Hold-off repeller the steerer applies this think - pickDest sets
    *  it while a defended objective is being staged onto. */
   standoff: { x: number; z: number; radius: number; strength: number } | null = null;
-  /** Lateral weave drive armed by pickDest — the runner's serpentine,
+  /** Lateral weave drive armed by pickDest - the runner's serpentine,
    *  applied inside the steering field rather than as a fake waypoint. */
   weave = 0;
 
-  /** Current hunt target — the belt intent carries no aim of its own,
+  /** Current hunt target - the belt intent carries no aim of its own,
    *  so hosts resolve the throw's arc off this. */
   get currentHuntId(): string | null {
     return this.h.hunt?.id ?? null;
   }
 
-  /** Where the hunt was last actually seen — the only legal aim point
+  /** Where the hunt was last actually seen - the only legal aim point
    *  for a lobbed throw (live position would be a wallhack on a
    *  cloaked or occluded target). `vel` rides along so the throw can
    *  lead by the same velocity the eye measured - a dart at a memory
@@ -504,20 +534,20 @@ export class BotBrain {
     return this.h.hunt ? { x: this.h.lastSeen.x, y: this.h.lastSeen.y, z: this.h.lastSeen.z, vel: this.h.lastSeenVel } : null;
   }
 
-  /** Jet-gate telemetry for the cap-run harness — which gate armed the
+  /** Jet-gate telemetry for the cap-run harness - which gate armed the
    *  last burn plus the latches that could outlive it. */
   get jetDebug(): { why: string; escapeT: number; out: boolean; hold: number } {
     return { why: this.moves.jetWhy, escapeT: this.escapeS.escapeJetT, out: this.moves.jetOut, hold: this.moves.holdFor() };
   }
 
-  /** True while the mount-perch holds a lip for tank refill — the
+  /** True while the mount-perch holds a lip for tank refill - the
    *  disposition reads it to shed drain skills until the mount fires. */
   get mountWait(): boolean { return this.moves.mountWait; }
 
   /** Perched-by-design (breath/mount staging) for the mobility watchdog. */
   get perched(): boolean { return this.moves.perched; }
 
-  /** Snapshot of the escape/mount internals at warn time — the line that
+  /** Snapshot of the escape/mount internals at warn time - the line that
    *  says WHY the bot couldn't close (dry tank, perching, detouring). */
   get stuckDiag(): Record<string, number | boolean> {
     return {
@@ -537,7 +567,7 @@ export class BotBrain {
   private lastPark = false;
   private lastPosted = 0;
 
-  /** The bot's skill matrix — hosts read it to bias weapon selection
+  /** The bot's skill matrix - hosts read it to bias weapon selection
    *  (a phenom draws its good gun) and to build the aimSkill ctx hook. */
   get skill(): BotSkill {
     return this.h.skill;
@@ -545,19 +575,19 @@ export class BotBrain {
 
   /** Role-adherence scalar for role-policy callers (HoF lean, route
    *  discipline): high duty holds the assigned shape, low duty loosens
-   *  it. Guidelines not laws — nobody sits at exactly 1.0. */
+   *  it. Guidelines not laws - nobody sits at exactly 1.0. */
   get dutyLevel(): number {
     return this.duty;
   }
 
-  /** The tryhard read — hosts feed it into FlagSituation so the goal
+  /** The tryhard read - hosts feed it into FlagSituation so the goal
    *  table can give sweaty bots comp-pub behaviors (route-leading the
    *  thief, posting a leash a loose defender wouldn't hold). */
   get sweatLevel(): number {
     return this.sweat;
   }
 
-  /** Getting shot makes the bot recoil — call from the damage funnel. */
+  /** Getting shot makes the bot recoil - call from the damage funnel. */
   takeHit(from: BotVec, attackerId?: string): void {
     this.flinchT = FLINCH_S;
     this.hitSay = true;
@@ -569,12 +599,12 @@ export class BotBrain {
     this.goalS.revengeFrom = { x: from.x, y: from.y, z: from.z };
   }
 
-  /** Situation chatter — rising edges only; the host resolves kind→line
+  /** Situation chatter - rising edges only; the host resolves kind→line
    *  through botTaunts.chatter, which rate-limits anyway, but firing a
    *  steady flag would still waste the cooldown on repeats. Priority is
    *  first-come: wounds outrank contacts outrank ambience. */
   private pickSay(ctx: BrainCtx, hurtEdge: boolean, hero: boolean, wasHunt: string | null): BrainOut['say'] {
-    // Threat/bored latches update every think — skipping them when a
+    // Threat/bored latches update every think - skipping them when a
     // higher-priority line fires would leak a stale 'underfire' next tick.
     const underfire = this.sayThreats(ctx);
     const bored = this.sayBored(ctx);
@@ -582,7 +612,7 @@ export class BotBrain {
     return this.sayHelp(ctx) ?? this.sayHunt(ctx, wasHunt) ?? underfire ?? bored;
   }
 
-  /** Carrier under pressure calls for an escort — when the line comes
+  /** Carrier under pressure calls for an escort - when the line comes
    *  out as VDM/VNE the radio layer turns the chord into a real pin on
    *  this bot's position, so the shout is a call for help, not flavor. */
   private helpUntil = 0;
@@ -594,12 +624,12 @@ export class BotBrain {
     return { kind: 'callfor' };
   }
 
-  /** {h} fill for wound lines — "im at 23hp" reads human, "im hurt" is a bot line. */
+  /** {h} fill for wound lines - "im at 23hp" reads human, "im hurt" is a bot line. */
   private hpTag(ctx: BrainCtx): string | undefined {
     return ctx.healthFrac == null ? undefined : `${Math.round(ctx.healthFrac * 100)}hp`;
   }
 
-  /** {d} fill for spotting lines — compass bearing from self to the
+  /** {d} fill for spotting lines - compass bearing from self to the
    *  last-seen ground, so "contact sw" names where, not just who. */
   private dirTag(ctx: BrainCtx, at?: BotVec | null): string | undefined {
     const t = at ?? this.h.lastSeen;
@@ -619,7 +649,7 @@ export class BotBrain {
     return undefined;
   }
 
-  /** Inbound shells OR a fresh hit — either is "I'm being shot at". */
+  /** Inbound shells OR a fresh hit - either is "I'm being shot at". */
   private sayThreats(ctx: BrainCtx): BrainOut['say'] {
     const threats = (ctx.threats?.length ?? 0) > 0 || this.hitSay;
     this.hitSay = false;
@@ -628,7 +658,7 @@ export class BotBrain {
     return say;
   }
 
-  /** Long silence with nobody acquired — the ambient line. STALE_MS is
+  /** Long silence with nobody acquired - the ambient line. STALE_MS is
    *  too twitchy; a human only remarks on a genuinely empty field. */
   private sayBored(ctx: BrainCtx): BrainOut['say'] {
     const quiet = !this.h.hunt && ctx.now - this.h.lastSeenAt > 40_000;
@@ -638,17 +668,17 @@ export class BotBrain {
     return { kind: 'bored' };
   }
 
-  /** Belt lob: a live target in mid range on a 9s cooldown — grenades
+  /** Belt lob: a live target in mid range on a 9s cooldown - grenades
    *  into a brawl, not at ghosts (stale seen-times don't qualify).
    *  The infiltrator plays it as an ambush: the belt flies at knife
-   *  range in the same tick the cloak drops — belt+primary combo is
+   *  range in the same tick the cloak drops - belt+primary combo is
    *  the whole point of sneaking up. */
   private pickBelt(dt: number, pos: BotVec, now: number, ctx: BrainCtx): boolean {
     this.beltT -= dt;
     if (!this.h.hunt || this.beltT > 0 || now - this.h.lastSeenAt > STALE_MS) {return false;}
     const d = dist3(pos, this.h.lastSeen);
     if (ctx.infiltrating) {
-      // Guideline, not doctrine — only commit to the knife-range combo
+      // Guideline, not doctrine - only commit to the knife-range combo
       // when the setup is favorable: healthy enough to eat the trade,
       // tank carrying the fight, and not walking into a crowd.
       const crowded = (ctx.enemies?.length ?? 0) > 2;
@@ -661,19 +691,25 @@ export class BotBrain {
     return true;
   }
 
-  /** Fear/hero state rides the health fraction — a rare hero roll on the
+  /** Fear/hero state rides the health fraction - a rare hero roll on the
    *  rising edge of getting hurt decides whether low HP means retreat or
    *  a desperate last stand. Latch resets once healed so the next wound
    *  gets a fresh roll. */
   private mood(ctx: BrainCtx, dt: number): { hurtEdge: boolean; hero: boolean; fearing: boolean } {
-    // A hoarder breaks contact earlier — every held token is value the
+    // A hoarder breaks contact earlier - every held token is value the
     // corpse spills, and the headhunt regen drip refills a disengaged
     // carrier anyway. +0.005/held, capped at +0.50: empty pockets still
     // fight to 15% but a 100-token vault bails below ~65%.
-    const fearAt = T.brain.fearHp + Math.min(ctx.held ?? 0, 100) * 0.005;
+    // Broke hunters press DEEPER than the base floor (-0.06 fading to
+    // par at 20 tokens): nothing on the corpse means nothing to lose,
+    // so the empty-pocket bot is the one who dives the guarded vault.
+    // ctx.held is undefined outside headhunt - other modes keep par.
+    const {held} = ctx;
+    const fearAt = T.brain.fearHp + Math.min(held ?? 0, 100) * 0.005
+      - (held === undefined ? 0 : 0.06 * Math.max(0, 1 - held / 20));
     const hurt = (ctx.healthFrac ?? 1) < fearAt;
     const hurtEdge = hurt && !this.hurtLatch;
-    // A nemesis rattles the hero roll — the man who's already killed
+    // A nemesis rattles the hero roll - the man who's already killed
     // this bot twice doesn't inspire a last stand, he ends it.
     const shaken = this.h.lastHitBy && dreadOf(this.h, this.h.lastHitBy.id) >= 2;
     if (hurtEdge && botRand() < T.brain.heroChance * (shaken ? 0.4 : 1)) {this.heroT = T.brain.heroS;}
@@ -694,20 +730,20 @@ export class BotBrain {
 
     const wasHunt = this.h.hunt?.id ?? null;
 
-    // Opt-in stage profiler — FPS_THINK_PROF seeds thinkProf + wallPerf;
+    // Opt-in stage profiler - FPS_THINK_PROF seeds thinkProf + wallPerf;
     // absent, the wrapper costs one undefined check per stage.
     const prof = sharedEnv.thinkProf;
     const pf = prof ? sharedEnv.wallPerf! : (): number => 0;
     const pm = (stage: string, t0: number): void => { if (prof) {prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0);} };
     let tp = pf();
 
-    // Radio commands carry an implied position — a same-team "Defend our
+    // Radio commands carry an implied position - a same-team "Defend our
     // flag!" or "Cover me!" sticks for a stretch instead of dying with the
     // notice tick, so a dutiful bot actually rotates toward the call.
     if (ctx.notice?.goal) {this.radioGoal = Object.assign({}, ctx.notice.goal, {until: now + 25_000});}
     if (this.radioGoal && (now > this.radioGoal.until || distSqXZ(this.radioGoal, pos) < 25 * 25)) {this.radioGoal = null;}
     ctx.radio = this.radioGoal;
-    // Brain-owned trait injected into ctx — pickHunt's ectx clone then
+    // Brain-owned trait injected into ctx - pickHunt's ectx clone then
     // carries it to scanVisible without another parameter thread.
     ctx.sweat = this.sweat;
 
@@ -718,14 +754,14 @@ export class BotBrain {
       pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p): void => this.goals.pick(c, p));
     }
     pm('hunt', tp);
-    // The sweatlord's callout — a committed runner whose push just went
+    // The sweatlord's callout - a committed runner whose push just went
     // live announces the run ("going in") instead of silently flooding.
     // Rising edge only, and it doesn't outrank wound/fear lines.
     const capCall = this.sweat > 0 && ctx.runner && ctx.pushLive && !this.pushLatch;
     this.pushLatch = Boolean(ctx.pushLive);
     let say = this.pickSay(ctx, hurtEdge, hero, wasHunt) ?? (capCall ? { kind: 'capcall' } as const : undefined);
     this.goalS.wanderT -= dt;
-    // detourT decays here, with the other timers — decrementing it inside
+    // detourT decays here, with the other timers - decrementing it inside
     // the dest block below would let the setting call's dt eat the window.
     this.escapeS.detourT -= dt;
     this.escapeS.escapeJetT -= dt;
@@ -739,16 +775,16 @@ export class BotBrain {
     pm('dest', tp);
 
     // --- line planning: commit to a terrain-sampled landing spot ---
-    // Posted bots skip it — ski lines arc around the objective on
+    // Posted bots skip it - ski lines arc around the objective on
     // purpose (downhill bias, side-valley energy plays), which pulls a
     // defender off the stand he's meant to be planted on. Straight
     // home is the right route when the route is 50m.
-    // An armed breach skips it too — the waypoint IS the door/gap the
+    // An armed breach skips it too - the waypoint IS the door/gap the
     // wall machinery found; re-planning it against the objective pulls
     // the feet straight back into the face it exists to walk around
     // (bastion trace: bg=-326,328 → d1=-323,368 → d2=-301,339, bot
     // pinned at the wall 160s+).
-    // An armed breach skips it too — but only the LOCAL wall-walk. A
+    // An armed breach skips it too - but only the LOCAL wall-walk. A
     // far flow-hop breach is still a route leg, and blanket-skipping
     // both planning layers for the whole 25s window disarmed every
     // fight on the way (bastion soak: kills ~90 → ~30).
@@ -767,7 +803,7 @@ export class BotBrain {
     dest = d2;
     pm('steer', tp);
     // Env-gated decision-chain trace: which stage rewrites the step.
-    // FPS_TRACE=<playerId> — soaks print stage deltas for one bot.
+    // FPS_TRACE=<playerId> - soaks print stage deltas for one bot.
     const {traceId} = sharedEnv;
 
     if (ctx.id && traceId && ctx.id.includes(traceId)
@@ -779,7 +815,7 @@ export class BotBrain {
     }
 
     // A deliberate stand-still must not arm the treadmill window inside
-    // stuckBreak — a held combat spot or a mount/breath perch is parked
+    // stuckBreak - a held combat spot or a mount/breath perch is parked
     // by choice, so re-anchor instead of letting it read as a pin.
     if (this.holding || this.moves.perched) {
       this.escapeS.pinT = 0;
@@ -788,7 +824,7 @@ export class BotBrain {
     }
     tp = pf();
     dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);
-    // Hunting is exempt from the waypoint forfeit — but a prey the bot
+    // Hunting is exempt from the waypoint forfeit - but a prey the bot
     // demonstrably can't reach is a wall-grind, not a chase. Windowed
     // streaks can't catch it (the detour/jet escapes wobble a walled
     // bot ≥2m a window, resetting every counter), so measure the hunt
@@ -801,7 +837,7 @@ export class BotBrain {
     // normal transition once the filter drops it.
     if (this.h.hunt) {
       const hp = this.h.hunt.pos;
-      // The window survives target flips — a defended pocket holds
+      // The window survives target flips - a defended pocket holds
       // several visible enemies and pickHunt rotates between them, so
       // anchoring per-id resets the clock before it can ever mature.
       // The stall is the POCKET: only real movement or a target swap
@@ -818,7 +854,7 @@ export class BotBrain {
         const closed = this.huntWin.d0 - Math.hypot(hp.x - pos.x, hp.z - pos.z);
         const stalled = moved < 4 && closed < 4;
         if (stalled && preyUnreachable(ctx, pos, hp) && this.huntWin.fails === 0) {
-          // First verdict on a walled pocket isn't a blacklist — it's the
+          // First verdict on a walled pocket isn't a blacklist - it's the
           // designed breach: spend the TANK scaling the face (3s ≈ 27m,
           // clears bastion's 21m gate where the 1.1s escape sips can't).
           // The dest still drives INTO the wall, so the burn climbs it.
@@ -826,12 +862,12 @@ export class BotBrain {
           this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3);
           this.huntWin.fails = 1;
         } else if (stalled && (preyUnreachable(ctx, pos, hp) || (this.huntWin.fails += 1) >= 3)) {
-          // The pocket is unreachable, not just this prey — a defended
+          // The pocket is unreachable, not just this prey - a defended
           // gate holds several enemies, and blacklisting one at a time
           // re-arms the stall on each next-nearest. Everything huddled
           // near the unreachable target goes on the list together.
           // (Probe-false three-strikes: the geometry says a route exists
-          // but the escape kit can't find it — same grind, same fix.)
+          // but the escape kit can't find it - same grind, same fix.)
           for (const e of ctx.enemies) {
             // oxlint-disable-next-line max-depth -- nesting tracks the hunt-failure branches above
             if (e.alive && distSqXZ(e.pos, hp) < 35 * 35) {this.h.unreachUntil.set(e.id, now + 30_000);}
@@ -848,19 +884,19 @@ export class BotBrain {
       this.huntWin.t = 0; this.huntWin.fails = 0;
     }
     // A goal the escape senses can't reach after ~4 failures is a bad
-    // roll, not a challenge — forfeit the wander waypoint so the next
+    // roll, not a challenge - forfeit the wander waypoint so the next
     // roll picks a new line instead of grinding the same wall forever.
     // Either streak counts: pinned grind or the orbit treadmill that
     // displaces without closing. But first, one designed-breach check:
     // if a structure wall sits on the straight path and its top is
     // inside the full-tank climb envelope (curtains ~17m, not 85m gate
     // towers), spend the tank scaling it before giving up the waypoint.
-    // While a breach owns the feet, the stall counters must not grow —
+    // While a breach owns the feet, the stall counters must not grow -
     // the bot is deliberately walking a waypoint that ISN'T the goal,
     // so "not closing on goal" measures the escape itself, not a new
     // pin. Left counted, each breach re-arms the next: armed bg drives
     // feet off-goal, orbitStreak hits 4, wallResponse rolls another
-    // 25s breach — the flag-carrier midfield orbit (capRun autopsy).
+    // 25s breach - the flag-carrier midfield orbit (capRun autopsy).
     if (this.breachUntil > now) {
       this.escapeS.stuckStreak = 0;
       this.escapeS.orbitStreak = 0;
@@ -868,7 +904,7 @@ export class BotBrain {
     const streak = Math.max(this.escapeS.stuckStreak, this.escapeS.orbitStreak);
     // Committed tasks outrank the hunt exemption: a besieger/runner
     // stalled on a vault wall with a live foe in sight still needs the
-    // breach machinery — inside an enemy base there is ALWAYS a hunt
+    // breach machinery - inside an enemy base there is ALWAYS a hunt
     // target, so `!this.h.hunt` would silence wallResponse exactly where
     // it's needed (siege probe: besieger parked at the door face 100s+).
     const committed = Boolean(ctx.wave || ctx.runner || ctx.running);
@@ -880,7 +916,7 @@ export class BotBrain {
       this.goalClimbs = 0;
     }
     // Proactive egress: a wall right in front of the bot on a long-range
-    // goal line means it's pressing its own compound's interior — the
+    // goal line means it's pressing its own compound's interior - the
     // authored passTeam gate is air to it. Don't wait for a stall to
     // mature before finding the door; spawning inside a fortress burns
     // ~6s a life otherwise. ownGate only matches MY team's panes, so it
@@ -901,7 +937,7 @@ export class BotBrain {
         }
       }
     }
-    // Macro progress check — the detector the motion counters can't
+    // Macro progress check - the detector the motion counters can't
     // fake: a bot lapping a compound interior at 15m/s moves plenty but
     // never closes on the goal. Six seconds older and no nearer, with a
     // wall still on the goal line, gets the same climb-or-breach as a
@@ -914,7 +950,7 @@ export class BotBrain {
         const moved = Math.hypot(pos.x - this.goalWin.ax, pos.z - this.goalWin.az);
         if (d > 12 && this.goalWin.d - d < 8) {
           if (moved < 1.5) {
-            // v≈0 with jets armed isn't a stall, it's a wedge — the bot
+            // v≈0 with jets armed isn't a stall, it's a wedge - the bot
             // is folded into a structure pocket and every tangent probe
             // still reads wall. Back straight out of the pocket, then
             // let the next window route again.
@@ -957,7 +993,7 @@ export class BotBrain {
 
     if (!say && belt) {say = { kind: 'belt' };}
     if (!say && deploy) {say = { kind: 'deploy' };}
-    // Room-event notice — last priority: a wound or a fresh contact is
+    // Room-event notice - last priority: a wound or a fresh contact is
     // worth more words than scoreboard commentary.
     if (!say && ctx.notice) {say = { kind: ctx.notice.kind, target: ctx.notice.actor };}
 
@@ -976,7 +1012,7 @@ export class BotBrain {
    *  section the wall probe found; no structure at all → plain waypoint
    *  forfeit (terrain stall, not a wall problem). */
   private wallResponse(ctx: BrainCtx, pos: BotVec, now: number): void {
-    // The authored exit first: a passTeam pane is our team's door — it
+    // The authored exit first: a passTeam pane is our team's door - it
     // reads as air to us and solid to enemies, so walking THROUGH it is
     // always cheaper than climbing curtains. Only relevant when the
     // goal is on the far side of the walls; the pane must lie roughly
@@ -995,10 +1031,10 @@ this.goalClimbs += 1;
     } else {
       let breach = wallTop === null ? null : breachAlongWall(ctx, pos, this.goalS.goal);
       if (!breach && ctx.route && this.goalS.goal) {
-        // The face probe only scans ±60m — a fortress wall's real
+        // The face probe only scans ±60m - a fortress wall's real
         // opening can sit farther along. The structure-aware flood
         // already threads it; take the next hop as the waypoint rather
-        // than forfeiting to a re-approach loop — but only a hop the
+        // than forfeiting to a re-approach loop - but only a hop the
         // bot can actually walk to: a cell center sitting behind wall
         // geometry re-arms the same pin it was meant to break.
         const hop = ctx.route(pos.x, pos.z, this.goalS.goal.x, this.goalS.goal.z, 90);
@@ -1018,4 +1054,4 @@ this.goalClimbs += 1;
   }
 }
 
-// dist3/distSq live in botVec.ts — shared by the brain family.
+// dist3/distSq live in botVec.ts - shared by the brain family.
