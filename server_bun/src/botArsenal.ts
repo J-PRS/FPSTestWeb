@@ -176,9 +176,10 @@ s[kind] += 1; this.propels.set(id, s);
           if (!tr.lag) {tr.lag = Object.assign({}, live);}
           // Beams pursue tighter: 0.85/tick is ~230ms of lag = ~2.3m of
           // permanent miss on a strafing target - fair for a lobbed bolt,
-          // but a hitscan shaft owes no flight time; ~115ms still leaves
-          // honest jink reaction without trailing the runner by a body.
-          const chase = (tr.wt !== undefined && (getWeaponStats(tr.wt)?.speed ?? 1) === 0) ? 0.93 : 0.85;
+          // but a hitscan shaft owes no flight time. 0.96 lands ~45%
+          // shaft-uptime on impossible skill (the T:Tribes LG bar) while
+          // still leaving jink reaction room.
+          const chase = (tr.wt !== undefined && (getWeaponStats(tr.wt)?.speed ?? 1) === 0) ? 0.96 : 0.85;
           tr.lag.x += (live.x - tr.lag.x) * chase;
           tr.lag.y += (live.y - tr.lag.y) * chase;
           tr.lag.z += (live.z - tr.lag.z) * chase;
@@ -201,7 +202,7 @@ s[kind] += 1; this.propels.set(id, s);
         // strength scatter just sweeps the ray across the target instead
         // of dwelling (~22% uptime measured vs the ~85% a human holds).
         const beam = tr.wt !== undefined && (getWeaponStats(tr.wt)?.speed ?? 1) === 0;
-        const sig = tr.sig * (0.35 + 1.3 * tr.diff) * (beam ? 0.45 : 1);
+        const sig = tr.sig * (0.35 + 1.3 * tr.diff) * (beam ? 0.35 : 1);
         // Unit motion axis for ahead/behind weighting (zero speed → isotropic).
         const v = tr.tv, vl = v ? Math.hypot(v.x, v.y, v.z) : 0;
         const ax = vl > 1 ? v!.x / vl : 1, ay = vl > 1 ? v!.y / vl : 0, az = vl > 1 ? v!.z / vl : 0;
