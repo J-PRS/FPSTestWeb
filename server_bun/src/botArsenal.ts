@@ -344,13 +344,18 @@ s[kind] += 1; this.propels.set(id, s);
     // is arming him. Team plating goes through the belt path; a duel
     // never wants this shot.
     if (wt === WeaponType.ArmorGrenade) {return;}
-    // Fuse weapons detonate wherever the shell is at fuse — aim the POP
-    // point, not the target. Solve the launch dir that puts the fuse-end
-    // position on the target's led position; outside the reachable shell
-    // (|u|≠1) the volley is confetti and the trigger stays held.
+    // Fuse-only carriers (MRV) detonate wherever the shell is at fuse —
+    // aim the POP point, not the target. Solve the launch dir that puts
+    // the fuse-end position on the target's led position; the ±5% band
+    // that used to gate this starved every reach-capped aoe slug (rail,
+    // plasma: contact pops, not airbursts — they were refused forever).
+    // Bomblets release FORWARD of the pop, so the burst only pays when
+    // it lands at-or-just-past the target — a close target gets overflown
+    // (MRV's ~82m carry is a >60m weapon; inside the 45m acquire cap it
+    // honestly has no shot), and confetti past ~1.4x is waste.
     let fuseSolved = false;
     const stF = getWeaponStats(wt);
-    if (stF && stF.aoeRadius > 0 && stF.maxLifetime != null && stF.maxLifetime <= 2 && stF.speed > 0) {
+    if (stF?.fuseOnly && stF.maxLifetime != null && stF.speed > 0) {
       const f = stF.maxLifetime, inh = stF.inherit ?? 0.5;
       const tv = target.velocity;
       const qx = target.position.x + tv.x * f - muzzle.x - p.velocity.x * inh * f;
@@ -358,7 +363,7 @@ s[kind] += 1; this.propels.set(id, s);
       const qz = target.position.z + tv.z * f - muzzle.z - p.velocity.z * inh * f;
       const sf = stF.speed * f;
       const ul = Math.hypot(qx, qy, qz) / sf;
-      if (ul < 0.85 || ul > 1.05) {return;}
+      if (ul < 0.85 || ul > 1.4) {return;}
       aim.x = muzzle.x + qx / sf; aim.y = muzzle.y + qy / sf; aim.z = muzzle.z + qz / sf;
       fuseSolved = true;
     }
