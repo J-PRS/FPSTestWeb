@@ -192,11 +192,11 @@ export const WEAPONS_B: Record<number, WeaponStats> = {
   [WeaponType.MRVBomblet]: {
     // Airburst child - contact pop on whatever it rains onto. Count is
     // the weapon: 6 × ~29 max ≈ a mortar's worth spread over an area.
-    // 16m ring: six overlapping footprints make a real denial field -
+    // 20m ring: six overlapping footprints make a real denial field -
     // at 6m the rain read as fireworks, not zoning.
     directDamage: 18,
     aoeDamage: 20,
-    aoeRadius: 16,
+    aoeRadius: 20,
     knockbackForce: 8,
     forceMode: 'push',
     speed: 0, // scattered by the carrier, never muzzle-fired
