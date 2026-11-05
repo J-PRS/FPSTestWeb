@@ -497,9 +497,11 @@ export class BotBrain {
 
   /** Where the hunt was last actually seen — the only legal aim point
    *  for a lobbed throw (live position would be a wallhack on a
-   *  cloaked or occluded target). */
-  get currentHuntSeen(): BotVec | null {
-    return this.h.hunt ? { x: this.h.lastSeen.x, y: this.h.lastSeen.y, z: this.h.lastSeen.z } : null;
+   *  cloaked or occluded target). `vel` rides along so the throw can
+   *  lead by the same velocity the eye measured - a dart at a memory
+   *  point is a guaranteed miss on a runner. */
+  get currentHuntSeen(): (BotVec & { vel: BotVec }) | null {
+    return this.h.hunt ? { x: this.h.lastSeen.x, y: this.h.lastSeen.y, z: this.h.lastSeen.z, vel: this.h.lastSeenVel } : null;
   }
 
   /** Jet-gate telemetry for the cap-run harness — which gate armed the

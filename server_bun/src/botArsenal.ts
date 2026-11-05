@@ -114,7 +114,7 @@ s[kind] += 1; this.propels.set(id, s);
     public room: Room,
     public loadouts: Map<string, BotLoadout>,
     private lastHuntCb: (botId: string) => string | null,
-    private huntSeenCb: (botId: string) => BotVec | null = (): null => null,
+    private huntSeenCb: (botId: string) => (BotVec & { vel?: BotVec }) | null = (): null => null,
     /** The shooter brain's skill matrix — biases the draw toward the
      *  gun the bot is actually good with (same bias the senses use,
      *  so advertised weaponSpeed and fired weapon agree). */
@@ -369,7 +369,7 @@ s[kind] += 1; this.propels.set(id, s);
     // Arm-gated ordnance under the arm window plays the BOUNCE-SERVE:
     // lob the dirt ~10m AHEAD of the runner's path - the shell thuds,
     // skids forward still cooking, and pops where they're headed.
-    if ((stF?.armTime ?? 0) > 0 && stF.speed > 0 && dist < stF.speed * stF.armTime * 0.35 && dist > 8) {
+    if ((stF?.armTime ?? 0) > 0 && stF.speed > 0 && dist < stF.speed * (stF.armTime ?? 0) * 0.35 && dist > 8) {
       const tv = target.velocity, ts = Math.hypot(tv.x, tv.z);
       const lx = ts > 2 ? (tv.x / ts) * 10 : 0, lz = ts > 2 ? (tv.z / ts) * 10 : 0;
       const gx = aim.x + lx, gz = aim.z + lz;
@@ -709,7 +709,7 @@ s[kind] += 1; this.propels.set(id, s);
    *  skips the self-splash veto: a besieger hugging a generator must
    *  lob closer than its own blast envelope — eating falloff IS the
    *  sabotage, humans disc a gen point-blank. */
-  lobAt(p: BotBody, aim: Vec3, riskSelf = false): boolean {
+  lobAt(p: BotBody, aim: Vec3 & { vel?: BotVec }, riskSelf = false): boolean {
     const want = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
     const wt = classCanFire(p.armorClass, want) ? want : WeaponType.Grenade;
     const stats = getWeaponStats(wt);
@@ -718,8 +718,17 @@ s[kind] += 1; this.propels.set(id, s);
     // fizzle until a nugget restocks it (brains see ctx.pickup for that).
     const body = this.room.players.getPlayer(p.id);
     if (body && body.beltCharges < BELT_THROW_COST) {return false;}
-    const dx = aim.x - p.position.x, dz = aim.z - p.position.z;
-    const d = Math.hypot(dx, dz) || 1;
+    let dx = aim.x - p.position.x, dz = aim.z - p.position.z;
+    let d = Math.hypot(dx, dz) || 1;
+    // Seen-velocity lead: the aim point is a memory, not the live body -
+    // splash belts shrug off a ~5m drift; a Javelin's 0.25m skewer does
+    // not. Lead by the same velocity the eye measured, roughly the
+    // shell's flat flight time.
+    if (aim.vel) {
+      const flight = d / stats.speed;
+      dx += aim.vel.x * flight; dz += aim.vel.z * flight;
+      d = Math.hypot(dx, dz) || 1;
+    }
     // Ballistic lob: range = v²·sin(2θ)/|g| — solve θ for the target's
     // distance instead of guessing a pitch, since the grenade's 13m
     // splash can't cover a 15m overshoot. Rails stay flat.

@@ -1,7 +1,6 @@
 import { it, expect } from 'bun:test';
 import { mkRoom, step, pin } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
-import type { BotLoadout } from '../../../shared/botLoadouts.ts';
 
 it('melee probe: who punches from far?', () => {
   const room = mkRoom({ mode: 'dm', bots: 6, botSkill: 'impossible', arena: { x: 0, z: 0, radius: 300 } }, 'dm', 201, false);
