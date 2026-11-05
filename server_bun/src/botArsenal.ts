@@ -374,7 +374,7 @@ s[kind] += 1; this.propels.set(id, s);
       const qz = target.position.z + tv.z * f - muzzle.z - p.velocity.z * inh * f;
       const sf = stF.speed * f;
       const ul = Math.hypot(qx, qy, qz) / sf;
-      if (ul < 0.85 || ul > 1.4) {return;}
+      if (ul < 0.85 || ul > 1.15) {return;} // past ~1.15x carry the burst always overshoots (soak: 282 volleys at 120+m, 0 hits)
       aim.x = muzzle.x + qx / sf; aim.y = muzzle.y + qy / sf; aim.z = muzzle.z + qz / sf;
       fuseSolved = true;
     }
