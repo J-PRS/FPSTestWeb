@@ -162,12 +162,16 @@ export class RemoteDeployables {
       const b = rspec.make(this.deps.scene, terrain, at);
       b.unfoldDone();
       if (hp !== undefined) { b.health = hp; b.armor = armor ?? 0; }
+      // Only DeployShield exposes flash() - turret/mortar/cg carry a
+      // THREE.Sprite *field* named flash, and ?.bind on it threw, killing
+      // every remote spawn of those kinds (DEPLOY DESYNC, invisible guns).
+      const bFlash = (b as { flash?: unknown }).flash;
       item = {
         kind, candId: `rdep:${id}`, pos: b.pos, dead: false,
         hurt: (): void => { return; }, // server owns its lifetime - deployGone removes it
         update: (dt): void => b.update(dt, rspec.scans ? this.enemies() : undefined),
         dispose: (): void => b.dispose(this.deps.scene),
-        v: b, owner, flash: (b as { flash?: () => void }).flash?.bind(b),
+        v: b, owner, flash: typeof bFlash === 'function' ? (bFlash as () => void).bind(b) : undefined,
       };
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);

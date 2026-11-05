@@ -8,7 +8,7 @@ import { injectHeightmapBytes, getHeightmapData, getHeightfield, setTerrainBumps
 const N = 65;
 const flat = new Uint8Array(N * N).fill(80);
 
-function byteAt(data: Uint8ClampedArray, x: number, z: number): number {
+function byteAt(data: ArrayLike<number>, x: number, z: number): number {
   return data[(((z + N) % N) * N + ((x + N) % N)) * 4]!;
 }
 
