@@ -100,12 +100,13 @@ describe('scenario: weapon matchups at near band (10m)', () => {
 });
 
 describe('scenario: weapon matchups at mid band (25m)', () => {
-  it('the cannon owns the disc duel — banded splash flipped it', () => {
-    // Used to be disc's upset win via fatter proxy + 1.5x direct-bloom.
-    // Banded splash pays 75/50/25% of the DIRECT hit — cannon's 70dmg
-    // shell splashes up to 52 where the old linear aoeDamage gave ~15.
-    // Observed: cannon 5/5. A disc comeback means the band table moved.
-    expect(wins(series(KIT.beam, KIT.bruiser, 25), 'b')).toBeGreaterThanOrEqual(4);
+  it('lightning at mid band contests the cannon - a razor coin flip', () => {
+    // The beam-rider kit now draws Lightning at mid band (its measured
+    // 25-60m apex) instead of Disc - so this duel reads LG vs cannon:
+    // the shaft's standoff tracking vs the 70dmg banded slug went
+    // 2/2/1 observed - contested, nobody free-wins. Pin resolution.
+    const r = series(KIT.beam, KIT.bruiser, 25);
+    expect(r.filter((x): boolean => x.w !== '-').length).toBeGreaterThanOrEqual(4);
   });
 
   it('plasma cannon edges the support plinker', () => {

@@ -80,9 +80,9 @@ export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol,
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.MissileLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] },
   },  // artillery
-  { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.Implodisc,      side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] },
-  },  // beam rider
+  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Lightning, far: WeaponType.Railgun,       belt: WeaponType.Implodisc,      side: WeaponType.Pistol,
+    alts: { near: [WeaponType.Flak], mid: [WeaponType.Cannon, WeaponType.Gonne, WeaponType.Disc], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] },
+  },  // beam rider - LG apex is 25-60m (measured, not close): CG brawls
   { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.MissileLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver,
     alts: { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Basilisk], far: [WeaponType.Mortar], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] },
   },  // trapper
@@ -112,9 +112,10 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   // Heavy ordnance stays in far/belt - the class gate only reads those
   //  slots for tier-locks, so a mortar in `near` would be invisible to
   //  derivation (and the authored kits never put it there either).
-  // Slot pools follow the measured range curves (teamSoak --force band
-  // table, 2026-10): chaingun peaks at 25-60m, lightning dies past 60m,
-  // rocket connects best at 25-60 - all mid-band guns, not near/far.
+  // Slot pools follow the measured range curves (teamSoak --cycle band
+  // table, 2026-11): chaingun peaks 10-25m, lightning converts 25-60m,
+  // bolt is the standoff gun - mid holds the 25-60 shells, near the
+  // knife fighters.
   // Sprinkler fights inside 15m - a 120m/s lob is flat at knife range,
   // the cone fits inside its pop; at mid band it just arcs short.
   near: [WeaponType.Shotgun, WeaponType.Flak, WeaponType.Sprinkler],
