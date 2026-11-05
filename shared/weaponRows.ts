@@ -594,6 +594,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.25, // near-contact only - an 8m proxy popped the carrier on anything nearby
     hitGrow: 2,
     maxLifetime: 1.6, // fuse pop releases the bomblets
+    fuseOnly: true,   // bodies don't pop it - an impact cluster is a
+                    // strictly-better grenade (same logic as MRV). Terrain
+                    // and walls still stop it - that's the ground-pop lane.
     cluster: { count: 5, radius: 9 }, // bomblet scatter footprint around the pop
   },
   [WeaponType.ClusterBomblet]: {
