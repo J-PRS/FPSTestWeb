@@ -397,6 +397,19 @@ s[kind] += 1; this.propels.set(id, s);
         aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : aim.y - 1.4;
       }
     }
+    // Splash-serve for direct-fire aoe guns (PlasmaCannon & friends):
+    // vs fast lateral movers at range, aim the dirt under the led point -
+    // a whiff becomes a guaranteed splash tag instead of a bolt landing
+    // 40m behind them. Straight runners still eat the direct hit.
+    else if (stF && stF.aoeRadius > 0 && !stF.fuseOnly && !stF.terrainBounce && (stF.bodyArmTime ?? stF.armTime ?? 0) === 0 && stF.speed > 0 && dist > 20 && dist < 80) {
+      const tv = target.velocity;
+      const ux = dx0 / dist, uz = dz0 / dist;
+      const lat = Math.abs(tv.x * -uz + tv.z * ux);
+      if (lat > 8) {
+        const gx = aim.x, gz = aim.z;
+        aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : aim.y - 1.4;
+      }
+    }
     if (stF?.fuseOnly && stF.maxLifetime != null && stF.speed > 0) {
       const f = stF.maxLifetime, inh = stF.inherit ?? 0.5;
       const tv = target.velocity;
