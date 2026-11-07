@@ -214,9 +214,13 @@ export class SnapshotBuffer {
       // arrival ratchet the delay up, and each jump rewound/damped
       // renderTime — remotes lurched on straight paths despite a full
       // buffer. ~160ms/s up converges on a real degradation in ~1s while
-      // single late packets ride extrapolation instead. Deflate ~200ms/s.
+      // single late packets ride extrapolation instead. Deflate rides
+      // rateScale too — a fixed -10/push on a sparse stream deflated
+      // ~8x slower than it inflated, so recovered streams sat parked
+      // at a stale-high delay (the 575ms delayMs plateaus) long past
+      // the need.
       const slewUp = Math.min(8 * rateScale, target - this.interpDelay);
-      this.interpDelay += Math.max(-10, slewUp);
+      this.interpDelay += Math.max(-10 * rateScale, slewUp);
     }
 
     // Finite-but-absurd is the other half of the wire class: no mover
