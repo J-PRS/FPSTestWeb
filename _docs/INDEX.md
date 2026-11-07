@@ -23,6 +23,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-17_TERRAIN_COMPILE_STALL.md` | The 40s browser hang |
 | `_docs/2026-10-22_FRONTEND_AUDIT.md` | Vanilla DOM layer vs published best practice — near-optimal; residual gaps |
 | `_docs/2026-10-28_CLASS_ASSET_DUPLICATION.md` | Live class GLBs embed duplicate 32-clip sets (~722 KB redundant); shared-pack option and prerequisites |
+| `_docs/2026-11-07_CLIP_STRIP_MIGRATION.md` | **Post-strip clip wiring** — where each rig's clips come from now (scout pack / kevdev / UAL maps), polyart re-sourced, and the unclosed gap: scifisoldier/vexa/polyart have no non-loco bone map |
 | `_docs/2026-10-28_LAG_COMP_WYSIWYG.md` | Lag-comp reference: industry practices, our rewind pipeline, ghostsoak numbers, remaining accuracy work |
 | `_docs/2026-10-28_NDC_PROJECTION.md` | Overscan-canvas NDC mapping — why head markers drifted, the ndcScreen contract, what to reuse |
 | `_docs/2026-10-23_SERVER_HOTPATH_AUDIT.md` | **Server hot-path footgun audit** — projStep/link allocations, remaining dhypot3 swaps, per-tick grid rebuild, roster builders; ordered by payoff/risk |
@@ -102,7 +103,9 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/traps/2026-10-31_audio-stop-pop.md` | Trap: bare `stop()` mid-waveform clicks — global 15ms fade patch in `audio.ts` beats patching every call site |
 | `_docs/2026-11-05_BOT_WEAPON_USE_AUDIT.md` | Bot weapon-use audit — full cycle-table sweep: 16 commits (body-bounce, bodyArmTime gate, far-slot GL/bolt, situational sidearms, hose/disc orbits, flak+splash serves), pinned-bench board, remaining balance items |
 | `_docs/2026-11-07_MOAT_AUDIT.md` | Bundle-exposure audit + hardening plan: P2P authority sealed, remaining inventory ranked, import-boundary ratchet + static dev-tool gating as next steps |
+| `_docs/2026-11-07_MAPLAB_REGEN_PERF.md` | **maplab regen autopsy** — Alt+Q prof-ring added; 1.9s@449² is all gen.ts math (mesh/shader ~60ms). Python sidecar (`_tools/bench/gen_bench.py`): numba≈WASM≈2–8× only, `prange` 29× on synth; priorityFlood heap-encoding bug found; ranked fixes (separable glacier, cached drainage, worker pool, draft grid) |
 | `_docs/2026-11-07_SESSION_LOG.md` | Session log: capper fix, foreign-WIP batches, LAN/P2P exclusion, moat ratchet, offline ctx fills - commits, verified state, open items, lessons |
+| `_docs/2026-11-07_MAPSHOT_BLIND_SHOTS.md` | check.sh mapshot step runs without E2E_GPU - captured 4KB black JOINING screens while gate passed; GPU rerun renders fine but logs a persistent 123m SNAP-correction storm (staging warp vs authority shadow, journal=0); fix options + bisect note |
 
 ## Agent memory (append-only, one line each)
 

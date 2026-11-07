@@ -925,6 +925,7 @@ export class PlayerModel {
     this.skinnedMeshes.push(...kept, mm, ...rigid);
     this.atlasParts.length = 0;
     this.atlasParts.push(mm);
+    this.invalidateHulls(); // consumed meshes carried the hull clones
   }
 
   /** Rigid accessories are non-skinned meshes parented under a skeleton
@@ -1079,6 +1080,7 @@ export class PlayerModel {
     this.skinnedMeshes.length = 0;
     this.skinnedMeshes.push(...merged);
     this.lodGeoBuckets = geoBuckets;
+    this.invalidateHulls(); // the swap removed the meshes hulls ride
   }
 
   /** remapLod hook - merges the lod1 geo list into the same material
@@ -1573,6 +1575,18 @@ export class PlayerModel {
       this.gunHulls.push(h);
     }
     for (const h of this.gunHulls) {h.visible = this.hulls[0]?.visible ?? false;}
+  }
+
+  /** The atlas/LOD mesh swaps above consume the meshes hull clones were
+   *  parented to — leave them and `hulls.length > 0` suppresses every
+   *  future rebuild (the "enemy with no outline" bug). Drop the orphans;
+   *  the next setOutline tick rebuilds on the live meshes. */
+  private invalidateHulls(): void {
+    if (this.hulls.length === 0 && this.gunHulls.length === 0) {return;}
+    for (const h of this.hulls) {h.removeFromParent();}
+    for (const h of this.gunHulls) {h.removeFromParent();}
+    this.hulls.length = 0;
+    this.gunHulls.length = 0;
   }
 
   /** Enemy outline - hex shows a normal-extruded silhouette drawn

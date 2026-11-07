@@ -36,6 +36,7 @@ export interface LoadoutHost {
   packItem: DeployKind;
   skill: SkillId;
   fireTimer: number;
+  weaponDrawT: number;
   model: PlayerModel | null;
   scene: THREE.Scene;
   movement: MovementController;
@@ -338,6 +339,9 @@ export class PlayerLoadout {
   /** Weapon changed: viewmodel/audio hook + the third-person body's
    *  lower→raise swap dip; the hand prop becomes the real weapon. */
   emitWeaponSwitch(wid: number): void {
+    // Fire lock for the full swap cycle - a pull-out isn't shootable
+    // until the gun is back up (same window SIDEARM_DRAW_TIME paints).
+    this.h.weaponDrawT = SIDEARM_DRAW_TIME;
     this.h.onWeaponSwitch?.(wid);
     // The model's hand prop keys on the WIRE weaponType (remote fires feed
     // it enums) — a raw wid would look the slot index up as an enum and

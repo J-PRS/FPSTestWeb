@@ -20,6 +20,9 @@ const logger = new ChildLogger('Impulse');
    *  and the server rejects every claim (same gate, appliedClass). */
 function wantFireWeapon(p: Player, wid: number, auto: boolean): boolean {
     if (p.throwLockT > 0 || PlayerLoadout.lockedForClass(p.appliedClass, wid)) {return false;}
+    // Swap draw lock - the gun is still coming up; taps ride firePending
+    // (kept below) so a press mid-draw fires the moment it's out.
+    if (p.weaponDrawT > 0) {return false;}
     // Pool ammo (PlasmaGun pilot): a dry pool doesn't burn fireTimer or
     // play the anim - the next tick re-tries, so the trickle regen IS
     // the sustained cadence once the clip drains. fire.ts does the spend.
@@ -64,7 +67,7 @@ export function fireWeapons(p: Player): void {
       p.shootAnimTimer = 0.3;
       p.onWeaponFire?.(def, { origin: p.pos.clone(), dir: p.getAimDir(), playerVel: p.vel.clone() });
     }
-    p.input.firePending = false;
+    if (p.weaponDrawT <= 0) {p.input.firePending = false;}
 
     // Belt item (C key) — the equipped throw; hold to repeat. The throw
     // lock gates too: a stretched throw (satchel ≈ 1.9s) outlasts the 1s

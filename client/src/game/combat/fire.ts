@@ -160,9 +160,13 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // arcBlockedAt replay a slower, undeflected arc that clips walls the
   // real shell cleared ("flight blocked" rejects on honest hits).
   const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
-  // NetProbe: claimed-vs-flown drift — must stay ~0 or the server's
+  // NetProbe: claimed-vs-flown drift - must stay ~0 or the server's
   // arc replay diverges (the 'flight blocked' phantom-reject class).
-  spawnDrift(velocity.distanceTo(p.vel));
+  // Jittered shells (bloom/spread cones) SKIP this: their claim is the
+  // RAW aim dir by design - the server re-derives the identical seeded
+  // jitter off shotId, so |claimVel - p.vel| measures the cone angle,
+  // not a bug (chaingun spray read as a 24 m/s "drift" storm).
+  if (e.bloomRadius === undefined) {spawnDrift(velocity.distanceTo(p.vel));}
   if (serverSimmed(config.weaponType)) {
     // Claimless path: the intent is all we send — the server spawns its
     // own authoritative shell and echoes shotId on projectileCreated,
@@ -314,6 +318,7 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
     spawnProjectile(deps, def.config, { origin: e.origin, dir: e.dir, playerVel: e.playerVel,
       bloomRadius: def.bloom.base + pl.bloom, bloomSeq: pl.bloomSeq++ });
     pl.bloom = Math.min(def.bloom.max, (pl.bloom + def.bloom.rate) * def.bloom.exp);
+    pl.bloomDecay = def.bloom.decay; // residue drains at the growing weapon's rate (swap-safe)
     return;
   }
   if (def.spread) {

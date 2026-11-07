@@ -439,9 +439,19 @@ export class Player {
   /** Bloom cone radius for def.bloom weapons (chaingun): grows per shot,
    *  decays in tickTimers. Dir-offset units - 0 = pixel tight. */
   bloom = 0;
+  /** Residual cone drain rate - stamped by the weapon that grew the
+   *  bloom, so a weapon swap keeps decaying it (the server's lazy decay
+   *  covers the whole gap at the generating weapon's rate; gating decay
+   *  on the CURRENT weapon's def froze the cone across swaps). */
+  bloomDecay = 0;
   /** Predicted cone draw counter - mirrors the server's bloomSeq so the
    *  jitter seed (idSeed(id) ^ seq) matches the authoritative draw. */
   bloomSeq = 0;
+  /** Swap draw lock - set on every weapon change (emitWeaponSwitch):
+   *  firing waits out the viewmodel's lower+raise cycle so a swap can't
+   *  chain heavy guns at instant cadence. Mirrors the server's intent
+   *  gate only as prediction feel; authority cadence is separate. */
+  weaponDrawT = 0;
   /** Headhunt held tokens — server-owned count, HUD reads it raw. */
   heldTokens = 0;
   /** True when the held-token drip is live (≥3 tokens, 8s since last hit). */
@@ -682,12 +692,15 @@ export class Player {
     this.beltTimer = Math.max(0, this.beltTimer - dt);
     this.throwLockT = Math.max(0, this.throwLockT - dt);
     this.armory.secondaryDrawT = Math.max(0, this.armory.secondaryDrawT - dt);
+    this.weaponDrawT = Math.max(0, this.weaponDrawT - dt);
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
     // Bloom decays only while the trigger's UP (per-shot decay would
-    // swallow the +rate add at any firing cadence) - a holstered spray
-    // holds its cone until the gun comes back out.
-    const bloomDef = weaponDef(this.armory.secondaryWid ?? this.loadout[this.weaponIndex]).bloom;
-    if (bloomDef && !this.input.mouseHeld) {this.bloom = Math.max(0, this.bloom - bloomDef.decay * dt);}
+    // swallow the +rate add at any firing cadence). The rate rides the
+    // weapon that GREW it, not the shouldered def - gating on the
+    // current weapon's def froze the residue across a swap, so the
+    // crosshair cone came back frozen at the old width (and the server
+    // had already drained it over the gap anyway).
+    if (!this.input.mouseHeld) {this.bloom = Math.max(0, this.bloom - this.bloomDecay * dt);}
     this.skills.tickCooldowns(dt);
     this.skills.updateBeacon(dt);
     this.skills.updateCloak(dt);
