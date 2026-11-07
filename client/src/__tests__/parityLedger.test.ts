@@ -17,16 +17,16 @@ import * as THREE from 'three';
 const VID = (): string => `v${Math.random().toString(36).slice(2)}`;
 
 describe('kbEchoHorizon', (): void => {
-  it('floors at 1000 and grows with RTT, never below echo round-trip', (): void => {
-    expect(kbEchoHorizon(0, 0)).toBe(1000);
-    expect(kbEchoHorizon(50, 0)).toBe(1000);
-    expect(kbEchoHorizon(350, 0)).toBe(1000); // 2*350+300=1000 exactly
-    expect(kbEchoHorizon(500, 0)).toBe(1300);
+  it('floors at 1600 and grows with RTT, never below echo round-trip', (): void => {
+    expect(kbEchoHorizon(0, 0)).toBe(1600);
+    expect(kbEchoHorizon(50, 0)).toBe(1600);
+    expect(kbEchoHorizon(350, 0)).toBe(1600); // volatile-lane flush ~1s post-destroy
+    expect(kbEchoHorizon(700, 0)).toBe(1700);
   });
   it('stretches through wire silence but caps the stretch', (): void => {
-    expect(kbEchoHorizon(0, 500)).toBe(1400); // +400 of stall
-    expect(kbEchoHorizon(0, 10_000)).toBe(3000); // stall stretch capped at +2000
-    expect(kbEchoHorizon(0, 50)).toBe(1000); // <100ms stall ignored
+    expect(kbEchoHorizon(0, 500)).toBe(2000); // +400 of stall
+    expect(kbEchoHorizon(0, 10_000)).toBe(3600); // stall stretch capped at +2000
+    expect(kbEchoHorizon(0, 50)).toBe(1600); // <100ms stall ignored
   });
 });
 

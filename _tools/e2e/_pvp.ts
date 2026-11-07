@@ -3,7 +3,8 @@
 // autopilot. Asserts parity census clean on BOTH + cross-player hits.
 import { launchClient, closeClient, type Client } from './browser.ts';
 const SECS = Number(process.argv[2] ?? '200');
-const URL = 'http://127.0.0.1:5400/?server=https://play.jprice.app&room=headhunt-1&net=ws&autopilot';
+const ROOM = process.argv[3] ?? 'headhunt-1';
+const URL = `http://127.0.0.1:5400/?server=https://play.jprice.app&room=${ROOM}&net=ws&autopilot`;
 const a = await launchClient(URL);
 const b = await launchClient(URL);
 const parity = (c: Client) => c.test<any>(`JSON.stringify(window.__test.parity)`);

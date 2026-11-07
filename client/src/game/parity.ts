@@ -33,10 +33,11 @@ export function parityStamp(kind: string): void {
  *  msSinceLiveRx stretches the window through wire silence so a stall
  *  delays (not refuses) the echo. */
 export function kbEchoHorizon(rttMs: number, msSinceLiveRx: number): number {
-  // Floor 1000 not 700: when every RTT probe reads 0 (ws tier, worker
-  // owns the probe, srvPing not landed yet) the echo round-trip is still
-  // real - a flat 700ms falsely expired WAN echoes at ~714ms (tsDuel10).
-  return Math.max(1000, rttMs * 2 + 300) + Math.min(Math.max(0, msSinceLiveRx - 100), 2000);
+  // Floor 1600 not 1000: the knockback echo rides the volatile journal lane,
+  // whose batch flush adds ~1s AFTER the shell's destroy - prod WS at ~40ms
+  // RTT still landed echoes at 1008-1450ms (5/5 past the old floor). The
+  // stretch term only covers wire silence, not a busy lane.
+  return Math.max(1600, rttMs * 2 + 300) + Math.min(Math.max(0, msSinceLiveRx - 100), 2000);
 }
 
 export function parityMiss(kind: string, detail: Record<string, unknown>): void {
