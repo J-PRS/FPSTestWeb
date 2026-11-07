@@ -214,6 +214,12 @@ export class RemoteInterp {
     }
     this.lastUpdateTime = nowMs;
     const stamp = serverMs ?? this.lastUpdateTime;
+    // Out-of-order record - unordered datagram lanes (WT) deliver stale
+    // frames, and applying an older stamp reseats the rendered body
+    // backward: the subtle back-and-forth jitter on remotes. The newest
+    // stamp already won; a stale record only counts as liveness above.
+    // Equal stamps are the same tick's state - idempotent, let through.
+    if (stamp < prevUpdateMs) {return;}
     this.lastServerUpdateMs = stamp;
 
     // Simulating and an update arrived → arm the converge phase inside
