@@ -101,8 +101,14 @@ export class BotFire {
     const cp = Math.cos(bot.rotation.pitch);
     const fx = Math.sin(bot.rotation.yaw) * cp, fy = -Math.sin(bot.rotation.pitch), fz = Math.cos(bot.rotation.yaw) * cp;
     if ((fx * dx + fy * dy + fz * dz) / dist < SETTLE_COS) {return;}
-    const picked = pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
+    const picked0 = pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
       bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
+    // Deploy artillery only draws feet-down - same fallback the server's
+    // arsenal picks: airborne body + groundedOnly pick = next legal slot,
+    // not a dry pull that never fires.
+    const picked = getWeaponStats(picked0).groundedOnly && !bot.grounded
+      ? ([lo.far, lo.mid, lo.near, lo.side].find((w): boolean => !getWeaponStats(w).groundedOnly && classCanFire(bot.armorClass, w)) ?? picked0)
+      : picked0;
     const melee = picked === WeaponType.Melee || dist <= MELEE_RANGE;
     // Same class gate the server holds players to — a pick the body can't
     // legally shoulder falls back to the first legal slot, never fires.
@@ -128,6 +134,10 @@ export class BotFire {
       this.claimShot(bot, targetId, aim, melee, melee ? MELEE_DAMAGE : BOT_DMG, wt);
       return;
     }
+    // Launcher recoil (howitzer): offline bots feel the same kick the
+    // server applies through moveSim - vel drives the brain's sim.
+    const recoil = getWeaponStats(wt).recoilImpulse ?? 0;
+    if (recoil > 0) {bot.vel.addScaledVector(_shotDir.set(fx, fy, fz), -recoil);}
     this.spawnShells(bot, wt, cfg, fx, fy, fz);
   }
 
@@ -141,6 +151,10 @@ export class BotFire {
     if (now - last < interval * 1000) {return false;}
     // Pool ammo - offline bots obey the same clip rule humans do; the
     // pool lives on the body so respawn() refills it like the server's.
+    // Deploy weapons: offline bots obey groundedOnly the same as the
+    // server's arsenal gate - brain moveState carries the ground truth.
+    const st = getWeaponStats(wt);
+    if (st.groundedOnly && !bot.grounded) {return false;}
     if (!spendAmmo(bot.ammoPool, wt, now / 1000)) {return false;}
     this.lastShotAt.set(bot.playerId, now);
     return true;

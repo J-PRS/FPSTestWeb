@@ -60,10 +60,10 @@ export const BOT_LOADOUTS: BotLoadout[] = [
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Railgun], belt: [WeaponType.ImpactGrenade], side: [WeaponType.Revolver] },
   },  // chaser - light frame, so no medium-locked PlasmaGun
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar, WeaponType.GrenadeLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar, WeaponType.Howitzer, WeaponType.GrenadeLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
   },  // siege
   { perk: 'armored',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.MissileLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.Howitzer, WeaponType.MissileLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] },
   },  // anchor - heavies can't shoulder medium-only Cannon either
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc, WeaponType.GrenadeLauncher], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] },
@@ -72,19 +72,19 @@ export const BOT_LOADOUTS: BotLoadout[] = [
     alts: { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
   },  // hose - area denial; sprinkler is a <15m weapon, not mid
   { perk: 'armored',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver,
-    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Mortar], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] },
+    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.Howitzer], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] },
   },  // bruiser - big slugs (Railgun is light-frame gear, Cannon medium)
   { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.BoltLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol,
     alts: { near: [WeaponType.Chaingun, WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.Disc], belt: [WeaponType.Grenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
   },  // skirmisher - shove tools; Flak forces medium, so no heavy RL
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.MissileLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Howitzer, WeaponType.MissileLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] },
   },  // artillery
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Lightning, far: WeaponType.Railgun,       belt: WeaponType.Implodisc,      side: WeaponType.Pistol,
     alts: { near: [WeaponType.Flak], mid: [WeaponType.Cannon, WeaponType.Gonne, WeaponType.Disc], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] },
   },  // beam rider - LG apex is 25-60m (measured, not close): CG brawls
   { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.MissileLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver,
-    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Basilisk], far: [WeaponType.Mortar], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] },
+    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.Cannon, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.Howitzer], belt: [WeaponType.Javelin, WeaponType.RemoteRailgun], side: [WeaponType.Pistol] },
   },  // trapper
   { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.ArmorGrenade,  side: WeaponType.Pistol,
     alts: { near: [WeaponType.Chaingun, WeaponType.Sprinkler], mid: [WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.Grenade, WeaponType.Javelin], side: [WeaponType.Revolver] },
@@ -129,7 +129,7 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   // GL earns a far draw too: forced bench conversion peaks at 60-120m
   // (7.1%/shot vs 5.2% at 25-60) - the skipping shell covers ground the
   // mid triangle (dead past ~57m) could never open for it.
-  far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.GrenadeLauncher],
+  far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Howitzer, WeaponType.Railgun, WeaponType.GrenadeLauncher],
   // Every player belt throw (derived from beltThrow markers) + MRV -
   //  the carrier isn't a throw type but fields through this slot.
   //  Parity both ways: a wildcard bot fields what a player can equip.

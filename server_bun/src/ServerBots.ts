@@ -353,6 +353,15 @@ export class ServerBots {
   private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch?: number }; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
     const { goal, now, sh, nuggetNear, ctx } = s;
     if (out.fire) {this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);}
+    // Deploy artillery: the band picked a groundedOnly gun but the body
+    // is still moving - park the drive (all keys released) so the bot
+    // slides to a stand, goes feet-down, and actually fires the piece.
+    if (this.arsenal.deployWanted(id)) {
+      out.move = out.move ?? {};
+      out.move.park = true;
+      out.move.ski = false;
+      out.move.jet = false;
+    }
     // Stand suppression: a committed runner with clear LOS takes a few
     // potshots at the stand while closing - humans pre-soften the ring
     // (disc/GL/bolt, not a mortar barrage) so the pass doesn't fly

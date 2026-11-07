@@ -104,6 +104,9 @@ export class BotArsenal implements BeamHost {
    *  regenerates over time. Prevents gradual self-destruction from
    *  repeated self-splash hits that individually pass the per-shot gate. */
   private selfDamageBudget = new Map<string, number>();
+  /** groundedOnly picks that lost to the ground rule - true = wants
+   *  artillery but is still moving, so the drive should plant it. */
+  private deployPick = new Map<string, boolean>();
   /** Held trigger per bot: brains decide press/release cadence and aim
    *  direction - a human holds M1 and tracks, the gun streams at its own
    *  legal rate between thinks. `aim` rides the target's movement so the
@@ -175,6 +178,13 @@ s[kind] += 1; this.propels.set(id, s);
     this.lastShot.delete(id);
     this.lastPropelAt.delete(id);
     this.propels.delete(id);
+    this.deployPick.delete(id);
+  }
+
+  /** True while the band pick wants deploy artillery the body can't
+   *  fire yet - firePhase parks so the next think is feet-down. */
+  deployWanted(id: string): boolean {
+    return this.deployPick.get(id) === true;
   }
 
   /** Players can't out-run a weapon's rate either - the drawn gun owns
@@ -350,7 +360,16 @@ s[kind] += 1; this.propels.set(id, s);
       if (!this.rateOk(p.id, wt0)) {return;}
       // Pool ammo - same dry rule humans get on the intent path; bot
       // pools live on their player record and accrue on the sim clock.
+      // Deploy weapons obey the same grounded rule humans do - feet on
+      // dirt AND not skiing, or the draw itself is refused.
+      if (getWeaponStats(wt0).groundedOnly) {
+        const sim = this.room.moveSim.simOf(p.id);
+        if (!sim?.state.onGround || sim.input.skiHeld) {return;}
+      }
       if (!spendAmmo(this.room.players.getPlayer(p.id)?.ammoPool ?? new Map(), wt0, this.clock / 1000)) {return;}
+      // Launcher recoil: the kick is real movement, bots feel it too.
+      const recoil0 = getWeaponStats(wt0).recoilImpulse ?? 0;
+      if (recoil0 > 0) {this.room.moveSim.applyImpulse(p.id, { x: -cdx / cdist * recoil0, y: -cdy / cdist * recoil0, z: -cdz / cdist * recoil0 }, 3);}
       weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
       if (wt0 === WeaponType.Melee) {
         const stats = getWeaponStats(WeaponType.Melee);
@@ -476,7 +495,16 @@ s[kind] += 1; this.propels.set(id, s);
     if (!this.rateOk(p.id, wt)) {return;}
     // Pool ammo - the cadence gate stamps first so a rate-blocked pull
     // doesn't eat a round; a dry pool then refuses like a dry tank.
+    if (getWeaponStats(wt).groundedOnly) {
+      const sim = this.room.moveSim.simOf(p.id);
+      if (!sim?.state.onGround || sim.input.skiHeld) {return;}
+    }
     if (!spendAmmo(this.room.players.getPlayer(p.id)?.ammoPool ?? new Map(), wt, this.clock / 1000)) {return;}
+    const recoil = getWeaponStats(wt).recoilImpulse ?? 0;
+    if (recoil > 0 && aim) {
+      const dl = Math.hypot(aim.x - p.position.x, aim.y - (p.position.y + 1.4), aim.z - p.position.z) || 1;
+      this.room.moveSim.applyImpulse(p.id, { x: -(aim.x - p.position.x) / dl * recoil, y: -(aim.y - (p.position.y + 1.4)) / dl * recoil, z: -(aim.z - p.position.z) / dl * recoil }, 3);
+    }
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing - combat funnels it identically,
@@ -758,6 +786,22 @@ s[kind] += 1; this.propels.set(id, s);
     const body = this.room.players.getAllPlayers().get(botId);
     const hp = body?.health ?? 100;
     const picked = pickBotWeaponSafe(lo, distXZ, dist, hp, skill, s?.courage);
+    // Deploy artillery only draws feet-down. If the band picked a
+    // groundedOnly gun while the body is airborne/skiing, the bot's
+    // real answer is PLANT: firePhase reads deployWanted and parks, so
+    // the next think is feet-down and the artillery actually fires.
+    // While it can't plant instantly, the fallback slot keeps it
+    // shooting instead of dry-pulling.
+    if (getWeaponStats(picked).groundedOnly) {
+      const sim = this.room.moveSim.simOf(botId);
+      const plantable = !!sim?.state.onGround && !sim.input.skiHeld;
+      this.deployPick.set(botId, !plantable);
+      if (!plantable) {
+        const alt = [lo.far, lo.mid, lo.near, lo.side]
+          .find((w): boolean => !getWeaponStats(w).groundedOnly && classCanFire(body?.armorClass, w));
+        if (alt !== undefined) {return alt;}
+      }
+    } else {this.deployPick.delete(botId);}
     // Same class gate players get in CombatHandler - the loadout tables
     // stay honest, but a pick is refused at fire time too, not assumed.
     if (classCanFire(body?.armorClass, picked)) {return picked;}
