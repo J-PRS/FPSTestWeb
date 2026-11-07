@@ -72,7 +72,7 @@ export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
   if (!host && !urlParams.serverPath && (hn === 'localhost' || hn === '127.0.0.1') && await isUp(local.httpUrl)) {return local;}
   if (!host || urlParams.serverPath) {
     try {
-      const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean; servers?: Record<string, string> }> => r.json());
+      const cfg = await fetch('/server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean; servers?: Record<string, string> }> => r.json());
       host = cfg.server?.trim() ?? '';
       if (cfg.fleet) {fleet = true;}
       if (cfg.servers) {Object.assign(NAMED_SERVERS, cfg.servers);}
