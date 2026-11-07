@@ -604,6 +604,13 @@ export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
 
     const b = new Projectile(deps.lazyScene(), at, _bombDir, _bombVel, cfg);
 
+    // Inherit the carrier's authorship: a remote shell's bomblets are
+    // remote-authored too - unset reads as MINE downstream and every
+    // pop stamps a dmg-echo the server can never confirm (the parity
+    // spam). shotId deliberately does NOT ride: bomblets stay
+    // untracked children that never claim.
+    b.shooterId = p.shooterId;
+
     deps.world.projectiles.push(b);
 
   }

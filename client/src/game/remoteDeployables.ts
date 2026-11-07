@@ -593,6 +593,7 @@ export class RemoteDeployables {
         const p = new Projectile(this.deps.scene, muzzle,
           aim.sub(muzzle).normalize(), new THREE.Vector3(), CHAINGUN_CONFIG);
         p.isRemote = true;
+        p.shooterId = item.owner ?? null; // deployable fire is owner-authored - unset reads as MINE to the blast gates
         this.deps.world.projectiles.push(p);
       }
       sfx.shotAt(item.pos, WeaponType.Chaingun);
@@ -616,7 +617,7 @@ export class RemoteDeployables {
   /** Mortar turret fired - the wire carries the solved launch velocity;
    *  spawn a replica mortar shell on the identical arc. Damage arrives
    *  through the server's scheduled bolt, not this body. */
-  mortarShot(id: number, _owner: string, vx: number, vy: number, vz: number): void {
+  mortarShot(id: number, owner: string, vx: number, vy: number, vz: number): void {
     const item = this.byId.get(id);
     if (!item) {return;}
     const muzzle = item.v instanceof DeployMortar
@@ -627,6 +628,7 @@ export class RemoteDeployables {
       new THREE.Vector3(vx, vy, vz).normalize(), new THREE.Vector3(), MORTAR_CONFIG);
     p.vel.set(vx, vy, vz);
     p.isRemote = true;
+    p.shooterId = owner; // the wire names the mortar's owner - the blast gates read unset as MINE
     this.deps.world.projectiles.push(p);
     sfx.shotAt(item.pos, WeaponType.Mortar);
   }
