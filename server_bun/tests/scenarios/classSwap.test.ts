@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'bun:test';
 import { CLASS_STATS } from '../../../shared/botClasses.ts';
-import { mkRoom, firstPlayer } from './harness.ts';
+import { WeaponType } from '../../../shared/weapons.ts';
+import type { ServerMessage } from '../../../shared/protocol.ts';
+import { mkRoom, firstPlayer, freeze } from './harness.ts';
 
 describe('scenario: class/perk swaps bank on respawn', () => {
   it('classUpdate is invisible mid-life, applied at the new life', () => {
@@ -71,5 +73,38 @@ describe('scenario: reclaim applies the rejoiner class', () => {
     expect(p.pendingClass).toBe('heavy');
     const res = room.players.respawnPlayer(p.id);
     expect(res?.armorClass).toBe('heavy');
+  });
+
+  it('reclaim of the live class leaves light-only guns firing', () => {
+    const room = mkRoom({ bots: 1 }, 'dm');
+    const p = firstPlayer(room);
+    freeze(room, p.id, { x: 0, y: 31, z: 0 });
+    const toP: ServerMessage[] = [];
+    const origSend = room.connections.sendToPlayer.bind(room.connections);
+    room.connections.sendToPlayer = (pid, m) => { if (pid === p.id) {toP.push(m);} else {origSend(pid, m);} };
+    const rejects = () => toP.filter((m) => m.type === 'shotRejected').length;
+
+    // Live-light life, 'heavy' banked; seat blob says 'medium' (stale).
+    // Pre-fix the handshake carried the PICK ('heavy') and this reclaim
+    // flipped the seat early — every Lightning tick reject-spammed.
+    p.armorClass = 'medium';
+    p.pendingClass = 'heavy';
+    room.applyClaimedClass(p.id, 'light'); // what the fixed client sends: appliedClass
+    room.messages.handleMessage(p.id, {
+      type: 'shotFired',
+      dir: { x: 0, y: 0.3, z: 1 },
+      weaponType: WeaponType.Lightning,
+    });
+    expect(rejects()).toBe(0);
+
+    // The old claim (the banked pick) still locks the gun out — proving
+    // the reject path itself is alive and this test isn't vacuous.
+    room.applyClaimedClass(p.id, 'heavy');
+    room.messages.handleMessage(p.id, {
+      type: 'shotFired',
+      dir: { x: 0, y: 0.3, z: 1 },
+      weaponType: WeaponType.Lightning,
+    });
+    expect(rejects()).toBe(1);
   });
 });

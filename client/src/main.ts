@@ -347,7 +347,7 @@ function wireNetworkLocal(): void {
     if (player.health <= 0) { teamBots?.localDied(); killLocal('fell to death'); }
   };
   // The handshake carries the LIVE tier/perk (applied*), not the menu
-  // pick — a reclaim applies the claim to the seat immediately, so
+  // pick: a reclaim applies the claim to the seat immediately, so
   // sending a banked pick would enforce a class the client isn't
   // playing yet (class-locked rejects until respawn).
   networkManager.joinPerk = () => player.appliedPerk;

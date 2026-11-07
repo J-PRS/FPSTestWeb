@@ -223,7 +223,13 @@ export class PlayerLoadout {
       settings.set('fps-perk', g.perk);
       settings.set('fps-skill', g.skill);
     }
-    if (this.h.appliedClass === c) {return;}
+    if (this.h.appliedClass === c) {
+      // A just-installed banked kit was gated for the tier it was BUILT
+      // for: a wire-stomped armorClass (dropped classUpdate) can leave
+      // picks the live tier can't shoulder. Scrub or they reject all life.
+      this.unshoulderLocked();
+      return;
+    }
     this.h.appliedClass = c;
     this.h.movement.setSpeedScale(CLASS_STATS[c].speedScale);
     this.h.movement.setBody(CLASS_STATS[c].mass, CLASS_STATS[c].eyeHeight, CLASS_STATS[c].radius);
