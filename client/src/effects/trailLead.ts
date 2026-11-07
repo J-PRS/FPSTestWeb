@@ -20,13 +20,12 @@
 // cashing as a sky-length lead (the jump-cut in QuarksTrail.emitSegment is
 // the second line of defence).
 
-/** Minimax lead in render frames of travel. With deposits every other
- *  frame, the newest clump's head error against the mesh is L on a deposit
- *  frame and L−1 on the frame after (L = the lead); centring that at zero
- *  gives L = 0.5, i.e. the head never leads the mesh by more than half a
- *  frame and never trails by more than half a frame. The old fixed value
- *  was 2 (always ahead by up to two frames). */
-export const TRAIL_LEAD_FRAMES = 0.5;
+/** Lead in render frames of travel. Zero: smoke/droplet puffs read wrong
+ *  AHEAD of the shell (any positive lead deposits them in front of the
+ *  mesh on sparse trails); trailing ≤1 frame is the physical direction.
+ *  The old 0.5 minimax centred the ±1-frame deposit alternation but put
+ *  visible puffs ahead of slow shells. */
+export const TRAIL_LEAD_FRAMES = 0;
 
 /**
  * Emitter lead for one emission tick, as a world-space delta to add to the

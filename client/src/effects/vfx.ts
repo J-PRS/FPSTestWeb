@@ -17,6 +17,7 @@ import {
   Vector3 as QV3, Vector4 as QV4,CircleEmitter
 ,
   type FunctionValueGenerator, type GeneratorMemory, type FunctionJSON,
+  type Particle, type EmissionState,
 } from 'three.quarks';
 import { registerDiag } from '../core/fxDiag.js';
 
@@ -147,6 +148,25 @@ export interface QuarksTrailHost {
   travelPos?: THREE.Vector3;
 }
 
+/** Deterministic golden-angle scatter. Random ring offsets let two
+ *  adjacent deposits land on the same spot — a doubled additive quad
+ *  reads as an unnaturally bright bead. Golden-angle ordering gives
+ *  every particle a distinct (angle, radius): guaranteed minimum
+ *  separation, and the column reads as a smooth spiral instead of
+ *  static. Subclasses CircleEmitter so the ramp-in radius writes still
+ *  apply. */
+class SpiralEmitter extends CircleEmitter {
+  private idx = 0;
+  override initialize(p: Particle, _es: EmissionState): void {
+    const a = (this.idx * 2.3999632297) % (Math.PI * 2); // golden angle
+    const fr = (this.idx * 0.61803398875) % 1;           // golden-ratio disc fill
+    const r = this.radius * Math.sqrt(fr);
+    p.position.set(Math.cos(a) * r, Math.sin(a) * r, 0);
+    p.velocity.copy(p.position).multiplyScalar(p.startSpeed);
+    this.idx += 1;
+  }
+}
+
 const _tDir = new THREE.Vector3();
 // Trails pool like bursts: weapon configs are a bounded set, and a shot's
 // trail construction is ~20 behavior objects - restarting beats rebuilding.
@@ -219,7 +239,7 @@ export class QuarksTrail {
         behaviors.push(new GravityForce(_upQ, config.trailParticleGravity));
       }
 
-      const circle = new CircleEmitter({ radius: config.trailSpread * 0.5, thickness: 1 });
+      const circle = new SpiralEmitter({ radius: config.trailSpread * 0.5, thickness: 1 });
       const sys = new ParticleSystem({
         duration: 1, looping: true,
         startLife: new IntervalValue(config.trailLifeMin, config.trailLifeMax),
