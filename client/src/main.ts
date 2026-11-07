@@ -346,8 +346,12 @@ function wireNetworkLocal(): void {
     sfx.playerHurt();
     if (player.health <= 0) { teamBots?.localDied(); killLocal('fell to death'); }
   };
-  networkManager.joinPerk = () => player.perk;
-  networkManager.joinClass = (): "light" | "medium" | "heavy" => player.armorClass;
+  // The handshake carries the LIVE tier/perk (applied*), not the menu
+  // pick — a reclaim applies the claim to the seat immediately, so
+  // sending a banked pick would enforce a class the client isn't
+  // playing yet (class-locked rejects until respawn).
+  networkManager.joinPerk = () => player.appliedPerk;
+  networkManager.joinClass = (): "light" | "medium" | "heavy" => player.appliedClass;
   // Kill zone — the body dropped below the map's floor. Predicted locally
   // so the death lands on the crossing frame; the server's shadow owns
   // the actual kill and the respawn.
