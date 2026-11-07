@@ -102,6 +102,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/traps/2026-10-31_audio-stop-pop.md` | Trap: bare `stop()` mid-waveform clicks — global 15ms fade patch in `audio.ts` beats patching every call site |
 | `_docs/2026-11-05_BOT_WEAPON_USE_AUDIT.md` | Bot weapon-use audit — full cycle-table sweep: 16 commits (body-bounce, bodyArmTime gate, far-slot GL/bolt, situational sidearms, hose/disc orbits, flak+splash serves), pinned-bench board, remaining balance items |
 | `_docs/2026-11-07_MOAT_AUDIT.md` | Bundle-exposure audit + hardening plan: P2P authority sealed, remaining inventory ranked, import-boundary ratchet + static dev-tool gating as next steps |
+| `_docs/2026-11-07_SESSION_LOG.md` | Session log: capper fix, foreign-WIP batches, LAN/P2P exclusion, moat ratchet, offline ctx fills - commits, verified state, open items, lessons |
 
 ## Agent memory (append-only, one line each)
 
