@@ -356,9 +356,13 @@ export class SessionManager {
     // re-arm it or the restored corpse stays dead forever
     room.messages.onPlayerReconnected(playerId);
     // Same spawn-hold as a fresh join  -  only for seats that asked at
-    // join (the flag lives on the player record). Dead seats re-arm
-    // their respawn on releaseReady.
-    if (existingPlayer.spawnHold) {room.players.holdSpawn(playerId);}
+    // join (the flag lives on the player record) and only while ALIVE:
+    // a corpse has nothing to veil (death already skips every funnel),
+    // and holding a dead seat parks its respawn deadlines on the
+    // awaitingReady gate — resync churn re-latching the hold wedges the
+    // seat dead forever. Dead seats keep their respawn timer instead;
+    // the revive gets the normal spawn shield.
+    if (existingPlayer.spawnHold && !existingPlayer.isDead) {room.players.holdSpawn(playerId);}
 
     logger.info('Player reconnected within grace period, state restored', { playerId, room: room.name, health: existingPlayer.health, pos: existingPlayer.position });
     return true;
