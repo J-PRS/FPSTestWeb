@@ -545,6 +545,13 @@ dropCensus.total += 1;
       return;
     }
     try { sessionStorage.removeItem('fps-proto-reload'); } catch { /* no budget to reset */ } // clean connect - reset the budget
+    // pv did its one job (bust the CDN's stale bundle on the mismatch
+    // reload) — drop it from the bar so /s/ links stay clean.
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('pv')) {
+      const u = new URL(location.href);
+      u.searchParams.delete('pv');
+      history.replaceState(null, '', u.toString());
+    }
 
     // gameState is the authoritative roster on (re)connect - clear stale
     // entries for players who left during our disconnect, then add the
