@@ -138,6 +138,8 @@ export interface Item {
   team?: string;
   /** Dome lattice flare when the field soaks a shell - shield only. */
   flash?: () => void;
+  /** Launch fired - the pad's squash snap (padBoing / offline mirror). */
+  boing?: () => void;
   /** The live emitter - lets the aim solve tilt its sky shaft. */
   beacon?: DeployBeacon;
   /** Base-asset lifecycle - deployDown deploys the wreck state (dims

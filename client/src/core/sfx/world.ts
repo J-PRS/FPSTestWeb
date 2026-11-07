@@ -139,6 +139,21 @@ export function warpJump(pos: THREE.Vector3, emitVel?: THREE.Vector3): void {
   } finally { audio.emitterPitch = 1; }
 }
 
+/** Jump pad arming - a two-note "ready" chirp at the pad. Positional:
+ *  you hear a stand's pad come live across the field, not in your ear. */
+export function padArm(pos: THREE.Vector3, emitVel?: THREE.Vector3): void {
+  const c = ctx();
+  if (!c) {return;}
+  const inNode = audio.worldInput(pos, emitVel);
+  if (!inNode) {return;}
+  const g = c.createGain(); g.connect(inNode);
+  try {
+    if (!play(g, 0.35, inNode)) { audio.freeInput(inNode); return; }
+    if (layer(g, [['hg_tick', 0.7, 1.4], ['shot_energy', 0.4, 1.9, undefined, 0.07]])) {return;}
+    osc('sine', 660, 1760, 0.14, 0.35, g);
+  } finally { audio.emitterPitch = 1; }
+}
+
 // ---------------------------------------------------------------------------
 // Remote player move audio — pooled positional loops so you HEAR a disc-
 // jockey spooling up behind you, not just see dust. One jet+ski channel

@@ -4,6 +4,7 @@ import { getGlowTexture } from '../effects/glowTexture.js';
 import { tickUnfold, unfoldDone, healDeploy, damageDeploy } from './deployBody.js';
 import type { Terrain, FieldRing } from '../world/terrain.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
+import * as sfx from '../core/sfx.js';
 
 // Player-deployable jump pad - a throw-down launch plate. Reads as a
 // dish tilted to the surface normal: the geometry IS the instruction
@@ -31,6 +32,8 @@ export class DeployPad {
   private glow: THREE.Sprite;
   private ring: FieldRing | null = null;
   private animT = 0;
+  /** Discharge squash: 1 on boing, decays - the dish dips and re-cocks. */
+  private squashT = 0;
   unfoldT = 0;
   armed = false;
   private scene: THREE.Scene;
@@ -76,15 +79,31 @@ export class DeployPad {
   update(dt: number): void {
     if (this.dead) {return;}
     this.animT += dt;
-    if (!this.armed && this.animT >= DEPLOY_ITEMS.pad.armS!) {this.armed = true;}
+    if (!this.armed && this.animT >= DEPLOY_ITEMS.pad.armS!) {
+      this.armed = true;
+      sfx.padArm(this.pos); // the armed state you can HEAR offscreen
+    }
     if (!this.ring) {this.buildRing();}
-    // Armed read: a slow breathing pulse - nobody reads a HUD line for
-    // "pad live", the glow IS the state.
-    const pulse = this.armed ? Math.sin(this.animT * 4) * 0.5 + 0.5 : 0;
-    this.glow.material.opacity = 0.25 + pulse * 0.5;
-    this.glow.scale.setScalar(0.8 + pulse * 0.5);
-    this.ring!.intensity = this.armed ? 0.5 + pulse * 0.4 : 0.2;
+    // Squash snap: the dish dips hard on the launch then re-cocks with
+    // an overshoot - reads as the plate physically kicking the body.
+    if (this.squashT > 0) {
+      this.squashT = Math.max(0, this.squashT - dt * 3.2);
+      const k = 1 - this.squashT;
+      const dip = this.squashT > 0.7 ? 0.5 + 0.5 * (1 - this.squashT) / 0.3 : 1 + 0.16 * Math.sin(k * 9);
+      this.group.scale.set(1, Math.min(1.16, dip), 1);
+      this.glow.material.opacity = 0.9;
+    } else {
+      // Armed read: a slow breathing pulse - nobody reads a HUD line
+      // for "pad live", the glow IS the state.
+      const pulse = this.armed ? Math.sin(this.animT * 4) * 0.5 + 0.5 : 0;
+      this.glow.material.opacity = 0.25 + pulse * 0.5;
+      this.glow.scale.setScalar(0.8 + pulse * 0.5);
+      this.ring!.intensity = this.armed ? 0.5 + pulse * 0.4 : 0.2;
+    }
   }
+
+  /** The launch fired - wire (padBoing) or the offline mirror calls it. */
+  boing(): void { this.squashT = 1; }
 
   tickUnfold(dt: number): void {
     tickUnfold(this, dt);

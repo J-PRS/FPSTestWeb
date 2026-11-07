@@ -282,6 +282,7 @@ export class DeployAdopter {
         if (dx * dx + dy * dy + dz * dz >= tr2 || now - (lastHits.get(id) ?? -1e9) < 1500) {return;}
         lastHits.set(id, now);
         vel.add(_padDv);
+        s.boing();
         this.deps.lazyEffects().spawnBounce(pos, _padDv);
         sfx.bounce();
       };
@@ -291,6 +292,7 @@ export class DeployAdopter {
       if (!p.isDead && p.pos.distanceToSquared(s.pos) < tr2 && now - (lastHits.get('local') ?? -1e9) >= 1500) {
         lastHits.set('local', now);
         p.movement.impulse(_padDv);
+        s.boing();
         this.deps.lazyEffects().spawnBounce(p.pos, _padDv);
         sfx.bounce();
       }
@@ -299,7 +301,7 @@ export class DeployAdopter {
           if (f.alive && f.playerId) {launch(f.playerId, f.pos, f.vel);}
         }
       }
-    });
+    }, { boing: (): void => s.boing() });
   }
 
   /** Barrier dome - the emitter is a plain dep: destructible like any

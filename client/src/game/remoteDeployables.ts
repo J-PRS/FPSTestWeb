@@ -175,6 +175,7 @@ export class RemoteDeployables {
         update: (dt): void => b.update(dt, rspec.scans ? this.enemies() : undefined),
         dispose: (): void => b.dispose(this.deps.scene),
         v: b, owner, flash: typeof bFlash === 'function' ? (bFlash as () => void).bind(b) : undefined,
+        boing: typeof (b as unknown as { boing?: unknown }).boing === 'function' ? ((b as unknown as { boing: () => void }).boing).bind(b) : undefined,
       };
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);
@@ -610,8 +611,9 @@ export class RemoteDeployables {
 
   /** Server pad discharged - paint the launch FX at the pad along the
    *  real normal dir; the victim's velocity arrives on the wire. */
-  padBoing(_id: number, pos: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }): void {
+  padBoing(id: number, pos: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }): void {
     const v = new THREE.Vector3(pos.x, pos.y, pos.z);
+    this.byId.get(id)?.boing?.();
     this.deps.lazyEffects().spawnBounce(v, _boingDir.set(n.x, n.y, n.z).normalize());
     sfx.bounce();
   }
