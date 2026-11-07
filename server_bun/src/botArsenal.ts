@@ -62,7 +62,31 @@ const BOLT_SPEED = 60; // m/s - the melee swing's visual bolt
 // FPS_SUPERBOT knob lives in superBot.ts - leaf import so beam/drive/
 // roster don't reach back through this file.
 
-type BotBody = { id: string; position: Vec3; velocity: Vec3; armorClass: string };
+type BotBody = { id: string; position: Vec3; velocity: Vec3; armorClass: string; rotation: { yaw: number; pitch?: number } };
+
+/** The body's look dir from its wire rotation — same convention the
+ *  drive writes (yaw=atan2(x,z), pitch positive looks DOWN). A bot's
+ *  shots launch along this: the model always faces where it shoots
+ *  (Quake's rule — the crosshair IS the view, not a hidden aim var). */
+function faceDir(p: BotBody): Vec3 {
+  const cp = Math.cos(p.rotation.pitch ?? 0);
+  return { x: Math.sin(p.rotation.yaw) * cp, y: -Math.sin(p.rotation.pitch ?? 0), z: Math.cos(p.rotation.yaw) * cp };
+}
+/** cos(20°): a trigger pull waits until the body's facing is inside
+ *  this cone of the wanted dir — acquisition is a visible wind-up, not
+ *  a silent snap. The trigger stays live across the miss. */
+const SETTLE_COS = Math.cos(0.35);
+function settled(p: BotBody, dir: Vec3): boolean {
+  const f = faceDir(p);
+  return f.x * dir.x + f.y * dir.y + f.z * dir.z >= SETTLE_COS;
+}
+/** One-off shots (lobs, point suppression) aren't a held trigger - the
+ *  honest read is the throwing flick: snap the facing onto the launch
+ *  dir the instant the shot leaves. */
+function faceLaunch(p: BotBody, dir: Vec3): void {
+  p.rotation.yaw = Math.atan2(dir.x, dir.z);
+  p.rotation.pitch = -Math.asin(Math.max(-1, Math.min(1, dir.y)));
+}
 
 const j = (): number => (botRand() - 0.5) * 0.07;
 
@@ -130,10 +154,16 @@ s[kind] += 1; this.propels.set(id, s);
   }
 
   /** The live aim point a held trigger is tracking - the drive reads it
-   *  to pitch the bot's head at its target. */
+   *  to pitch the bot's head at its target. Between volleys the trigger
+   *  is dead but the HUNT is still live: a duelist keeps their crosshair
+   *  on the enemy between pulls, so the look falls back to the last-seen
+   *  spot - without it every volley re-paid the full spring acquisition
+   *  before the settle gate opened (volley weapons lost ~half their
+   *  uptime to re-acquire, stream weapons didn't). */
   aimPoint(id: string): Vec3 | null {
     const tr = this.trigger.get(id);
-    return tr && tr.until > this.clock ? tr.aim : null;
+    if (tr && tr.until > this.clock) {return tr.aim;}
+    return this.huntSeenCb?.(id) ?? null;
   }
 
   /** Part of a bot's teardown - see ServerBots.untrack. */
@@ -291,6 +321,14 @@ s[kind] += 1; this.propels.set(id, s);
 
   private discharge(p: BotBody, tr: { targetId: string; aim: Vec3; track: boolean | undefined; sig: number; err: Vec3; wt: number | undefined }): void {
     const { targetId, aim } = tr;
+    const muzzleB = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    const bdx = aim.x - muzzleB.x, bdy = aim.y - muzzleB.y, bdz = aim.z - muzzleB.z;
+    const bl = Math.hypot(bdx, bdy, bdz) || 1;
+    const wantB = { x: bdx / bl, y: bdy / bl, z: bdz / bl };
+    // Still turning? The pull waits — a shot that leaves before the body
+    // has swung on target is a silent aimbot (the model never looked).
+    if (!settled(p, wantB)) {return;}
+    const fdir = faceDir(p);
     if (targetId.startsWith('b:')) {
       beamAtBall(this, p, Number(targetId.slice(2)), aim, BOT_LOADOUTS[0]!);
       return;
@@ -327,9 +365,8 @@ s[kind] += 1; this.propels.set(id, s);
           wt0, false);
         return;
       }
-      if (!this.room.projectiles.spawn(p.id, wt0, muzzle0,
-        { x: cdx / cdist, y: cdy / cdist, z: cdz / cdist }, p.velocity)) {
-        fireSpeedless(this, p.id, muzzle0, { x: cdx / cdist, y: cdy / cdist, z: cdz / cdist }, wt0);
+      if (!this.room.projectiles.spawn(p.id, wt0, muzzle0, fdir, p.velocity)) {
+        fireSpeedless(this, p.id, muzzle0, fdir, wt0);
       }
       return;
     }
@@ -465,11 +502,11 @@ s[kind] += 1; this.propels.set(id, s);
     }
     // The brain's aim already leads by target velocity over real flight
     // time (weaponSpeed hook below) - adding lead here would double it.
-    const ax = aim.x - muzzle.x;
-    const ay = aim.y - muzzle.y;
-    const az = aim.z - muzzle.z;
-    const alen = (ax * ax + ay * ay + az * az) ** 0.5 || 1;
-    const dir = { x: ax / alen, y: ay / alen, z: az / alen };
+    // The shot launches along the body's FACING, not the aim point: the
+    // serve/fuse mutations above rewrote tr.aim, the drive's slew chases
+    // it, and the settle gate up top held this pull until the body was
+    // inside the cone - so where the model looks IS where it shoots.
+    const dir = fdir;
     const me0 = this.room.players.getPlayer(p.id);
     if (me0) {this.bloomCone(me0, dir, wt);}
     // Human imperfection: occasionally skip self-splash checks entirely,
@@ -555,6 +592,7 @@ s[kind] += 1; this.propels.set(id, s);
     const dir = { x: dx / dist + j(), y: dy / dist + j(), z: dz / dist + j() };
     const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
     dir.x /= l; dir.y /= l; dir.z /= l;
+    faceLaunch(p, dir); // one-off shot - the throwing flick makes the look honest
     const me2 = this.room.players.getPlayer(p.id);
     if (me2) {this.bloomCone(me2, dir, wt);}
     // Human imperfection: occasionally skip self-splash checks entirely,
@@ -793,6 +831,7 @@ s[kind] += 1; this.propels.set(id, s);
     const dirN = { x: vx / vl, y: vy / vl, z: vz / vl };
     if (!riskSelf && this.selfBlastBlocked(muzzle, dirN, wt, p.velocity, p.id, body?.team ?? undefined)) {return false;}
     if (body) {body.beltCharges -= BELT_THROW_COST;}
+    faceLaunch(p, dirN); // the throwing flick - model faces where it lobs
     this.room.projectiles.spawn(p.id, wt, muzzle, dirN, p.velocity);
     return true;
   }

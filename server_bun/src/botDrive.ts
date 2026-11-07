@@ -17,6 +17,8 @@ import type { BotArsenal } from './botArsenal.ts';
 import { isSuper } from './superBot.ts';
 import { inv } from '../../shared/invariants.ts';
 import type { MobilityWatchdog, MobilitySample } from './botMobility.ts';
+import type { BotSlew } from '../../shared/botSlew.ts';
+import type { BotSkill } from '../../shared/botSkill.ts';
 import type { Room } from './Room.ts';
 
 const SPEED = 14;          // m/s ground move (legacy path)
@@ -31,14 +33,21 @@ export interface DriveHost {
   readonly foeNear: Map<string, number>;
   readonly field: Heightfield | null;
   checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void;
+  /** The brain's shared slew tracker (spring+noise aim turn model). */
+  slewFor(id: string): BotSlew | undefined;
+  /** The bot's skill matrix — the slew's per-bot tuning input. */
+  skillOf(id: string): BotSkill | undefined;
 }
 
 /** The bot's intent becomes input keys  -  only what a player's fingers
- *  could press. The arsenal's post-throw jet pin rides the same held
- *  bit as the brain's own jet key. */
-function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean }, now: number): void {
-  h.room.moveSim.setInput(id, intent.moving && !out.move?.park ? {
-    forward: 1, right: 0,
+ *  could press. `move` is the dest direction already projected onto the
+ *  body's facing (strafe decomposition: forward/right are the WASD a
+ *  human holds while looking somewhere else). The arsenal's post-throw
+ *  jet pin rides the same held bit as the brain's own jet key. */
+function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, move: { forward: number; right: number }, now: number): void {
+  const moving = (move.forward !== 0 || move.right !== 0) && !out.move?.park;
+  h.room.moveSim.setInput(id, moving ? {
+    forward: move.forward, right: move.right,
     jumpPressed: Boolean(out.move?.jump), jumpHeld: Boolean(out.move?.jump),
     skiHeld: Boolean(out.move?.ski),
     jetHeld: Boolean(out.move?.jet) || h.arsenal.jetPinUntil(id) > now,
@@ -55,8 +64,8 @@ function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: B
   }, p.status);
   // C4 replay: mint the observer edge stream (change-only dedupe inside
   // botInput)  -  without it a bot remote can never run edge replay.
-  h.room.botInput(id, intent.moving && !out.move?.park ? {
-    forward: 1, right: 0,
+  h.room.botInput(id, moving ? {
+    forward: move.forward, right: move.right,
     jump: out.move?.jump ? 1 : 0, ski: out.move?.ski ? 1 : 0,
     jet: (out.move?.jet || h.arsenal.jetPinUntil(id) > now) ? 1 : 0,
   } : { forward: 0, right: 0, jump: 0, ski: 0, jet: 0 }, p.status);
@@ -82,27 +91,26 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt, height: sheepHeight }, now);
   const aim = h.arsenal.aimPoint(id);
   if (aim || dist >= 0.5) {
-    // Wrist-speed turn  -  a snapped 180° reads as a fly-flick while an
-    // arc at ~5 rad/s reads as a player swinging their view around.
     // A bot's yaw is its crosshair (like a human's): while a trigger is
     // live it faces the TARGET, not the destination  -  a body strafing
     // sideways while its shots land on you reads as a silent aimbot.
-    const want = aim
+    const wantYaw = aim
       ? Math.atan2(aim.x - p.position.x, aim.z - p.position.z)
       : Math.atan2(dx, dz);
-    let dyaw = want - p.rotation.yaw;
-    if (dyaw > Math.PI) {dyaw -= Math.PI * 2;}
-    if (dyaw < -Math.PI) {dyaw += Math.PI * 2;}
-    const yaw = p.rotation.yaw + Math.max(-5 * dt, Math.min(5 * dt, dyaw));
-    h.room.moveSim.faceYaw(id, yaw);
-    p.rotation.yaw = yaw;
+    // Wire pitch is negated  -  positive looks down  -  and a disengaged
+    // bot relaxes back to level. Pitched at the MUZZLE (+1.4 over eye),
+    // not the eye: shots launch along this dir, so a facing solved at
+    // eye height would loft every shell 1.4m over the capsule top.
+    const wantPitch = aim ? -Math.atan2(aim.y - (p.position.y + 1.4), Math.hypot(aim.x - p.position.x, aim.z - p.position.z)) : 0;
+    // Human-shaped turn — shared/botSlew spring + settling noise, the
+    // same drive the offline host uses (was a flat 5 rad/s slew).
+    const f = h.slewFor(id)?.face(dt, p.rotation.yaw, wantYaw, p.rotation.pitch, wantPitch, h.skillOf(id));
+    if (f) {
+      h.room.moveSim.faceYaw(id, f.yaw);
+      p.rotation.yaw = f.yaw;
+      p.rotation.pitch = f.pitch;
+    }
   }
-  // Head tracks the trigger's live aim point (same 5 rad/s slew as the
-  // wrist turn); wire pitch is negated  -  positive looks down  -  and a
-  // disengaged bot relaxes back to level.
-  const wantPitch = aim ? -Math.atan2(aim.y - p.position.y, Math.hypot(aim.x - p.position.x, aim.z - p.position.z)) : 0;
-  const dpitch = wantPitch - p.rotation.pitch;
-  p.rotation.pitch += Math.max(-5 * dt, Math.min(5 * dt, dpitch));
   // Landing flare  -  the T1 damage floor means a 25+ m/s arrival costs
   // real health; a human feathers jets on the way down, and the reflex
   // lives below the brain (a splat is a reflex, not a decision). Gate is
@@ -111,7 +119,20 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   // under-flare is cheap, a splat is not.
   if (out.move && !sh.onGround && sh.vel.y < -MOVEMENT_CONFIG.fallDamageMinSpeed
     && sheepHeight < -sh.vel.y * 0.8) { out.move.jet = true; }
-  commitMoveInput(h, id, p, out, { moving: dist >= 0.5 }, now);
+  // Travel intent in world space → yaw-relative keys, so aiming and
+  // moving decouple like a human's hands: a bot facing its target still
+  // strafes/backpedals toward its destination instead of being dragged
+  // onto the crosshair. Quantized to the 8 legal WASD chords - the edge
+  // wire is int8 anyway, so the shadow, the broadcast, and remote edge
+  // replay all run the identical keys a human could hold.
+  let fwdIn = 0, rgtIn = 0;
+  if (dist >= 0.5) {
+    const fx = Math.sin(p.rotation.yaw), fz = Math.cos(p.rotation.yaw);
+    const nx = dx / dist, nz = dz / dist;
+    fwdIn = Math.round(nx * fx + nz * fz);      // d·fwd
+    rgtIn = Math.round(nx * -fz + nz * fx);     // d·right, right = (-fwdZ, fwdX)
+  }
+  commitMoveInput(h, id, p, out, { forward: fwdIn, right: rgtIn }, now);
   // 'trying' needs reach, not intent: out.dest re-rolls each think and
   // can hover a meter off the position (steerer micro-orbit), which
   // would count a bot that has effectively arrived as grinding forever.

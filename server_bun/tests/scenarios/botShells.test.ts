@@ -86,6 +86,11 @@ describe('scenario: bot shells hit creatures like player shots', () => {
       loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
     };
     bots.loadouts.set(b.id, BOT_LOADOUTS[8]!);
+    // Face the aim: shots launch along the body's facing now, and this
+    // test drives fireAt without ticking the room — nothing else turns
+    // the body (same convention as faceLaunch: pitch aims from muzzle).
+    b.rotation.yaw = Math.atan2(30 - b.position.x, 0 - b.position.z);
+    b.rotation.pitch = -Math.atan2(30.1 - (b.position.y + 1.4), 30);
     const hp0 = victim.health;
     const armor0 = victim.armor;
     for (let i = 0; i < 6; i++) {
@@ -125,6 +130,10 @@ describe('scenario: bot shells hit creatures like player shots', () => {
       loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
     };
     bots.loadouts.set(b.id, BOT_LOADOUTS[7]!); // artillery
+    // Face the aim — see the weld test: fireAlong-facing needs the body
+    // turned, and this test never ticks the room.
+    b.rotation.yaw = Math.atan2(50 - b.position.x, 0 - b.position.z);
+    b.rotation.pitch = -Math.atan2(32 - (b.position.y + 1.4), 50);
     for (let i = 0; i < 3; i++) {bots.arsenal.fireAt(b, 'victim', { x: 50, y: 32, z: 0 });}
     expect(w.count('projectileCreated')).toBe(1); // one shell per 2.0s, not three per tick
     bots.arsenal.testAdvance(2100);

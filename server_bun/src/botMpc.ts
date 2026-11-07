@@ -126,8 +126,12 @@ export class BotMpc {
 
   /** Drive one bot through a search-planned leg. Returns false when the
    *  option can't run (no field/shadow/plan-in-flight) so the caller
-   *  keeps the normal pipeline. `tgt` is the committed destination. */
-  drive(id: string, tgt: BotVec): boolean {
+   *  keeps the normal pipeline. `tgt` is the committed destination.
+   *  `modelYaw` is the wire-facing yaw (aim while a trigger lives, else
+   *  travel): the shadow faces it too and the plan's act yaw becomes
+   *  WASD keys off that facing - shadow, edge replay, and remote model
+   *  then run the identical human-legal input. */
+  drive(id: string, tgt: BotVec, modelYaw: number): boolean {
     // FPS_MPC_OFF: scenario harnesses pin the option off entirely —
     // the sync fallback pays ~300ms/solve inside step(), which turns a
     // 10s soak into minutes and measures the planner, not the room.
@@ -230,9 +234,16 @@ export class BotMpc {
     const a = run?.plan.act[stepI(run!)];
     if (!a) {return false;}
     run!.i += 1;
-    this.moveSim.faceYaw(id, a.yaw);
-    this.moveSim.setInput(id, { forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: a.jet });
-    this.botInput?.(id, { forward: 1, right: 0, jump: 0, ski: 1, jet: a.jet ? 1 : 0 }, 0);
+    this.moveSim.faceYaw(id, modelYaw);
+    // The plan's travel yaw decomposed onto the model's facing -
+    // quantized to the 8 legal key chords (the edge wire is int8; an
+    // analog value would replay differently than the shadow ran).
+    const fx = Math.sin(modelYaw), fz = Math.cos(modelYaw);
+    const nx = Math.sin(a.yaw), nz = Math.cos(a.yaw);
+    const fwd = Math.round(nx * fx + nz * fz);
+    const rgt = Math.round(nx * -fz + nz * fx);
+    this.moveSim.setInput(id, { forward: fwd, right: rgt, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: a.jet });
+    this.botInput?.(id, { forward: fwd, right: rgt, jump: 0, ski: 1, jet: a.jet ? 1 : 0 }, 0);
     return true;
   }
 

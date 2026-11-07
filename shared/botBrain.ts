@@ -15,6 +15,7 @@ import { botRand } from './botRand.ts';
 import { sharedEnv } from './env.ts';
 import {type ChatterKind, dir8} from './botTaunts.ts';
 import { BotSteer } from './botSteer.ts';
+import { BotSlew } from './botSlew.ts';
 import { BotLines } from './botLines.ts';
 import { BotGoals, type GoalState } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
@@ -385,6 +386,11 @@ export class BotBrain {
     goal: { x: 0, y: 0, z: 0 }, // kept in sync with goalS.goal each think
   };
   private readonly steerer = new BotSteer();
+  /** Human-shaped aiming turns (see botSlew.ts) — hosts drive this with
+   *  their own yaw/pitch each frame; the spring+volatility+noise model
+   *  replaces the old constant-rate slew so crosshair motion reads as a
+   *  person, not a servo. Lives on the brain so both hosts share it. */
+  readonly slew = new BotSlew();
   // Meso-scale terrain routing lives in botLines.ts - turns a raw goal
   // into a committed landing spot so the steerer walks ski lines.
   private readonly lines = new BotLines();

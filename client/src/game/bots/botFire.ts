@@ -11,6 +11,9 @@ import * as THREE from 'three';
 import { GameBot, BOT_DMG } from './botBrain.js';
 import { BOT_LOADOUTS, pickBotWeaponSafe } from '../../../../shared/botLoadouts.js';
 import { aimSkillFor } from '../../../../shared/botSkill.js';
+
+/** cos(20°): settle cone a pull waits inside — see botArsenal SETTLE_COS. */
+const SETTLE_COS = Math.cos(0.35);
 import { getProjectileConfig } from '../../projectiles/index.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { SLOT_DEFS } from '../../weapons.js';
@@ -92,6 +95,12 @@ export class BotFire {
     const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
     const dx = aim.x - bot.position.x, dy = aim.y - bot.position.y, dz = aim.z - bot.position.z;
     const dist = Math.hypot(dx, dy, dz) || 1;
+    // Fire-along-facing: the pull waits until the body has swung inside
+    // ~20° of the aim (Quake's rule — the crosshair IS the view). Still
+    // turning = no shot, no ammo spent; the brain re-pulls next think.
+    const cp = Math.cos(bot.rotation.pitch);
+    const fx = Math.sin(bot.rotation.yaw) * cp, fy = -Math.sin(bot.rotation.pitch), fz = Math.cos(bot.rotation.yaw) * cp;
+    if ((fx * dx + fy * dy + fz * dz) / dist < SETTLE_COS) {return;}
     const picked = pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
       bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
     const melee = picked === WeaponType.Melee || dist <= MELEE_RANGE;
@@ -119,7 +128,7 @@ export class BotFire {
       this.claimShot(bot, targetId, aim, melee, melee ? MELEE_DAMAGE : BOT_DMG, wt);
       return;
     }
-    this.spawnShells(bot, wt, cfg, dx / dist, dy / dist, dz / dist);
+    this.spawnShells(bot, wt, cfg, fx, fy, fz);
   }
 
   /** The brain's volley cadence is weapon-blind — a 0.45s burst pick of
@@ -221,6 +230,10 @@ export class BotFire {
     const vy = (dir.y / len) * stats.speed - bot.vel.y * 0.5;
     const vz = (dir.z / len) * stats.speed - bot.vel.z * 0.5;
     const vl = Math.hypot(vx, vy, vz) || 1;
+    // The throwing flick — a lob isn't a held trigger, so the honest
+    // read is the body snapping onto the launch dir as it throws.
+    bot.rotation.yaw = Math.atan2(vx / vl, vz / vl);
+    bot.rotation.pitch = -Math.asin(Math.max(-1, Math.min(1, vy / vl)));
     const p = new Projectile(this.host.scene(),
       _shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z),
       _shotDir.set(vx / vl, vy / vl, vz / vl), bot.vel,

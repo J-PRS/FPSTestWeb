@@ -86,23 +86,6 @@ const sharedGroundYCache = new Map<number, number>();
 
 
 
-/** Rotate `cur` toward `want` by at most `maxDelta` radians — view
-
- *  turns have wrist speed, so a snapped 180° reads as a fly-flick. */
-
-function slewYaw(cur: number, want: number, maxDelta: number): number {
-
-  let d = want - cur;
-
-  if (d > Math.PI) {d -= Math.PI * 2;}
-
-  if (d < -Math.PI) {d += Math.PI * 2;}
-
-  return cur + Math.max(-maxDelta, Math.min(maxDelta, d));
-
-}
-
-
 
 
 
@@ -702,7 +685,20 @@ export class GameBot extends RemotePlayer {
 
     // offline bot carves its view around instead of fly-flicking.
 
-    if (md > 0.01) {this.rotation.yaw = slewYaw(this.rotation.yaw, Math.atan2(dest.x - pos.x, dest.z - pos.z), 5 * dt);}
+    // A bot's yaw is its crosshair (like a human's): while a shot is
+    // live it faces the TARGET, not the destination — a body strafing
+    // sideways while its shots land on you reads as a silent aimbot.
+    // Same rule the server driveMove applies off arsenal.aimPoint.
+    const aimFresh = performance.now() - this.lastAimAt < 1500;
+    // Between volleys the trigger is dead but the hunt is live — a
+    // duelist keeps their crosshair on the enemy between pulls, so the
+    // look falls back to the last-seen hunt spot (same rule as the
+    // server's aimPoint fallback; without it volley weapons re-paid the
+    // full spring acquisition before the settle gate opened).
+    const look = aimFresh ? this.lastAim : (this.brain.h.hunt?.pos ?? null);
+    const wantYaw = look
+      ? Math.atan2(look.x - pos.x, look.z - pos.z)
+      : Math.atan2(dest.x - pos.x, dest.z - pos.z);
 
     // Head tracks the last aim point like the server drive does — wire
 
@@ -710,13 +706,27 @@ export class GameBot extends RemotePlayer {
 
     // back to level at the same 5 rad/s slew as the wrist turn.
 
-    const wantPitch = performance.now() - this.lastAimAt < 1500
+    // Pitched at the MUZZLE (+1.4 over eye) like the server drive —
 
-      ? -Math.atan2(this.lastAim.y - pos.y, Math.hypot(this.lastAim.x - pos.x, this.lastAim.z - pos.z))
+    // shots launch along this dir, so an eye-height solve lofts every
+
+    // shell over the capsule top.
+
+    const wantPitch = look
+
+      ? -Math.atan2(look.y - (pos.y + 1.4), Math.hypot(look.x - pos.x, look.z - pos.z))
 
       : 0;
 
-    this.rotation.pitch = slewYaw(this.rotation.pitch, wantPitch, 5 * dt);
+    // Human-shaped turn: spring flick + overshoot + settling noise,
+
+    // skill-scaled — shared/botSlew.ts, same drive the server uses.
+
+    if (look || md > 0.01) {
+      const f = this.brain.slew.face(dt, this.rotation.yaw, wantYaw, this.rotation.pitch, wantPitch, this.brain.skill);
+      this.rotation.yaw = f.yaw;
+      this.rotation.pitch = f.pitch;
+    }
 
     this.rotation.roll = 0; // corpse roll would otherwise stick forever
 
@@ -736,11 +746,31 @@ export class GameBot extends RemotePlayer {
 
     const jet = (Boolean(move?.jet) || this.propelJetT > 0) && this.energy > 0.5;
 
+    // Travel intent in world space → yaw-relative keys (same strafe
+
+    // decomposition the server driveMove does): the bot can face its
+
+    // target and still walk to its dest instead of onto the crosshair.
+
+    let fwdIn = 0, rgtIn = 0;
+
+    if (md > 0.5) {
+
+      const fx = Math.sin(this.rotation.yaw), fz = Math.cos(this.rotation.yaw);
+
+      const nx = (dest.x - pos.x) / md, nz = (dest.z - pos.z) / md;
+
+      fwdIn = Math.round(nx * fx + nz * fz);
+
+      rgtIn = Math.round(nx * -fz + nz * fx);
+
+    }
+
     this.movement.setInput({
 
-      forward: md > 0.5 ? 1 : 0,
+      forward: fwdIn,
 
-      right: 0,
+      right: rgtIn,
 
       jumpHeld: Boolean(move?.jump),
 

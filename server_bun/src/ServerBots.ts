@@ -20,6 +20,7 @@ import { type BotBrain,BRAWL_RANGE,FOE_CONE_MIN_DOT,type BotVec,type BrainCtx,ty
 
 import { losClear } from '../../shared/botLos.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
+import type { BotSlew } from '../../shared/botSlew.ts';
 import { endTaunt, startTaunt, type ChatterKind, type EndOutcome, type TauntLine } from '../../shared/botTaunts.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
@@ -135,6 +136,11 @@ export class ServerBots {
    *  skill↔outcome lines without touching the brain internals. */
   skillOf(id: string): BotSkill | undefined {
     return this.brains.get(id)?.skill;
+  }
+  /** The brain's shared aim-turn tracker — botDrive reads it through
+   *  DriveHost so yaw/pitch get the spring+noise model, not a ramp. */
+  slewFor(id: string): BotSlew | undefined {
+    return this.brains.get(id)?.slew;
   }
   /** Brain cadence: senses+think+fire run every THINK_DIV tick per bot
    *  (phase-offset so the squad doesn't think in lockstep). 20Hz decisions
@@ -344,7 +350,7 @@ export class ServerBots {
   /** Everything the brain asked to shoot or plant this tick - primary
    *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
    *  deploy claims re-validated through the human message path. */
-  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; rotation: { yaw: number }; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch?: number }; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
     const { goal, now, sh, nuggetNear, ctx } = s;
     if (out.fire) {this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);}
     // Stand suppression: a committed runner with clear LOS takes a few
@@ -526,7 +532,7 @@ export class ServerBots {
    *  (a plated capper survives the run), then hurt allies in reach, and
    *  anyone pressing in. Technicians do it eagerly; other support kits
    *  toss one now and then - a guideline, not a reflex. */
-  private supportNade(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; armorClass: string }, brain: BotBrain, now: number, nuggetNear: boolean): void {
+  private supportNade(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch?: number }; armorClass: string }, brain: BotBrain, now: number, nuggetNear: boolean): void {
     if (!p.team) {return;}
     const belt = this.loadouts.get(id)?.belt;
     if (belt !== WeaponType.ArmorGrenade) {return;}
@@ -565,7 +571,7 @@ export class ServerBots {
    *  lobs at a hurt cluster - the dedicated 'medic' does both eagerly,
    *  hybrids only when duty says so and the tank has a reserve. The
    *  beam's ammo IS jet energy, so pocket-healing spends mobility. */
-  private healAlly(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; armorClass: string }, brain: BotBrain, now: number): void {
+  private healAlly(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch?: number }; armorClass: string }, brain: BotBrain, now: number): void {
     if (!p.team) {return;}
     const lo = this.loadouts.get(id);
     if (!lo) {return;}
@@ -745,8 +751,17 @@ hurtCount += 1;
       const tm2 = performance.now();
       const sh = this.room.moveSim.simState(id);
       const mpcTgt = this.mpcArm.get(id);
+      // The yaw the wire will show (aim while a trigger lives, else the
+      // sim's travel yaw) - the drivers face the shadow to it and carry
+      // the plan's travel dir as strafe keys, so remote edge replay
+      // reproduces the shadow's world input instead of walking the
+      // crosshair.
+      const mpcAim = this.arsenal.aimPoint(id);
+      const modelYaw = mpcAim
+        ? Math.atan2(mpcAim.x - p.position.x, mpcAim.z - p.position.z)
+        : (sh?.yaw ?? p.rotation.yaw);
       let owned = false;
-      if (sh && mpcTgt && this.mpc.drive(id, mpcTgt)) {owned = true;}
+      if (sh && mpcTgt && this.mpc.drive(id, mpcTgt, modelYaw)) {owned = true;}
       else if (mpcTgt) {this.mpcArm.delete(id); this.mpc.release(id); this.mpcProgress.delete(id);}
       // Transit legs: any bot with a destination and no park order gets
       // the rollout - energy-banked movement is the default state, not a
@@ -780,7 +795,7 @@ hurtCount += 1;
         const dd = cruise ? Math.hypot(cruise.x - p.position.x, cruise.z - p.position.z) : 0;
         const transit = cruise !== undefined && !out.move?.park
           && dd > 40 && dd < 150 && (this.foeNear.get(id) ?? 0) <= now;
-        if (transit && this.greedy.drive(id, cruise)) {owned = true;}
+        if (transit && this.greedy.drive(id, cruise, modelYaw)) {owned = true;}
         else {this.greedy.release(id);}
       }
       if (sh && !owned) {
@@ -801,10 +816,14 @@ hurtCount += 1;
         p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
         // Same rule as botDrive: a live trigger faces the target, not the
         // heading - MPC runners strafe while shooting like everyone else.
-        const mpcAim = this.arsenal.aimPoint(id);
-        p.rotation.yaw = mpcAim
-          ? Math.atan2(mpcAim.x - p.position.x, mpcAim.z - p.position.z)
-          : sh.yaw;
+        // Driven through the same BotSlew as driveMove so committed legs
+        // ease/flick like every other bot instead of snapping.
+        const wantPitch = mpcAim
+          ? -Math.atan2(mpcAim.y - (p.position.y + 1.4), Math.hypot(mpcAim.x - p.position.x, mpcAim.z - p.position.z))
+          : 0;
+        const mf = this.slewFor(id)?.face(dt, p.rotation.yaw, modelYaw, p.rotation.pitch ?? 0, wantPitch, this.skillOf(id));
+        p.rotation.yaw = mf?.yaw ?? modelYaw;
+        if (mf) {p.rotation.pitch = mf.pitch;}
         p.skiing = 1;
         // Meter tick parity with driveMove: MPC bots skip driveMove, so
         // without this they never tick and of() reads the unproven

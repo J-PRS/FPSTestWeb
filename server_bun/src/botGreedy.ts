@@ -43,7 +43,10 @@ export class BotGreedy {
 
   release(id: string): void { this.held.delete(id); }
 
-  drive(id: string, tgt: BotVec): boolean {
+  /** `modelYaw` = the wire-facing yaw (see botMpc.drive) - the shadow
+   *  faces it and the picked travel yaw rides as strafe keys, so the
+   *  edge replay reproduces the identical world input. */
+  drive(id: string, tgt: BotVec, modelYaw: number): boolean {
     if (!this.field) {return false;}
     const sim = this.moveSim.simOf(id);
     const econ = this.moveSim.econOf(id);
@@ -57,9 +60,13 @@ export class BotGreedy {
       if (!h) {return false;}
     }
     h.ticks -= 1;
-    this.moveSim.faceYaw(id, h.yaw);
-    this.moveSim.setInput(id, { forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: h.jet });
-    this.botInput?.(id, { forward: 1, right: 0, jump: 0, ski: 1, jet: h.jet ? 1 : 0 }, 0);
+    this.moveSim.faceYaw(id, modelYaw);
+    const fx = Math.sin(modelYaw), fz = Math.cos(modelYaw);
+    const nx = Math.sin(h.yaw), nz = Math.cos(h.yaw);
+    const fwd = Math.round(nx * fx + nz * fz);
+    const rgt = Math.round(nx * -fz + nz * fx);
+    this.moveSim.setInput(id, { forward: fwd, right: rgt, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: h.jet });
+    this.botInput?.(id, { forward: fwd, right: rgt, jump: 0, ski: 1, jet: h.jet ? 1 : 0 }, 0);
     return true;
   }
 
