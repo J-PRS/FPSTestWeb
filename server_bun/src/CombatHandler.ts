@@ -30,7 +30,7 @@ import { lgTickDamage, lgChargeAt, LG_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_M
 import { perkMods } from '../../shared/perks.ts';
 
 
-/** What a beam intent's honest ray struck — the room resolves earliest
+/** What a beam intent's honest ray struck - the room resolves earliest
  *  contact; CombatHandler pays it. `contact` is the surface point (pop
  *  blasts and relays anchor there). Chain ids ride a second contact
  *  when the fork arcs to another creature. */
@@ -42,63 +42,63 @@ export interface BeamContact {
   chainBallId?: number;
   chainCrawlerId?: number;
   chainContact?: Vec3;
-  /** Damage multiplier — the terrain-bounce leg pays half. */
+  /** Damage multiplier - the terrain-bounce leg pays half. */
   dmgScale?: number;
 }
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
 
-/** Optional room wiring — mirrors the subset of RoomInfo combat needs. */
+/** Optional room wiring - mirrors the subset of RoomInfo combat needs. */
 export interface CombatDeps {
-  /** Domain-event sink — kill/hit/fire/botSpoke notifications fan out
+  /** Domain-event sink - kill/hit/fire/botSpoke notifications fan out
    *  to the room's subscribers (scoring, bot senses, influence). */
   emit?: RoomEventSink;
   /** Team-mode rooms block damage between teammates (knockback still
-   *  applies — boosting off a teammate's splash is intentional). */
+   *  applies - boosting off a teammate's splash is intentional). */
   teams?: boolean;
-  /** Server option: set = teammates CAN damage each other — friendly()
+  /** Server option: set = teammates CAN damage each other - friendly()
    *  returns false even in team rooms. Splash knockback is unaffected. */
   friendlyFire?: boolean;
   /** Rabbit rooms: returns the flag carrier's id (null when the flag is
-   *  loose). Presence of the dep IS the mode check — friendly() blocks
+   *  loose). Presence of the dep IS the mode check - friendly() blocks
    *  damage unless one side of the pair is the rabbit. */
   rabbitCarrier?: () => string | null;
   /** Rabbit: true once the flag exists (first corpse spawned it). Before
-   *  that the mode is deliberately open season — hunters can't fight a
+   *  that the mode is deliberately open season - hunters can't fight a
    *  rabbit that doesn't exist yet; after, a loose flag still enforces
    *  the pairing law. */
   rabbitFlagLive?: () => boolean;
-  /** Rabbit tie-in: id sitting in last place — the bottom-feeder rule
+  /** Rabbit tie-in: id sitting in last place - the bottom-feeder rule
    *  lets the worst-ranked hunter brawl with anyone. */
   rabbitBottom?: () => Set<string>;
-  /** Jet-tank access for heal-beam ammo — the beam burns movement energy,
+  /** Jet-tank access for heal-beam ammo - the beam burns movement energy,
    *  server-side truth so a bot/client can't heal for free. */
   drainEnergy?: (playerId: string, amount: number) => void;
   energyOf?: (playerId: string) => number | null;
-  /** Shadow-sim grounded state — groundedOnly weapons refuse otherwise. */
+  /** Shadow-sim grounded state - groundedOnly weapons refuse otherwise. */
   groundedOf?: (playerId: string) => boolean;
-  /** Dome occlusion for blast sweeps — the shell dies at the shield's
+  /** Dome occlusion for blast sweeps - the shell dies at the shield's
    *  edge, so its splash must not reach anyone inside that dome. */
   shieldBlocked?: (from: Vec3, to: Vec3, shooterId: string) => boolean;
-  /** Server-driven respawn is a declared discontinuity — reseat the
+  /** Server-driven respawn is a declared discontinuity - reseat the
    *  shadow at the spawn or the corpse→spawn jump reads as divergence. */
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Room mode tag for balance telemetry ('ctf', 'nuggets', ...). */
   mode?: string;
 
-  /** A bot chat line hit the wire — Room relays it as a 'reply' notice
+  /** A bot chat line hit the wire - Room relays it as a 'reply' notice
    *  so squadmates can answer back. Emitted as 'botSpoke'. */
-  /** Room heartbeat counters — claims/rejects/applied damage tally here
+  /** Room heartbeat counters - claims/rejects/applied damage tally here
    *  so the periodic 'Room health' line shows the funnel at a glance. */
   health?: Map<string, number>;
-  /** A real fire claim passed the gates — the sheep meter's ignore
+  /** A real fire claim passed the gates - the sheep meter's ignore
    *  debit needs fire recency for humans (bots report their own).
    *  Emitted as 'fire'. */
   /** Nearest-creature distance for env-damage plausibility (melee-from-
    *  afar flagging). Absent = no creature sim to check against. */
   envRange?: (playerId: string) => number;
-  /** Distance of the nearest ball / crawler to a point — self-frag
+  /** Distance of the nearest ball / crawler to a point - self-frag
    *  autopsy discriminates a terrain lip from a body that hopped into
    *  the shell. */
   preyNear?: (pos: Vec3, shooterId?: string) => { ball: number; crawler: number; foe: number };
@@ -106,16 +106,16 @@ export interface CombatDeps {
   /** Spatial memory: hits and kills deposit danger scent on the victim's
    *  team layer; the map itself lives on Room. */
   influence?: InfluenceMap;
-  /** Seeded room rng — absent = ambient Math.random (production). */
+  /** Seeded room rng - absent = ambient Math.random (production). */
   rng?: () => number;
   /** Fire-intent → authoritative shell spawn (RoomProjectiles). Only
    *  SERVER_SIMMED_WEAPONS route here; returns the LiveProj id. */
   fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number) => string | null;
-  /** Beam-intent resolution — the honest ray against terrain, walls,
+  /** Beam-intent resolution - the honest ray against terrain, walls,
    *  players, and creatures; earliest contact wins. Absent = beam
    *  intents stay cosmetic relays only. */
   beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number) => BeamContact | null;
-  /** Creature damage sinks for beam contacts — BallSim/CreatureSim
+  /** Creature damage sinks for beam contacts - BallSim/CreatureSim
    *  handleHit; absent when the room runs no creature sims. */
   ballHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
   crawlerHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
@@ -123,24 +123,24 @@ export interface CombatDeps {
    *  ray touches, then `repair` pays it (Room.deployables.repair). */
   repairTarget?: (playerId: string, muzzle: Vec3, dir: Vec3, range: number) => number | null;
   repair?: (playerId: string, targetId: number) => ClaimVerdict | void;
-  /** Target uplink-transit estimate (ms) — blast lag-comp subtracts the
+  /** Target uplink-transit estimate (ms) - blast lag-comp subtracts the
    *  same lead the tick broadcast shows shooters, so a point-blank-
    *  looking pop validates against the position actually rendered. */
   transitOf?: (playerId: string) => number;
-  /** Link jitter EMA — bounds the shooter's claimed render lag. */
+  /** Link jitter EMA - bounds the shooter's claimed render lag. */
   transitVarOf?: (playerId: string) => number;
-  /** Claim-declared trigger instant (server-clock estimate) — feeds the
+  /** Claim-declared trigger instant (server-clock estimate) - feeds the
    *  measured-uplink channel the transit EMA approximates. */
   uplinkNote?: (playerId: string, fireAt: number) => void;
   /** Binary playerHit lane (wireIds resolve → encodeHit once per event).
-   *  Returns false when either id lacks a wireId — caller falls back to
+   *  Returns false when either id lacks a wireId - caller falls back to
    *  the JSON broadcast so test harnesses and env shooters still land. */
   wireHit?: (e: { shooterId: string; targetId: string; damage: number; health: number; armor?: number; seq?: number; shotId?: string; gd?: number }) => boolean;
   /** Room wireId lookup for S→C binary relays (u16 on the wire). */
   widOf?: (playerId: string) => number | undefined;
   /** Broadcast one pre-encoded binary frame (broadcastBinaryReliable). */
   wireCast?: (data: Uint8Array, journaled?: boolean | 'volatile', exclude?: string) => void;
-  /** Single-recipient reliable binary (knockback — victim-only). */
+  /** Single-recipient reliable binary (knockback - victim-only). */
   wireTo?: (playerId: string, data: Uint8Array, journaled?: boolean | 'volatile') => void;
   /** Arrival-time cosmetic relay already flashed this shotId - skip the
    *  drain's own emit or observers see a double muzzle. */
@@ -152,22 +152,22 @@ export interface CombatDeps {
  * environmental damage, projectile tracking/destroy, and respawn timers.
  * Split from MessageHandler so the dispatch surface (movement, presence,
  * snapshots) stays a thin routing file. The projectile book-keeping lives
- * in claimLedger — this file keeps the damage policy.
+ * in claimLedger - this file keeps the damage policy.
  */
 export class CombatHandler {
-  /** The blast sweep — claimed AOE resolutions, trusted server blasts,
+  /** The blast sweep - claimed AOE resolutions, trusted server blasts,
    *  plating sweeps, mine pops. Own file (combatBlast.ts) via BlastHost. */
-  blast: BlastRunner; // public — aoeClaims drives it via AoeHost
-  /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
+  blast: BlastRunner; // public - aoeClaims drives it via AoeHost
+  /** Cosmetic relay gate for shotFired - a hitscan pull has no damage
    *  semantics, so excess ones are silently dropped instead of rejected. */
   private lastFireNotify = new Map<string, number>();
-  /** 1s sliding window of server-simmed fire intents — the flood gate. */
+  /** 1s sliding window of server-simmed fire intents - the flood gate. */
   private simmedFireTimes = new Map<string, number[]>();
-  /** Beam intents (LG/Repair) get their own window — they already pay in
+  /** Beam intents (LG/Repair) get their own window - they already pay in
    *  the beam branch and never own a shell, so they must not also
    *  consume the projectile-spawn flood/cadence budget below. */
   private beamFireTimes = new Map<string, number[]>();
-  /** Weapons whose shotFired resolves in the beam branches — never
+  /** Weapons whose shotFired resolves in the beam branches - never
    *  reach the projectile spawn gate (they'd double-count the window
    *  and only spawn-refuse anyway). */
   private static readonly BEAM_INTENT_WEAPONS = new Set<number>([WeaponType.Lightning, WeaponType.Shocklance, WeaponType.Repair, WeaponType.HealBeam]);
@@ -175,26 +175,26 @@ export class CombatHandler {
    *  A resend inside the window is a no-op (the first verdict already
    *  flew); outside it the intent is simply new. */
   private seenShots = new Map<string, Map<string, number>>();
-  private static readonly SHOT_DEDUPE_MS = 10_000; // resync replays ride the whole journal — >5s hidden gaps are normal
+  private static readonly SHOT_DEDUPE_MS = 10_000; // resync replays ride the whole journal - >5s hidden gaps are normal
   /** Cadence gate (registerMiss uses it): per `${playerId}:${weaponType}`
-   *  burst window — start time + claims seen inside it. The client fire
+   *  burst window - start time + claims seen inside it. The client fire
    *  timer is feel; this is the law. A window holds up to `burst` spawn
    *  claims (fan weapons fire all pellets in one pull); hits don't need
-   *  gating — the ledger already caps them at one per registered
+   *  gating - the ledger already caps them at one per registered
    *  projectile. */
   fireWindows = new Map<string, { start: number; count: number; lastTs?: number; arr: number[]; violations: number }>();
-  /** Heal-beam tick law — per `shooter|patient` pair last-tick stamp,
+  /** Heal-beam tick law - per `shooter|patient` pair last-tick stamp,
    *  the same rate shape the repair beam enforces. */
   healTicks = new Map<string, number>();
-  /** The LG bank/ramp economy — own file (combatCharge.ts); this handler
+  /** The LG bank/ramp economy - own file (combatCharge.ts); this handler
    *  only supplies the detonation (a real processAOE blast). */
-  chargeBank: ChargeBank; // public — aoeClaims banks LG ticks through it
+  chargeBank: ChargeBank; // public - aoeClaims banks LG ticks through it
   private aoe: AoeClaims;
-  /** First-hit timestamps per shooter|victim pair — kill-side applies it
+  /** First-hit timestamps per shooter|victim pair - kill-side applies it
    *  as the engagement time (TTK), hit-side only refreshes it. */
-  /** Map-structure colliders — claim validation rejects flights that
+  /** Map-structure colliders - claim validation rejects flights that
    *  would have to pass through a wall to reach their end point.
-   *  solidIndex is public — BlastRunner marches through it too. */
+   *  solidIndex is public - BlastRunner marches through it too. */
   _solids: readonly StructureCollider[] = [];
   solidIndex: ColliderIndex | null = null;
   get solids(): readonly StructureCollider[] { return this._solids; }
@@ -207,7 +207,7 @@ export class CombatHandler {
   private hitLedger = new HitLedger();
   respawner: RespawnManager;
 
-  /** AoeHost surface — seeded rng rides deps so bomblet scatter replays
+  /** AoeHost surface - seeded rng rides deps so bomblet scatter replays
    *  under scenario seeds; ambient dice when uninjected. */
   rng(): number { return (this.deps.rng ?? Math.random)(); }
 
@@ -217,7 +217,7 @@ export class CombatHandler {
     public sendToPlayer: SendToPlayerFn,
     public deps: CombatDeps = {},
   ) {
-    // Late binding on the static — tests reassign tauntDelayMs after
+    // Late binding on the static - tests reassign tauntDelayMs after
     // construction and must still steer the delay.
     this.killFeed = new KillFeed(playerManager, broadcast, (): number => CombatHandler.tauntDelayMs(),
       (id, vgs): void | undefined => this.deps.emit?.({ type: 'botSpoke', id, vgs }), sendToPlayer);
@@ -231,7 +231,7 @@ export class CombatHandler {
     if (this.deps.health) {this.deps.health.set(key, (this.deps.health.get(key) ?? 0) + n);}
   }
 
-  /** The claim's measured uplink age (ms) — sendShotFired stamps fireAt
+  /** The claim's measured uplink age (ms) - sendShotFired stamps fireAt
    *  on the client's server-clock estimate; absence = 0 (bot/legacy).
    *  Bounded by the MEASURED path, not the stamp itself: a forged deep-
    *  past fireAt would otherwise rewind the attack origin across the
@@ -249,7 +249,7 @@ export class CombatHandler {
   }
 
   /** Claim-driven origin: the shooter's reported eye/muzzle point,
-   *  bounded to honest reach of its uplink window — a teleported claim
+   *  bounded to honest reach of its uplink window - a teleported claim
    *  clamps to the nearest recorded body sample instead of being taken
    *  verbatim. No transit estimate: pos is claim truth, the window is
    *  measured uplink. */
@@ -259,7 +259,7 @@ export class CombatHandler {
       const bound = rewindNearest(player, uplinkMs + 150, 150, pos);
       const gap = dhypot3(bound.x - pos.x, bound.y - pos.y, bound.z - pos.z);
       // A real muzzle sits within ~muzzle-lead + a step of some recorded
-      // body sample in the window — a bigger gap is a teleported claim.
+      // body sample in the window - a bigger gap is a teleported claim.
       if (gap <= 3) {return { x: pos.x, y: pos.y, z: pos.z };}
     }
     return at;
@@ -269,7 +269,7 @@ export class CombatHandler {
    *  their client can log WHY predicted damage never happened. */
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
     this.hb('rej');
-    // Record rejected shots too — a journal replay of a REFUSED pull
+    // Record rejected shots too - a journal replay of a REFUSED pull
     // must no-op, not re-arrive, heat the cadence window, and reject the
     // next legal pump (the shotgun cascade: rejected→resent→rejected).
     if (kind === 'Shot' && shotId) {
@@ -278,32 +278,32 @@ export class CombatHandler {
       if (!seen.has(shotId)) {seen.set(shotId, wallNow());}
     }
     this.hb(`rej.${kind}`);
-    // The verdict is expected traffic — a spray of out-of-reach claims
+    // The verdict is expected traffic - a spray of out-of-reach claims
     // from one player is one signal, not N log lines (16-bot soak:
     // ~200 warns/4min, all stamped by a handful of senders). Throttle
     // per player+kind like notifyDrop does for the wire side; the exact
     // counts still land in the rej.* heartbeat keys.
     if (reason === 'shooter dead') {
-      // A late volley is netcode working — verdict + drop.deadShot carry
+      // A late volley is netcode working - verdict + drop.deadShot carry
       // the signal; a warn per race reads as soak jank at 64 clients.
       logger.debug(`${kind} rejected: ${playerId}: ${reason}`);
     } else {
       this.rejectWarn(`${playerId}:${kind}`,
         `${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
     }
-    // Rejected claims can leave predicted self-damage stuck client-side —
+    // Rejected claims can leave predicted self-damage stuck client-side -
     // ship our health value so the shooter resyncs instead of drifting.
     const health = this.playerManager.getPlayer(playerId)?.health;
     this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType, health, shotId });
   }
 
-  /** Honest-lag drop, not a reject — but the shooter's client already
+  /** Honest-lag drop, not a reject - but the shooter's client already
    *  predicted the damage, so it needs a clearing signal or its
    *  pending-hit ledger warns phantom. Throttled per player+kind+target:
    *  a beam held on a corpse would otherwise spam the channel at tic
-   *  rate. Distinct from reject(): no warn, no rej counter — these are
+   *  rate. Distinct from reject(): no warn, no rej counter - these are
    *  the drops the health map already tallies as drop.*. */
-  /** Per player+kind warn throttle for reject() — see the comment there.
+  /** Per player+kind warn throttle for reject() - see the comment there.
    *  Keyed like lastDropNotify and cleaned with it on disconnect. */
   private lastRejectWarn = new Map<string, { at: number; n: number }>();
   /** 2s coalescing warn: repeats inside the window count up and land on
@@ -331,8 +331,8 @@ w.n += 1;
 
   friendly(shooterId: string, targetId: string): boolean {
     // Rabbit law: pre-flag (first corpse hasn't spawned it) the lobby is
-    // open season — there is no rabbit to hunt yet. Once the flag exists,
-    // the only legal pairings include the carrier — hunter-vs-hunter is
+    // open season - there is no rabbit to hunt yet. Once the flag exists,
+    // the only legal pairings include the carrier - hunter-vs-hunter is
     // friendly fire, a dropped flag does NOT reopen the season. The
     // bottom-feeder is exempt: last place can hit/be hit by anyone.
     // Self-splash stays legal (rocket jumps).
@@ -348,7 +348,7 @@ w.n += 1;
     // stays allowed regardless (rocket jumps).
     if (!this.deps.teams || shooterId === targetId || this.deps.friendlyFire) {return false;}
     const t = this.playerManager.getPlayer(targetId);
-    // Map-authored assets shoot under the virtual `base:<team>` owner —
+    // Map-authored assets shoot under the virtual `base:<team>` owner -
     // no player row exists, so the team's own bodies must be exempted here
     // or a base turret's splash would chew its defenders.
     if (shooterId.startsWith('base:')) {return t?.team === shooterId.slice(5);}
@@ -357,11 +357,11 @@ w.n += 1;
   }
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
-   *  idle reap) — NOT on socket close, so a rejoining player keeps theirs. */
+   *  idle reap) - NOT on socket close, so a rejoining player keeps theirs. */
   onPlayerRemoved(playerId: string): void {
 
     this.killFeed.forget(playerId);
-    // A pending respawn is part of the player's teardown too — removal
+    // A pending respawn is part of the player's teardown too - removal
     // paths that skip onPlayerDisconnected (kick, room hop, admin reload)
     // would otherwise leave a zombie timer firing into a gone player.
     this.onPlayerDisconnected(playerId);
@@ -374,7 +374,7 @@ w.n += 1;
     // one. Rejoin or not, the objective stays in play.
     this.deps.emit?.({ type: 'flagDrop', playerId });
     // Per-player fire-throttle state is per-connection like the room's
-    // warn keys — a leaver's entry otherwise sits in the map for the
+    // warn keys - a leaver's entry otherwise sits in the map for the
     // room's life.
     this.lastFireNotify.delete(playerId);
     this.simmedFireTimes.delete(playerId);
@@ -397,14 +397,14 @@ w.n += 1;
     }
   }
 
-  /** Hitscan fire leaves no projectile for observers to see — relay a
+  /** Hitscan fire leaves no projectile for observers to see - relay a
    *  cosmetic 'playerShot' so other clients render muzzle audio/visual.
    *  Origin is server-stamped (rewound to fire time, like spawn sanity
    *  checks) so a forged claim can't paint shots from arbitrary points;
-   *  dir stays cosmetic — observers only use it to aim a beam flash. */
+   *  dir stays cosmetic - observers only use it to aim a beam flash. */
   handleShotFired(playerId: string, msg: Extract<ClientMessage, { type: 'shotFired' }>): void {
     const player = this.playerManager.getPlayer(playerId);
-    // A dead-shooter claim is a client dead-gate breach — counted on the
+    // A dead-shooter claim is a client dead-gate breach - counted on the
     // handler ledger (inv stays out: handler-level tests legitimately
     // exercise this path, the breach signal is the reject verdict).
     if (!player || player.isDead) {
@@ -415,7 +415,7 @@ w.n += 1;
     const now = wallNow();
     if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) {this.deps.uplinkNote?.(playerId, msg.fireAt);}
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
-    // Reclaim replays resend recent fire intents — a pull already spawned
+    // Reclaim replays resend recent fire intents - a pull already spawned
     // under this nonce is a no-op, not a second shell. Dropping silently
     // (not rejecting) is correct: the first intent's verdict already flew.
     if (msg.shotId) {
@@ -424,22 +424,22 @@ w.n += 1;
       if (seenAt !== undefined && now - seenAt < CombatHandler.SHOT_DEDUPE_MS) {return;}
     }
     const fireProjectile = dir && serverSimmed(msg.weaponType) && !CombatHandler.BEAM_INTENT_WEAPONS.has(msg.weaponType!) ? this.deps.fireProjectile : undefined;
-    // Class lock applies to every fire intent — beams and melee skip the
+    // Class lock applies to every fire intent - beams and melee skip the
     // projectile branch but must not dodge it.
     if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
       this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
       return;
     }
     // Melee intent: the swing point is server-derived (rewound origin +
-    // aim offset), so a forged position can't widen the arc — the old
+    // aim offset), so a forged position can't widen the arc - the old
     // aoeShot claim carried a client position for exactly this math.
     if (msg.weaponType === WeaponType.Melee && dir) {
       const meleeStats = getWeaponStats(WeaponType.Melee);
       const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
-      // The creature half of the swing pays here too — same derived
-      // origin, same dir — so the client's predicted contact never
+      // The creature half of the swing pays here too - same derived
+      // origin, same dir - so the client's predicted contact never
       // needs a creatureHit claim.
       this.deps.emit?.({ type: 'meleeSweep', playerId, pos: mpos, dir: { x: dir.x / l, y: dir.y / l, z: dir.z / l } });
       this.aoe.handleAOEShot(playerId, {
@@ -460,7 +460,7 @@ w.n += 1;
       }
       return;
     }
-    // Beam intent (Lightning): each tick IS the intent — the room's
+    // Beam intent (Lightning): each tick IS the intent - the room's
     // honest ray decides the contact and the ramp/bank economy pays
     // here, so neither a creatureHit claim nor a per-tick aoeShot is
     // needed. Falls through to the cosmetic playerShot relay below.
@@ -476,13 +476,13 @@ w.n += 1;
         { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
     }
-    // Beam intent (Shocklance): one zap per pull-out cycle — the intent
+    // Beam intent (Shocklance): one zap per pull-out cycle - the intent
     // IS the shot; the honest ray resolves the contact and pays the flat
-    // lance damage. No ramp/bank economy — that's the LG's business.
+    // lance damage. No ramp/bank economy - that's the LG's business.
     if (msg.weaponType === WeaponType.Shocklance && dir && this.deps.beamSweep) {
       const lastL = this.lastLance.get(playerId) ?? 0;
       // The gate sits 150ms UNDER the client's cadence (the old pair was
-      // 1.0s client / 850ms server) — arrival jitter must never refuse a
+      // 1.0s client / 850ms server) - arrival jitter must never refuse a
       // shot the honest trigger just released.
       if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return; }
       this.lastLance.set(playerId, now);
@@ -493,7 +493,7 @@ w.n += 1;
         { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LANCE_RANGE));
     }
-    // Beam intent (Repair): same shape — the tick is the intent and the
+    // Beam intent (Repair): same shape - the tick is the intent and the
     // server names the weld target off the honest ray, so the per-tick
     // `repair` claim isn't needed. Falls through to the cosmetic relay.
     if (msg.weaponType === WeaponType.Repair && dir && this.deps.repairTarget) {
@@ -509,11 +509,11 @@ w.n += 1;
       if (id !== null) {this.deps.repair?.(playerId, id);}
     }
     // Beam intent (HealBeam): same tick-is-intent shape, but the honest
-    // ray's first contact must be a TEAMMATE — anything earlier (enemy,
+    // ray's first contact must be a TEAMMATE - anything earlier (enemy,
     // creature, wall) shadows the patient and the tick pays nothing.
     // The ammo is the shooter's own jet tank: pocket-healing a push
     // costs the medic their climb out. healTicks paces per shooter|
-    // patient pair — the same rate law the repair beam enforces.
+    // patient pair - the same rate law the repair beam enforces.
     if (msg.weaponType === WeaponType.HealBeam && dir && this.deps.beamSweep) {
       const recent = (this.beamFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
@@ -544,12 +544,12 @@ w.n += 1;
     }
     if (fireProjectile) {
       // Intents spawn real sims + broadcasts, so they need a real flood
-      // gate — the fastest legit simmed weapon is ~13/s; 20/s is spam.
+      // gate - the fastest legit simmed weapon is ~13/s; 20/s is spam.
       const recent = (this.simmedFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
       if (recent.length >= 20) { this.reject(playerId, 'Shot', 'fire rate (flood)', undefined, msg.weaponType, msg.shotId); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
-      // Per-weapon cadence law — revived from the retired shotClaims: the
+      // Per-weapon cadence law - revived from the retired shotClaims: the
       // flat 20/s flood gate alone lets a mortar (2.0s interval) claim
       // ~13 simmed shells/sec. Rolling-second arrival bound per
       // `${playerId}:${weaponType}`; 0.85× interval slack absorbs input
@@ -568,7 +568,7 @@ win.violations += 1;
         }
       }
     } else {
-      // Cosmetic relay only — throttled: a dropped relay costs a muzzle
+      // Cosmetic relay only - throttled: a dropped relay costs a muzzle
       // flash, but a dropped intent would orphan a predicted shell.
       // The stamp lands at the relay emit below so the intent
       // fall-through shares ONE throttle per player.
@@ -581,21 +581,21 @@ win.violations += 1;
     const uplinkMs = this.uplinkMsOf(playerId, msg);
     const at = this.claimOrigin(player, uplinkMs, msg.pos);
     // Claimless pilot: a server-simmed intent spawns an authoritative
-    // shell — the intent IS the whole claim; contact/blast outcomes
+    // shell - the intent IS the whole claim; contact/blast outcomes
     // arrive as broadcasts, never as client claims. projectileCreated
     // covers observers' visuals, so the playerShot relay is skipped.
     if (fireProjectile) {
-      // Belt throws pay the same charge the spawn claim would deduct —
+      // Belt throws pay the same charge the spawn claim would deduct -
       // skipping it would make free ordnance a forged intent away.
       if (msg.weaponType !== undefined && BELT_THROW_WEAPONS.has(msg.weaponType)) {
         const cost = beltThrowCost(msg.weaponType);
-        // Silent drops orphan the shooter's predicted shell — it binds
+        // Silent drops orphan the shooter's predicted shell - it binds
         // nothing and reads as a ghost hit. Verdict back so the ledger
         // closes instead of waiting out the bind grace.
         if (player.beltCharges < cost) { this.hb('drop.beltDry'); this.reject(playerId, 'Shot', 'belt charges dry', undefined, msg.weaponType, msg.shotId); return; }
         player.beltCharges -= cost;
       }
-      // Energy-paid weapons (Blaster): the jet tank IS the magazine —
+      // Energy-paid weapons (Blaster): the jet tank IS the magazine -
       // one shared cost formula (payShotCost) so bots, clients and the
       // server never disagree on the bill. Verdict back so the shooter's
       // predicted bolt doesn't ghost.
@@ -643,20 +643,20 @@ win.violations += 1;
       }
       player.bloom = bloomGrow(bs.bloom, msg.weaponType ?? -1);
       player.bloomAt = now / 1000;
-      // Velocity inherit: the predicted shell draws playerVel*0.5 — using
+      // Velocity inherit: the predicted shell draws playerVel*0.5 - using
       // the shadow velocity here diverges the echo by uplink-of-accel and
       // shows as a mid-air reanchor jink. Adopt the claim's vel verbatim
       // within an honest window (accel×lag can't legit exceed ~20m/s);
-      // a forged vel beyond that clamps to shadow — worst cheat is a
+      // a forged vel beyond that clamps to shadow - worst cheat is a
       // half-weighted 20m/s nudge, not a free speedline.
       const ownerVel = msg.vel && finiteVec(msg.vel)
           && dhypot3(msg.vel.x - player.velocity.x, msg.vel.y - player.velocity.y, msg.vel.z - player.velocity.z) <= 20
         ? msg.vel : player.velocity;
-      // Back-date the shell's age by the MEASURED uplink transit — the
+      // Back-date the shell's age by the MEASURED uplink transit - the
       // EMA fed by pongs + bounded claim samples, not this claim's stamp
       // (a stale/forged fireAt only re-anchors the ORIGIN above; it may
       // not buy seconds of shell age). Without a measurement the honest
-      // age is arrival-time — transitOf returns 0 in join grace.
+      // age is arrival-time - transitOf returns 0 in join grace.
       const lagS = (this.deps.transitOf?.(playerId) ?? 0) / 1000;
       const id = fireProjectile(playerId, msg.weaponType!,
         { x: at.x, y: at.y, z: at.z },
@@ -674,7 +674,7 @@ win.violations += 1;
         if (msg.weaponType !== undefined) {weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);}
         return;
       }
-      // spawn() declined — a silent no-spawn leaves a predicted shell
+      // spawn() declined - a silent no-spawn leaves a predicted shell
       // waiting forever. Hitscan-class (speed<=0) never owns a shell:
       // its damage settled in the beam intent above, and the reject
       // would misreport a refused shot, so it falls through to relay.
@@ -686,7 +686,7 @@ win.violations += 1;
     // moved simmed weapons off the else-branch throttle).
     if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
     this.lastFireNotify.set(playerId, now);
-    // pos.y IS the eye (screen center) — the muzzle relays right off it,
+    // pos.y IS the eye (screen center) - the muzzle relays right off it,
     // Quake-style, no bump (a +1.6 would double-offset over the crosshair).
     const shotWid = this.deps.widOf?.(playerId);
     if (this.deps.earlyRelayed?.(playerId, msg.shotId)) {return;} // flashed at arrival
@@ -700,10 +700,10 @@ win.violations += 1;
     }
   }
 
-  /** Slam landing intent — the client's dive speed is never trusted;
+  /** Slam landing intent - the client's dive speed is never trusted;
    *  power comes off the move shadow's own velocity (the landing claim
    *  lands while the pre-impact speed is still the freshest sample).
-   *  Position gets a loose plausibility gate against the shadow — a
+   *  Position gets a loose plausibility gate against the shadow - a
    *  slam teleported across the map is rejected, not adjudicated. */
   handleSlam(playerId: string, msg: Extract<ClientMessage, { type: 'slam' }>): ClaimVerdict {
     const player = this.playerManager.getPlayer(playerId);
@@ -730,53 +730,53 @@ win.violations += 1;
     this.aoe.handleAOEShot(playerId, msg);
   }
 
-  /** Server-owned blast — the room's projectile/deployable sims decided
+  /** Server-owned blast - the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
   serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, opts?: { shotId?: string; attribWeaponType?: number; power?: number; air?: number; radiusScale?: number }): void {
     this.blast.serverBlast(ownerId, position, weaponType, excludeTargetId, opts);
   }
 
-  /** Rope-dart contact — the projectile sim resolved the hook's connect
+  /** Rope-dart contact - the projectile sim resolved the hook's connect
    *  point; blast owns the impulse. */
   grapple(ownerId: string, anchor: Vec3, victimId: string | null): void {
     this.blast.grapple(ownerId, anchor, victimId);
   }
 
-  // Client-reported environmental damage (crawler pounces, etc.) — self-only,
+  // Client-reported environmental damage (crawler pounces, etc.) - self-only,
   // clamped so it can never be aimed at another player or one-shot anyone.
   handleEnvironmentDamage(playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): ClaimVerdict {
     return handleEnvironmentDamage(this, playerId, msg);
   }
 
-  /** Heal claim cadence gate — see envClaims.handleHeal. */
+  /** Heal claim cadence gate - see envClaims.handleHeal. */
   lastHeal = new Map<string, number>();
-  /** Per-attacker env-splash credit clock — see envClaims EnvHost. */
+  /** Per-attacker env-splash credit clock - see envClaims EnvHost. */
   lastEnvCredit = new Map<string, number>();
 
-  // Client-claimed heal — self-only; team-mode needs a server-granted
+  // Client-claimed heal - self-only; team-mode needs a server-granted
   // credit, elsewhere the claim stays free-form.
   handleHeal(playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): ClaimVerdict {
     return handleHeal(this, playerId, msg);
   }
 
   handleProjectileDestroy(playerId: string, msg: Extract<ClientMessage, { type: 'projectileDestroy' }>): void {
-    // Every shell is server-simmed — the sim owns its lifecycle end to
+    // Every shell is server-simmed - the sim owns its lifecycle end to
     // end, so a client projectileDestroy can never be legal. Drop it
     // (heartbeat so a forged client shows in the health map).
     this.hb('drop.destroy');
-    logger.debug(`projectileDestroy dropped — shells are server-owned`, { playerId, projectileId: msg.projectileId, shotId: msg.shotId });
+    logger.debug(`projectileDestroy dropped - shells are server-owned`, { playerId, projectileId: msg.projectileId, shotId: msg.shotId });
   }
 
   // One funnel for the hit-or-kill outcome: broadcast the damage, or credit
   // the kill and start the respawn timer. Keeps the three damage paths in
-  // lockstep — a fix here can't drift between shot/AOE/environment.
-  /** Server-bot hitscan — no wire claim to validate, the server IS the
+  // lockstep - a fix here can't drift between shot/AOE/environment.
+  /** Server-bot hitscan - no wire claim to validate, the server IS the
    *  shooter, so this goes straight to damage. Distance/hit-chance live in
    *  ServerBots; this just runs the shared outcome funnel so bot kills,
    *  knockback bookkeeping and respawns match player-caused ones. */
-  /** Server-owned sentry hit — owner is the shooter for scoring/friendly
+  /** Server-owned sentry hit - owner is the shooter for scoring/friendly
    *  checks, but the sim drives the trigger, not a client claim. */
-  /** Server-owned mine blast — owner is the shooter for scoring/friendly
+  /** Server-owned mine blast - owner is the shooter for scoring/friendly
    *  checks, but the sim decided to detonate. Position check skipped: the
    *  blast center is the mine's own spot, not the owner's. */
   mineBlast(ownerId: string, pos: Vec3, maxDamage: number, radius: number, knockback: number): void {
@@ -786,7 +786,7 @@ win.violations += 1;
   /** Single-target server-authored hits (bot shots, sentry bolts, creature
    *  bites) share one funnel: target liveness, optional friendly gate, dd
    *  multiplier off the shooter, applyDamage + forceSend + applyHit.
-   *  'environment' = no shooter, no friendly check — a crawler bites
+   *  'environment' = no shooter, no friendly check - a crawler bites
    *  whoever it landed on. */
   serverHit(
     ownerId: string, targetId: string, damage: number, label: string,
@@ -803,7 +803,7 @@ win.violations += 1;
     this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon, shotId: opts.shotId, air: opts.air });
   }
 
-  /** Beam tick payout — the contact is already the honest earliest, so
+  /** Beam tick payout - the contact is already the honest earliest, so
    *  this only runs the economy: player victims ride ChargeBank like a
    *  bot beam (ramp → tick → bank → serverHit); creatures bank their
    *  withheld charge on a per-creature map and pop it on a beam kill,
@@ -830,9 +830,9 @@ win.violations += 1;
     if (c.chainCrawlerId !== undefined && c.chainContact) {this.creatureTick(playerId, 'crawl', c.chainCrawlerId, c.chainContact, LG_CHAIN_DMG_SCALE * s);}
   }
 
-  /** Shocklance — flat zap on the swept contact: player pays
+  /** Shocklance - flat zap on the swept contact: player pays
    *  directDamage (perk-scaled), creatures take the same number through
-   *  the standard hit deps. No ramp — the cadence gate IS the economy. */
+   *  the standard hit deps. No ramp - the cadence gate IS the economy. */
   private lastLance = new Map<string, number>();
 
   private lancePay(playerId: string, player: PlayerState, c: BeamContact | null): void {
@@ -870,7 +870,7 @@ win.violations += 1;
     }
   }
 
-  /** Deliberate respawn (the client's K bind) — routed through the same
+  /** Deliberate respawn (the client's K bind) - routed through the same
    *  self-hit funnel as a self-frag so the kill feed, corpse charge-pop,
    *  respawn timer, and any pending class/perk all behave identically.
    *  Damage is far over the kill line on purpose: shield/regen buffs
@@ -878,7 +878,7 @@ win.violations += 1;
   respawnRequest(id: string, hold = false): void {
     const p = this.playerManager.getPlayer(id);
     if (p?.isDead) {
-      // Dead press releases a die-and-spectate hold — it never skips a
+      // Dead press releases a die-and-spectate hold - it never skips a
       // live countdown (a click-beats-timer hole made the delay decorative).
       this.respawner.respawnNow(id);
       return;
@@ -912,18 +912,18 @@ win.violations += 1;
   }
 
   // Spree callouts ride matchNotice (system chat line). killTotal()===1 pins
-  // first blood exactly — stats are wiped at match boundaries, so a 1 can
+  // first blood exactly - stats are wiped at match boundaries, so a 1 can
   // only mean the opening frag.
 
 
-  /** Room teardown — pending respawns and queued taunts die with the
+  /** Room teardown - pending respawns and queued taunts die with the
    *  room or a hibernating room fires broadcasts into an empty world. */
   dispose(): void {
     this.respawner.dispose();
     this.killFeed.dispose();
   }
 
-  /** Typing-beat delay — a scenario test steps sim-time only, so it
+  /** Typing-beat delay - a scenario test steps sim-time only, so it
    *  stubs this to 0 to see taunts inside the frag loop. */
   static tauntDelayMs: () => number = (): number => 1200 + tauntRand() * 1800;
 

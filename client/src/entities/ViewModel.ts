@@ -6,11 +6,11 @@ import * as vm from './vmGhost.js';
 import { kickF } from './vmKick.js';
 import { VmEnvelopes } from './vmEnvelopes.js';
 import { VmBaked } from './vmBaked.js';
-// Timing constants live with the envelopes — re-export so Player/fire.ts
+// Timing constants live with the envelopes - re-export so Player/fire.ts
 // keep importing them from the file they already know.
 export { THROW_RELEASE, THROW_TOTAL, SIDEARM_DRAW_TIME, SWING_CONTACT_T, SWING_STRIKE_T } from './vmEnvelopes.js';
 
-// Port of Assets/Scripts/WeaponSway.cs (Unity FPS_Test) — mouse-lag sway,
+// Port of Assets/Scripts/WeaponSway.cs (Unity FPS_Test) - mouse-lag sway,
 // velocity offset, perlin-ish bob, and landing dip.
 const SWAY_AMOUNT = 0.02;
 const SWAY_MAX = 0.03;
@@ -24,7 +24,7 @@ const FALL_MAX = 0.08;
 
 const REST_POS = new THREE.Vector3(0.25, -0.28, -0.45);
 
-/** Builder-baked geometry constants for the bolt bow — kept on the
+/** Builder-baked geometry constants for the bolt bow - kept on the
  *  weapon group's userData so the tick can re-solve the string pose
  *  without importing the builder module. */
 interface BowGeom {
@@ -41,57 +41,57 @@ const SWITCH_DIP_Y = -0.34;
 const SWITCH_DIP_ROT = -0.35; // muzzle tips down as it holsters
 
 const PUNCH_X = 0.18;    // gun swings right
-const PUNCH_Y = -0.3;    // and deep — nearly holstered, not a recoil
+const PUNCH_Y = -0.3;    // and deep - nearly holstered, not a recoil
 const PUNCH_Z = 0.06;
 const PUNCH_ROLL = 0.5;
-const PUNCH_ROT = -0.35; // muzzle tips DOWN (negative like switch) — butt-up sweep, never recoil-up
-const THRUST_Z = -0.21;  // the lance jabs ~21cm — nearly half the gun length
+const PUNCH_ROT = -0.35; // muzzle tips DOWN (negative like switch) - butt-up sweep, never recoil-up
+const THRUST_Z = -0.21;  // the lance jabs ~21cm - nearly half the gun length
 const THRUST_Y = -0.015;
-const THRUST_ROT = -0.05; // slight nose-down drive — tip stays on the aim line
+const THRUST_ROT = -0.05; // slight nose-down drive - tip stays on the aim line
 // The melee swing HOLSTERS the gun (the envelope hides it) instead of
-// dipping it — a group dip would drag the hammer with it, and the
+// dipping it - a group dip would drag the hammer with it, and the
 // hammer's poses are authored in group-rest space.
 const SWING_DIP_Y = -0.34;  // sidearm-style holster dip while the hammer swings
-const SWING_DIP_ROT = -0.35; // muzzle tips down — same lower→raise read as a swap
+const SWING_DIP_ROT = -0.35; // muzzle tips down - same lower→raise read as a swap
 
 export class ViewModel {
   readonly group: THREE.Group;
-  // Keyed by WeaponType — the array order used to collide with the enum
+  // Keyed by WeaponType - the array order used to collide with the enum
   // (Chaingun=3 showed the mortar mesh, Railgun=9 indexed past the end).
-  weapons = new Map<number, THREE.Group>(); // public — envelopes swap visibility
-  // Empty node parked at each weapon's muzzle — world position IS the
+  weapons = new Map<number, THREE.Group>(); // public - envelopes swap visibility
+  // Empty node parked at each weapon's muzzle - world position IS the
   // attachment point for beam VFX, so the bolt tracks sway/kick exactly.
   private muzzleNodes = new Map<number, THREE.Object3D>();
-  // Muzzle Z per weapon (model space) — lives in weaponVisual.ts so the
+  // Muzzle Z per weapon (model space) - lives in weaponVisual.ts so the
   // flash sits AT the bore; read through muzzleZFor()/muzzleZ().
-  chainBarrels: THREE.Group | null = null; // public — VmBaked reseats the bake's pivot
-  // Bore axis in the SPIN NODE's local space — procedural barrels run
+  chainBarrels: THREE.Group | null = null; // public - VmBaked reseats the bake's pivot
+  // Bore axis in the SPIN NODE's local space - procedural barrels run
   // along -Z, but an adopted bake node carries Blender's export axes, so
   // a blind rotation.z cartwheels the triad. Computed at adoption.
-  spinAxis = new THREE.Vector3(0, 0, -1); // public — VmBaked recomputes bore axes
+  spinAxis = new THREE.Vector3(0, 0, -1); // public - VmBaked recomputes bore axes
   spinVel = 0;
   /** Sliding-barrel kick (howitzer): slideKickT counts 1→0, slideRef is
    *  the 'slide' child of the active weapon (set in vmKick). */
   slideKickT = 0;
   slideRef: THREE.Object3D | null = null;
-  // spinVel cap lives in vmKick.ts (SPIN_MAX) — it owns the spool.
-  activeWeapon = 0; // public — the switch envelope rewrites it at the dip
+  // spinVel cap lives in vmKick.ts (SPIN_MAX) - it owns the spool.
+  activeWeapon = 0; // public - the switch envelope rewrites it at the dip
   private timer = 0;
   private aimBlend = 0;
   private kickAmount = 0;
-  kickVel = 0;       // spring velocity — impulse IN, overshoot settle
-  kickX = 0;         // sideways kick — flak/melee shudder
-  kickRoll = 0;      // per-shot roll — alternating twist reads as torque
+  kickVel = 0;       // spring velocity - impulse IN, overshoot settle
+  kickX = 0;         // sideways kick - flak/melee shudder
+  kickRoll = 0;      // per-shot roll - alternating twist reads as torque
   kickDecay = 12;    // per-weapon spring rate
   kickAmp = 1;       // per-weapon muzzle-rise multiplier
   kickBack = 1;      // per-weapon backward-shove multiplier (kickZ scale)
   flashLifeScale = 1;
-  flashLightI = 5; // peak intensity of the current pop — set per weapon in kickF
-  fistGroup: THREE.Group; // public — the punch envelope flies it
-  hammerGroup: THREE.Group; // public — the swing envelope flies it
+  flashLightI = 5; // peak intensity of the current pop - set per weapon in kickF
+  fistGroup: THREE.Group; // public - the punch envelope flies it
+  hammerGroup: THREE.Group; // public - the swing envelope flies it
   private baseRotX = 0.04;
   private baseRotZ = 0;
-  flashMesh: THREE.Mesh;  // public — the switch envelope re-parks it
+  flashMesh: THREE.Mesh;  // public - the switch envelope re-parks it
   flashMesh2: THREE.Mesh;
   flashMat: THREE.MeshBasicMaterial;
   flashLight: THREE.PointLight;
@@ -117,7 +117,7 @@ export class ViewModel {
     // Vertex AO is NOT baked here: the bake is 16 raycasts/vertex against an
     // unindexed merged mesh (~1-4s across all weapons), and weapons that end
     // up GLB-swapped discard the result entirely. loadBakedWeapons bakes AO
-    // only on weapons whose bake fetch misses — i.e. the ones that actually
+    // only on weapons whose bake fetch misses - i.e. the ones that actually
     // stay procedural.
     // Streamed weapon AO/GLB bake is fire-and-forget and already
     // amortized (~100ms chunks per weapon via yieldFrame) - safe past
@@ -131,14 +131,14 @@ export class ViewModel {
     this.flashMat = hf.flashMat;
     this.flashMesh = hf.flashMesh;
     this.flashMesh2 = hf.flashMesh2;
-    // Muzzle light — the half of a retro flash nobody draws: for ~60ms
+    // Muzzle light - the half of a retro flash nobody draws: for ~60ms
     // the shot actually LIGHTS the gun and hands. Parented to the quad so
     // it inherits the per-weapon muzzle park and sway/kick for free.
     this.flashLight = new THREE.PointLight(0xFF_FF_FF, 0, 2.2, 2);
     this.flashLight.visible = false;
     this.flashMesh.add(this.flashLight);
 
-    // Bottom-right, mostly centered — Quake guns sit low and fat
+    // Bottom-right, mostly centered - Quake guns sit low and fat
     this.group.scale.setScalar(0.8);
     this.group.position.copy(REST_POS);
     this.group.rotation.y = 0.05;
@@ -147,7 +147,7 @@ export class ViewModel {
     camera.add(this.group);
   }
 
-  // Camera-space muzzle offset for an ARBITRARY weapon — same math as
+  // Camera-space muzzle offset for an ARBITRARY weapon - same math as
   // getMuzzleOffset but not tied to whichever weapon is active (the beam
   // keeps welding to the LG emitter during the holster dip).
   muzzleViewPos(wt: number, out: THREE.Vector3): boolean {
@@ -160,13 +160,13 @@ export class ViewModel {
 
   // World-space point where a muzzle node actually RENDERS on screen.
   // The gun draws through vmCam (FOV 55) while the world renders through
-  // the main camera (FOV 90) — a raw camera-space offset lands on the
+  // the main camera (FOV 90) - a raw camera-space offset lands on the
   // wrong ray, which is why the beam visibly detached from the gun tip.
   // Project through vmCam to NDC (the pixel the emitter occupies), then
   // unproject through the main camera → a world point on the main cam's
   // ray through that exact pixel. Anchor and emitter can never disagree.
   muzzleAnchorWorld(wt: number, cam: THREE.Camera, out: THREE.Vector3): boolean {
-    // vmCam's quaternion is only synced inside renderFrame — mid-update it
+    // vmCam's quaternion is only synced inside renderFrame - mid-update it
     // still holds LAST frame's rotation, so fast turns leave the anchor a
     // frame behind the rendered gun. Sync it here to this frame's truth.
     this.vmCam.quaternion.copy(cam.quaternion);
@@ -180,7 +180,7 @@ export class ViewModel {
 
   /** Same round-trip for a live NODE (e.g. the LG emitter ball): syncs
    *  vmCam to this frame's camera FIRST, then reads the node's world
-   *  transform — reading it before the sync bakes last frame's rotation
+   *  transform - reading it before the sync bakes last frame's rotation
    *  into the position and the anchor detaches under fast turns. */
   anchorNodeWorld(node: THREE.Object3D, cam: THREE.Camera, out: THREE.Vector3): boolean {
     this.vmCam.quaternion.copy(cam.quaternion);
@@ -207,7 +207,7 @@ export class ViewModel {
   }
 
   // Per-weapon fire feel: [decay, sideways jitter, flashColor, flashScale, flashLife, rise]
-  // Same spring everywhere — only the impulse shape changes per weapon,
+  // Same spring everywhere - only the impulse shape changes per weapon,
   // the Quake approach: one damped oscillator, re-triggered per shot.
   // `rise` scales muzzle-up pitch + back-thrust so weapons differ in
   // character, not just shove depth (mortar heaves, pistol snaps).
@@ -215,14 +215,14 @@ export class ViewModel {
     kickF(this, strength);
     if (this.activeWeapon === WeaponType.Chaingun) {this.startBarrelKick();}
     if (this.activeWeapon === WeaponType.Disc || this.activeWeapon === WeaponType.Implodisc) {
-      // Spinfusor fake: the chambered disc IS the projectile — it's gone
+      // Spinfusor fake: the chambered disc IS the projectile - it's gone
       // the instant the shot breaks. The NEXT disc slides forward out of
       // the breech into the slit during the refire gap.
       if (!this.discAmmo) {this.discAmmo = this.weapons.get(WeaponType.Disc)?.getObjectByName('discAmmo') ?? null;}
       if (this.discAmmo) { this.discAmmo.visible = false; this.discT = 0; }
     }
     if (vmTypeOf(this.activeWeapon) === WeaponType.BoltLauncher) {
-      // Crossbow fake: the chambered bolt is the projectile — gone the
+      // Crossbow fake: the chambered bolt is the projectile - gone the
       // instant the shot breaks; the drum indexes one station and the
       // next bolt feeds up into the channel during the refire gap.
       this.initBowParts();
@@ -246,13 +246,13 @@ export class ViewModel {
   private strA = new THREE.Vector3();
   private strB = new THREE.Vector3();
   private strD = new THREE.Vector3();
-  /** The kick+punch share of this frame's group transform — public so
+  /** The kick+punch share of this frame's group transform - public so
    *  gunlab's inspect anchor (parked outside vm.group) can ride it. */
   readonly kickDeltaPos = new THREE.Vector3();
   kickDeltaRotX = 0;
   kickDeltaRotZ = 0;
   /** Full pose delta from rest (sway/bob/fall/kick/dips/punch), measured
-   *  AFTER the group writes — external consumers (gunlab inspect anchor)
+   *  AFTER the group writes - external consumers (gunlab inspect anchor)
    *  mirror this so detached copies of the weapon do everything the
    *  viewmodel does, not just recoil. */
   readonly poseDeltaPos = new THREE.Vector3();
@@ -262,17 +262,17 @@ export class ViewModel {
   private discAmmo: THREE.Object3D | null = null;
   private discT = -1; // <0 idle; >=0 ms since the shot ejected the chambered disc
   private static readonly DISC_HIDE = 0.06;  // blink gap before the reload slide
-  // ~75% of DISC_RATE (1.0s) total — a lazy feed reads as machinery, and
+  // ~75% of DISC_RATE (1.0s) total - a lazy feed reads as machinery, and
   // a fast snap would be invisible behind the kick anyway.
   private static readonly DISC_SLIDE = 0.69; // breech→slit travel
   private static readonly DISC_BACK = 0.2;   // park depth inside the breech
 
   // Chaingun per-shot tell: knock the TOP barrel (the one feeding) back a
-  // beat, spring it home before the next round. At full spin it's ~mush —
-  // a barrel holds top for ~50ms — but it reads during spin-up.
+  // beat, spring it home before the next round. At full spin it's ~mush -
+  // a barrel holds top for ~50ms - but it reads during spin-up.
   private barrelKickIdx = -1;
   private barrelKickT = 0;
-  private chainSpin = 0; // accumulated spin angle — the euler can't be
+  private chainSpin = 0; // accumulated spin angle - the euler can't be
                          // read back cleanly once roll is composed in
   private startBarrelKick(): void {
     if (!this.chainBarrels) {return;}
@@ -290,7 +290,7 @@ export class ViewModel {
   /** Camera-space muzzle OFFSET of the active weapon (gun sway/kick/bob
    *  included, camera rotation STRIPPED OUT). The gun group is a child of
    *  vmCam, so a raw getWorldPosition bakes vmCam's rotation into the
-   *  result — and vmCam's quaternion is only refreshed inside renderFrame,
+   *  result - and vmCam's quaternion is only refreshed inside renderFrame,
    *  which makes it one frame stale to any caller in the update pass.
    *  worldToLocal cancels whatever rotation it carries, yielding the true
    *  local offset; callers rotate by the CURRENT main-camera quaternion
@@ -303,14 +303,14 @@ export class ViewModel {
     return true;
   }
 
-  /** Dip-cycle family (throw/switch/punch envelopes) — own file
+  /** Dip-cycle family (throw/switch/punch envelopes) - own file
    *  (vmEnvelopes.ts); the public triggers stay as delegates. */
   private env = new VmEnvelopes(this);
   private baked = new VmBaked(this);
   muzzleZ(wt: number): number { return muzzleZFor(wt); }
 
   /** Re-park a weapon's muzzle node on a model feature (e.g. the LG's
-   *  emitter ball) so every consumer of the node — beam anchor, flash —
+   *  emitter ball) so every consumer of the node - beam anchor, flash -
    *  tracks the authored geometry instead of the tuned constant. */
   parkMuzzleAt(wt: number, worldPos: THREE.Vector3): boolean {
     const n = this.muzzleNodes.get(wt);
@@ -320,7 +320,7 @@ export class ViewModel {
     return true;
   }
 
-  /** Flash park point in GROUP space — the muzzle NODE's real position
+  /** Flash park point in GROUP space - the muzzle NODE's real position
    *  plus a small forward push past the bore face. z-only parking left
    *  the quads on the group axis (x=0,y=0): for guns whose bore sits
    *  off-axis the flash rendered buried inside the body, never visible. */
@@ -329,8 +329,8 @@ export class ViewModel {
     if (!n) {return false;}
     n.updateWorldMatrix(true, false);
     n.getWorldPosition(out);
-    this.group.worldToLocal(out); // strip camera — pure group-space point
-    out.z -= 0.04; // proud of the bore face — a flush quad occludes/z-fights
+    this.group.worldToLocal(out); // strip camera - pure group-space point
+    out.z -= 0.04; // proud of the bore face - a flush quad occludes/z-fights
     return true;
   }
 
@@ -342,26 +342,26 @@ export class ViewModel {
     this.env.draw();
   }
 
-  // Cloak ghosting — a true "whole-layer" fade, not per-surface alpha.
+  // Cloak ghosting - a true "whole-layer" fade, not per-surface alpha.
   // Each opaque mesh gets an invisible depth-only clone that renders in the
   // opaque pass BEFORE the transparent weapon: the silhouette's depth lands
   // in the buffer first, so the transparent pass culls every surface behind
   // the frontmost one. The gun fades against the world while still
-  // occluding ITSELF — no backside bleed, no alphaHash grain.
+  // occluding ITSELF - no backside bleed, no alphaHash grain.
   // Already-transparent stuff (muzzle flash, glow sprites) just dims.
-  ghostMats: // public — VmBaked joins bakes mid-cloak
+  ghostMats: // public - VmBaked joins bakes mid-cloak
    { m: THREE.Material; opacity: number; transparent: boolean; depthWrite: boolean }[] = [];
   ghostShells: THREE.Mesh[] = [];
 
-  ghostifyMesh(mesh: THREE.Mesh): void { vm.ghostifyMesh(this, mesh); } // public — VmBaked
-  ghostify(m: THREE.Material): void { vm.ghostify(this, m); } // public — VmBaked
+  ghostifyMesh(mesh: THREE.Mesh): void { vm.ghostifyMesh(this, mesh); } // public - VmBaked
+  ghostify(m: THREE.Material): void { vm.ghostify(this, m); } // public - VmBaked
   setGhost(on: boolean): void { vm.setGhost(this, on); }
   // Energy shield, first-person read: the same hex+fresnel field that wraps
   // the third-person bubble crawls over the gun's surface.
-  shieldShells: THREE.Object3D[] = []; // public — switch envelope re-wraps
+  shieldShells: THREE.Object3D[] = []; // public - switch envelope re-wraps
   shellColor = 0x66_CC_FF;
   setShield(on: boolean, color = 0x66_CC_FF): void { vm.setShield(this, on, color); }
-  // Medkit reuses the gun shell — same field, green read.
+  // Medkit reuses the gun shell - same field, green read.
   setMend(on: boolean): void { vm.setShield(this, on, 0x3F_DD_6F); }
   /** Tick the field animation on the gun shells (called from update). */
   updateShieldShells(dt: number): void { vm.updateShieldShells(this, dt); }
@@ -370,12 +370,12 @@ export class ViewModel {
     this.env.punch(landed);
   }
 
-  /** Forward jab — the shocklance's discharge pose; bolt times to the apex. */
+  /** Forward jab - the shocklance's discharge pose; bolt times to the apex. */
   thrust(): void {
     this.env.thrust();
   }
 
-  /** Hammer swing — the melee prop chops down-left through the crosshair
+  /** Hammer swing - the melee prop chops down-left through the crosshair
    *  while the gun is holstered. */
   swing(landed = false): void {
     this.env.swing(landed);
@@ -398,12 +398,12 @@ export class ViewModel {
     // waddling the weapon side to side.
     this.aimBlend += ((firing ? 1 : 0) - this.aimBlend) * Math.min(dt * 10, 1);
     const hold = 1 - this.aimBlend * 0.85;
-    // tmpQuat is the inverse camera rotation — shared by sway and landing-dip
+    // tmpQuat is the inverse camera rotation - shared by sway and landing-dip
     // world->camera-space conversions
     camera.getWorldQuaternion(this.tmpQuat).invert();
     this.updateShieldShells(dt);
 
-    // Mouse sway — weapon lags behind look direction
+    // Mouse sway - weapon lags behind look direction
     let moveX = THREE.MathUtils.clamp(-lookDeltaX * SWAY_AMOUNT * 60, -SWAY_MAX, SWAY_MAX);
     let moveY = THREE.MathUtils.clamp(-lookDeltaY * SWAY_AMOUNT * 60 - playerVel.y / 5000, -SWAY_MAX, SWAY_MAX);
 
@@ -422,7 +422,7 @@ export class ViewModel {
     const bobX = (Math.sin(this.timer) * 0.6 + Math.sin(this.timer * 1.73) * 0.4) * BOB_HEIGHT * hold;
     const bobY = (Math.cos(this.timer * 0.87) * 0.6 + Math.cos(this.timer * 1.31) * 0.4) * BOB_HEIGHT * hold;
 
-    // Landing dip — big downward vel changes kick the gun
+    // Landing dip - big downward vel changes kick the gun
     let fallX = 0, fallY = 0, fallZ = 0;
     const velJump = playerVel.y - this.lastFrameYVel;
     if (velJump >= FALL_THRESHOLD) {
@@ -432,14 +432,14 @@ export class ViewModel {
       fallX = this.tmpDir.x; fallY = this.tmpDir.y; fallZ = this.tmpDir.z;
     }
 
-    // Fire kick — underdamped spring on velocity, not a decaying position
+    // Fire kick - underdamped spring on velocity, not a decaying position
     // offset: sharp impulse in, slight overshoot past rest, settle. That's
-    // the difference between "snap" and "slide" — ζ≈0.55 keeps one visible
+    // the difference between "snap" and "slide" - ζ≈0.55 keeps one visible
     // bounce-back without ringing.
     const s = this.kickDecay * 2.2;
     this.kickVel += (-this.kickAmount * s * s - this.kickVel * 1.1 * s) * dt;
     this.kickAmount += this.kickVel * dt;
-    // Ceiling on travel — heavy weapons (mortar/cannon at strength ~2)
+    // Ceiling on travel - heavy weapons (mortar/cannon at strength ~2)
     // slam into it instead of flying the gun off-screen.
     if (this.kickAmount > 0.85) { this.kickAmount = 0.85; this.kickVel = Math.min(this.kickVel, 0); }
     this.kickX *= Math.exp(-dt * this.kickDecay * 1.4); // jitter settles faster than the shove
@@ -455,25 +455,25 @@ export class ViewModel {
     );
     // Kick contribution isolated for inspect consumers: the recoil is
     // written into vm.group's transform, but gunlab's inspect anchor
-    // parks the weapon OUTSIDE vm.group — copy the delta onto the anchor.
+    // parks the weapon OUTSIDE vm.group - copy the delta onto the anchor.
     this.kickDeltaPos.set(this.kickX * this.kickAmount + punch * PUNCH_X,
       kickY + punch * PUNCH_Y + thrust * THRUST_Y, kickZ + punch * PUNCH_Z + thrust * THRUST_Z);
     this.kickDeltaRotX = this.kickAmount * 0.7 * this.kickAmp + punch * PUNCH_ROT + thrust * THRUST_ROT;
     this.kickDeltaRotZ = punch * PUNCH_ROLL + this.kickRoll * this.kickAmount;
     // Snap fast to the kicked pose so the punch is actually visible
     this.group.position.lerp(target, Math.min(dt * 20, 1));
-    // Muzzle rise is the readable half of a kick — pitch up hard
+    // Muzzle rise is the readable half of a kick - pitch up hard
     // (×0.55, was 0.28 → ~10° at full strength, mortar/cannon more)
     this.group.rotation.x = this.baseRotX + this.kickAmount * 0.7 * this.kickAmp + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT + punch * PUNCH_ROT + thrust * THRUST_ROT;
     this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL + punch * PUNCH_ROLL
       + this.kickRoll * this.kickAmount;
     // Post-write truth: lerped position and instant rotations resolve to
-    // the group's actual transform — that delta IS the pose.
+    // the group's actual transform - that delta IS the pose.
     this.poseDeltaPos.copy(this.group.position).sub(REST_POS);
     this.poseDeltaRotX = this.group.rotation.x - this.baseRotX;
     this.poseDeltaRotZ = this.group.rotation.z - this.baseRotZ;
 
-    // Melee swing holster — the dip rides the WEAPON's own transform,
+    // Melee swing holster - the dip rides the WEAPON's own transform,
     // not this.group: hammerGroup is a group child, so a group-level
     // dip would drag the hammer's swipe off the crosshair with the gun.
     const curWeapon = this.weapons.get(this.activeWeapon);
@@ -489,8 +489,8 @@ export class ViewModel {
     this.tickDiscAmmo(dt);
     this.tickBow(dt);
 
-    // Flash decay — sqrt curve: bright spike, fast falloff. The two quads
-    // grow/shrink in opposite directions (Effekseer's recipe — mirrored
+    // Flash decay - sqrt curve: bright spike, fast falloff. The two quads
+    // grow/shrink in opposite directions (Effekseer's recipe - mirrored
     // envelopes read as an event, identical ones read flat), and the
     // muzzle light dies on the same curve.
     if (this.flashT > 0) {
@@ -512,7 +512,7 @@ export class ViewModel {
   }
 
   /** Sliding barrel (howitzer): kick snaps it in ~40ms, then it rides
-   *  back out on the fireInterval-ish clock — artillery recoil travel. */
+   *  back out on the fireInterval-ish clock - artillery recoil travel. */
   private tickBarrelSlide(dt: number): void {
     const s = this.slideRef;
     if (!s || this.slideKickT <= 0) {
@@ -524,7 +524,7 @@ export class ViewModel {
     s.position.z = (s.userData.baseZ as number) + k * k * 0.14; // in on fire, back out slow
   }
 
-  /** Chaingun cluster tick — spin decay (~0.7s coast after firing stops)
+  /** Chaingun cluster tick - spin decay (~0.7s coast after firing stops)
    *  plus the per-barrel recoil spring: the knocked barrel rides back on
    *  its own short envelope, independent of the whole-gun kick. */
   private tickChainBarrels(dt: number): void {
@@ -544,7 +544,7 @@ export class ViewModel {
   }
 
   /** Disc rechamber: hidden during the blink gap, then the next disc
-   *  slides forward out of the breech into the slit, spinning — ease-out
+   *  slides forward out of the breech into the slit, spinning - ease-out
    *  cubic so it seats with a snap rather than a drift. */
   private tickDiscAmmo(dt: number): void {
     if (this.discT < 0 || !this.discAmmo) {return;}
@@ -554,7 +554,7 @@ export class ViewModel {
     const k = Math.min((this.discT - ViewModel.DISC_HIDE) / ViewModel.DISC_SLIDE, 1);
     const e = 1 - (1 - k) * (1 - k) * (1 - k);
     this.discAmmo.position.z = ViewModel.DISC_BACK * (1 - e);
-    // Rim (r 0.115) is wider than the body apothem (~0.10) — a full-size
+    // Rim (r 0.115) is wider than the body apothem (~0.10) - a full-size
     // disc parked deep would leak cyan through the flanks. Spawn it small
     // inside the breech and grow as it slides; the clip is hidden anyway.
     this.discAmmo.scale.setScalar(0.55 + 0.45 * e);
@@ -567,7 +567,7 @@ export class ViewModel {
 
   /** Crossbow flex + feed. Limbs ride the whole-gun kick spring for free:
    *  releasing tension closes them ~25% of their sweep then the spring
-   *  settles them back — a bow's limbs snap forward on release, not back.
+   *  settles them back - a bow's limbs snap forward on release, not back.
    *  Rest pose holds the string DRAWN at the latch; the shot snaps the
    *  vertex forward to the neutral cam line, then the reload window
    *  re-cocks it. String legs re-stretch cam→latch every frame so they
@@ -588,7 +588,7 @@ export class ViewModel {
   }
 
   private tickBow(dt: number): void {
-    // Legs must be solved from frame one — init used to happen on first
+    // Legs must be solved from frame one - init used to happen on first
     // fire, leaving the cylinders as unit rods through the model.
     this.initBowParts();
     const p = this.bowParts;
@@ -597,8 +597,8 @@ export class ViewModel {
     let latchOff = -flex * 0.05;
     if (this.bowT >= 0) {
       // Draw cycle: release snaps the limb tips forward almost instantly
-      // (~10ms — a released bow jumps, it does not ease), then the reload
-      // window slowly re-cocks them to the drawn pose — reads like the
+      // (~10ms - a released bow jumps, it does not ease), then the reload
+      // window slowly re-cocks them to the drawn pose - reads like the
       // string being pulled back, not a spring settling. The string
       // vertex jumps to the neutral cam line then eases back to the latch.
       const snap = Math.min(this.bowT / 0.01, 1);
@@ -644,7 +644,7 @@ export class ViewModel {
     const e = 1 - (1 - k) * (1 - k) * (1 - k);
     p.bolt.position.z = 0.18 * (1 - e); // slides forward out of the drum feed
     if (k >= 1) {p.bolt.position.z = 0;}
-    // bolt re-chambers before the draw cycle ends — keep bowT counting
+    // bolt re-chambers before the draw cycle ends - keep bowT counting
     // so the limb/string re-cock finishes instead of popping back.
     if (this.bowT > 0.08 + ViewModel.BOW_DRAW) {this.bowT = -1;}
   }

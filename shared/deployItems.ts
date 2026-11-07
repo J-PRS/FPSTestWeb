@@ -9,7 +9,7 @@
 import { WeaponType } from './weaponTable.ts';
 import { WEAPONS } from './weaponRows.ts';
 
-export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon' | 'watersphere' | 'tether'
+export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon' | 'watersphere' | 'tether' | 'pad'
   // Authored-only base assets — cap 0 means a player can never plant one;
   // they exist only via the map spec `deploys` block.
   | 'generator' | 'sensor' | 'baseturret';
@@ -73,6 +73,8 @@ export interface DeployItemDef {
   projSpeed?: number;
   /** Dead-zone radius (mortar — it lobs, so point-blank is unreachable). */
   minRange?: number;
+  /** Launch speed m/s along the surface normal (pad). */
+  launchSpeed?: number;
 }
 
 export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
@@ -105,6 +107,10 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
   // (a full stop below 20 m/s, nothing above 80), and breaking free zaps
   // their jet energy in proportion to how hard it held them.
   tether:  { label: 'Tether', cap: 2, hp: 30, ttlS: 150, cost: 2, tetherRadius: 6, tetherZap: 24, bodyR: 0.6, bodyH: 0.5 },
+  // Jump pad: a throw-down launch plate. Lands, ~1s to arm, then ANY
+  // body stepping in the ring rides the surface normal out - friendly
+  // route boost or an enemy's free trip to orbit, no allegiance check.
+  pad:     { label: 'Jump Pad', cap: 2, hp: 30, ttlS: 150, cost: 3, armS: 1, triggerDist: 2.6, launchSpeed: 30, bodyR: 0.9, bodyH: 0.3 },
   // Base assets are fat targets — a generator is the raid's main prize,
   // so it soaks far more splash than a field plant. Authored ttl is
   // ignored: base gear runs on the respawn clock, not the decay clock.
@@ -120,5 +126,5 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
 // chases its owner (a static hull would punt the owner it shadows) and
 // the nugget never becomes an item. Everything else you can't walk
 // through; the barrier's dome stays walk-through by design above.
-const NOSOLID = new Set<DeployKind>(['drone', 'nugget', 'watersphere', 'tether']);
+const NOSOLID = new Set<DeployKind>(['drone', 'nugget', 'watersphere', 'tether', 'pad']);
 export function deploySolid(kind: DeployKind): boolean { return !NOSOLID.has(kind); }

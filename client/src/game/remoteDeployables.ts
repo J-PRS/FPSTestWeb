@@ -14,6 +14,7 @@ import { DeployShield } from '../entities/DeployShield.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployTether } from '../entities/DeployTether.js';
 import { DeployWatersphere } from '../entities/DeployWatersphere.js';
+import { DeployPad } from '../entities/DeployPad.js';
 import { Explosion } from '../effects/explosion.js';
 import { LightningBeam } from '../effects/lightningBeam.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -78,6 +79,7 @@ const BT = DEPLOY_ITEMS.baseturret;
 const _aim = new THREE.Vector3();
 const _aim2 = new THREE.Vector3();
 const _zero = new THREE.Vector3();
+const _boingDir = new THREE.Vector3();
 
 
 /** Remote-kind registry - one row per kind whose remote visual is just
@@ -97,6 +99,7 @@ const REMOTE_SPEC: Partial<Record<DeployKind, {
   cgturret:    { make: (s, t, p) => new DeployCg(s, t, p),          scans: true },
   tether:      { make: (s, t, p) => new DeployTether(s, t, p) },
   watersphere: { make: (s, t, p) => new DeployWatersphere(s, t, p) },
+  pad:         { make: (s, t, p) => new DeployPad(s, t, p) },
 };
 
 export class RemoteDeployables {
@@ -603,6 +606,14 @@ export class RemoteDeployables {
     p.isRemote = true;
     this.deps.world.projectiles.push(p);
     sfx.shotAt(item.pos, WeaponType.Mortar);
+  }
+
+  /** Server pad discharged - paint the launch FX at the pad along the
+   *  real normal dir; the victim's velocity arrives on the wire. */
+  padBoing(_id: number, pos: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }): void {
+    const v = new THREE.Vector3(pos.x, pos.y, pos.z);
+    this.deps.lazyEffects().spawnBounce(v, _boingDir.set(n.x, n.y, n.z).normalize());
+    sfx.bounce();
   }
 
   /** Server tripped a mine - paint the blast at the reported position.

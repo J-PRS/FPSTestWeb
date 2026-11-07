@@ -24,6 +24,7 @@ import { DeployShield } from '../entities/DeployShield.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployTether } from '../entities/DeployTether.js';
 import { DeployWatersphere } from '../entities/DeployWatersphere.js';
+import { DeployPad } from '../entities/DeployPad.js';
 import type { Terrain } from '../world/terrain.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
 import { Explosion } from '../effects/explosion.js';
@@ -93,7 +94,7 @@ interface Pod {
 }
 
 type PodBody = DeployTurret | DeployMortar | DeployCg | DeployStation
-  | DeployDrone | DeployShield | DeployBeacon | DeployTether | DeployWatersphere;
+  | DeployDrone | DeployShield | DeployBeacon | DeployTether | DeployWatersphere | DeployPad;
 
 /** Seated-kinds registry - one entry per bolted-down kit: ctor + the
  *  adopter slot it lands in. A new kind writes ONE row here instead of
@@ -112,6 +113,7 @@ const SEATED: Partial<Record<DeployKind, {
   beacon:      { make: (s, t, p) => new DeployBeacon(s, t, p),      adopt: (a, b, o) => a.adoptBeacon(b as DeployBeacon, o) },
   tether:      { make: (s, t, p) => new DeployTether(s, t, p),      adopt: (a, b, o) => a.adoptTether(b as DeployTether, o) },
   watersphere: { make: (s, t, p) => new DeployWatersphere(s, t, p), adopt: (a, b, o) => a.adoptWatersphere(b as DeployWatersphere, o) },
+  pad:         { make: (s, t, p) => new DeployPad(s, t, p),         adopt: (a, b, o) => a.adoptPad(b as DeployPad, o) },
 };
 
 export interface Item {
@@ -631,6 +633,7 @@ export class Deployables {
   remoteSentryShot(id: number, owner: string, x: number, y: number, z: number): void { this.remotes.sentryShot(id, owner, x, y, z); }
   remoteMortarShot(id: number, owner: string, vx: number, vy: number, vz: number): void { this.remotes.mortarShot(id, owner, vx, vy, vz); }
   remoteMineBoom(id: number, pos: { x: number; y: number; z: number }): void { this.remotes.mineBoom(id, pos); }
+  padBoing(id: number, pos: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }): void { this.remotes.padBoing(id, pos, n); }
 
 
 

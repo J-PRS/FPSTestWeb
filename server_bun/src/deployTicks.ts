@@ -12,6 +12,7 @@ import {
 import { healPool } from './healPool.ts';
 import { DEPLOY_ITEMS } from '../../shared/deployItems.ts';
 import { GRAVITY } from '../../shared/movement.ts';
+import { hmNormal } from '../../shared/heightfield.ts';
 import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
@@ -83,6 +84,37 @@ export function tickMine(r: RoomDeployables, d: Deployed, _dt: number): void {
         r.room.messages.mineBlast(d.owner, d.pos, MINE_DAMAGE, MINE_BLAST_RADIUS, MINE_KNOCKBACK);
         return;
       }
+    }
+  }
+
+  /** Jump pad: after the arm delay, ANY body in the ring rides the
+   *  surface normal out - no team check, a pad helps whoever steps on
+   *  it. Per-body cooldown keeps a lingerer from re-firing every tick;
+   *  the whoosh rides the wire so remote clients see the launch. */
+  const _padN = { x: 0, y: 1, z: 0 };
+export function tickPad(r: RoomDeployables, d: Deployed, _dt: number): void {
+    d.fireCd -= _dt; // doubles as the arm timer - same convention as the mine
+    if (d.fireCd > 0) {return;}
+    const def = DEPLOY_ITEMS.pad;
+    const tr = def.triggerDist!, sp = def.launchSpeed!;
+    const n = _padN;
+    if (r.room.field) {hmNormal(r.room.field, d.pos.x, d.pos.z, n);}
+    const now = simNow();
+    for (const [pid, p] of r.room.players.getAllPlayers()) {
+      if (p.isDead) {continue;}
+      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+      if (dx * dx + dy * dy + dz * dz >= tr * tr) {continue;}
+      const last = d.padHits?.get(pid) ?? -1e9;
+      if (now - last < 1500) {continue;}
+      (d.padHits ??= new Map()).set(pid, now);
+      // A little extra up-lift on top of the normal so a flat pad still
+      // throws a body skyward instead of sliding it along the dirt.
+      const dv = { x: n.x * sp, y: n.y * sp + 6, z: n.z * sp };
+      r.room.moveSim.applyImpulse(pid, dv);
+      r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'padBoing', 'id', d.id, {
+        pos: { x: d.pos.x, y: d.pos.y, z: d.pos.z },
+        nx: dv.x / sp, ny: dv.y / sp, nz: dv.z / sp,
+      }) as ServerMessage);
     }
   }
 

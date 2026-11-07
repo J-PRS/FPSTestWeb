@@ -66,6 +66,7 @@ const EXEMPT: Record<string, string> = {
   landed: 'remote anim/FX relay — slam thud + dust, remote frames carry the landing',
   jetpack: 'remote anim relay',
   knockback: 'impulse echo — remote frames carry the result',
+  padBoing: 'launch FX relay — remote frames carry the resulting velocity',
   projRide: 'cosmetic pairing relay — destroy events carry the contact pos',
   srvPing: 'liveness',
   aoeShot: 'cosmetic beam relay',

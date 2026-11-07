@@ -13,9 +13,11 @@ import type { DeployShield } from '../entities/DeployShield.js';
 import type { DeployBeacon } from '../entities/DeployBeacon.js';
 import type { DeployTether } from '../entities/DeployTether.js';
 import type { DeployWatersphere } from '../entities/DeployWatersphere.js';
+import type { DeployPad } from '../entities/DeployPad.js';
 import type { DeployMortar } from '../entities/DeployMortar.js';
 import type { DeployCg } from '../entities/DeployCg.js';
 import type { DeployKind } from '../../../shared/deployables.js';
+import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { MORTAR_CONFIG } from '../projectiles/mortarConfig.js';
 import { CHAINGUN_CONFIG } from '../projectiles/chaingunConfig.js';
@@ -31,6 +33,7 @@ type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: 
 
 const _zeroVel = new THREE.Vector3();
 const _shotDir = new THREE.Vector3();
+const _padDv = new THREE.Vector3();
 
 export interface AdoptHost {
   foesFor(owner?: DeployOwner): Foe[];
@@ -256,6 +259,47 @@ export class DeployAdopter {
    *  judged by the shared sim and the server, not by this record. */
   adoptWatersphere(w: DeployWatersphere, owner?: DeployOwner): void {
     this.mkItem('watersphere', w, owner, (dt): void => w.update(dt));
+  }
+
+  /** Jump pad - offline mirror of the server's tickPad: once armed, ANY
+   *  body in the ring (local player or bot, no team check) rides the
+   *  surface normal out. Connected the wire carries the launch - this
+   *  loop only owns the solo mirror. */
+  adoptPad(s: DeployPad, owner?: DeployOwner): void {
+    const def = DEPLOY_ITEMS.pad;
+    const lastHits = new Map<string, number>();
+    this.mkItem('pad', s, owner, (dt): void => {
+      s.update(dt);
+      if (this.deps.lazyNetworkManager().isConnected() || !s.armed) {return;}
+      const n = this.deps.lazyTerrain().getNormal(s.pos.x, s.pos.z);
+      const sp = def.launchSpeed!;
+      _padDv.set(n.x * sp, n.y * sp + 6, n.z * sp);
+      const tr2 = def.triggerDist! * def.triggerDist!;
+      const p = this.deps.lazyPlayer();
+      const now = performance.now();
+      const launch = (id: string, pos: THREE.Vector3, vel: THREE.Vector3): void => {
+        const dx = pos.x - s.pos.x, dy = pos.y - s.pos.y, dz = pos.z - s.pos.z;
+        if (dx * dx + dy * dy + dz * dz >= tr2 || now - (lastHits.get(id) ?? -1e9) < 1500) {return;}
+        lastHits.set(id, now);
+        vel.add(_padDv);
+        this.deps.lazyEffects().spawnBounce(pos, _padDv);
+        sfx.bounce();
+      };
+      // The local body launches through the real sim impulse (same
+      // channel the howitzer recoil uses) - not a raw vel write, so
+      // the ungrounded/fall-damage contracts still hold.
+      if (!p.isDead && p.pos.distanceToSquared(s.pos) < tr2 && now - (lastHits.get('local') ?? -1e9) >= 1500) {
+        lastHits.set('local', now);
+        p.movement.impulse(_padDv);
+        this.deps.lazyEffects().spawnBounce(p.pos, _padDv);
+        sfx.bounce();
+      }
+      for (const team of ['alpha', 'bravo']) {
+        for (const f of this.deps.botFoes?.(team) ?? []) {
+          if (f.alive && f.playerId) {launch(f.playerId, f.pos, f.vel);}
+        }
+      }
+    });
   }
 
   /** Barrier dome - the emitter is a plain dep: destructible like any

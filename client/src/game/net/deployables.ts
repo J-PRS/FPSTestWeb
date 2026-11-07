@@ -58,6 +58,10 @@ export function wireDeployables(ctx: NetCtx): void {
     mgr().remoteMineBoom(id, pos);
     deps.lazyDemoManager?.()?.recordDeployBoom(id, pos);
   };
+  networkManager.onPadBoing = (id, pos, n): void => {
+    if (!Number.isFinite(pos.x + pos.y + pos.z + n.x + n.y + n.z)) {deps.logger.warn(`padBoing #${id} dropped: non-finite payload`); return;}
+    mgr().padBoing(id, pos, n);
+  };
   networkManager.onDeployHp = (id, hp, armor, src): void => {
     if (!Number.isFinite(hp + (armor ?? 0))) {return;}
     mgr().applyDeployHp(id, hp, armor);
