@@ -240,6 +240,10 @@ export class GameServer {
         const ws = room.socketOf(id);
         this.removePlayerCompletely(room, id, 'afk demote');
         if (ws) {
+          // begin() before seat() — the demote just deleted the session,
+          // and seat-without-begin both spams the anomaly log and leaves a
+          // room-less session that corrupts the next reclaim's room lookup.
+          this.registry.begin(id, room.name);
           ws.data.gen = this.registry.seat(id, true, 'spectate');
           room.spectators.add(id);
           this.specRooms.set(id, room);
