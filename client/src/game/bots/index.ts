@@ -558,6 +558,16 @@ bn += 1;
     ctx.thief = info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null;
     ctx.flagsHome = info?.flagsHome ?? false;
     ctx.kout = info?.kout ?? false;
+    // The objective flag's REAL position: the shared brain's altitude
+    // vetoes measure this, not the (possibly offset) aim point. A
+    // carrier reads its own stand; an infiltrator reads the live enemy
+    // flag. Without it "over the flag" vetoes fired on a fake anchor.
+    const flagTeam = this.ctf && bot.team
+      ? (info?.running ? bot.team : info?.infiltrating ? (bot.team === 'alpha' ? 'bravo' : 'alpha') : bot.team)
+      : null;
+    ctx.flagPos = flagTeam ? this.ctf!.flagPos(flagTeam, false) ?? null : null;
+    ctx.moveSkill = bot.skill?.movement;
+    ctx.pickupVal = ctx.nugget?.val;
     this.fillSenses(ctx, bot, others);
     return ctx;
   }
@@ -584,6 +594,28 @@ bn += 1;
     // Room-event ping — the server senses feeds the same notice ctx so
     // offline bots groan a cap and alert a grab like online ones.
     ctx.notice = this.notices.for(bot.playerId, bot.team, performance.now());
+    // Economy + desperation channels — the shared brain already reads
+    // these fields; feeding them isn't a leak, just correct wiring.
+    // convoy = richest ally hoard worth drifting to escort; spillSoon =
+    // a rich ally visibly dying (vultures camp the corpse). desperate =
+    // score deficit x endgame pressure, ~0..2 like the server's.
+    if (this.spec.teams && (bot.team === 'alpha' || bot.team === 'bravo')) {
+      const other: 'alpha' | 'bravo' = bot.team === 'alpha' ? 'bravo' : 'alpha';
+      const winAt = Math.max(1, this.spec.winAt);
+      const deficit = (this.scores[other] - this.scores[bot.team]) / winAt;
+      const leaderFrac = Math.min(1, Math.max(this.scores.alpha, this.scores.bravo) / winAt);
+      ctx.desperate = Math.max(0, deficit) * leaderFrac * 2;
+      if (this.mode === 'headhunt') {
+        let rich: THREE.Vector3 | null = null, richHeld = 14, spill: THREE.Vector3 | null = null;
+        for (const b of this.bots) {
+          if (b === bot || b.team !== bot.team || b.botHp <= 0) {continue;}
+          if (b.heldTokens > richHeld) {rich = b.position; richHeld = b.heldTokens;}
+          else if (!spill && b.heldTokens >= 5 && b.botHp < b.botMaxHp * 0.35) {spill = b.position;}
+        }
+        ctx.convoy = rich;
+        ctx.spillSoon = spill;
+      }
+    }
   }
 
   /** Flag/killFeed-worthy room event → chatter sense. The CTF bridge

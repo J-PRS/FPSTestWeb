@@ -319,6 +319,10 @@ export class GameBot extends RemotePlayer {
 
   get skill() { return this.brain.skill; }
 
+  /** Kill-zone memory — the death site feeds the brain so the next
+   *  life routes around it (delegates to the shared brain). */
+  markDeath(pos: THREE.Vector3, now: number): void { this.brain.markDeath(pos, now); }
+
   /** Role-adherence scalar — role policy (HoF lean) scales by it. */
 
   get dutyLevel(): number { return this.brain.dutyLevel; }
@@ -520,6 +524,20 @@ export class GameBot extends RemotePlayer {
 
     confidence?: number;
 
+    /** The objective flag's real position - altitude vetoes measure
+     *  this, not the offset aim point (shared brain contract). */
+    flagPos?: { x: number; y: number; z: number } | null;
+    /** skill.movement - times the hop-descent jet. */
+    moveSkill?: number;
+    /** Chased pickup's denomination (headhunt 1/3/9/27). */
+    pickupVal?: number;
+    /** Score deficit x endgame pressure, ~0..2 - team modes only. */
+    desperate?: number;
+    /** Richest friendly headhunt hoard worth escorting. */
+    convoy?: { x: number; y: number; z: number } | null;
+    /** Rich ally visibly dying - camp the spill before it lands. */
+    spillSoon?: { x: number; y: number; z: number } | null;
+
   }): { targetId: string; aim: THREE.Vector3 } | null {
 
     const pos = this.position;
@@ -570,7 +588,7 @@ export class GameBot extends RemotePlayer {
 
         return v;
 
-      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,flagsHome: ctx.flagsHome,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp,held: this.heldTokens}, botWeaponHooks(
+      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,flagsHome: ctx.flagsHome,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,flagPos: ctx.flagPos ?? null,moveSkill: ctx.moveSkill,pickupVal: ctx.pickupVal,desperate: ctx.desperate,convoy: ctx.convoy ?? null,spillSoon: ctx.spillSoon ?? null,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp,held: this.heldTokens}, botWeaponHooks(
 
         (d): WeaponType => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t): number => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage) as WeaponType,
 

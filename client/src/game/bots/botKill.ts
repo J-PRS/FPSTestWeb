@@ -110,6 +110,9 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     // Full-gib for every kill for now — the model hides as its baked
     // chunk geos fly; respawn restores on the next life.
     const t = bot.team;
+    // Kill-zone memory — the brain remembers where this life ended so
+    // the next one routes around it (server feeds the same mark).
+    bot.markDeath(bot.position, performance.now());
     bot.hide();
     // Past ~120m real body parts read as generic shards anyway — take
     // the instanced path (mesh-path gibs are ~20 materials + matrix
