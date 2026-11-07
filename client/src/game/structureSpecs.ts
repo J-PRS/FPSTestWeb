@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { structureColliders } from '../../../shared/ballCollide.js';
-import { ColliderIndex, SolidWorld } from '../../../shared/solidWorld.js';
+import { ColliderIndex, SolidWorld, segSolidHit } from '../../../shared/solidWorld.js';
 import { Ball } from '../entities/balls.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { setBotStructureSpecs } from './bots/botBrain.js';
@@ -60,6 +60,46 @@ export function structureNormalAt(x: number, y: number, z: number, out: THREE.Ve
     return out.set(nx, ny, nz).normalize();
   }
   return null;
+}
+
+const _segDn = new THREE.Vector3();
+
+/** Swept segment vs the live structure set — writes the contact point
+ *  and the hit FACE's normal (side walls and ceilings included, not just
+ *  tops). Returns false on a clean pass. Thrown deploy pods use it to
+ *  glance off walls instead of phasing through. */
+export function structureSegHit(from: THREE.Vector3, to: THREE.Vector3, outPos: THREE.Vector3, outN: THREE.Vector3): boolean {
+  if (!live) {return false;}
+  const hit = segSolidHit(from, to, live.cols);
+  if (!hit) {return false;}
+  outPos.set(hit.x, hit.y, hit.z);
+  const eps = 0.06;
+  for (const c of live.cols) {
+    const dx = hit.x - c.cx, dz = hit.z - c.cz;
+    if (c.dome) {
+      // Contact on the cap: the normal is radial from the base center.
+      const cy0 = c.cy - c.hy;
+      _segDn.set(dx, hit.y - cy0, dz);
+      if (hit.y >= cy0 - eps && Math.abs(_segDn.lengthSq() - c.dome * c.dome) < c.dome * 0.2) {
+        outN.copy(_segDn).normalize();
+        return true;
+      }
+      continue;
+    }
+    const lx = dx * c.cos + dz * c.sin;
+    const lz = -dx * c.sin + dz * c.cos;
+    const ly = hit.y - c.cy;
+    if (Math.abs(lx) > c.hx + eps || Math.abs(ly) > c.hy + eps || Math.abs(lz) > c.hz + eps) {continue;}
+    // The face with the smallest gap to the point owns the contact.
+    const ex = Math.abs(Math.abs(lx) - c.hx);
+    const ey = Math.abs(Math.abs(ly) - c.hy);
+    const ez = Math.abs(Math.abs(lz) - c.hz);
+    if (ex <= ey && ex <= ez) {outN.set(Math.sign(lx) * c.cos, 0, -Math.sign(lx) * c.sin);}
+    else if (ez <= ey) {outN.set(-Math.sign(lz) * c.sin, 0, Math.sign(lz) * c.cos);}
+    else {outN.set(0, Math.sign(ly), 0);}
+    return true;
+  }
+  return false;
 }
 
 export function applyStructureSpecs(list: readonly StructureSpec[] | undefined, movement?: MoveStructures): void {

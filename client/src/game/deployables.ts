@@ -46,7 +46,7 @@ import type { TargetCandidate } from './targeting.js';
 import { DEPLOY_KINDS, DEPLOY_MAX, type DeployKind } from '../../../shared/deployables.js';
 import { RemoteDeployables } from './remoteDeployables.js';
 import { DEPLOY_ITEMS, deploySolid } from '../../../shared/deployItems.js';
-import { structureNormalAt, structureTopAt } from './structureSpecs.js';
+import { structureNormalAt, structureTopAt, structureSegHit } from './structureSpecs.js';
 import { canThrowPack, packCost, recyclesSeated } from './deployEconomy.js';
 import type { StructureCollider } from '../../../shared/ballCollide.js';
 export type { DeployKind } from '../../../shared/deployables.js';
@@ -78,6 +78,9 @@ const NUG_POD_GEO = new THREE.IcosahedronGeometry(0.3, 0);
 const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xFF_EE_88).multiplyScalar(EMIT_GAIN) });
 const _UP = new THREE.Vector3(0, 1, 0);
 const _sn = new THREE.Vector3(); // struct-normal scratch (pad seat)
+const _segFrom = new THREE.Vector3(); // pod step segment scratch
+const _segHit = new THREE.Vector3();
+const _segN = new THREE.Vector3();
 const _FAR = new THREE.Vector3(0, -1e5, 0); // dormant-proxy for flying mines
 const _repTo = new THREE.Vector3(); // repair-beam ray scratch
 
@@ -320,7 +323,17 @@ export class Deployables {
     const terrain = this.deps.lazyTerrain();
     pod.ttl -= dt;
     pod.vel.y += GRAVITY * dt;
+    _segFrom.copy(pod.pos);
     pod.pos.addScaledVector(pod.vel, dt);
+
+    // Structure side/ceiling faces: a pod meeting a wall flank or dome
+    // shoulder glances off instead of phasing through. Flat tops skip -
+    // the rest check below lands them (same DEPLOY_SLOPE rule as cliffs).
+    if (structureSegHit(_segFrom, pod.pos, _segHit, _segN) && _segN.y < DEPLOY_SLOPE) {
+      pod.pos.copy(_segHit).addScaledVector(_segN, POD_RADIUS * 0.5);
+      const vn = pod.vel.dot(_segN);
+      if (vn < 0) {pod.vel.addScaledVector(_segN, -vn * 1.4); pod.vel.multiplyScalar(0.4);}
+    }
 
     // The unfolding kits share one tumble - assemble mid-air, spin, track
     // the pod's fall. Mine/nugget pods differ below.
