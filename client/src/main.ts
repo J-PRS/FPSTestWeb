@@ -634,17 +634,33 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // anything else falls back to ?server=. Local hosts stay unpinned —
   // a shared link must never hardcode ws://127.0.0.1 for its opener.
   {
-    const u = new URL(serverUrl);
+    // Pin the ENTRY host, not the seat: on a fleet, wsUrl is the assigned
+    // worker (host:8443) — alias-matching it misses NAMED_SERVERS and
+    // stamps ?server=wss://host:8443 into the bar, which both stays ugly
+    // and pins share recipients to one worker, bypassing matchmaking.
+    // lobbyUrl is the matchmaker a fresh joiner must enter through.
+    const pinBase = (await serverEndpoints).lobbyUrl ?? serverUrl;
+    const u = new URL(pinBase);
     const local = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname);
-    if (!local && !urlParams.has('server') && !urlParams.serverPath) {
+    // A ?server= that already names the entry host is redundant — it
+    // only ever needed the param to SAY it. Those get the alias path
+    // too (and drop the param), which self-heals stamped worker URLs
+    // from before this ran against the entry host.
+    const serverParam = urlParams.get('server');
+    const serverParamHost = ((): string => { try { return new URL(serverParam ?? '').host; } catch { return ''; } })();
+    const redundantParam = Boolean(serverParam) && (serverParamHost === u.host || serverParamHost === serverUrlHost());
+    function serverUrlHost(): string { try { return new URL(serverUrl).host; } catch { return ''; } }
+    if (!local && (!urlParams.has('server') || redundantParam) && !urlParams.serverPath) {
       const alias = Object.entries(NAMED_SERVERS).find(([, v]): boolean => {
         try { return new URL(v).host === u.host; } catch { return false; }
       })?.[0];
+      const q = new URLSearchParams(window.location.search);
+      if (redundantParam) {q.delete('server');}
+      const search = q.size > 0 ? `?${q}` : '';
       if (alias && window.location.pathname.startsWith('/s/')) {
-        history.replaceState(null, '', `/${alias}${window.location.pathname.slice(2)}${window.location.search}`);
+        history.replaceState(null, '', `/${alias}${window.location.pathname.slice(2)}${search}`);
       } else if (!alias) {
-        const q = new URLSearchParams(window.location.search);
-        q.set('server', `${u.protocol}//${u.host}`);
+        if (!serverParam) {q.set('server', `${u.protocol}//${u.host}`);}
         history.replaceState(null, '', `${window.location.pathname}?${q}`);
       }
     }
