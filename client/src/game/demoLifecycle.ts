@@ -27,7 +27,7 @@ import { SLOT_DEFS } from '../weapons.js';
 import { updatePlaybackCreatures, clearPlaybackCreatures, type PlaybackCreature } from '../demo/playbackCreatures.js';
 import { clearPlaybackDeployables, type PlaybackDeployable } from '../demo/playbackDeployables.js';
 import { clearPlaybackMarkers, updatePlaybackFlags } from '../demo/playbackMarkers.js';
-import { hmapMatches } from '../demo/demoHmap.js';
+import { hmapMatches, hmapToField } from '../demo/demoHmap.js';
 import { feedMode } from '../feed/feedMode.js';
 import { disposeSwings } from '../effects/swingTrails.js';
 import { getHeightfield, injectHeightmapBytes, applyHeightfieldScale } from '../world/heightmap.js';
@@ -406,7 +406,11 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     if (emb && !d.hmRestore) {
       const live = getHeightfield();
       if (!live || !hmapMatches(emb, live)) {
-        d.hmRestore = injectHeightmapBytes(emb.data, emb.gridN, emb.heightScale, emb.worldScale);
+        // hmapToField applies the corr tail (peak-preserving deltas on a
+        // finer grid) — injecting the raw coarse bytes loses the bounce
+        // fidelity the recorder paid bytes to keep.
+        const ef = hmapToField(emb);
+        d.hmRestore = injectHeightmapBytes(ef.data, ef.size, ef.heightScale ?? emb.heightScale, ef.worldScale ?? emb.worldScale);
         applyHeightfieldScale(d.lazyTerrain());
         d.lazyTerrain().reloadHeightmap();
         demoManager.ui.setStatus(live ? 'map mismatch - embedded terrain' : 'embedded terrain');

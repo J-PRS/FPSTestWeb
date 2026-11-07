@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { deserializeDemo } from '../demo/demoReader.js';
+import type { Heightfield } from '../../../shared/heightfield.js';
 
 import { applyPlaybackEvents, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import {
@@ -521,6 +522,73 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
     expect(kicks).toBe(zeroShots.length + demo.projectileEvents.filter((
       e): boolean => e.eventType === ProjectileEventType.Fired && e.targetId === 0 && e.timestamp <= 0.01,
     ).length);
+  });
+
+  it('killed balls die at the recorded kill spot — mesh+trail, not a phantom', (): void => {
+    const rig = makePlaybackRig();
+    const { world } = rig;
+    // The clip's OWN embedded heightmap as Ball.field — the ball sim
+    // then bounces on the recording's real terrain, so edge reseeds +
+    // stepBall should keep the body near the recorded track. Without a
+    // field the harness silently takes the ballistic fallback and the
+    // sim-overwrite bug can never reproduce here.
+    const prevField = Ball.netField;
+    expect(demo.heightmap, 'clip lacks embedded heightmap — test needs real terrain').toBeTruthy();
+    const hm = demo.heightmap!;
+    (Ball as unknown as { field: Heightfield | null }).field = {
+      size: hm.gridN, data: hm.data, stride: 1,
+      heightScale: hm.heightScale, worldScale: hm.worldScale,
+    };
+    let pi = 0, ti = 0;
+    const dt = 1 / 30;
+    const kills: { id: number; evPos: THREE.Vector3; ballPos: THREE.Vector3 | null; hadMesh: boolean; dist: number }[] = [];
+    try {
+      for (let t = 0; t < demo.header.duration; t += dt) {
+        const proj: ProjectileEvent[] = [];
+        while (pi < demo.projectileEvents.length && demo.projectileEvents[pi]!.timestamp <= t) {proj.push(demo.projectileEvents[pi]!);pi += 1;}
+        const tgt: TargetEvent[] = [];
+        while (ti < demo.targetEvents.length && demo.targetEvents[ti]!.timestamp <= t) {tgt.push(demo.targetEvents[ti]!);ti += 1;}
+        // Snapshot pre-event ball state for kills in this batch.
+        for (const e of tgt) {
+          if (e.targetType < 32 && (e.eventType === TargetEventType.Destroyed
+            || (e.eventType === TargetEventType.Hit && e.health <= 0))) {
+            const b = world.playbackBallById.get(e.targetId);
+            kills.push({
+              id: e.targetId,
+              evPos: new THREE.Vector3(e.posX, e.posY, e.posZ),
+              ballPos: b ? b.pos.clone() : null,
+              hadMesh: b ? (b.swarmSlot >= 0 && !b.meshRemoved) : false,
+              dist: b ? b.pos.distanceTo(new THREE.Vector3(e.posX, e.posY, e.posZ)) : -1,
+            });
+          }
+        }
+        applyPlaybackEvents(world, { projectiles: proj, targets: tgt });
+        rig.life.updateBallsPlayback(dt);
+        rig.life.updatePlaybackProjectiles(dt);
+      }
+    } finally {
+      (Ball as unknown as { field: Heightfield | null }).field = prevField;
+    }
+    console.log(`kills tracked: ${kills.length}`);
+    for (const k of kills) {
+      console.log(`  ball ${k.id}: kill pos (${k.evPos.x.toFixed(1)},${k.evPos.y.toFixed(1)},${k.evPos.z.toFixed(1)})`
+        + ` ball at (${k.ballPos ? `${k.ballPos.x.toFixed(1)},${k.ballPos.y.toFixed(1)},${k.ballPos.z.toFixed(1)}` : 'MISSING'})`
+        + ` dist=${k.dist.toFixed(1)}m mesh=${k.hadMesh}`);
+    }
+    expect(kills.length).toBeGreaterThan(0);
+    for (const k of kills) {
+      expect(k.ballPos, `ball ${k.id} not spawned`).not.toBeNull();
+      expect(k.hadMesh, `ball ${k.id} had no mesh at kill`).toBe(true);
+    }
+    const dists = kills.map((k): number => k.dist).sort((a, b): number => a - b);
+    console.log(`kill dists=[${dists.map((d): string => d.toFixed(1)).join(', ')}]`);
+    // Phantom signature: the ctor's ambient ring spot put bodies 200-400m
+    // off the recorded track for EVERY ball — max <250 asserts that class
+    // is dead. Edge-starved balls (ball 54: zero edges for 10.4s) still
+    // diverge on bounce drift — a fidelity ceiling the recording sets,
+    // not a bug. Median is the real assertion: bodies track the tape.
+    expect(dists[dists.length - 1]).toBeLessThan(250);
+    expect(dists[Math.floor(dists.length / 2)]).toBeLessThan(30);
   });
 
   it('roster refs are in bounds and local frames are finite/monotonic', (): void => {

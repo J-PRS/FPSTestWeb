@@ -12,6 +12,21 @@ import * as sfxWorld from '../core/sfx/world.js';
 // Ball/target replay: spawned/seek-rebuilt balls, smooth-snap drift
 // correction, hit flash + debris - everything that reads a TargetEvent.
 
+/** Re-seed a playback ball's local sim at the RECORDED state. The Ball
+ *  ctor builds the sim at a random ambient ring spot; left alone,
+ *  tickLocal writes that spot over pos on frame 1 — every playback ball
+ *  teleported ~200m from its recorded track. The sim must stay (it
+ *  supplies terrain bounces between sparse edges), it just has to start
+ *  where the recording says. */
+function seedSim(ball: Ball, x: number, y: number, z: number, vx: number, vy: number, vz: number): void {
+  ball.edgeDriven = true; // physics-only sim: edges own state + decisions
+  const s = ball.netS.sim;
+  if (!s) {return;}
+  s.x = x; s.y = y; s.z = z;
+  s.vx = vx; s.vy = vy; s.vz = vz;
+  s.gt = 0; // stale cached probe, same write applyKnockback makes
+}
+
 export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, deadBallIds: Set<number>, seekTime: number): void {
   const { scene, terrain, balls, debrisList, playbackBallById } = world;
   const playerPos = world.getPlayer().pos;
@@ -30,6 +45,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
     const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2 | 3);
     ball.pos.set(ev.posX, ev.posY, ev.posZ);
     ball.vel.set(ev.velX, ev.velY, ev.velZ);
+    seedSim(ball, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ);
     playbackBallById.set(ev.targetId, ball);
     balls.push(ball);
     ball.update(0, terrain, playerPos); // sync mesh (ctor doesn't copy pos)
@@ -42,6 +58,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
     if (!ball || ball.dead) {return;}
     ball.pos.set(ev.posX, ev.posY, ev.posZ);
     ball.vel.set(ev.velX, ev.velY, ev.velZ);
+    seedSim(ball, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ);
     if (ev.eventType === TargetEventType.Hit) {
       ball.health = ev.health;
       if (ball.health <= 0) {ball.dead = true;}
@@ -87,6 +104,7 @@ function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number
     // old tails must end here — snap everything, no sweep, trail cuts.
     ball.pos.set(ex, ey, ez);
     ball.vel.set(evx, evy, evz);
+    seedSim(ball, ex, ey, ez, evx, evy, evz);
     ball.renderOffset.set(0, 0, 0);
     ball._rpos.copy(ball.pos);
     if (drift >= 25) {
@@ -101,8 +119,11 @@ function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number
   // converges sim+render+trail smoothly onto the recorded arc; a mid-air
   // pos jump is what chopped trails and popped the spawn spring at
   // every sparse-edge correction.
-  // Small drift: no positional write - the per-frame blend converges
-  // pos/vel onto pbTarget smoothly instead of a 25% nudge per event.
+  // Small drift: the SIM still gets the edge — tickLocal writes s.x/y/z
+  // over pos every frame, so an un-corrected sim stomps the blend and
+  // walks its own track (the phantom-ring bug). Reseeding is the only
+  // write that survives.
+  seedSim(ball, ex, ey, ez, evx, evy, evz);
 }
 
 /** Continuous keyframe smoothing - call every playback tick after the
@@ -136,6 +157,7 @@ function spawnPlaybackBall(world: PlaybackWorld, ev: TargetEvent): void {
     // orphan the old one - updated by nothing, frozen in the scene.
     existing.pos.set(ev.posX, ev.posY, ev.posZ);
     existing.vel.set(ev.velX, ev.velY, ev.velZ);
+    seedSim(existing, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ);
     if (ev.health > 0) {existing.health = ev.health;}
     existing.update(0, terrain, playerPos);
     return;
@@ -151,6 +173,7 @@ function spawnPlaybackBall(world: PlaybackWorld, ev: TargetEvent): void {
   const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2 | 3);
   ball.pos.set(ev.posX, ev.posY, ev.posZ);
   ball.vel.set(ev.velX, ev.velY, ev.velZ);
+  seedSim(ball, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ);
   // Apply recorded health when available (e.g. synthetic Spawned from a Hit/Bounce snapshot)
   if (ev.health > 0) {
     ball.health = ev.health;
@@ -180,6 +203,7 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
     // Snap ball to recorded hit position to ensure explosion aligns
     ball.pos.set(ev.posX, ev.posY, ev.posZ);
     ball.vel.set(ev.velX, ev.velY, ev.velZ);
+    seedSim(ball, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ);
     // Flash the ball and then sync to the recorded post-hit health
     ball.takeDamage(1); // health is force-synced from the event - amount is cosmetic
     ball.health = ev.health;
@@ -196,6 +220,10 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
     // fade, slot free) and splices on `disposed`. Unmapping here freezes
     // the corpse midair.
   } else if (ev.eventType === TargetEventType.Destroyed) {
+    // Terminal edge: seat the corpse at the recorded spot before debris —
+    // an edge-starved ball can sit 100m+ off its last bounce keyframe,
+    // and the gibs must burst where the kill actually happened.
+    ball.pos.set(ev.posX, ev.posY, ev.posZ);
     ball.dead = true;
     // Same death bark the live kill path cues (combat/impact.ts).
     sfxWorld.enemyCue(ball.pos, (ball as Ball & { dieCue?: 'die' | 'splat' | 'rustle' | 'squawk' }).dieCue ?? 'die');

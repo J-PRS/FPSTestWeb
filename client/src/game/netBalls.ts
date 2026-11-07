@@ -476,6 +476,8 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   }
 
   const { check: rubberbandCheck, rbFleetFlush } = makeRubberbandWatch(deps, ballEventAge, estSimNow, logger);
+  // Per-ball sim-time of the last decimated demo edge (1Hz floor).
+  const segRecordT = new Map<number, number>();
 
   function netBallSegment(m: { id: number; kind?: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {
     const b = netBallById.get(m.id);
@@ -503,6 +505,16 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     if (m.kind && m.kind !== 'segment') {
       const dm = deps.lazyDemoManager();
       if (dm?.isRecording) {
+        dm.recordTargetBounce(m.id, m.position, m.velocity, b.variant);
+      }
+    } else if (m.kind === 'segment') {
+      // …but a heartbeat decimated to ~1Hz is the anchor floor for balls
+      // the StateChanged sweep can't see (its source enumerates local
+      // entities; wire-only balls got zero edges and drifted 150m+ in
+      // replay). Wire presence = recorded presence, unconditionally.
+      const dm = deps.lazyDemoManager();
+      if (dm?.isRecording && (m.t ?? 0) - (segRecordT.get(m.id) ?? -Infinity) > 1) {
+        segRecordT.set(m.id, m.t ?? 0);
         dm.recordTargetBounce(m.id, m.position, m.velocity, b.variant);
       }
     }

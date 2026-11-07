@@ -228,6 +228,12 @@ export class Ball {
   // stepper predicts the same arc against the same heightfield - bounce-for
   // -bounce identical, so corrections are invisible unless latency spikes.
   netDriven = false;
+  /** Demo playback: pos/vel come from recorded edges (reseeded via
+   *  seedSim), the sim only fills physics between them — pass
+   *  authoritative=false + target=null to stepBall or its enrage pull /
+   *  stall-breaker / leash teleport fire on the sim's own clock toward
+   *  the local player, not the recorded one (phantom fly-aways). */
+  edgeDriven = false;
   netId = 0;
   get netTargetId(): string | null { return this.netS.netTargetId; }
   readonly netS: NetBag = newNetBag();
@@ -486,7 +492,7 @@ export class Ball {
     }
     // The committed target is the live player - offline has no link lag.
     const _pt = BALL_PROF ? performance.now() : 0;
-    const ev = stepBall(s, dt, field, playerPos, true,
+    const ev = stepBall(s, dt, field, this.edgeDriven ? null : playerPos, !this.edgeDriven,
       { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
     if (BALL_PROF) {ballProf.sim += performance.now() - _pt;}
     this.pos.set(s.x, s.y, s.z);
