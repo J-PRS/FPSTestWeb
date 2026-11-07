@@ -46,7 +46,7 @@ import type { TargetCandidate } from './targeting.js';
 import { DEPLOY_KINDS, DEPLOY_MAX, type DeployKind } from '../../../shared/deployables.js';
 import { RemoteDeployables } from './remoteDeployables.js';
 import { DEPLOY_ITEMS, deploySolid } from '../../../shared/deployItems.js';
-import { structureNormalAt } from './structureSpecs.js';
+import { structureNormalAt, structureTopAt } from './structureSpecs.js';
 import { canThrowPack, packCost, recyclesSeated } from './deployEconomy.js';
 import type { StructureCollider } from '../../../shared/ballCollide.js';
 export type { DeployKind } from '../../../shared/deployables.js';
@@ -342,14 +342,20 @@ export class Deployables {
     // Collide with the drawn surface, not the smooth field - on convex
     // ground the flat triangles dip under bilinear and a field rest
     // reads as a pod hovering (same gap the Nugget rest fixed).
+    // Structure tops count too: only faces at/below the pod (maxTop =
+    // pod.pos.y) so flying under a deck doesn't catch the ceiling.
     const groundY = terrain.getRenderedHeight(pod.pos.x, pod.pos.z);
-    if (Number.isFinite(groundY) && pod.pos.y - POD_RADIUS <= groundY) {
-      const n = terrain.getNormal(pod.pos.x, pod.pos.z);
+    const structTop = structureTopAt(pod.pos.x, pod.pos.z, pod.pos.y);
+    const rest = Math.max(groundY, structTop);
+    if (Number.isFinite(rest) && pod.pos.y - POD_RADIUS <= rest) {
+      const n = structTop > groundY
+        ? (structureNormalAt(pod.pos.x, rest, pod.pos.z, _sn) ?? terrain.getNormal(pod.pos.x, pod.pos.z))
+        : terrain.getNormal(pod.pos.x, pod.pos.z);
       if (n.y >= DEPLOY_SLOPE) {
-        this.attach(pod, n);
+        this.attach(pod, n, rest);
       } else {
         // Cliff face - glance off instead of sticking sideways.
-        pod.pos.y = groundY + POD_RADIUS;
+        pod.pos.y = rest + POD_RADIUS;
         const vn = pod.vel.dot(n);
         pod.vel.addScaledVector(n, -vn * 1.4); // reflect, lose energy
         pod.vel.multiplyScalar(0.4);
@@ -361,12 +367,12 @@ export class Deployables {
   /** Touchdown on landable ground - seat the already-unfolded item and
    *  hand it to the live items list. No post-land growth: it dropped in
    *  full-size like a Turretter. */
-  private attach(pod: Pod, n: THREE.Vector3): void {
+  private attach(pod: Pod, n: THREE.Vector3, rest?: number): void {
     const terrain = this.deps.lazyTerrain();
     const impact = Math.abs(pod.vel.y);
     pod.landed = true;
     pod.ttl = 0; // consumed - the item lives in this.items now
-    const seat = terrain.getRenderedHeight(pod.pos.x, pod.pos.z);
+    const seat = rest ?? terrain.getRenderedHeight(pod.pos.x, pod.pos.z);
     if (Number.isFinite(seat)) {pod.pos.y = seat;}
     // Every bolted-down kit shares the seat: snap to the pod spot, tilt to
     // the face normal, adopt into items. Drone skips the tilt - it lifts
