@@ -108,7 +108,13 @@ function spawnWorker(id: string, port: number): void {
     env: Object.assign({}, process.env, {FPS_PORT: String(port), FPS_WORKER_ID: id, FPS_FLEET_REPORT: `http://127.0.0.1:${BASE}/fleet/report`, FPS_WORKERS: String(WORKERS),
       // One UDP lane can't be shared by N workers on one box — each gets
       // its own port (9898→w0, 9899→w1, …) or the lane stays off.
-      ...(process.env.FPS_UDP_PORT ? {FPS_UDP_PORT: String(Number(process.env.FPS_UDP_PORT) + (port - BASE - 1))} : {})}),
+      ...(process.env.FPS_UDP_PORT ? {FPS_UDP_PORT: String(Number(process.env.FPS_UDP_PORT) + (port - BASE - 1))} : {}),
+      // Public WT is single-port: the box firewall forwards 443→BASE+1443,
+      // and a QUIC session can't cross workers — only w0 can serve it.
+      // Other workers would advertise a port that lands on w0's listener
+      // and reject their tokens, so their WT stays off and /wthash
+      // honestly reports disabled.
+      FPS_WT_PORT: id === 'w0' ? String(BASE + 1443) : '0'}),
     stdout: 'inherit',
     stderr: 'inherit',
   });
