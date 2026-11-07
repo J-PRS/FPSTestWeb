@@ -1,6 +1,6 @@
 import { settings } from '../core/settings.js';
 
-import { urlParams, isDevHost } from '../core/params.js';
+import { urlParams, isDevHost, P2P_ENABLED } from '../core/params.js';
 
 import { liveMapThumb } from './liveMapThumb.js';
 
@@ -613,7 +613,9 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // P2P is presented as LAN: ICE host/mDNS candidates work there with
     // zero NAT traversal, while strict-NAT internet pairs silently fail
     // without TURN - so the UI only promises the case that always works.
-    for (const name of ['JOIN', 'HOST', 'OFFLINE', 'LAN']) {
+    // P2P_ENABLED drops the tab on public bundles - the embedded
+    // authority stays out of the shipped client entirely.
+    for (const name of ['JOIN', 'HOST', 'OFFLINE', ...(P2P_ENABLED ? ['LAN'] : [])]) {
 
       const b = btn(name);
 
@@ -1190,11 +1192,12 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     soloPage.append(soloLbl, soloModeRow, soloModeBtns, soloFamRow, soloBody);
 
-    tabs.get('LAN')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
+    if (tabs.has('LAN')) {tabs.get('LAN')!.append(p2pRow, p2pBtns, lobLbl, lobRows);}
 
 
 
-    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!, tabs.get('LAN')!);
+    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!,
+      ...(tabs.has('LAN') ? [tabs.get('LAN')!] : []));
 
     showTab(tabs.has(settings.get('fps-lb-tab')) ? settings.get('fps-lb-tab') : 'JOIN');
 

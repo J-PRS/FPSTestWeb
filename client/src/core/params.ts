@@ -19,6 +19,12 @@ import { settings } from './settings.js';
 export const isDevHost = (): boolean =>
   import.meta.env.DEV || window.location.protocol !== 'https:';
 
+/** P2P/LAN duels embed the real authority modules (p2p/host.ts pulls
+ *  server_bun adjudication into the client bundle) — serving that to
+ *  every visitor hands out the moat. Static gate: tree-shaken out of
+ *  prod bundles entirely; dev builds and VITE_FPS_P2P=1 builds keep it. */
+export const P2P_ENABLED = import.meta.env.DEV || import.meta.env.VITE_FPS_P2P === '1';
+
 // Read live, not a boot snapshot: switchRoom() rewrites ?room/?map/?bots
 // via history.replaceState with no reload — a parse-once snapshot would
 // serve the PREVIOUS room to every later call site. Some debug readers

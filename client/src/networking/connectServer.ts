@@ -1,4 +1,4 @@
-import { urlParams } from '../core/params.js';
+import { urlParams, P2P_ENABLED } from '../core/params.js';
 import type { NetworkManager } from './NetworkManager.js';
 import type { ChildLogger } from '../core/Logger.js';
 import type { LoadProfiler } from '../utils/profiling.js';
@@ -86,9 +86,10 @@ async function connectP2PMode(ctx: ConnectCtx, p2p: string): Promise<void> {
 export async function connectServer(ctx: ConnectCtx): Promise<void> {
   const { serverUrl, classicMode, networkManager, logger, profiler } = ctx;
   const {p2p} = urlParams;
-  if (!classicMode && p2p) {
+  if (!classicMode && p2p && P2P_ENABLED) {
     await connectP2PMode(ctx, p2p);
   } else if (!classicMode) {
+    if (p2p) {ctx.fragMessages?.show('LAN duels aren\'t in this build');}
     profiler.markTime('networkConnectStart');
     networkManager.connect(serverUrl, undefined, ctx.resolveUrl).then((): void => {
       profiler.markTime('networkConnected');
