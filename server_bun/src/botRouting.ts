@@ -421,6 +421,21 @@ export class BotRouting {
       ?? (task.kind === 'push' ? task.goal : null));
     // One role table for both runtimes — shared/flagGoals.ts.
     let pick = taskGoal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty, roleSide(p.id));
+    // Return-on-demand: guarding the drop while our carrier is still
+    // inbound - a touch now re-homes our flag while theirs is out,
+    // which just hands them a fresh grab on the stand. The returner
+    // holds ~12m off toward the enemy approach and takes the touch
+    // when the runner's ETA lands - the cap window opens as he arrives,
+    // not a minute early.
+    if (task?.kind === 'return' && pick === taskGoal && enemy.carrier && sit.dropped) {
+      const c = this.room.players.getPlayer(enemy.carrier);
+      const eta = c ? dist3(c.position, own.home) / 24 : 0;
+      if (eta > 8) {
+        const ax = enemy.home.x - sit.dropped.x, az = enemy.home.z - sit.dropped.z;
+        const al = Math.hypot(ax, az) || 1;
+        pick = { x: sit.dropped.x + (ax / al) * 12, y: sit.dropped.y, z: sit.dropped.z + (az / al) * 12 };
+      }
+    }
     // A moving-target pick aims at where it will BE: chasing the raw
     // position means following the wake of a 30m/s+ run forever — the
     // slots' velocity rides along for exactly this lead (escort's slot

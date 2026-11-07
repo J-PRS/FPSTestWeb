@@ -1025,11 +1025,14 @@ export class BotBrain {
     this.lastPosted = ctx.posted ?? 0;
     // Flag pass: a carrier about to eat the spill hands the flag
     // forward - a live teammate's grip beats the corpse drop, which is
-    // also how the standoff pass game keeps the flag alive. 70% roll
-    // so a wounded runner isn't a predictable hot-potato machine.
+    // also how the standoff pass game keeps the flag alive. A healthy
+    // carrier runs the same play as a RELAY (30% roll): the receiver is
+    // already nearer home and keeps the flag moving - free ground and
+    // an unpredictable flag state for defenders reading the line.
     let passFlag: BotVec | undefined;
     this.passT = Math.max(0, this.passT - dt);
-    if (ctx.running && (ctx.healthFrac ?? 1) < 0.4 && this.passT <= 0) {
+    if (ctx.running && this.passT <= 0) {
+      const hp = ctx.healthFrac ?? 1;
       let mate: BotVec | null = null, mateD = 35;
       for (const a of ctx.allies ?? []) {
         const d = dist3(pos, a);
@@ -1043,7 +1046,7 @@ export class BotBrain {
       // the carrier's objective (his own stand) than the carrier is.
       if (mate && ctx.objective
         && dist3(mate, ctx.objective) < dist3(pos, ctx.objective) - 10
-        && botRand() < 0.7) { passFlag = { x: mate.x, y: mate.y, z: mate.z }; this.passT = 4; }
+        && botRand() < (hp < 0.4 ? 0.7 : 0.3)) { passFlag = { x: mate.x, y: mate.y, z: mate.z }; this.passT = 4; }
     }
     return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say, passFlag };
   }
