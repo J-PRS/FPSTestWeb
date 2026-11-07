@@ -7,9 +7,19 @@
 // message to the page.
 const HOST = process.env.SHIM_UDP_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.SHIM_UDP_PORT ?? 9898);
+// Optional WAN impairment: SHIM_LOSS=0.05 drops 5% of datagrams in each
+// direction; SHIM_JITTER_MS=150 holds each datagram for rand(0..150)ms —
+// the hold-vs-later-arrival reorder is what exercises out-of-order lanes.
+const LOSS = Number(process.env.SHIM_LOSS ?? 0);
+const JITTER = Number(process.env.SHIM_JITTER_MS ?? 0);
+const deliver = (fn: () => void): void => {
+  if (LOSS > 0 && Math.random() < LOSS) { return; }
+  if (JITTER > 0) { setTimeout(fn, Math.random() * JITTER); }
+  else { fn(); }
+};
 const udp = await Bun.udpSocket({
   socket: {
-    data(_s, buf) { ws?.send(buf); },
+    data(_s, buf) { deliver(() => ws?.send(buf)); },
   },
 });
 let ws: { send(d: string | Uint8Array): void } | null = null;
@@ -23,9 +33,9 @@ Bun.serve({
   websocket: {
     open(c) { ws = c; },
     message(_c, data) {
-      if (typeof data !== 'string') { udp.send(data, PORT, HOST); }
+      if (typeof data !== 'string') { deliver(() => udp.send(data as Uint8Array, PORT, HOST)); }
     },
     close() { ws = null; },
   },
 });
-console.log(`udp shim ws://127.0.0.1:8787 → ${HOST}:${PORT}`);
+console.log(`udp shim ws://127.0.0.1:8787 → ${HOST}:${PORT}${LOSS || JITTER ? ` (loss=${LOSS} jitter<=${JITTER}ms)` : ''}`);
