@@ -52,6 +52,7 @@ type Schema = {
   'fps-pscale': number;       // integer pixel-size divisor 1-4 (retro chunk)
   'fps-pmode': number;        // pixel mode: 0 raw / 1 smooth(xBR) / 2 dithered / 3 atkinson
   'fps-aa': number;           // antialiasing: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x
+  'fps-retro': number;        // palette quantization: 0 full / 1 256 / 2 64 / 3 16 / 4 8 colors per channel
   'fps-fov': number;          // world camera FOV degrees (viewmodel cam stays fixed)
   'fps-player-id': string;    // claimed identity - survives F5/restarts
   'fps-name': string;         // chosen display name - cosmetic, rides the join
@@ -121,6 +122,7 @@ const DEFAULTS: Schema = {
   'fps-pscale': 1,
   'fps-pmode': 0,
   'fps-aa': 1,
+  'fps-retro': 0,
   'fps-fov': 90,
   'fps-player-id': '',
   'fps-name': '',

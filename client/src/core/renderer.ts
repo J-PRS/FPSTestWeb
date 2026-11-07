@@ -17,7 +17,7 @@ import {
 import {
   TONE_MAPPING_EXPOSURE,
 } from './config.js';
-import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL, BLOOM_MERGE_GLSL } from './rendererShaders.js';
+import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL, BLOOM_MERGE_GLSL, RETRO_GLSL } from './rendererShaders.js';
 import { setFxBufferHeight } from './fxViewport.js';
 
 export interface RendererSetup {
@@ -43,6 +43,8 @@ export interface RendererSetup {
    *  mode (0 raw / 1 smooth-xBR / 2 dithered / 3 atkinson). scale=1
    *  disables the pipeline entirely. */
   setPixel: (scale: number, mode: number, persist?: boolean) => void;
+  /** Retro post pass: color steps per channel; 0 = off. */
+  applyRetro: (lv: number) => void;
   /** Fractional resolution scale (auto-quality degrade) - softens the
    *  frame evenly via pixel-ratio scaling; only meaningful outside the
    *  hard-pixel modes, which need integer factors to keep the chunky
@@ -404,6 +406,19 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   fxaaPass.enabled = false;
   smaaPass.enabled = false;
 
+  // Retro - palette quantize only (pixel size lives in the PIXEL SIZE
+  // row), display-space, dead last. levels 0 = pass-through; the pass is
+  // enabled but no-ops so toggling never re-orders the chain.
+  const retroEffect = new Effect('Retro', RETRO_GLSL, {
+    uniforms: new Map<string, THREE.Uniform>([['levels', new THREE.Uniform(0)]]),
+  });
+  const retroPass = new EffectPass(camera, retroEffect);
+  composer.addPass(retroPass);
+  /** lv>0 = color steps per channel (256/64/16/8 presets). */
+  function applyRetro(lv: number): void {
+    retroEffect.uniforms.get('levels')!.value = lv;
+  }
+
   bloomMergePass.enabled = bloomEnabled;
   gradePass.enabled = postproEnabled;
   dirtEffect.uniforms.get('dirtIntensity')!.value = bloomEnabled && !dirtOff ? 3 : 0;
@@ -445,10 +460,10 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const dumpPasses = (): string[] => ([
     ['scene', scenePass], ['sanitize', sanitizePass], ['bloom', bloomMergePass],
     ['grade', gradePass], ['upscale', upscalePass], ['xbr', xbrPass],
-    ['fxaa', fxaaPass], ['smaa', smaaPass],
+    ['fxaa', fxaaPass], ['smaa', smaaPass], ['retro', retroPass],
   ] as [string, Pass][]).map(([n, p]): string => `${n}${p.enabled ? '' : ':off'}${p.renderToScreen ? '>SCR' : ''}`);
 
-  return { composer, scenePass, bloomMergePass, gradePass, dirtEffect, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses };
+  return { composer, scenePass, bloomMergePass, gradePass, dirtEffect, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, applyRetro, dumpPasses };
 }
 
 // Canvas sizing for every pixel/res path - hard modes render into a
@@ -662,7 +677,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   document.body.append(fsCanvas); // after gl: DOM order = the z-order
 
   const cc = makeComposer(renderer, scene, camera, modes);
-  const { composer, scenePass, bloomMergePass, gradePass, dirtEffect, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses } = cc;
+  const { composer, scenePass, bloomMergePass, gradePass, dirtEffect, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, applyRetro, dumpPasses } = cc;
 
   // composer.setSize() also resizes the canvas - set buffers first, then
   // restore whichever canvas sizing the pixel mode wants (it never shrinks).
@@ -853,6 +868,16 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   wireAARow((v): void => applyAA(pmodeEff() === 1 && (v === 1 || v === 2) ? 0 : v), (v): void => { aaMode = v; });
   syncAALocks(); // boot: non-RAW pixel mode starts with AA locked
 
+  // COLORS row: palette-level presets, persisted like the AA pick.
+  const RETRO_PRESETS = [0, 256, 64, 16, 8];
+  let retroPick = settings.get('fps-retro');
+  applyRetro(RETRO_PRESETS[retroPick] ?? 0);
+  wireSegRow('retro-row', (): number => retroPick,
+    (v): void => {
+      retroPick = v; settings.set('fps-retro', v);
+      applyRetro(RETRO_PRESETS[v] ?? 0);
+    });
+
   // Postpro is the master switch for the composer chain: the grade pass
   // IS the output transform - a live composer minus grade pumps raw
   // linear HDR to canvas (overexposed). So OFF must mean direct render:
@@ -860,7 +885,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // without it, and materials' own tone mapping takes over on canvas.
   // Residual: SMOOTH/xBR upscale + postpro-off still lacks a terminal
   // encode - a debug-tier combo, not a user tier.
-  const needsComposerNow = (): boolean => postproEnabled ||
+  const needsComposerNow = (): boolean => postproEnabled || retroPick > 0 ||
     (pscale > 1 && (pmode === 1 || pmode === 2)) ||
     (resScale < 1 && pscale === 1 && settings.get('fps-filter') === 2);
 
@@ -892,6 +917,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     isPostProcessingEnabled: (): boolean => postproEnabled,
     isBloomEnabled: (): boolean => bloomEnabled,
     setBloomEnabled,
+    applyRetro,
     updateRendererSize,
     // compileAsync reentry guard - see warmup below.
     // checkMaterialsReady throws inside three when a material added

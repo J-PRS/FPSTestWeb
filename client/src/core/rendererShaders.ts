@@ -300,3 +300,17 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   dirt.b = dirt.b >= 0.0 ? dirt.b : 0.0;
   outputColor = vec4(inputColor.rgb + dirt * bloom * dirtIntensity, inputColor.a);
 }`;
+
+/** Retro - pixelation + uniform palette quantize in one pass. pixel>0
+ *  snaps UVs to a coarse grid; levels>0 snaps color to N steps/channel.
+ *  Runs on the display-space frame (post-grade, post-AA). */
+export const RETRO_GLSL = /* glsl */ `
+uniform float levels;
+void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+  vec4 c = inputColor;
+  if (levels > 0.5) {
+    float n = levels - 1.0;
+    c.rgb = round(c.rgb * n) / n;
+  }
+  outputColor = c;
+}`;
