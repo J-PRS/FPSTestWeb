@@ -331,6 +331,9 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
   // Solo conquest lattice - offline only; connected rooms get nodeUpdate
   // on the wire and this field stays unset.
   deps.world.soloConquest?.tick(dt);
+  // Crystal idle motion - rosters arrive a few times a second, the
+  // affordance animates between them.
+  deps.world.nodeLayer?.tick(dt, performance.now());
   perf.mark('bots');
   if (!demoPlaying) {deps.combat()?.updateProjectiles(dt, rawDt);}
   // Offline clip render steps this with demo-dt per output frame -

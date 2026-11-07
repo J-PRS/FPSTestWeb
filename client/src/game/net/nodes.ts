@@ -27,7 +27,7 @@ export interface NodeRow {
 export interface NodeLayerDeps {
   lazyScene(): THREE.Scene;
   lazyTerrain(): { getHeight(x: number, z: number): number; addFieldRing(x: number, z: number, r: number, tint: readonly [number, number, number]): FieldRing; removeFieldRing(h: FieldRing): void };
-  world: { localTeam?: string; nodeMarkers: Map<number, { pos: THREE.Vector3; owner: NodeOwner; core: boolean; gx: number; gz: number; show: boolean; hot: boolean }> };
+  world: { localTeam?: string; nodeMarkers: Map<number, { pos: THREE.Vector3; owner: NodeOwner; core: boolean; gx: number; gz: number; show: boolean; hot: boolean }>; nodeLayer?: { tick(dt: number, now: number): void } | null };
   lazyHud(): { logEvent(text: string, cls?: string): void; removePlayerIndicator(id: string): void };
   fragMessages: { show(text: string): void };
   lazyHealthBarSystem(): { showDamage(item: RepairTarget, ally: boolean): void };
@@ -67,6 +67,11 @@ interface NodeVis {
   /** Y the beam rises from — the kit base's top (katastand deck ~3.4,
    *  gendome cap ~7), so it doesn't sprout through the pedestal. */
   baseTop: number;
+  /** Contested/actionable read from the last roster — drives the
+   *  crystal's spin rate (a live objective turns, a dead one idles). */
+  hot: boolean;
+  /** Crystal hover baseline — bobbed per frame around this offset. */
+  crystY: number;
 }
 
 const _col = new THREE.Color();
@@ -100,13 +105,13 @@ function buildVis(row: NodeRow, terrain: ReturnType<NodeLayerDeps['lazyTerrain']
     v: { health: row.hp, armor: 0, maxHealth: row.maxHp },
   };
   g.position.set(row.pos.x, row.pos.y, row.pos.z);
-  return { g, ring, tint, beam, beamMat, crystal, crystalMat, target, lastHp: row.hp, core: row.core, baseTop };
+  return { g, ring, tint, beam, beamMat, crystal, crystalMat, target, lastHp: row.hp, core: row.core, baseTop, hot: false, crystY: baseTop + cs * 1.2 };
 }
 
 /** One row roster → one lattice paint. The hosted path feeds wire
  *  rosters; the offline bridge feeds its own sim's snapshot — same
  *  reconcile/links/markers/callouts either way. */
-export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow[]): void } {
+export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow[]): void; tick(dt: number, now: number): void } {
   const vis = new Map<number, NodeVis>();
   const prevOwner = new Map<number, NodeOwner>();
   const prevCoreHp = new Map<number, number>();
@@ -223,6 +228,9 @@ export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow
       },
       apply: (v, r): void => {
         callouts(r);
+        // Diegetic read: a node someone can act on RIGHT NOW spins its
+        // crystal faster - motion pulls the eye without a word of text.
+        v.hot = actionable.has(r.id) || hot.has(r.id);
         // Three readable states: neutral untouched = dim grey; under
         // construction = the BUILDER's color brightening with progress;
         // owned = team color at full strength. The ring paints the
@@ -276,10 +284,19 @@ export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow
     rebuildLinks(nodes);
     syncMarkers(nodes);
   };
-  return { applyRows };
+  /** Per-frame idle motion — the crystal spin/bob. Rosters only arrive
+   *  a few times a second; the affordance animates between them. */
+  const tick = (dt: number, now: number): void => {
+    for (const v of vis.values()) {
+      v.crystal.rotation.y += dt * (v.hot ? 2.6 : 0.7);
+      v.crystal.position.y = v.crystY + Math.sin(now * 0.0018 + v.g.position.x) * 0.35;
+    }
+  };
+  return { applyRows, tick };
 }
 
 export function wireNodes(ctx: NetCtx): void {
   const layer = createNodeLayer(ctx.deps);
   ctx.networkManager.onNodeUpdate = (nodes: NodeRow[]): void => layer.applyRows(nodes);
+  ctx.deps.world.nodeLayer = layer;
 }

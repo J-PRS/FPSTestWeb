@@ -104,6 +104,9 @@ export interface WorldState {
    *  carrier is excluded from tick fanout so the walking-bomb warning
    *  needs this channel. Decays between echoes; drives the crackle tell. */
   selfCharge: number;
+  /** Hosted conquest lattice layer (net/nodes.ts) - owns the crystal
+   *  idle motion between roster updates; null outside conquest. */
+  nodeLayer?: { tick(dt: number, now: number): void } | null;
   /** Solo conquest lattice sim (offline only) - soloConquest.ts owns it;
    *  the loop ticks it, blastForce feeds it the same blast stream the
    *  server's RoomConquest listens on. */
