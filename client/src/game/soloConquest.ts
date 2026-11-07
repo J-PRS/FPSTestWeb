@@ -46,7 +46,7 @@ export class SoloConquest {
   readonly sim: ConquestSim;
   private readonly group = new THREE.Group();
 
-  constructor(deps: SoloConquestDeps, span: number) {
+  constructor(deps: SoloConquestDeps, span: number, n?: number) {
     const bodyScratch = { local: { id: 'local', team: undefined as string | undefined, position: deps.lazyPlayer().pos, isDead: false } };
     this.sim = new ConquestSim({
       groundAt: (x, z): number => {
@@ -75,7 +75,7 @@ export class SoloConquest {
       setScores: (a, b): void => { deps.setTeamScores(a, b); deps.lazyHud().setTeamScore?.(a, b); },
       setSpawns: (rings): void => deps.setNodeSpawns(rings),
       endMatch: (team): void => deps.setWinner(team),
-    }, span);
+    }, span, n);
 
     // Stand/dome meshes — the wire echo builds these online; solo builds
     // the same kit pieces locally (no colliders — see header).

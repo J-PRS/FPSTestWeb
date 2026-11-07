@@ -130,6 +130,12 @@ export interface MapSpec {
    *  native 2048m tile so nothing on the map is squished horizontally.
    *  Absent = the engine default 1500. Rides the wire like heightScale. */
   tileSize?: number;
+  /** Conquest lattice authored per map - `n` is the grid dimension,
+   *  `span` the lattice's world span in meters. The playable knob is
+   *  cell size (~200m = a ski hop), not map size, so a 1.5km terrain
+   *  authors a tighter arena than tileSize implies. Absent = derive
+   *  both from tileSize. */
+  conquest?: { n?: number; span?: number };
   /** Mission-authored haze (T2 Sky block): `color` is the fog tint
    *  [r,g,b], `distance` the fog start, `visible` where full fog
    *  swallows the world. `horizon` [r,g,b] overrides the sky's
@@ -579,6 +585,16 @@ function parseTileSize(raw: unknown): number | undefined {
 
 
 
+function parseConquest(raw: unknown): MapSpec['conquest'] {
+  if (typeof raw !== 'object' || raw === null) {return undefined;}
+  const o = raw as { n?: unknown; span?: unknown };
+  const n = typeof o.n === 'number' && Number.isFinite(o.n) ? Math.max(2, Math.min(9, Math.round(o.n))) : undefined;
+  const span = typeof o.span === 'number' && Number.isFinite(o.span) ? Math.max(200, Math.min(4096, o.span)) : undefined;
+  return n !== undefined || span !== undefined ? { n, span } : undefined;
+}
+
+
+
 /** Vertical gain - 0.1× (flats) to 8× (spikes). u8 quantization steps grow
  *  with it: past ~4× the 0.49m texel step is readable under skis. */
 function parseHeightScale(raw: unknown): number | undefined {
@@ -680,6 +696,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     terrain: parseTerrain((src as { terrain?: unknown }).terrain),
     heightScale: parseHeightScale((src as { heightScale?: unknown }).heightScale),
     tileSize: parseTileSize((src as { tileSize?: unknown }).tileSize),
+    conquest: parseConquest((src as { conquest?: unknown }).conquest),
     fog: parseFog((src as { fog?: unknown }).fog),
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g|webp)$/, 2, 'terrainTex'),
     terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 9, 0, 'terrainPreset') || undefined,

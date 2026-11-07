@@ -86,14 +86,14 @@ export class ConquestSim {
   /** Accumulated sim time — deterministic, no wall clock in sims. */
   private simT = 0;
 
-  constructor(private readonly host: ConquestHost, private span: number) {
+  constructor(private readonly host: ConquestHost, private span: number, private forcedN?: number | undefined) {
     this.layout();
   }
 
   /** Full lattice (re)mint — ctor, match reset, and spec rotation all
    *  land here. Corner cells own the two cores; everything else neutral. */
   private layout(): void {
-    this.n = conquestN(this.span);
+    this.n = this.forcedN ?? conquestN(this.span);
     const cores = conquestCores(this.n);
     this.nodes.length = 0;
     const cells = conquestCells(this.span, this.n);
@@ -394,9 +394,11 @@ export class ConquestSim {
     this.layout();
   }
 
-  /** Spec rotation — the lattice re-derives on the new span. */
-  onSpec(span: number): void {
+  /** Spec rotation — the lattice re-derives on the new span (+ the
+   *  authored grid override when the spec carries one). */
+  onSpec(span: number, n?: number): void {
     this.span = span;
+    this.forcedN = n;
     this.layout();
   }
 

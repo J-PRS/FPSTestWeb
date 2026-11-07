@@ -38,7 +38,10 @@ export class RoomConquest implements ModeModule {
       },
       splat: (pos): void => { room.influence.splat(pos, 'opportunity', 1); },
       endMatch: (team): void => room.endMatch(team),
-    }, room.spec.tileSize ?? HM_WORLD_SCALE);
+    }, Number(process.env.FPS_CONQUEST_SPAN) || room.spec.conquest?.span || room.spec.tileSize || HM_WORLD_SCALE,
+    // Density precedence: env test knobs > authored spec.conquest.n >
+    // the tileSize heuristic inside conquestN.
+    Number(process.env.FPS_CONQUEST_N) || room.spec.conquest?.n);
     // Nodes eat the same blast stream deployables do — no new damage
     // plumbing; hitscan can't hurt them (nodes are blast-only, matching
     // the codebase's blast-durability rule for objectives).
@@ -76,7 +79,7 @@ export class RoomConquest implements ModeModule {
 
   /** Spec rotation (map rotation / admin reload) — re-layout on the new span. */
   onSpec(spec: MapSpec): void {
-    this.sim.onSpec(spec.tileSize ?? HM_WORLD_SCALE);
+    this.sim.onSpec(spec.conquest?.span ?? spec.tileSize ?? HM_WORLD_SCALE, spec.conquest?.n);
   }
 
   /** Live terrain (re)attach — re-snap positions, keep match state. */

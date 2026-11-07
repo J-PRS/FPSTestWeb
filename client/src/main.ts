@@ -585,7 +585,7 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
         if (teamBots) {teamBots.scores.alpha = a; teamBots.scores.bravo = b;}
         world.teamScores = { alpha: a, bravo: b };
       },
-    }, mapSpec?.tileSize ?? HM_WORLD_SCALE);
+    }, mapSpec?.conquest?.span ?? mapSpec?.tileSize ?? HM_WORLD_SCALE, mapSpec?.conquest?.n);
     teamBots.conquest = soloConquest;
     world.soloConquest = soloConquest;
     teamBots.reseatAll();

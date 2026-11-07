@@ -54,6 +54,7 @@
     }
   ],
   "structures": [],
+  "conquest": { "n": 3, "span": 600 },
   "terrain": "rimrock.bin",
   "heightScale": 1.2,
   "terrainPreset": 5,
