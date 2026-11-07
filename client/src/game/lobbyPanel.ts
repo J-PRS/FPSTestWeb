@@ -610,7 +610,10 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     };
 
-    for (const name of ['JOIN', 'HOST', 'OFFLINE', 'P2P']) {
+    // P2P is presented as LAN: ICE host/mDNS candidates work there with
+    // zero NAT traversal, while strict-NAT internet pairs silently fail
+    // without TURN - so the UI only promises the case that always works.
+    for (const name of ['JOIN', 'HOST', 'OFFLINE', 'LAN']) {
 
       const b = btn(name);
 
@@ -994,7 +997,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    const p2pRow = field('P2P DUEL');
+    const p2pRow = field('LAN DUEL');
 
     const p2pIn = document.createElement('input');
 
@@ -1187,11 +1190,11 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     soloPage.append(soloLbl, soloModeRow, soloModeBtns, soloFamRow, soloBody);
 
-    tabs.get('P2P')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
+    tabs.get('LAN')!.append(p2pRow, p2pBtns, lobLbl, lobRows);
 
 
 
-    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!, tabs.get('P2P')!);
+    panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!, tabs.get('LAN')!);
 
     showTab(tabs.has(settings.get('fps-lb-tab')) ? settings.get('fps-lb-tab') : 'JOIN');
 

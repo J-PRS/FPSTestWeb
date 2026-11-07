@@ -79,7 +79,7 @@ async function connectP2PMode(ctx: ConnectCtx, p2p: string): Promise<void> {
     profiler.markTime('networkConnected');
   } catch (error) {
     logger.error('P2P connect failed', error);
-    fragMessages?.show('P2P connect failed — playing offline');
+    fragMessages?.show('LAN connect failed — playing offline');
   }
 }
 
