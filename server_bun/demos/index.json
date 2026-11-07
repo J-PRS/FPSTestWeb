@@ -553,6 +553,13 @@
     "fileSize": 59894
   },
   {
+    "filename": "clip_2026-11-07T10-44-15_3.1s.demo",
+    "projectileLifetime": 3.0999999046325684,
+    "timestamp": 1794048255975,
+    "description": "Best shot (3.10s air, 13.1s clip)",
+    "fileSize": 250955
+  },
+  {
     "filename": "clip_2026-10-11T13-36-55_3.1s.demo",
     "projectileLifetime": 3.0916500091552734,
     "timestamp": 1791725815099,
@@ -565,6 +572,13 @@
     "timestamp": 1791688965478,
     "description": "Best shot (3.05s air, 13.1s clip)",
     "fileSize": 113083
+  },
+  {
+    "filename": "clip_2026-11-07T10-11-38_3.0s.demo",
+    "projectileLifetime": 3.049999952316284,
+    "timestamp": 1794046298828,
+    "description": "Best shot (3.05s air, 13.0s clip)",
+    "fileSize": 302059
   },
   {
     "filename": "clip_2026-10-04T11-05-04_3.0s.demo",
@@ -644,6 +658,13 @@
     "fileSize": 220830
   },
   {
+    "filename": "clip_2026-11-07T09-03-40_2.9s.demo",
+    "projectileLifetime": 2.8889830112457275,
+    "timestamp": 1794042220083,
+    "description": "Best shot (2.89s air, 12.9s clip)",
+    "fileSize": 319825
+  },
+  {
     "filename": "clip_2026-10-04T21-21-52_2.9s.demo",
     "projectileLifetime": 2.8833999633789062,
     "timestamp": 1791148912402,
@@ -677,26 +698,5 @@
     "timestamp": 1791024941052,
     "description": "Cool shot (2.82s air, 12.8s clip)",
     "fileSize": 195842
-  },
-  {
-    "filename": "clip_2026-10-09T19-55-34_2.8s.demo",
-    "projectileLifetime": 2.8113813400268555,
-    "timestamp": 1791575734571,
-    "description": "Combo x2 (best 2.81s air, 16.6s clip)",
-    "fileSize": 170438
-  },
-  {
-    "filename": "clip_2026-10-03T11-37-51_2.8s.demo",
-    "projectileLifetime": 2.80422306060791,
-    "timestamp": 1791027471770,
-    "description": "Cool shot (2.80s air, 12.8s clip)",
-    "fileSize": 191495
-  },
-  {
-    "filename": "clip_2026-07-18T08-07-24_2.8s.demo",
-    "projectileLifetime": 2.7997000217437744,
-    "timestamp": 1784362044031,
-    "description": "Cool shot (2.80s air, 12.8s clip)",
-    "fileSize": 57378
   }
 ]
