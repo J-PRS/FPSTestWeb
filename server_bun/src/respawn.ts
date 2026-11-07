@@ -68,7 +68,21 @@ export class RespawnManager {
    *  is the caller's domain (sim-time drivers arm sim-time grace). */
   private fire(playerId: string, graceClock: number): void {
     const result = this.playerManager.respawnPlayer(playerId);
-    if (!result) {return;}
+    if (!result) {
+      // A held seat refused — lapsing the deadline leaves the player
+      // dead forever if holdSpawn keeps re-arming (reconnect/resync
+      // churn refreshing awaitingReady faster than READY_HOLD releases
+      // it). Retry on the respawn cadence until the seat is free; the
+      // refusal itself gets a line so a stuck-dead report names itself.
+      const p = this.playerManager.getPlayer(playerId);
+      if (p?.awaitingReady) {
+        logger.warn('respawn refused: seat held off-spawn — re-arming', { playerId });
+        this.schedule(playerId);
+      } else {
+        logger.warn('respawn refused: respawnPlayer returned null', { playerId });
+      }
+      return;
+    }
     const player = this.playerManager.getPlayer(playerId);
     if (!player) {return;}
     logger.info('Player respawned', { playerId, position: result.position });
