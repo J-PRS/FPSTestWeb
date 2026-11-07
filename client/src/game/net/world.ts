@@ -20,6 +20,7 @@ import { RIG_MANIFEST, CLASS_BODY_VARIANT } from '../../entities/playerClips.js'
 import type { PlayerModelVariant } from '../../entities/PlayerModel.js';
 import { mkGltfLoader, loadGltfCached } from '../../gltfLoad.js';
 import { dropVolatileWorldFx } from './resync.js';
+import { voidPendingEchoes } from '../parity.js';
 import { applyTerrain, applyInteriors, applyMapFog, applyWeather, applyAtmosphere, applyWater, applyKillZone, firstTerrain, type MapSnapshot } from './mapAssets.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
 // Boot/terrain machinery lives in mapAssets.js — re-exported so main.ts
@@ -298,6 +299,11 @@ export function wireWorld(ctx: NetCtx): void {
     // re-seeding (the hidden-tab regain path can't cover a socket that
     // died and rejoined while we were still looking at the screen).
     dropVolatileWorldFx(deps.world);
+    // Parity verdicts pending on the dead socket can never confirm - their
+    // playerHit/knockback wires died with it. Void them (and the kb stamps'
+    // consume queue) or every pre-drop prediction expires as a false miss.
+    voidPendingEchoes();
+    deps.world.selfBlastStamps.length = 0;
     // A gameState is a full world snapshot — every remote snapshot buffered
     // before it is stale. Worse, serverMs is per-room (tickSeq×50): a room
     // hop/restart rewinds it, and pushes stamped behind the buffer's anchor

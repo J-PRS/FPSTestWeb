@@ -198,6 +198,17 @@ export function kbStampDeadline(s: { t: number; pid?: string; wt?: number; wireT
   return s.t + horizon;
 }
 
+/** New authority session (gameState: join, reclaim, room hop) - every
+ *  pending verdict's confirming wire died with the old socket, so the
+ *  stamps are unjudgeable, not misses. Same void class as victim-death. */
+export function voidPendingEchoes(): void {
+  const n = dmgEchoes.length;
+  if (n > 0) {parityProbes.echoesVoided = (parityProbes.echoesVoided ?? 0) + n;}
+  dmgEchoes.length = 0;
+  expiredShots.clear();
+  shellFates.clear();
+}
+
 export function sweepDamageEchoes(now: number, stallMs = 0): void {
   for (let i = dmgEchoes.length - 1; i >= 0; i -= 1) {
     const e = dmgEchoes[i]!;

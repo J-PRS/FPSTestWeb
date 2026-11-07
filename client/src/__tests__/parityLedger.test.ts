@@ -3,7 +3,7 @@ import {
   kbEchoHorizon, kbStampDeadline,
   expectDamageEcho, confirmDamageEcho, hasPendingEcho,
   noteVictimDeath, noteVictimRespawn,
-  noteShellFate, parityLines, parityProbes, sweepDamageEchoes,
+  noteShellFate, parityLines, parityProbes, sweepDamageEchoes, voidPendingEchoes,
 } from '../game/parity.js';
 import { WEAPONS } from '../../../shared/weapons.js';
 import { RemoteInterp, type InterpHost } from '../entities/remoteInterp.js';
@@ -139,6 +139,16 @@ describe('damage echo ledger', (): void => {
     expect(dump).toContain(`"shot":"${shot}"`);
     expect(dump).toContain('"srvAt":"2,0,0"');
     expect(dump).toContain('"fates":2');
+  });
+
+  it('a session reset voids pending echoes instead of reporting dead-wire misses', (): void => {
+    const v = VID();
+    const voidsBefore = parityProbes.echoesVoided ?? 0;
+    expectDamageEcho(v, 25, 1, 'reconnect1');
+    voidPendingEchoes(); // reclaim: the confirming playerHit died with the old socket
+    expect(parityProbes.echoesVoided).toBe(voidsBefore + 1);
+    expect(hasPendingEcho(v)).toBe(false);
+    sweepDamageEchoes(performance.now() + 15_000, 0); // nothing left to expire
   });
 });
 
