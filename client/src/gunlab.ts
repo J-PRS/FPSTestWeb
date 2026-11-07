@@ -1419,13 +1419,17 @@ requestAnimationFrame((): void => {
   console.log(`[gunlab] interactive: nav+${tti}ms${reloadGap === null ? '' : ` f5-total ${Date.now() - Number(localStorage.getItem('gunlab.unloadAt'))}ms`}`);
 });
 let last = performance.now();
+// __lab.freeze parks the pose at REST - vm.update's envelopes would
+// nudge it back off canonical by sub-mm, which resamples the
+// world-position wear noise over the whole weapon (≈25dB drift).
+let labFrozen = false;
 renderer.setAnimationLoop((): void => {
   const now = performance.now();
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   // vm.update always ticks: inspect needs it too - kickAmount, the bow
   // draw envelope, barrel spins all live on the weapon group's children.
-  vm.update(dt, lookDX * 0.002, lookDY * 0.002, zeroVel, camera);
+  if (!labFrozen) {vm.update(dt, lookDX * 0.002, lookDY * 0.002, zeroVel, camera);}
   if (state.inspect && inspectAnchor) {
     orbit.update(); // damping settles between frames - must tick
     // The anchor is parked in the scene outside vm.group, so the pose
@@ -1503,6 +1507,7 @@ renderer.setAnimationLoop((): void => {
       if (ip) {inspectAnchor.position.copy(ip);}
       inspectAnchor.rotation.set(0, 0, 0);
     }
+    labFrozen = true;
   },
 };
 

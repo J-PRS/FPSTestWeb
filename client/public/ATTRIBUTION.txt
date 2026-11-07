@@ -1,0 +1,11 @@
+Third-party assets shipped in this bundle
+(canonical list: LICENSES.md at the repository root)
+
+Audio — announcer voice pack
+  "WARLORD - Video Game Announcer" by VoiceBosch (SoundBiter SFX library)
+  Source: https://opengameart.org/content/warlord-video-game-announcer
+  License: Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)
+  https://creativecommons.org/licenses/by-sa/4.0/
+  Files: sfx/announce_*.ogg
+  The announce_*.ogg files are licensed CC BY-SA 4.0 and may be
+  redistributed under those terms; attribution: VoiceBosch.

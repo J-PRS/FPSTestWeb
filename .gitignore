@@ -39,7 +39,9 @@ _tools/dif2glb_in/
 # Unity Asset Store bodies — licensed, not owned; stay out of git
 client/public/assets/models/class_*.glb
 
-# Announcer clips — ripped for playtest only, licensed; never tracked
+# Announcer source WAVs — the WARLORD pack (VoiceBosch, CC BY-SA 4.0,
+# see LICENSES.md). Raw .wav masters stay local; the shipped .ogg
+# encodes are tracked on purpose.
 client/public/sfx/announce_*.wav
 
 # Session probe scripts + generated captures — scratch, not for git
@@ -163,6 +165,18 @@ _tools/scratch/
 .devin*
 demos_rich/
 
+
+# Voice gallery generated audio + build artifacts (regenerable via gen_*).
+# Sources stay tracked: lines.json, gen_*, index.html, serve.py, run_tunnel.bat.
+_tools/vgs_gallery/out/
+_tools/vgs_gallery/voices.bin
+_tools/vgs_gallery/manifest.js
+_tools/vgs_gallery/manifest.json
+_tools/announcer_gallery/out/
+_tools/announcer_gallery/raw/
+_tools/announcer_gallery/manifest.js
+_tools/soundgallery/data.js
+_tools/soundgallery/tunnel.log
 
 # Scratch archaeology (never commit)
 _scratch/

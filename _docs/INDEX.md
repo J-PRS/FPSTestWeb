@@ -100,6 +100,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/traps/2026-10-24_remote-interp-chases-fiction.md` | Trap: converge/DR steering chases the extrapolated (fictional) sample instead of server truth |
 | `_docs/traps/2026-10-25_sweepStale-mass-reap-on-stall.md` | Trap: wall-clock staleness sweep mass-reaps live ribbons after a hidden-tab stall → zombie pushes + shared-slot trails |
 | `_docs/traps/2026-10-31_audio-stop-pop.md` | Trap: bare `stop()` mid-waveform clicks — global 15ms fade patch in `audio.ts` beats patching every call site |
+| `_docs/2026-11-05_BOT_WEAPON_USE_AUDIT.md` | Bot weapon-use audit — full cycle-table sweep: 16 commits (body-bounce, bodyArmTime gate, far-slot GL/bolt, situational sidearms, hose/disc orbits, flak+splash serves), pinned-bench board, remaining balance items |
 
 ## Agent memory (append-only, one line each)
 

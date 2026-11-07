@@ -3,7 +3,7 @@
 // for ~25s - speed histogram, ski flag fraction, parked fraction.
 import { launchClient, closeClient } from './browser.ts';
 
-const c = await launchClient(`http://localhost:5400/?server=ws://localhost:8000/ws&room=headhunt-1`);
+const c = await launchClient(`http://localhost:5400/?server=wss://play.jprice.app/w0/ws&room=headhunt-1`);
 await c.waitFor(`window.__test && window.__test.player`, 40000);
 await new Promise(r => setTimeout(r, 6000)); // remotes populate + settle
 

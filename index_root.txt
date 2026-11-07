@@ -15,6 +15,7 @@ AGENTS.md
 ARCHITECTURE.md
 CLAUDE.md
 Dockerfile
+LICENSES.md
 README.md
 ROADMAP.md
 _[client]_.bat
@@ -45,6 +46,7 @@ concepts
 deployment
 devup.bat
 index_root.txt
+licensing
 maps
 native
 package-lock.json
