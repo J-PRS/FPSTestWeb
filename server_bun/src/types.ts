@@ -36,6 +36,10 @@ export interface WebSocketData {
   /** Text frames seen before the join handshake completes — unseated
    *  sockets get a hard frame/size budget (pre-join CPU flood). */
   preJoin?: number;
+  /** Malformed/garbage frames seen; every rejection bumps it, past the
+   *  cap the socket closes. A legit client emits zero, so the budget is
+   *  pure headroom for a buggy one. */
+  badFrames?: number;
   /** Effective client IP — behind the local reverse proxy every peer is
    *  127.0.0.1, so upgrade stamps the last X-Forwarded-For hop (the same
    *  rule serverRoutes uses for ops auth: XFF only when peer is loopback). */

@@ -282,8 +282,24 @@ export class GameServer {
   /** Spectator sockets aren't players — roomOfPlayer can't find them. */
   private specRooms = new Map<string, Room>();
 
+  /** Unseated sockets per source IP: upgraded but not yet joined.
+   *  Cap bounds the held-zombie flood the kernel SYN rate can't see. */
+  private pendingByIp = new Map<string, Set<ServerWebSocket<WebSocketData>>>();
+  private static readonly PENDING_PER_IP = 8;
+
+  unseatAllow(ip: string | undefined): boolean {
+    const s = ip !== undefined ? this.pendingByIp.get(ip) : undefined;
+    return s === undefined || s.size < GameServer.PENDING_PER_IP;
+  }
+
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
     logger.debug('WebSocket connection opened', { remoteAddress: ws.remoteAddress });
+    const pendIp = ws.data.clientIp ?? ws.remoteAddress;
+    if (pendIp) {
+      let s = this.pendingByIp.get(pendIp);
+      if (!s) {s = new Set(); this.pendingByIp.set(pendIp, s);}
+      s.add(ws);
+    }
     // Join deadline: a socket that connects but never completes the join
     // handshake would otherwise sit forever (QUIC/RTC peers don't die on
     // their own quickly). 15s is generous — real clients join in ms.
@@ -301,6 +317,14 @@ export class GameServer {
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer | Uint8Array): void {
     const tRx = process.hrtime.bigint();
+    // Seated sockets leave the pending ledger: the join handshake
+    // stamps playerId deep in SessionManager, so the first message that
+    // reads one is the seat signal.
+    if (ws.data.playerId) {
+      const ip = ws.data.clientIp ?? ws.remoteAddress;
+      const s = ip ? this.pendingByIp.get(ip) : undefined;
+      if (s?.delete(ws) && s.size === 0) {this.pendingByIp.delete(ip!);}
+    }
     try {
     // Wrap first: the binary metering tag needs byte 1 — a DataView +
     // string per frame was ~50K throwaway allocs/s at load.
@@ -320,6 +344,7 @@ export class GameServer {
         return;
       }
       this.invalidWarn(ws.data.playerId, 'Unknown binary frame rejected');
+      this.garbageStrike(ws);
       return;
     }
     this.onJsonText(ws, message as string);
@@ -351,7 +376,7 @@ export class GameServer {
           // datagram reaching here is a protocol violation, drop it.
           if (!ws) {return;}
           const text = decodeWireJson(u8);
-          if (text === null) {this.invalidWarn(existingId, 'Malformed binary-JSON frame'); return;}
+          if (text === null) {this.invalidWarn(existingId, 'Malformed binary-JSON frame'); this.garbageStrike(ws); return;}
           this.onJsonText(ws, text);
           return;
         }
@@ -437,6 +462,7 @@ export class GameServer {
       raw = JSON.parse(text);
     } catch {
       this.invalidWarn(ws.data.playerId, 'Failed to parse JSON');
+      this.garbageStrike(ws);
       return;
     }
 
@@ -477,7 +503,7 @@ export class GameServer {
       return;
     }
 
-    this.handleGameMessage(room, existingPlayerId, raw);
+    this.handleGameMessage(room, existingPlayerId, raw, ws);
     } catch (error) {
       const t = (raw as { type?: string })?.type ?? '?';
       logger.error('Message handler failed', { playerId: existingPlayerId, type: t, err: error instanceof Error ? error.stack ?? error.message : String(error) });
@@ -490,6 +516,13 @@ export class GameServer {
   onClose(ws: ServerWebSocket<WebSocketData>, code?: number, _reason?: string): void {
     if (code !== undefined) {this.ops.closeCodes.set(code, (this.ops.closeCodes.get(code) ?? 0) + 1);}
     const {playerId} = ws.data;
+    // Leave the unseated ledger unconditionally: a socket that seated on
+    // its join frame and sent nothing since still holds a pending entry.
+    {
+      const ip = ws.data.clientIp ?? ws.remoteAddress;
+      const s = ip ? this.pendingByIp.get(ip) : undefined;
+      if (s?.delete(ws) && s.size === 0) {this.pendingByIp.delete(ip!);}
+    }
     if (!playerId) {return;}
     // Throttle entries keyed by playerId must die with the socket —
     // otherwise they linger until the 4096 wholesale clear, which also
@@ -775,6 +808,19 @@ seated += 1;
   private readonly invalidWarnAt = new Map<string, number>();
   private static readonly INVALID_WARN_GAP_MS = 5000;
 
+  /** Garbage-frame strikes: a legit client emits zero invalid frames
+   *  (the validator accepts everything it sends), so the cap is pure
+   *  headroom for a buggy one. Past it the socket is a garbage pumper,
+   *  not a player: close it or the parse loop is free DoS. */
+  private static readonly GARBAGE_FRAME_CAP = 64;
+  private garbageStrike(ws: ServerWebSocket<WebSocketData>): void {
+    const n = (ws.data.badFrames = (ws.data.badFrames ?? 0) + 1);
+    if (n >= GameServer.GARBAGE_FRAME_CAP) {
+      logger.warn('Closing garbage-flood socket', { playerId: ws.data.playerId, badFrames: n });
+      try { ws.close(1008, 'garbage flood'); } catch { /* already dying */ }
+    }
+  }
+
   /** One warn per sender per window for every garbage-frame path —
    *  parse/binary rejects arrive before validation, so they share this
    *  throttle or a malformed flood bypasses the bound entirely. */
@@ -795,11 +841,12 @@ seated += 1;
     this.dispatchMessage(room, playerId, msg, true);
   }
 
-  private handleGameMessage(room: Room, playerId: string, raw: unknown): void {
+  private handleGameMessage(room: Room, playerId: string, raw: unknown, ws?: ServerWebSocket<WebSocketData>): void {
     const result = validateMessage(raw);
     if (!result.success) {
 this.ops.msgsRejected += 1;
       this.invalidWarn(playerId, 'Invalid message rejected', { room: room.name, error: result.error });
+      if (ws) {this.garbageStrike(ws);}
       return;
     }
     this.dispatchMessage(room, playerId, result.data);

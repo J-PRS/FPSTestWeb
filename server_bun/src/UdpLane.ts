@@ -81,8 +81,24 @@ export class UdpLane {
     if (a && this.sock) { wireTx(playerId, bytes.byteLength, BIN_KIND[bytes[1]!]!); this.sock.send(bytes, a.port, a.host); }
   }
 
+  /** Per-source datagram budget: forged floods pay a counter read, not
+   *  the token decode. Legit input peaks ~30/s; 200/s is far past it. */
+  private static readonly RX_BUDGET = 200;
+  private rxCounts = new Map<string, { n: number; reset: number }>();
+
   private onData(buf: Uint8Array, port: number, addr: string): void {
     if (buf.byteLength <= TOKEN_BYTES) {return;}
+    const key = `${addr}:${port}`;
+    const now = Date.now();
+    let c = this.rxCounts.get(key);
+    if (c === undefined) {
+      if (this.rxCounts.size > 4096) {return;} // addr-flood: cap the map itself
+      c = { n: 0, reset: now + 1000 };
+      this.rxCounts.set(key, c);
+    } else if (now >= c.reset) {
+      c.n = 0; c.reset = now + 1000;
+    }
+    if (++c.n > UdpLane.RX_BUDGET) {return;}
     // Token is the map key — a datagram that doesn't carry a live token
     // can't reach a session (bind tokens are 128-bit, issued per join).
     let hex = '';

@@ -34,13 +34,16 @@ if (udpPort > 0) {
 }
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
-function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): boolean; requestIP?(req: Request): { address?: string } | null }, req: Request, data: WebSocketData): Response | undefined {
-  // Proxied peers all read 127.0.0.1 — the join throttle and flood logs
-  // would key every client onto the proxy. Trust the LAST XFF hop only
-  // when the peer actually is loopback; a direct socket can spoof XFF.
+// Proxied peers all read 127.0.0.1 — throttles/flood logs would key
+// every client onto the proxy. Trust the LAST XFF hop only when the
+// peer actually is loopback; a direct socket can spoof XFF.
+function effClientIp(srv: { requestIP?(req: Request): { address?: string } | null }, req: Request): string | undefined {
   const peer = srv.requestIP?.(req)?.address;
   const xff = peer && LOOPBACK.has(peer) ? req.headers.get('x-forwarded-for') : null;
-  data.clientIp = (xff ? xff.split(',').pop()!.trim() : undefined) ?? peer;
+  return (xff ? xff.split(',').pop()!.trim() : undefined) ?? peer;
+}
+function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): boolean; requestIP?(req: Request): { address?: string } | null }, req: Request, data: WebSocketData): Response | undefined {
+  data.clientIp = effClientIp(srv, req);
   if (srv.upgrade(req, { data })) {return undefined;}
   return new Response('Upgrade failed', { status: 400 });
 }
@@ -199,6 +202,11 @@ const serveOpts = {
     }
 
     if (url.pathname === '/ws') {
+      // Per-IP cap on unseated sockets: the kernel SYN rate bounds the
+      // connection RATE but not the held count; a source riding under it
+      // could still park hundreds of pending joins. Seated sockets are
+      // exempt (LAN cafes share an IP and join legitimately).
+      if (!gameServer.unseatAllow(effClientIp(srv, req))) {return corsResponse('Too many pending joins', { status: 429 });}
       return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow() });
     }
 

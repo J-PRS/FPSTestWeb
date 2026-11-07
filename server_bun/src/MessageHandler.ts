@@ -198,6 +198,7 @@ export interface RoomInfo {
   /** Arrival-time muzzle relay already flashed this shotId. */
   earlyRelayed?: (playerId: string, shotId?: string) => boolean;
   energyOf?: (playerId: string) => number | null;
+  groundedOf?: (playerId: string) => boolean;
   /** Wire-invisible cloak: position-bearing emits must not leak to
    *  non-teammates while this holds (records, relays, snapshots). */
   cloakHidden?: (playerId: string) => boolean;
