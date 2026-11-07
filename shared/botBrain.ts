@@ -492,7 +492,7 @@ export class BotBrain {
    *  their feet to outbid a fight); near-1 bots are lobby hoovers who
    *  cross midfield for a purple spill. Hashed per spawn like the
    *  rest of the personality. */
-  private readonly greed: number = 0.5;
+  readonly greed: number = 0.5;
   /** Held-position strafe orbit - angle advances each pickDest step.
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads

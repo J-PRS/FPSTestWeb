@@ -204,8 +204,13 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // slow patrol arc inside his leash — planted, never frozen. The
       // HoF keeps the tightest ring; his post is the flag itself.
       if (ctx.posted && ctx.objective && dist3(pos, ctx.objective) < ctx.posted * 0.5) {
-        b.orbitA += dt * 0.3;
-        const r = ctx.posted <= 6 ? 2.2 : Math.min(8, ctx.posted * 0.15);
+        // Every anchored defender on this objective used to ride the
+        // SAME ring — same center, same angular rate, radius capped 8m:
+        // a fixed-separation carousel one mortar deletes whole. Spread
+        // the annulus per bot: seeded direction and a greed-keyed
+        // radius/speed factor keep the patrol but break the ring.
+        b.orbitA += dt * 0.3 * b.orbitDir * (0.5 + b.greed);
+        const r = (ctx.posted <= 6 ? 2.2 : Math.min(8, ctx.posted * 0.15)) * (0.55 + 0.9 * b.greed);
         return {
           x: ctx.objective.x + Math.cos(b.orbitA) * r,
           y: ctx.objective.y,
