@@ -31,6 +31,7 @@ import { RoomStructures } from './roomStructures.ts';
 import { RoomPickups } from './RoomPickups.ts';
 import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
+import { RoomIntel } from './serverIntel.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
 import type { PlayerState, Vec3, ClientMessage,WebSocketData } from './types.ts';
 import { CLASS_STATS, classCapsule, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
@@ -381,6 +382,9 @@ export class Room {
   /** Server-owned deployables  -  turrets/mines/stations/drones a `deploy`
    *  claim plants; caps + TTL + teardown live here. */
   readonly deployables: RoomDeployables;
+  /** Server-truth IFF - per-viewer detection contacts (sensor net +
+   *  personal LOS, recon perk memory) feeding the 'intel' wire feed. */
+  readonly intel: RoomIntel;
   /** Server-simulated projectiles  -  bot fire spawns real shells here
    *  instead of rolled hitscan (bots-as-legal-players phase 2). */
   readonly projectiles: RoomProjectiles;
@@ -811,6 +815,7 @@ export class Room {
     }
     this.wireModeFeatures();
     this.deployables = new RoomDeployables(this);
+    this.intel = new RoomIntel(this);
     // Deployables are solid  -  the move shadows push bodies out of gear.
     this.moveSim.setDynamic(this.deployables.solidCols);
     if (this.spec.deploys) {
@@ -1026,6 +1031,9 @@ export class Room {
     for (const s of this.modeModule?.sims?.() ?? []) {this.sims.push(s);}
     if (ambient && this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind, vel: p.vel }) as ServerMessage) });}
     this.sims.push({ name: 'unbury', tick: (dt): void => this.unburyTick(dt) });
+    // IFF detection sweep - runs in every mode incl. duels: enemy markers
+    // gate on it regardless of world content.
+    this.sims.push({ name: 'intel', tick: (dt): void => this.intel.tick(dt) });
     if (this.spec.arena) {
       const arena = new RoomArena(this, this.spec.arena);
       this.sims.push({ name: 'arena', tick: (dt): void => arena.tick(dt) });

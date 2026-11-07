@@ -72,6 +72,7 @@ const EXEMPT: Record<string, string> = {
   srvPing: 'liveness',
   aoeShot: 'cosmetic beam relay',
   sensorPing: 'intel relay — no actor state',
+  intel: 'per-player IFF feed — marker visibility is UI state, not an actor',
   correction: 'self-sync control traffic',
   inputSync: 'control traffic',
   claimAck: 'control traffic',

@@ -461,6 +461,7 @@ this.handlerThrows += 1;
     deployDown: (data): void | undefined => this.h.onDeployDown?.(data.id, data.kind, data.team, data.respawnS),
     deployUp: (data): void | undefined => this.h.onDeployUp?.(data.id),
     sensorPing: (data): void | undefined => this.h.onSensorPing?.(data.id, data.team, data.targets),
+    intel: (data): void | undefined => this.h.onIntel?.(data.seen, data.mem),
     turretShot: (data): void | undefined => this.h.onTurretShot?.(data.id, data.owner, data.targetId),
     sentryShot: (data): void | undefined => this.h.onSentryShot?.(data.id, data.owner, data.x, data.y, data.z),
     mortarShot: (data): void | undefined => this.h.onMortarShot?.(data.id, data.owner, data.vx, data.vy, data.vz),

@@ -20,6 +20,9 @@ import { isBotId, botRosterName } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
 import { sampleRemoteGhosts } from './ghostTrace.js';
+import { intelContact } from './intel.js';
+import { debugOverlaysOn } from '../ui/hud/indicators.js';
+import { urlParams } from '../core/params.js';
 
 // Hostiles always read red - team colors are for your own side only.
 const ENEMY_RED = 0xFF_33_33;
@@ -158,13 +161,27 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
     // Teammates read green, everything else stays enemy red - FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.
     const friendly = Boolean(playerState.team) && playerState.team === deps.world.localTeam;
-    // Anchor at the RENDERED eye - the slope/lift pass can raise the
-    // mesh ~2.5m over the logical feet; marking raw position sinks the
-    // chevron into the body exactly when the lift is live.
-    _markPos.copy(remotePlayer.position); _markPos.y += remotePlayer.renderLift;
-    // Unnamed humans show their id minus the 'player_' prefix - still
-    // marks them as a real person vs a bot's HP number.
-    hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held, name: playerState.name ?? playerId.replace(/^player_/, '') });
+    // IFF gate: in connected play an enemy marker exists only while the
+    // server's intel feed detects him (sensor net or allied LOS). Tilde
+    // overlays / F1 / offline play bypass - debug visibility, not law.
+    const nm = deps.lazyNetworkManager();
+    const contact = friendly ? undefined : intelContact(playerId);
+    const seeAll = !nm.isConnected() || debugOverlaysOn() || urlParams.debug;
+    if (!friendly && !seeAll && !contact) {
+      hud.removePlayerIndicator(playerId);
+    } else {
+      // Anchor at the RENDERED eye - the slope/lift pass can raise the
+      // mesh ~2.5m over the logical feet; marking raw position sinks the
+      // chevron into the body exactly when the lift is live.
+      _markPos.copy(remotePlayer.position); _markPos.y += remotePlayer.renderLift;
+      // A lingering contact marks where he WAS (last-known), ghosted -
+      // never where he is now.
+      const mem = Boolean(contact && !contact.fresh);
+      if (mem) {_markPos.set(contact!.x, contact!.y, contact!.z);}
+      // Unnamed humans show their id minus the 'player_' prefix - still
+      // marks them as a real person vs a bot's HP number.
+      hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, mem, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held, name: playerState.name ?? playerId.replace(/^player_/, '') });
+    }
     // The number stays on the indicator; the crown renders the pile itself.
     remotePlayer.setHeld(playerState.held ?? 0);
   }

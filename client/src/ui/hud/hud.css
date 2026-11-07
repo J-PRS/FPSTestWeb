@@ -423,6 +423,9 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 /* Bots: same class silhouette, dimmed — "who's real" is an alpha read,
    not a different shape. */
 .player-indicator.bot { opacity: 0.75; }
+/* Lingering IFF contact (mem) — remembered, not currently detected.
+   Ghosted harder than a bot so stale never reads as live. */
+.player-indicator.mem { opacity: 0.5; }
 /* Class silhouettes — shape carries light/medium/heavy. Border + radius
    + box-shadow drop out for shaped marks; drop-shadow re-adds the white
    rim because it follows the CLIPPED path where a box border can't. */

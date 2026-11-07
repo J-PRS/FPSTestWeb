@@ -17,6 +17,7 @@ import { parityMiss, kbEchoHorizon, kbStampDeadline } from '../parity.js';
 import { recCorrection } from '../../core/telemetry.js';
 import { lastWeaponByPlayer } from './projectiles.js';
 import { markLocalSeated, isSessionVeiled } from './world.js';
+import { setIntel } from '../intel.js';
 import type { NetCtx } from './ctx.js';
 
 /** Updates, respawns, join/leave, movement events - the presence wire. */
@@ -535,6 +536,10 @@ function wirePlayerCombat(ctx: NetCtx): void {
   };
 
   networkManager.onPlayerKill = (shooterId, targetId, weapon, air, steal): void => onPlayerKill(ctx, shooterId, targetId, weapon, air, steal);
+
+  // Server-truth IFF feed - the marker gate reads this store; nothing
+  // else may un-hide an enemy indicator.
+  networkManager.onIntel = (seen, mem): void => setIntel(seen, mem);
 }
 
 

@@ -15,6 +15,7 @@ import { GRAVITY } from '../../shared/movement.ts';
 import { hmNormal, hmHeight } from '../../shared/heightfield.ts';
 import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
+import { STATUS, shootRevealed } from '../../shared/status.ts';
 
   /** Structure LOS for the gun scan — a sentry indoors shouldn't plink
    *  players outside through the wall. Target at chest height. */
@@ -458,13 +459,68 @@ export function tickSensor(r: RoomDeployables, d: Deployed, dt: number): void {
     d.fireCd = SENSOR_SCAN_S;
     const dTeam = r.teamOf(d);
     const targets: { id: string; x: number; y: number; z: number }[] = [];
+    // The mast sweeps from its crown (bodyH ~9.8) - a ridge that hides a
+    // runner at eye level still reads at mast height, like the real
+    // Tribes pulse sensor's elevated perch.
+    const eye = { x: d.pos.x, y: d.pos.y + DEPLOY_ITEMS.sensor.bodyH!, z: d.pos.z };
     for (const [pid, p] of r.room.players.getAllPlayers()) {
       if (p.isDead) {continue;}
       if (dTeam && p.team === dTeam) {continue;}
+      // Pulse sensors can't see cloak - only his own shots re-open him.
+      if ((p.status & STATUS.CLOAK) !== 0 && !shootRevealed(p.lastFireSim, simNow())) {continue;}
+      // A friendly jammer bubble hides its side from the pulse sweep -
+      // visual sightings and motion sensors still read them.
+      if (r.jammed(p, p.position)) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       if (dx * dx + dy * dy + dz * dz > SENSOR_RANGE * SENSOR_RANGE) {continue;}
+      // Terrain + structures occlude the sweep - the authentic pulse read.
+      if (!r.room.intel.los(dTeam, eye, p.position)) {continue;}
       targets.push({ id: pid, x: p.position.x, y: p.position.y, z: p.position.z });
     }
     if (targets.length === 0) {return;}
+    r.room.intel.noteSensor(d.owner, dTeam, targets);
     r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'sensorPing', 'id', d.id, { team: dTeam, targets }) as ServerMessage);
+}
+
+const MOTION_RANGE = DEPLOY_ITEMS.motion.range!;
+const MOTION_SCAN_S = DEPLOY_ITEMS.motion.fireInterval!;
+/** Below this speed a body reads as "still" - the motion sensor's whole
+ *  contract is that standing still drops you off the net. */
+const MOTION_STILL2 = 0.25;
+
+/** Deployable motion sensor - the Tribes pack item: detects MOVING
+ *  hostiles in range with no LOS check and THROUGH cloak (it reads
+ *  movement, not light). Sightings feed the same team intel feed the
+ *  mast does, so a moving capper lights up on friendly IFF even behind
+ *  a ridge - stand still and you're dark again. Jammers don't touch it:
+ *  they kill pulses, not motion. */
+export function tickMotion(r: RoomDeployables, d: Deployed, dt: number): void {
+    d.fireCd -= dt;
+    if (d.fireCd > 0) {return;}
+    d.fireCd = MOTION_SCAN_S;
+    const dTeam = r.teamOf(d);
+    const targets: { id: string; x: number; y: number; z: number }[] = [];
+    const range2 = MOTION_RANGE * MOTION_RANGE;
+    for (const [pid, p] of r.room.players.getAllPlayers()) {
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
+      if (p.protectedUntil > simNow()) {continue;}
+      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+      if (dx * dx + dy * dy + dz * dz > range2) {continue;}
+      // Velocity truth is the move shadow - p.velocity only mirrors it
+      // under moveAuthority for humans, so reading the record would leave
+      // every bot (and non-authority client) permanently "still".
+      const v = r.room.moveSim.simState(pid)?.vel ?? p.velocity;
+      if (v.x * v.x + v.y * v.y + v.z * v.z < MOTION_STILL2) {continue;}
+      targets.push({ id: pid, x: p.position.x, y: p.position.y, z: p.position.z });
+    }
+    if (targets.length === 0) {return;}
+    r.room.intel.noteSensor(d.owner, dTeam, targets);
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'sensorPing', 'id', d.id, { team: dTeam, targets }) as ServerMessage);
+}
+
+/** Jammer emitter - no scan of its own; the aura is read by tickSensor's
+ *  jammed() check. The tick only ages the arm delay. */
+export function tickJammer(_r: RoomDeployables, d: Deployed, dt: number): void {
+    d.fireCd = Math.max(0, d.fireCd - dt);
 }

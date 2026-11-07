@@ -1,6 +1,6 @@
 import { ChildLogger } from '../core/Logger.js';
 import { encodePosition, encodeInputMove, encodeWireJson, encodePosClaim, encodeShot, WIRE_JUMP, WIRE_JETPACK, WIRE_JSON } from '../../../shared/wire.js';
-import type { ClientMessage, ServerMessage, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
+import type { ClientMessage, ServerMessage, GameStatePlayer, IntelContact, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
 import { TieredTransport, benchTier, rewardTier } from './tiers.js';
@@ -162,6 +162,9 @@ export class NetworkManager {
   public onDeployUp: ((id: number) => void) | null = null;
   /** Base sensor sweep - hostiles inside a mast's radius, relayed to its team. */
   public onSensorPing: ((id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]) => void) | null = null;
+  /** Server-truth IFF contacts - the ONLY thing allowed to un-hide an
+   *  enemy marker. seen = live this sweep; mem = lingering last-known. */
+  public onIntel: ((seen: IntelContact[], mem: IntelContact[]) => void) | null = null;
   /** Server sim fired a remote sentry - paint the rocket at the deployable. */
   public onTurretShot: ((id: number, owner: string, targetId: string) => void) | null = null;
   public onSentryShot: ((id: number, owner: string, x: number, y: number, z: number) => void) | null = null;

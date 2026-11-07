@@ -59,8 +59,8 @@ export class PlayerIndicators {
     camera.getWorldDirection(_cameraDir);
   }
 
-  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string; hp?: number; held?: number; name?: string } = {}): void {
-    const { isDead = false, friendly = false, variant, sheep, bot, cls, hp, held, name } = opts;
+  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; mem?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string; hp?: number; held?: number; name?: string } = {}): void {
+    const { isDead = false, friendly = false, mem = false, variant, sheep, bot, cls, hp, held, name } = opts;
     let indicator = this.indicators.get(playerId);
     if (!indicator) {
       indicator = document.createElement('div');
@@ -70,6 +70,9 @@ export class PlayerIndicators {
       logger.debug('INDICATOR CREATED', { playerId, total: this.indicators.size });
     }
     indicator.classList.toggle('friendly', friendly);
+    // Lingering IFF contact - remembered, not currently detected. Ghosted
+    // so a stale marker never reads as a live one.
+    indicator.classList.toggle('mem', mem);
     // Silhouette = armor class (light chevron / medium V+◆ / heavy ▼);
     // bots render the same shape dimmed — class stays readable on bots.
     indicator.classList.toggle('bot', Boolean(bot));

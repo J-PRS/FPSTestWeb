@@ -16,6 +16,8 @@ import type { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import type { DeployPad } from '../entities/DeployPad.js';
 import type { DeployLoiter } from '../entities/DeployLoiter.js';
 import type { DeploySpider } from '../entities/DeploySpider.js';
+import type { DeployJammer } from '../entities/DeployJammer.js';
+import type { DeployMotion } from '../entities/DeployMotion.js';
 import type { DeployMortar } from '../entities/DeployMortar.js';
 import type { DeployCg } from '../entities/DeployCg.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -334,6 +336,19 @@ export class DeployAdopter {
       s.dive(dive.hover, dive.vel);
       item.dead = true; // munition spent - the projectile carries the blast
     }, { dive: (p0, v0): void => s.dive(p0, v0) });
+  }
+
+  /** Jammer - passive aura; the bubble logic is server-side (the mast's
+   *  sweep reads it). The item only owns the visual + damage record. */
+  adoptJammer(j: DeployJammer, owner?: DeployOwner): void {
+    this.mkItem('jammer', j, owner, (dt): void => j.update(dt));
+  }
+
+  /** Motion sensor - same passive shape: detection is the server's
+   *  tickMotion feeding the intel table; the replica just sweeps its
+   *  eye and marks the ring. */
+  adoptMotion(m: DeployMotion, owner?: DeployOwner): void {
+    this.mkItem('motion', m, owner, (dt): void => m.update(dt));
   }
 
   /** Spider mine - ground-scuttler: chases GROUNDED hostiles (air is

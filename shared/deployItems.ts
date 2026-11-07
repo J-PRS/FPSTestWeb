@@ -9,7 +9,7 @@
 import { WeaponType } from './weaponTable.ts';
 import { WEAPONS } from './weaponRows.ts';
 
-export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon' | 'watersphere' | 'tether' | 'pad' | 'loiter' | 'spider'
+export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon' | 'watersphere' | 'tether' | 'pad' | 'loiter' | 'spider' | 'jammer' | 'motion'
   // Authored-only base assets — cap 0 means a player can never plant one;
   // they exist only via the map spec `deploys` block.
   | 'generator' | 'sensor' | 'baseturret';
@@ -124,6 +124,16 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
   // genuinely safe over the skittering thing), and it dies cheap like
   // the loiter. launchSpeed = crawl speed.
   spider:  { label: 'Spider Mine', cap: 3, hp: 10, ttlS: 60, cost: 2, armS: 0.8, triggerDist: 24, launchSpeed: 14, blastDamage: 50, blastRadius: 7, knockback: 14, bodyR: 0.6, bodyH: 0.5 },
+  // Jammer: an emitter bubble hiding its side from PULSE detection -
+  // the base mast's sweep skips protected players inside the radius.
+  // Personal-LOS sightings and motion sensors still read you: jammers
+  // beat pulses, never eyeballs. range = bubble radius.
+  jammer:  { label: 'Jammer', cap: 2, hp: 30, ttlS: 90, cost: 3, range: 18, armS: 1, bodyR: 0.8, bodyH: 1.4 },
+  // Motion sensor: the deployable pack item - detects MOVING hostiles
+  // in its ring with no LOS needed and THROUGH cloak (it reads
+  // movement, not light). A body standing still drops off the net.
+  // Feeds the same team intel feed the mast does.
+  motion:  { label: 'Motion Sensor', cap: 2, hp: 20, ttlS: 90, cost: 3, range: 45, fireInterval: 1.5, armS: 1, bodyR: 0.7, bodyH: 1.1 },
   // Base assets are fat targets — a generator is the raid's main prize,
   // so it soaks far more splash than a field plant. Authored ttl is
   // ignored: base gear runs on the respawn clock, not the decay clock.

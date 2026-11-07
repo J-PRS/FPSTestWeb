@@ -318,11 +318,13 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
     let kind: string = 'drone';
     if ((ctx.healthFrac ?? 1) < 0.4) {kind = 'station';}
     else if (roll < 0.42) {kind = 'turret';}
-    else if (roll < 0.56) {kind = 'mortar';} // stand artillery — shells the approach lanes
+    else if (roll < 0.56) {kind = 'mortar';} // stand artillery - shells the approach lanes
     else if (roll < 0.72) {kind = 'cgturret';} // suppression spray on the open ground
     else if (roll < 0.78) {kind = 'loiter';} // the circling dart - hunts the lane, not just the stand
     else if (roll < 0.83) {kind = 'spider';} // the ground scuttler - cheap chase, air is the counter
-    else if (roll < 0.88) {kind = 'mine';}
+    else if (roll < 0.87) {kind = 'jammer';} // bubble hides its side from the pulse mast
+    else if (roll < 0.92) {kind = 'motion';} // ring sensor - reads movement through cloak
+    else if (roll < 0.96) {kind = 'mine';}
     const a = botRand() * Math.PI * 2;
     const r = 4 + botRand() * 6;
     const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;

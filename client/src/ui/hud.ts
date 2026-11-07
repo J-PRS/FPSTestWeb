@@ -449,7 +449,7 @@ export class HUD {
     this.sb.tick(dt);
   }
 
-  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; sheep?: number; bot?: boolean; cls?: string; hp?: number; held?: number; name?: string } = {}): void {
+  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; mem?: boolean; sheep?: number; bot?: boolean; cls?: string; hp?: number; held?: number; name?: string } = {}): void {
     this.indicators.update(playerId, position, camera, opts);
   }
 

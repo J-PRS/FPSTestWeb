@@ -16,7 +16,7 @@ import type { DeployKind } from './deployables.js';
 import type { TeamId } from './teams.ts';
 import type { AtmosphereSpec, SpawnPoint, StructureSpec, WaterSpec, WeatherSpec } from './mapSpec.ts';
 import type { ResultToken } from './resultToken.ts';
-export const PROTOCOL_VERSION = 14; // tick positions widened i16→i32 ×0.04 (±1310m saturation desync)
+export const PROTOCOL_VERSION = 15; // +intel IFF contacts - stale clients must not gate-free render
 
 export interface Vec3 {
   x: number;
@@ -30,6 +30,14 @@ export type TransportKind = 'wt' | 'rtc' | 'ws';
 export interface Rotation {
   yaw: number;
   pitch: number;
+}
+
+/** One IFF contact on the intel message - id + last-known feet pos. */
+export interface IntelContact {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
 }
 
 export type ClientMessage =
@@ -347,6 +355,12 @@ export type ServerMessage =
   // Base sensor sweep - hostiles inside the mast's radius, relayed to
   // the owning team as map pings. Not hit feedback - pure intel.
   | { type: 'sensorPing'; id: number; team?: string; targets: { id: string; x: number; y: number; z: number }[] }
+  // Server-truth IFF: which hostiles THIS client may mark, full stop.
+  // `seen` = detected in the latest sweep (marker rides the live body);
+  // `mem` = lingering contacts at their last-known position (recon perk
+  // stretches only the viewer's own memory - never the team's). Every
+  // expiry is stamped server-side; a client cannot fabricate a contact.
+  | { type: 'intel'; seen: IntelContact[]; mem: IntelContact[] }
   // Server-owned sentry fired at a player - clients render the rocket
   // visual; damage itself arrives through playerHit like everything else.
   | { type: 'turretShot'; id: number; owner: string; targetId: string }

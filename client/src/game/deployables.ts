@@ -27,6 +27,8 @@ import { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import { DeployPad } from '../entities/DeployPad.js';
 import { DeployLoiter } from '../entities/DeployLoiter.js';
 import { DeploySpider } from '../entities/DeploySpider.js';
+import { DeployJammer } from '../entities/DeployJammer.js';
+import { DeployMotion } from '../entities/DeployMotion.js';
 import type { Terrain } from '../world/terrain.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
 import { Explosion } from '../effects/explosion.js';
@@ -101,7 +103,8 @@ interface Pod {
 }
 
 type PodBody = DeployTurret | DeployMortar | DeployCg | DeployStation
-  | DeployDrone | DeployShield | DeployBeacon | DeployTether | DeployWatersphere | DeployPad | DeployLoiter | DeploySpider;
+  | DeployDrone | DeployShield | DeployBeacon | DeployTether | DeployWatersphere | DeployPad | DeployLoiter | DeploySpider
+  | DeployJammer | DeployMotion;
 
 /** Seated-kinds registry - one entry per bolted-down kit: ctor + the
  *  adopter slot it lands in. A new kind writes ONE row here instead of
@@ -123,6 +126,8 @@ const SEATED: Partial<Record<DeployKind, {
   pad:         { make: (s, t, p) => new DeployPad(s, t, p),         adopt: (a, b, o) => a.adoptPad(b as DeployPad, o) },
   loiter:      { make: (s, t, p) => new DeployLoiter(s, t, p),      adopt: (a, b, o) => a.adoptLoiter(b as DeployLoiter, o) },
   spider:      { make: (s, t, p) => new DeploySpider(s, t, p),      adopt: (a, b, o) => a.adoptSpider(b as DeploySpider, o) },
+  jammer:      { make: (s, t, p) => new DeployJammer(s, t, p),      adopt: (a, b, o) => a.adoptJammer(b as DeployJammer, o) },
+  motion:      { make: (s, t, p) => new DeployMotion(s, t, p),      adopt: (a, b, o) => a.adoptMotion(b as DeployMotion, o) },
 };
 
 export interface Item {
