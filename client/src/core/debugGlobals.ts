@@ -31,6 +31,8 @@ export interface TestHandle {
   demoLifecycle: ReturnType<typeof createDemoLifecycle>;
   chatSink: typeof chatSink;
   hud: HUD;
+  /** Offline bot squad — null outside solo. Lets soaks count alive/moving. */
+  teamBots: import('../game/bots/index.js').TeamBots | null;
   /** parity.ts counters — fates/echoes census for soak verdicts. */
   parity: { fatesSeen: number; echoesStamped: number; echoesConfirmed: number; destroysSeen: number; msgSeen: Record<string, number> };
 }

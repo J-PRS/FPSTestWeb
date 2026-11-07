@@ -65,6 +65,7 @@ export async function wireDebugTools(c: DevToolsCtx): Promise<void> {
     terrain: c.terrain, viewModel: c.viewModel,
     networkManager: c.networkManager, demoManager: c.demoManager, hud: c.hud,
     rendererSetup: c.rendererSetup, demoLifecycle: c.demoLifecycle,
+    teamBots: c.teamBots,
     chatSink: (await import('../game/chat.js')).chatSink,
     parity: (await import('../game/parity.js')).parityProbes,
   };
