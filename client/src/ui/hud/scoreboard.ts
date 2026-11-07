@@ -333,6 +333,12 @@ export class Scoreboard {
     this.root.classList.toggle('sb-noping', !v);
   }
 
+  /** Offline boards render NET as 'bot'/'-' on every row - a transport
+   *  column with no transports. Hide it like PING. */
+  setNetVisible(v: boolean): void {
+    this.root.classList.toggle('sb-nonet', !v);
+  }
+
 
 
   /** 4Hz re-render while open — cheap enough that diffing row state

@@ -298,6 +298,7 @@ export class HUD {
 
   setScoreboardRows(rows: SbRow[]): void { this.sb.setRows(rows); }
   setScoreboardPingVisible(v: boolean): void { this.sb.setPingVisible(v); }
+  setScoreboardNetVisible(v: boolean): void { this.sb.setNetVisible(v); }
   setScoreboardTeamScores(s: { alpha: number; bravo: number } | null): void { this.sb.setTeamScores(s); }
 
   /** Intermission footer on the board — "NEXT MATCH IN N". */
