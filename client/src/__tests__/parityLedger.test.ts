@@ -3,7 +3,7 @@ import {
   kbEchoHorizon, kbStampDeadline,
   expectDamageEcho, confirmDamageEcho, hasPendingEcho,
   noteVictimDeath, noteVictimRespawn,
-  noteShellFate, parityProbes, sweepDamageEchoes,
+  noteShellFate, parityLines, parityProbes, sweepDamageEchoes,
 } from '../game/parity.js';
 import { WEAPONS } from '../../../shared/weapons.js';
 import { RemoteInterp, type InterpHost } from '../entities/remoteInterp.js';
@@ -126,6 +126,19 @@ describe('damage echo ledger', (): void => {
     sweepDamageEchoes(performance.now() + 15_000, 0);
     noteShellFate('late1', { x: 1, y: 2, z: 3 }); // lands in expiredShots
     expect(parityProbes.fatesSeen).toBeGreaterThan(0);
+  });
+
+  it('a fan pull reports the fate nearest the predicted contact, not the last destroy', (): void => {
+    const v = VID();
+    const shot = `fan-${VID()}`;
+    expectDamageEcho(v, 9, 6, shot, { x: 0, y: 0, z: 0 });
+    noteShellFate(shot, { x: 100, y: 0, z: 0 }); // sibling pellet, far away
+    noteShellFate(shot, { x: 2, y: 0, z: 0 });   // the pellet that mattered
+    sweepDamageEchoes(performance.now() + 15_000, 0);
+    const dump = parityLines().join('\n');
+    expect(dump).toContain(`"shot":"${shot}"`);
+    expect(dump).toContain('"srvAt":"2,0,0"');
+    expect(dump).toContain('"fates":2');
   });
 });
 

@@ -70,7 +70,10 @@ const dmgEchoes: DmgEcho[] = [];
 // divergence (server spawned/flight differed); an echo with NO fate = the
 // server shell never even ran - intent lost, spawn refused, or its destroy
 // never arrived.
-const shellFates = new Map<string, { at: { x: number; y: number; z: number }; t: number }>();
+// Fan pulls register N server shells under ONE shotId (the pull nonce) -
+// keep every fate so the verdict picks the pellet nearest the predicted
+// contact; last-write-wins read a sibling pellet ~70m away as divergence.
+const shellFates = new Map<string, { ats: { x: number; y: number; z: number }[]; t: number }>();
 
 export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotId?: string | null, at?: { x: number; y: number; z: number }, vWire?: { x: number; y: number; z: number }): void {
   parityProbes.echoesStamped += 1;
@@ -161,7 +164,10 @@ export function noteShellFate(shotId: string, at: { x: number; y: number; z: num
   const late = expiredShots.get(shotId);
   if (late !== undefined) {parityMiss('fate-late', { shot: shotId, ageMs: Math.round(performance.now() - late) });}
   parityProbes.fatesSeen += 1;
-  shellFates.set(shotId, { at, t: performance.now() });
+  const slot = shellFates.get(shotId) ?? { ats: [], t: 0 };
+  if (slot.ats.length < 16) {slot.ats.push({ x: at.x, y: at.y, z: at.z });}
+  slot.t = performance.now();
+  shellFates.set(shotId, slot);
   if (shellFates.size > 64) {
     // Sweep stale entries lazily - fates older than the confirm window
     // can't be needed by any live echo.
@@ -224,7 +230,15 @@ export function sweepDamageEchoes(now: number, stallMs = 0): void {
         dmgEchoes.splice(i, 1);
         continue;
       }
-      const fate = e.shotId ? shellFates.get(e.shotId) : undefined;
+      const fateList = e.shotId ? shellFates.get(e.shotId)?.ats : undefined;
+      // Nearest fate to the predicted contact is the trajectory verdict -
+      // single-shell pulls have exactly one, fan pulls pick their pellet.
+      let fate: { x: number; y: number; z: number } | undefined;
+      if (fateList && fateList.length > 0) {
+        fate = e.at
+          ? fateList.reduce((best, p): typeof p => Math.hypot(p.x - e.at!.x, p.y - e.at!.y, p.z - e.at!.z) < Math.hypot(best.x - e.at!.x, best.y - e.at!.y, best.z - e.at!.z) ? p : best)
+          : fateList[0];
+      }
       const detail: Record<string, unknown> = Object.assign({}, {victim: e.victim,dmg: e.dmg}, (e.wt === undefined ? {} : { wt: e.wt }), { shot: e.shotId ?? '?' });
       if (e.at) {detail.at = `${e.at.x.toFixed(0)},${e.at.y.toFixed(0)},${e.at.z.toFixed(0)}`;}
       // Aim staleness: the wire pos of the victim at stamp time vs the
@@ -238,13 +252,14 @@ export function sweepDamageEchoes(now: number, stallMs = 0): void {
       // predicted contact - if the shell itself flew differently, the
       // spawn claim/coalescing changed its arc.
       if (fate && e.at) {
-        detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
-        detail.offM = Number(Math.hypot(fate.at.x - e.at.x, fate.at.y - e.at.y, fate.at.z - e.at.z).toFixed(1));
+        detail.srvAt = `${fate.x.toFixed(0)},${fate.y.toFixed(0)},${fate.z.toFixed(0)}`;
+        detail.offM = Number(Math.hypot(fate.x - e.at.x, fate.y - e.at.y, fate.z - e.at.z).toFixed(1));
       } else if (fate) {
-        detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
+        detail.srvAt = `${fate.x.toFixed(0)},${fate.y.toFixed(0)},${fate.z.toFixed(0)}`;
       } else {
         detail.srvAt = 'none'; // server shell never detonated - intent died before it ran
       }
+      if (fateList && fateList.length > 1) {detail.fates = fateList.length;}
       parityMiss('dmg-echo', detail);
       if (e.shotId) {
         expiredShots.set(e.shotId, now);
