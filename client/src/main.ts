@@ -635,14 +635,14 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // a shared link must never hardcode ws://127.0.0.1 for its opener.
   {
     // Pin the ENTRY host, not the seat: on a fleet, wsUrl is the assigned
-    // worker (host:8443) — alias-matching it misses NAMED_SERVERS and
+    // worker (host:8443) - alias-matching it misses NAMED_SERVERS and
     // stamps ?server=wss://host:8443 into the bar, which both stays ugly
     // and pins share recipients to one worker, bypassing matchmaking.
     // lobbyUrl is the matchmaker a fresh joiner must enter through.
     const pinBase = (await serverEndpoints).lobbyUrl ?? serverUrl;
     const u = new URL(pinBase);
     const local = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname);
-    // A ?server= that already names the entry host is redundant — it
+    // A ?server= that already names the entry host is redundant - it
     // only ever needed the param to SAY it. Those get the alias path
     // too (and drop the param), which self-heals stamped worker URLs
     // from before this ran against the entry host.

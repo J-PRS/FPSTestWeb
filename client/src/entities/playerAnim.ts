@@ -501,7 +501,7 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
         warnedAnimMisses.add('__stall');
         logger.warn(`Anim action stalled in state '${this.currentState}' (${this.currentClipName}) — re-entering`);
       }
-      // Re-entering restarts the clip at t=0 — the stalled pose snaps to
+      // Re-entering restarts the clip at t=0 - the stalled pose snaps to
       // cycle start = a visible pop every stall. Carry the dead action's
       // cycle fraction onto the re-entered action so recovery is seamless
       // whatever stalled it (PingPong's reverse leg loses direction, but
