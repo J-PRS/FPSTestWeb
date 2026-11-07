@@ -80,9 +80,13 @@ export class ConnectionManager {
   /** uWS native fanout: identical payloads (reliable broadcasts, ball
    *  batches, proj edges) build the frame once and publish to every
    *  subscribed socket -- ~88% of send calls on a combat room collapse
-   *  into one `server.publish` per frame. Set once in server.ts after
-   *  Bun.serve; absent in tests → the per-conn path stands. */
-  static publishFn: ((topic: string, data: string | Uint8Array) => void) | undefined;
+   *  into one `server.publish` per frame. One fn PER Bun.serve listener:
+   *  publish() only reaches subscribers of its own uWS server, so the
+   *  direct-TLS listener needs its own entry or its sockets (marked
+   *  pubbed, skipped by sendReliable) silently lose every async
+   *  broadcast -- the missing-playerRespawn desync. Set in server.ts
+   *  after each Bun.serve; absent in tests → the per-conn path stands. */
+  static publishFns = new Set<(topic: string, data: string | Uint8Array) => void>();
   /** UDP volatile lane (native-shell clients): returns true when the
    *  tick frame rode out over the bound datagram lane -- the ws path is
    *  skipped entirely (control/reliable traffic never touches this).
@@ -392,7 +396,7 @@ export class ConnectionManager {
     this.introAt.set(playerId, wallNow());
     this.tickDrained.delete(playerId); // joins re-arm the intro hold
     this.heldPhase.delete(playerId);   // ...and its grace count
-    if (this.topic && ConnectionManager.publishFn && typeof ws.subscribe === 'function') {
+    if (this.topic && ConnectionManager.publishFns.size > 0 && typeof ws.subscribe === 'function') {
       ws.subscribe(this.topic);
       this.pubbed.add(playerId);
     }
@@ -561,8 +565,9 @@ export class ConnectionManager {
     }
     // publish() can't exclude a socket -- an excluded broadcast pays the
     // per-conn path like the JSON version does.
-    const pub = ConnectionManager.publishFn;
-    if (exclude === undefined && pub && this.topic && this.pubbed.size > 0) {pub(this.topic, data);}
+    if (exclude === undefined && ConnectionManager.publishFns.size > 0 && this.topic && this.pubbed.size > 0) {
+      for (const pub of ConnectionManager.publishFns) {pub(this.topic, data);}
+    }
     this.connections.forEach((ws, pid): void => {
       if (pid === exclude) {return;}
       if (exclude === undefined && this.pubbed.has(pid)) {
@@ -600,9 +605,8 @@ export class ConnectionManager {
     if (WIRESPY && (msg as { type?: string }).type === 'projectileCreated') {
       logger.warn('wirespy broadcast', { type: 'projectileCreated', conns: [...this.connections.keys()] });
     }
-    const pub = ConnectionManager.publishFn;
-    if (pub && this.topic && excludePlayerId === undefined && this.pubbed.size > 0) {
-      pub(this.topic, f.data);
+    if (ConnectionManager.publishFns.size > 0 && this.topic && excludePlayerId === undefined && this.pubbed.size > 0) {
+      for (const pub of ConnectionManager.publishFns) {pub(this.topic, f.data);}
       this.connections.forEach((ws, pid): void => {
         if (this.pubbed.has(pid)) {
           wireTx(pid, f.data.length, f.kind);

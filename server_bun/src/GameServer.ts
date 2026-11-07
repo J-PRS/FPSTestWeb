@@ -292,7 +292,7 @@ export class GameServer {
   private static readonly PENDING_PER_IP = 8;
 
   unseatAllow(ip: string | undefined): boolean {
-    const s = ip !== undefined ? this.pendingByIp.get(ip) : undefined;
+    const s = ip === undefined ? undefined : this.pendingByIp.get(ip);
     return s === undefined || s.size < GameServer.PENDING_PER_IP;
   }
 
@@ -703,7 +703,7 @@ export class GameServer {
     // subscribed ws instead of a send-per-conn loop (send was ~25% of
     // CPU at 64 sockets). Per-conn paths (ticks, sendToPlayer, excludes)
     // stay direct.
-    ConnectionManager.publishFn = (topic: string, data: string | Uint8Array): void => { server.publish(topic, data as string | Uint8Array<ArrayBuffer>); };
+    ConnectionManager.publishFns.add((topic: string, data: string | Uint8Array): void => { server.publish(topic, data as string | Uint8Array<ArrayBuffer>); });
   }
 
   /** Dev-restart seat snapshot — humans only, bots re-mint from spec.bots.

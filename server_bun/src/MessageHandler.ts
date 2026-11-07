@@ -311,7 +311,7 @@ export class MessageHandler {
 
   /** UDP volatile lane: mint a session bind token for a joiner (native
    *  clients read `udp:{token,port}` in gameState and point their loopback
-   *  shim at it). Static/global like ConnectionManager.publishFn —
+   *  shim at it). Static/global like ConnectionManager.publishFns —
    *  server.ts sets it when FPS_UDP_PORT is live; absent = key omitted
    *  from gameState (JSON.stringify drops undefined fields). */
   static udpBind: ((playerId: string) => { token: string; port: number } | undefined) | undefined;

@@ -8,6 +8,7 @@ import { RtcServer } from './RtcServer.ts';
 import { WtServer } from './WtServer.ts';
 import { join } from 'node:path';
 import { clientLogRoute, rotateLogs } from './clientLogs.ts';
+import { ConnectionManager } from './ConnectionManager.ts';
 import { adminRoute, clipRoute, corsResponse, demoRoute, leaderboardRoute, makeRoutes, mapBinRoute } from './serverRoutes.ts';
 import { wallNow } from './wallClock.ts';
 import type { ServerWebSocket } from 'bun';
@@ -365,6 +366,19 @@ if (CONFIG.tlsCertPath || CONFIG.tlsKeyPath) {
         }
       };
       let tlsServer = bindTls();
+      // uWS publish is per-server: a topic subscriber only hears publishes
+      // issued through ITS listener's server object. Register this
+      // listener's publish alongside the primary's or TLS clients (the
+      // ones /join advertises) silently lose every async broadcast.
+      let tlsPublish: ((topic: string, data: string | Uint8Array) => void) | null = null;
+      const registerTlsPublish = (): void => {
+        if (tlsPublish) {ConnectionManager.publishFns.delete(tlsPublish); tlsPublish = null;}
+        const srv = tlsServer;
+        if (!srv) {return;}
+        tlsPublish = (topic: string, data: string | Uint8Array): void => { srv.publish(topic, data as string | Uint8Array<ArrayBuffer>); };
+        ConnectionManager.publishFns.add(tlsPublish);
+      };
+      registerTlsPublish();
       directTlsPort = tlsServer?.port ?? 0;
       if (tlsServer) {logger.info('Direct wss listener up', { port: directTlsPort });}
       // Cert renewal watch: the ACME pair rotates (~60d) and Bun reads
@@ -382,6 +396,7 @@ if (CONFIG.tlsCertPath || CONFIG.tlsKeyPath) {
         }
         if (!tlsServer) {
           tlsServer = bindTls();
+          registerTlsPublish();
           directTlsPort = tlsServer?.port ?? 0;
           if (tlsServer) {logger.info('Direct wss listener bound', { port: directTlsPort, renew: true });}
         }
