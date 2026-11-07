@@ -37,6 +37,9 @@ export class BotGoals {
     private duty: () => number = (): number => 1,
     private social: () => number = (): number => 0.5,
     private greed: () => number = (): number => 0.5,
+    /** Seeded per-bot angle — escort/vulture goals ring the carrier
+     *  here instead of stacking his exact spot (see the offer below). */
+    private escortA: () => number = (): number => 0,
   ) {}
 
   /** The bot's nerve - where on the solo↔social dial it sits right now.
@@ -128,12 +131,26 @@ export class BotGoals {
     offer(ctx.objective, committed ? 3.5 : huntW, Boolean(committed));
     // Escort the piñata: a 20+ friendly hoard draws its team like the
     // carrier is a walking objective - committed roles already hold
-    // their task, everyone else drifts to guard the vault.
-    offer(ctx.convoy, 1.5);
+    // their task, everyone else drifts to guard the vault. The pull is
+    // a RING point around the carrier, not his position: every escort
+    // converging on one spot stacked the team into a mortar-shaped
+    // clump circling the bowl he hid in (reported on prod rimrock).
+    // orbitA is the seeded per-bot angle; it also drifts slowly in
+    // patrol, so the screen point wanders instead of statue-sitting.
+    const escort = (p: BotVec | null | undefined, r: number): BotVec | null => {
+      if (!p) {return null;}
+      const rr = r * (0.7 + 0.6 * this.greed());
+      const x = p.x + Math.cos(this.escortA()) * rr;
+      const z = p.z + Math.sin(this.escortA()) * rr;
+      return { x, y: ctx.groundY(x, z), z };
+    };
+    offer(escort(ctx.convoy, 25), 1.5);
     // Corpse-watch beats the pickup offer it's about to become -
     // camping the dying carrier wins the spill; arriving late reads
-    // as the enemy team's tokens. Greed still decides who circles.
-    offer(ctx.spillSoon, 1.8 * (0.5 + this.greed()));
+    // as the enemy team's tokens. Greed still decides who circles -
+    // but vultures spread the ring the same way (12m is close enough
+    // to pounce on the drop).
+    offer(escort(ctx.spillSoon, 12), 1.8 * (0.5 + this.greed()));
     if (!(ctx.posted && ctx.objective && ctx.pickup && distSq(ctx.pickup, ctx.objective) > ctx.posted * ctx.posted)) {
       // Corridor loot: a nugget on the way to the objective is nearly
       // free and worth a bump; one off the line drops to a passing whim.

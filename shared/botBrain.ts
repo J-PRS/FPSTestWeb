@@ -411,6 +411,7 @@ export class BotBrain {
     (): number => this.duty,
     (): number => this.social,
     (): number => this.greed,
+    (): number => this.orbitA,
   );
   // Ski/jet/jump hint intents live in botMoves.ts - host closures read
   // the escape burst latch and the live hunt target.
