@@ -1325,7 +1325,10 @@ export class PlayerModel {
       // Crossfades get the same pass: the outgoing clip still holds weight
       // while the incoming name is already current (death→idle sweeps the
       // corpse pose under the feet for a few frames = phantom -1m sink).
-      if (!this.anim.transitioning && !ONESHOT_CLIPS.has(this.anim.currentClipName ?? '') && Math.abs(off) > 0.6) {
+      // |off| ≥ 50 isn't drift - it's the pre-bake/unit-scale artifact (raw
+      // source-units clip before canonicalization lands). That class is the
+      // hip-cap's job; the canary hunts the 0.6-3m "marker at his feet" drift.
+      if (!this.anim.transitioning && !ONESHOT_CLIPS.has(this.anim.currentClipName ?? '') && Math.abs(off) > 0.6 && Math.abs(off) < 50) {
         glitch('model-offset', { variant: this.variant, clip: this.anim.currentClipName ?? '?',
           state: this.anim.currentState, rise: Math.round(off * 10) / 10 });
       }

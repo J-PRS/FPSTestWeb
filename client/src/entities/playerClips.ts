@@ -47,28 +47,12 @@ export const KNIGHT_ANIMS: Record<AnimationState, string> = {
   'throw': 'Punch',
 };
 
-// UAS class bodies (paid packs) — each GLB bakes its own clip set on its
-// own rig, so clips bind natively with no retarget. Vexa ships clips for
-// every NON-locomotion state (idles, jumps, death, damage, gunshots) but
-// zero run/walk: her GLB names them on the ANIM_NAMES fallback slots and
-// kevdev supplies locomotion via VEXA_KEVDEV_BONE_MAP below.
-export const SCIFISOLDIER_ANIMS: Partial<Record<AnimationState, string>> = {
-  'idle': 'Idle_Rifle', 'walk': 'Walk_Rifle', 'run': 'Run_Rifle',
-  'jump': 'Jump_Rifle', 'death': 'Death_Rifle', 'ski': 'CrouchingRun_Rifle',
-  'jet': 'Jump_Rifle', 'hit': 'Hit', 'shoot': 'Fire_SniperRifle',
-  // No overhand in the pack — the one-handed pistol arm swing is the
-  // closest release motion; without it 'throw' falls through to 'Punch',
-  // which this rig doesn't ship either (warn + holds last pose).
-  'throw': 'Fire_1Pistol',
-};
-export const POLYART_ANIMS: Partial<Record<AnimationState, string>> = {
-  'idle': 'Idle_gunMiddle_ar', 'walk': 'WalkFront_Shoot_ar', 'run': 'Run_gunMiddle_AR',
-  'jump': 'Jump', 'death': 'Die', 'ski': 'Idle_Ducking_ar',
-  'jet': 'Idle_gunMiddle_ar', 'hit': 'Idle_Shoot_ar', 'shoot': 'Shoot_SingleShot_AR',
-  // No overhand in the GLB — Reload's two-handed body cycle reads as
-  // the belt-throw/deploy windup; the Punch fallback doesn't exist here.
-  'throw': 'Reload',
-};
+// UAS class bodies (paid packs): their native clip packs were stripped
+// to shared sources for size — the old native anims tables are gone, so
+// kevdev/UAL_ candidates drive these rigs like the other class bodies.
+// Vexa ships clips for every NON-locomotion state (idles, jumps, death,
+// damage, gunshots) but zero run/walk: kevdev supplies locomotion via
+// VEXA_KEVDEV_BONE_MAP below.
 
 /** RIG_MANIFEST — one row per body variant: where it loads from, how it
  *  fits the capsule, which anim sources feed its retarget bake, and its
@@ -194,7 +178,9 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   // CyberSoldier ships zero clips — his set is 100% retarget: mannequin's
   // native UAL states via CYBER_MANNEQUIN_BONE_MAP + kevdev 8-way
   // locomotion via CYBER_KEVDEV_BONE_MAP.
-  'scifisoldier': { url: '/assets/models/class_light.glb',  yaw: 0, fitH: 1.89, anims: SCIFISOLDIER_ANIMS, gunLocal: [0.22, 1.15, -0.35], sources: [],
+  // Clip-less since the UAS pack strip — its Rig* skeleton has no bone
+  // map into any shared source (kevdev/UAL bake would bind nothing).
+  'scifisoldier': { url: '/assets/models/class_light.glb',  yaw: 0, fitH: 1.89, gunLocal: [0.22, 1.15, -0.35], sources: [],
                     mount: { palms: true } },
   // Cyber+vexa are 100% retarget bakes — their source hip convention
   // lands facing +Z (toward the third-person camera), so the whole set
@@ -208,7 +194,7 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   // next to the armored classes; the cap keeps the honest hitbox.
   'vexa':         { url: '/assets/models/class_medium.glb', yaw: 0, fitH: 2.2,  gunLocal: [0.26, 1.35, -0.45], sources: ['kevdev'], clipYawFix: Math.PI,
                     mount: { quat: [0.8778, -0.1951, -0.3364, -0.2796] } },
-  'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [],
+  'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, gunLocal: [0.38, 1.7, -0.55], sources: ['kevdev', 'ual2'],
                     walkDirs: { B: 'WalkBack_Shoot_ar', L: 'WalkLeft_Shoot_ar', R: 'WalkRight_Shoot_ar' },
                     mount: { palms: true, palmFwd: 0.35, palmYaw: -0.25, palmUp: 0.05, size: 1.3 } },
   // Procedural Keel-style brute (_tools/models/build_brute.py) — ships

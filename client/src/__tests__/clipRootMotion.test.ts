@@ -16,7 +16,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { stripHipXZ } from '../entities/playerClipSurgery.js';
-import { SCIFISOLDIER_ANIMS, POLYART_ANIMS } from '../entities/playerClips.js';
+import { RIG_MANIFEST } from '../entities/playerClips.js';
 
 const MODELS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../public/assets/models');
 
@@ -128,21 +128,27 @@ const BODIES: [file: string, fitH: number][] = [
   ['class_heavy.glb', 2.76],
 ];
 
-// The anims tables must name real clips — a typo'd entry silently leaves
-// the previous action running (or bind-poses on first request).
-const ANIM_TABLES: [file: string, table: Record<string, string | undefined>][] = [
-  ['class_light.glb', SCIFISOLDIER_ANIMS],
-  ['class_heavy.glb', POLYART_ANIMS],
-];
-
+// Native anims tables must name real clips — a typo'd entry silently
+// leaves the previous action running (or bind-poses on first request).
+// Clips can live in the class GLB or any of the variant's retarget sources.
 describe('class anims tables resolve to real clips', (): void => {
-  for (const [file, table] of ANIM_TABLES) {
-    // oxlint-disable-next-line valid-title -- table-driven titles name the GLB under test
-    it(file, (): void => {
-      const g = parseGlb(path.join(MODELS_DIR, file));
-      const names = new Set((g.json.animations || []).map((a: any) => a.name));
-      for (const [state, clip] of Object.entries(table)) {
-        expect(names.has(clip!), `${file} ${state} → '${clip}'`).toBe(true);
+  const SRC_FILES: Record<string, string> = { ual1: 'robot-anims.glb', ual2: 'robot-anims2.glb', kevdev: 'kevdev-anims.glb', mannequin: 'mannequin.glb' };
+  const names = (variant: string): Set<string> => {
+    const rig = RIG_MANIFEST[variant]!;
+    const out = new Set<string>();
+    for (const f of [path.basename(rig.url), 'class_scout.glb', ...rig.sources.map((s): string => SRC_FILES[s]!)]) {
+      const g = parseGlb(path.join(MODELS_DIR, f));
+      for (const a of (g.json.animations || []) as { name: string }[]) {out.add(a.name); out.add(`UAL_${a.name}`);}
+    }
+    return out;
+  };
+  for (const [variant, rig] of Object.entries(RIG_MANIFEST)) {
+    if (!rig.anims) {continue;}
+    // oxlint-disable-next-line valid-title -- table-driven titles name the variant under test
+    it(variant, (): void => {
+      const avail = names(variant);
+      for (const [state, clip] of Object.entries(rig.anims!)) {
+        expect(avail.has(clip!), `${variant} ${state} → '${clip}'`).toBe(true);
       }
     });
   }
