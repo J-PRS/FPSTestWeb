@@ -32,7 +32,7 @@ export type RoomEvent =
   | { type: 'armor'; pos: Vec3; amount: number; radius: number }
   // Player-world notifications without a verdict — the shadow sim gets
   // the same impulse the blast applied; a conc'd carrier drops the flag.
-  | { type: 'impulse'; playerId: string; dv: Vec3 }
+  | { type: 'impulse'; playerId: string; dv: Vec3; fallBoost?: number }
   | { type: 'flagDrop'; playerId: string };
 
 export type RoomEventSink = (e: RoomEvent) => void;

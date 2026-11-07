@@ -738,7 +738,7 @@ export class Player {
     // Fires in MP too: the impact dressing is instant prediction feel,
     // and the featherfall soak must mirror the shadow's drain or the two
     // tank models diverge — only the health write stays wire-owned.
-    const landing = this.movement.landingImpact;
+    const landing = this.movement.landingImpact * this.movement.fallBoost;
     if (landing > MOVEMENT_CONFIG.fallDamageMinSpeed) {
       this.onFallDamage?.(landing, Math.max(0, -this.prevVelY));
     }

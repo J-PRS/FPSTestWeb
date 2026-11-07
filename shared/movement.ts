@@ -302,6 +302,13 @@ export class MoveSim {
    *  (impact - min) * scale * maxHealth. Read after update(); transient
    *  by design (replay re-derives it, snapshots never carry it). */
   landingImpact = 0;
+  /** Transient fall-damage multiplier — the howitzer's recoil arms it
+   *  so the launcher-kick pays like a real fall without juicing the
+   *  impulse itself. Decays to 1 inside update(); transient by design
+   *  (replay re-derives it, snapshots never carry it). */
+  fallBoost = 1;
+  /** Arm the fall-damage multiplier for the next landing window. */
+  armFallBoost(n: number): void { this.fallBoost = Math.max(this.fallBoost, n); }
   /** resolveBody's out-sink — solid contacts record -v·n here so wall
    *  and ceiling slams pay the same price as a floor landing (T1's
    *  impactDot is any surface's normal component). */
@@ -328,13 +335,16 @@ export class MoveSim {
     if (!Number.isFinite(dv.x + dv.y + dv.z)) {return;}
     const v = this.state.vel;
     v.x += dv.x; v.y += dv.y; v.z += dv.z;
-    if (dv.y > 0) {
+    if (dv.y > 0 || (dv.y < -8 && this.state.onGround)) {
       this.state.onGround = false;
       this.groundedBuffered = false;
       this.groundGraceT = 0;
       // Without the window the very next collideTerrain re-grounds it:
       // a sub-3 m/s shove reads velDotN below the launch gate and the
       // band keeps the body grounded while the arc drains into glue.
+      // Downward kicks (howitzer recoil) unground too - the body must be
+      // airborne for the floor contact to record a landing impact; the
+      // ground-glue would cancel the shove silently otherwise.
       this.impulseT = 0.35;
     }
   }
@@ -389,6 +399,7 @@ export class MoveSim {
     // and the sim freezes until a snapshot/setState reseed.
     if (!Number.isFinite(dt)) {return;}
     this.landingImpact = 0;
+    this.fallBoost = Math.max(1, this.fallBoost - 3 * dt); // ~0.66s from 3x
     this.tetherSlowNow = 0;
     this.acc += Math.min(dt, MoveSim.MAX_DT);
     while (this.acc >= MoveSim.STEP) {

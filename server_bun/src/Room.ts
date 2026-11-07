@@ -772,7 +772,7 @@ export class Room {
           this.creatureSim.armorBlast(e.pos, e.radius, e.amount);
           break;
         }
-        case 'impulse': { this.moveSim.applyImpulse(e.playerId, e.dv); break;
+        case 'impulse': { this.moveSim.applyImpulse(e.playerId, e.dv, e.fallBoost); break;
         }
         case 'flagDrop': { this.flags?.dropIfCarrier(e.playerId); break;
         }
@@ -1295,6 +1295,7 @@ export class Room {
       },
       onThrowFlag: (pid): void | undefined => this.flags?.throwFor(pid),
       energyOf: (pid): number | null => this.moveSim.energyOf(pid),
+      groundedOf: (pid): boolean => this.moveSim.simState(pid)?.onGround ?? false,
       // Wire-invisible cloak predicate — same terms as the tickRecords
       // hidden flag: masked CLOAK claim, modeled tank alive, shoot-
       // reveal window closed (lastFireSim is sim-ms domain).

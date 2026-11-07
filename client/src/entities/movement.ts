@@ -106,4 +106,8 @@ export class MovementController {
   /** Worst contact -v·n (m/s) since the last update — the T1 impact
    *  speed the fall-damage gate reads (see shared/movement.ts). */
   get landingImpact(): number { return this.sim.landingImpact; }
+  get fallBoost(): number { return this.sim.fallBoost; }
+  armFallBoost(n: number): void { this.sim.armFallBoost(n); }
+  impulse(dv: { x: number; y: number; z: number }): void { this.sim.impulse(dv); }
+  get skiHeld(): boolean { return this.sim.input.skiHeld; }
 }

@@ -76,6 +76,8 @@ export interface CombatDeps {
    *  server-side truth so a bot/client can't heal for free. */
   drainEnergy?: (playerId: string, amount: number) => void;
   energyOf?: (playerId: string) => number | null;
+  /** Shadow-sim grounded state — groundedOnly weapons refuse otherwise. */
+  groundedOf?: (playerId: string) => boolean;
   /** Dome occlusion for blast sweeps — the shell dies at the shield's
    *  edge, so its splash must not reach anyone inside that dome. */
   shieldBlocked?: (from: Vec3, to: Vec3, shooterId: string) => boolean;
@@ -608,9 +610,25 @@ win.violations += 1;
       if (msg.weaponType !== undefined && !spendAmmo(player.ammoPool, msg.weaponType, now / 1000)) {
         this.hb('drop.ammoDry'); this.reject(playerId, 'Shot', 'ammo dry', undefined, msg.weaponType, msg.shotId); return;
       }
+      // Deploy weapons (howitzer): grounded and not skiing, or the pull
+      // is dead - the predicted gate is on the same row, so a refused
+      // intent never costs ammo either way.
+      const st = msg.weaponType !== undefined ? getWeaponStats(msg.weaponType) : undefined;
+      if (st?.groundedOnly && (!(this.deps.groundedOf?.(playerId) ?? false) || player.skiing !== 0)) {
+        this.hb('drop.notGrounded'); this.reject(playerId, 'Shot', 'needs ground', undefined, msg.weaponType, msg.shotId); return;
+      }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;
       let ndir = { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l };
+      // Launcher recoil (howitzer): authority applies the same kick the
+      // client predicted - aimed up off dirt it's the shooter's own
+      // fall damage. Rides the impulse event so the moveSim shadow AND
+      // the sim journal see the delta, not just the wire position.
+      const recoil = msg.weaponType !== undefined ? (getWeaponStats(msg.weaponType).recoilImpulse ?? 0) : 0;
+      if (recoil > 0) {
+        this.deps.emit?.({ type: 'impulse', playerId,
+          dv: { x: -ndir.x * recoil, y: -ndir.y * recoil, z: -ndir.z * recoil }, fallBoost: 3 });
+      }
       // Server-owned bloom cone (chaingun): the client claims a RAW aim
       // dir - we draw the seeded cone its predicted shell used, so a
       // forged "center" claim still lands inside the same scatter.

@@ -307,6 +307,19 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
   // Pool ammo (PlasmaGun pilot): the predicted debit mirrors the server's
   // intent gate - a desync reject just closes the ledger, no ghost bolt.
   if (!spendAmmo(deps.lazyPlayer().ammoPool, def.config.weaponType, performance.now() / 1000)) {return;}
+  // Deploy weapons (howitzer): feet on dirt and not skiing, or the pull
+  // is dead. Ahead of the recoil arm so a refused shot can't arm it.
+  if (getWeaponStats(def.config.weaponType).groundedOnly
+    && (!deps.lazyPlayer().onGround || deps.lazyPlayer().getInputState().skiHeld)) {return;}
+  // Launcher recoil (howitzer): momentum opposite the shot. Aimed up off
+  // dirt the kick is the fall damage; airborne it's propulsion.
+  const recoil = getWeaponStats(def.config.weaponType).recoilImpulse ?? 0;
+  if (recoil > 0) {
+    deps.lazyPlayer().movement.impulse({ x: -e.dir.x * recoil, y: -e.dir.y * recoil, z: -e.dir.z * recoil });
+    // The kick alone under-measures as a fall - arm the sim's fall
+    // multiplier so the next landing reads the impact it felt like.
+    deps.lazyPlayer().movement.armFallBoost(3);
+  }
   deps.lazyViewModel()?.kick(def.kick);
   if (def.pellets) { spawnFan(deps, def.config, e, def.pellets.count, def.pellets.spread); return; }
   if (def.bloom) {

@@ -199,7 +199,7 @@ function accrue(pool: AmmoPool, weaponType: number, nowS: number): { ammo: numbe
   // DOWN during a burst, never jitters up. Exception: a dry pool regens
   // regardless, or an empty gun could never come back (that's the
   // half-cadence trickle).
-  const start = c.ammo < 1 ? c.t : Math.max(c.t, c.shotAt + interval);
+  const start = c.ammo < 1 || st.ammoAlwaysRegen ? c.t : Math.max(c.t, c.shotAt + interval);
   if (nowS > start) {c.ammo = Math.min(st.ammoCap, c.ammo + (nowS - start) / regenS);}
   c.t = nowS;
   return c;

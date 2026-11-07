@@ -75,3 +75,29 @@ export const MORTAR_CONFIG: ProjectileConfig = {
   ribbonLife: 0.4,
   ribbonColor: 0xCC_33_33,
 };
+
+// Howitzer - the mortar's siege brother: same bounce/arming machinery,
+// just re-pointed at the wt45 row (fat shell, longer dead-fuse, bigger
+// boom). Fields not overridden ride WEAPONS[4] equivalents.
+export const HOWITZER_CONFIG: ProjectileConfig = {
+  ...MORTAR_CONFIG,
+  name: 'howitzer',
+  displayName: 'Howitzer',
+  weaponType: 45,
+  // Siege shell reads differently than the mortar's dart: hotter amber
+  // shell + glow, wider ember trail - an artillery round, not a bomb.
+  meshColor: 0xFF_88_22,
+  glowColor: 0xFF_AA_33,
+  glowScale: 2.2,
+  ribbonColor: 0xFF_88_33,
+  ribbonWidth: 1.4,
+  damageColor: '#ffaa33',
+  vfx: 'shellburst', // cannon-family blast: dirty flash + smoke + iron chips
+  speed: WEAPONS[45].speed,
+  explosionRadius: WEAPONS[45].aoeRadius * AOE_VFX_SCALE,
+  force: WEAPONS[45].knockbackForce,
+  aoeDamage: WEAPONS[45].aoeDamage,
+  aoeRadius: WEAPONS[45].aoeRadius,
+  maxLifetime: WEAPONS[45].maxLifetime,
+  armTime: WEAPONS[45].armTime,
+};

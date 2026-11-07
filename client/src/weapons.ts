@@ -127,6 +127,9 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   // Rocket Launcher - the universal flat rocket: bolt stats minus
   // gravity, every class fields it. Appended last.
   def(WeaponType.RocketLauncher, BOLT_FIRE_RATE, 1),
+  // Howitzer - siege artillery: 5-charge drum, violent recoil kick.
+  // Appended last; never reorder shipped entries.
+  def(WeaponType.Howitzer, 3, 2.4),
 ];
 
 /** wid of the shocklance def - the 'lance' sidearm pick binds this. */

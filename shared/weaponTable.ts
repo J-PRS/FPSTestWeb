@@ -48,6 +48,7 @@ export enum WeaponType {
   Gonne = 42,        // light-frame cannon: the same 80 m/s arc shell in a handgonne - the gravity-arc primary family member for lights
   Basilisk = 43,        // heavy-frame cannon: the same 80 m/s arc shell in a huge-bore long gun - the gravity-arc primary family member for heavies
   RocketLauncher = 44,  // universal rocket: the Bolt Launcher's shell with no gravity - every class fields it
+  Howitzer = 45,        // siege artillery: mortar-on-steroids - 5-charge drum, 6s/round regen, arming fuse that bars close work, and a violent recoil kick that punishes grounded firing
 }
 
 export interface WeaponStats {
@@ -66,6 +67,14 @@ export interface WeaponStats {
   forceMode: 'push' | 'pull';
   /** Muzzle speed (m/s) - before player-velocity inheritance */
   speed: number;
+  /** Shooter impulse opposite the aim direction, m/s (howitzer's
+   *  violent launcher-kick). 0/absent = no recoil momentum. Applied on
+   *  every fire path - client prediction, server authority, bot arsenal.
+   */
+  recoilImpulse?: number;
+  /** Must be grounded (and not skiing) to fire — deploy weapons like the
+   *  howitzer; the recoil-propulsion exploit dies by rule, not tuning. */
+  groundedOnly?: boolean;
   /** Fraction of shooter velocity the shell inherits (default 0.5).
    *  0 = the flight line is pure aim - for weapons whose path IS the
    *  payload (a mid-flight ray discharges down the velocity line). */
@@ -187,6 +196,11 @@ export interface WeaponStats {
   /** Pool regen cadence as a multiple of fireInterval — 2 = one round
    *  per 2× the shot interval, so a dry gun sustains at half rate. */
   ammoRegenMult?: number;
+  /** Regen runs continuously even while firing (howitzer: the 6s charge
+   *  IS the reload — freezing it per-shot would double the drum time).
+   *  Default off: quick pools pause one interval post-shot so the clip
+   *  reads down-only during a burst. */
+  ammoAlwaysRegen?: boolean;
   /** Base cone radius always applied (sprinkler's fixed 0.05 hose) -
    *  sits UNDER any bloom growth, drawn from the same server-side seed. */
   spreadBase?: number;

@@ -203,6 +203,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aimAxis: 'track',
     fireInterval: 0.28,
     gib: true, tier: 'heavy',
+    // PlasmaGun pool mechanic, smaller magazine: 10 rounds, regen 2×
+    // interval while the trigger's cold - ~2.8s of full-rate fire.
+    ammoCap: 10,
+    ammoRegenMult: 2,
     directDamage: 45,
 
     aoeDamage: 25,
@@ -435,11 +439,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 90,
     aoeDamage: 35,
     aoeRadius: 14, // big - but under mortar's 18
-    // Steep inner ring like the mortar's: the band data says RL's kills
-    // all come from placement hits while mid-ring grazes wound and shove
-    // survivors clear. 75/60/30 instead of 67/45/22 - the blast pays for
-    // landing near feet, not for being big.
-    aoeScales: [0.833, 0.667, 0.333],
+    // Splash bands on the 90 direct: 50/35/20 - a real gradient instead
+    // of a cliff; mid-ring grazes wound instead of deleting half a bar.
+    aoeScales: [0.556, 0.389, 0.222],
     knockbackForce: 30, // rocket-jump tier - the tool IS the movement; sits at BLAST_IMPULSE_MAX so point-blank stays the intended apex
     forceMode: 'push',
     speed: 60, // 48 was deliberately-dodgeable; EV-aim + ~60m/s closed the gap (K/D 0.65->0.72 vs CG forced) - still slower than BoltLauncher (120)
@@ -449,6 +451,42 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.5, // area-denial tier: 0.5m wake cap - the 14m splash is the reach, not the proxy
     hitGrow: 0.4,
     maxLifetime: 6, // ~290m of flat reach
+  },
+  [WeaponType.Howitzer]: {
+    aimAxis: 'arcJudge',
+    fireInterval: 3,
+    gib: true, tier: 'heavy',
+    sfxKey: WeaponType.Mortar, vmKey: WeaponType.Mortar,
+    // Siege mortar: a 5-charge drum on the plasma pool - one round back
+    // per 6s (interval ×2), so sustained siege is 10rpm, not a carpet.
+    ammoCap: 5,
+    ammoRegenMult: 2,
+    ammoAlwaysRegen: true, // charges accrue nonstop - the drum IS the reload
+    // Shorter reach than the mortar (60 vs 80) traded for a bigger boom;
+    // the long 3s arming fuse bars close work entirely - the shell is
+    // dead dirt inside ~180m of flat arc.
+    directDamage: 150,
+    aoeDamage: 100,
+    aoeRadius: 22,
+    aoeScales: [0.833, 0.667, 0.333], // same steep banding as the mortar
+    knockbackForce: 50,
+    forceMode: 'push',
+    speed: 60,
+    gravity: true,
+    // The fun: violent recoil kicks the shooter opposite the shot. Fired
+    // upward off flat ground the kick plants you for fall damage; fired
+    // airborne it's a movement tool. Anti-fall perk is the pairing.
+    recoilImpulse: 30,
+    groundedOnly: true, // deploy artillery - no air, no ski, or it's a jump pad
+    bodyRadius: 0.35,
+    hitMin: 0,
+    hitMax: 0.5,
+    hitGrow: 2,
+    maxLifetime: 15, // longer lobs than the mortar's fuse class
+    armTime: 3, // dead-fuse window IS the close-range bar
+    terrainBounce: true,
+    bounceRestitution: 0.25,
+    bounceFriction: 0.7,
   },
   [WeaponType.RocketLauncher]: {
     aimAxis: 'arcLead',

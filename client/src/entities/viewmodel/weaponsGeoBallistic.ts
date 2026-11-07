@@ -1012,3 +1012,73 @@ return mrv;
 
 // Map is keyed by WeaponType, never positionally - Grenade/Slam/Melee
 // have no gun model (belt throw / fist), so they map to nothing.
+
+// Weapon 45 - howitzer: siege mortar. Reads as field artillery shrunk
+// to the shoulder - mortar-fat bore, a slotted brake that VENTS the
+// recoil sideways (the kick is the whole point), a 5-shell charge drum
+// under the receiver (ammoCap reads on the silhouette), folded bipod
+// and a spade plate at the heel for the deploy-to-fire read.
+export function mkHowitzer(): THREE.Group {
+const hw = new THREE.Group();
+// Sliding barrel - artillery recoil: the whole front tube rides back
+// into the receiver on the shot and slowly re-extends for the next one.
+// Narrower than the body so it visibly telescopes. ViewModel drives
+// the 'slide' child by name (same envelope family as the chain barrels).
+const slide = new THREE.Group();
+slide.name = 'barrels'; // bake keeps 'barrels' as a separate animated node
+slide.userData.baseZ = 0;
+slide.add(mkTube(0.16, 0.135, 0.62, -0.12, bodyMat)); // barrel - slimmer than the receiver
+slide.add(mkTube(0.2, 0.17, 0.11, -0.4, bodyMat));   // muzzle flare
+slide.add(mkBore(0.145, -0.461));
+// Recoil brake riding the slide - the collar alone sells the shape;
+// slot ports were sub-pixel noise nobody could see.
+slide.add(mkTube(0.185, 0.16, 0.075, -0.25, darkMat));
+hw.add(slide);
+// Receiver sleeve the barrel slides into - wider, stays put.
+hw.add(mkTube(0.21, 0.21, 0.3, 0.12, bodyMat));
+// Reinforcing bands - the siege-gun ring stack aft of the sleeve.
+hw.add(mkTube(0.225, 0.225, 0.035, -0.03, darkMat));
+hw.add(mkTube(0.225, 0.225, 0.035, 0.26, darkMat));
+// Charge drum - five glowing shell noses in the window (5-round pool).
+const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.16, 12), bodyMat);
+drum.rotation.z = Math.PI / 2;
+drum.position.set(0, -0.13, 0.1);
+hw.add(drum);
+const chargeTipMat = new THREE.MeshLambertMaterial({ color: 0xFF_88_22, emissive: 0xBB_44_00 });
+for (let i = 0; i < 5; i += 1) {
+  const a = (i / 5) * Math.PI * 2;
+  const cy = -0.13 + Math.sin(a) * 0.1;
+  const cz = 0.1 + Math.cos(a) * 0.1;
+  const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.165, 8), boreMat);
+  hole.rotation.z = Math.PI / 2;
+  hole.position.set(0, cy, cz);
+  hw.add(hole);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6), chargeTipMat);
+  tip.position.set(0.083, cy, cz);
+  hw.add(tip);
+}
+// Bipod legs folded forward - deploy hardware at rest.
+for (const side of [-1, 1]) {
+  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.22), darkMat);
+  leg.position.set(side * 0.12, -0.16, -0.16);
+  leg.rotation.x = -0.35;
+  hw.add(leg);
+}
+// Spade plate - the rear-heel recoil anchor a howitzer digs in with.
+const spade = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.025), darkMat);
+spade.position.set(0, -0.2, 0.24);
+spade.rotation.x = 0.5;
+hw.add(spade);
+const stock = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.2), bodyMat);
+stock.position.set(0, -0.05, 0.24);
+hw.add(stock);
+const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.06), darkMat);
+grip.position.set(0, -0.17, 0.18);
+grip.rotation.x = 0.35;
+hw.add(grip);
+// Heavy but not screen-filling - the sliding barrel does the "huge"
+// read, not raw size.
+hw.scale.setScalar(1.12);
+hw.visible = false;
+return hw;
+}

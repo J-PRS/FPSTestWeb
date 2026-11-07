@@ -1,6 +1,6 @@
 import { settings } from '../core/settings.js';
 import { SLOT_COUNT, weaponDef, widOf, LANCE_WID } from '../weapons.js';
-import { WeaponType } from '../../../shared/weapons.js';
+import { WeaponType, getWeaponStats } from '../../../shared/weapons.js';
 import { SIDEARM_DRAW_TIME } from './ViewModel.js';
 import type { MovementController } from './movement.js';
 import type { PlayerInput } from './player/input.js';
@@ -391,9 +391,17 @@ export class PlayerLoadout {
     }
   }
 
+  /** Deploy weapons (howitzer) refuse the draw while airborne or
+   *  skiing - pulling it mid-air is the same exploit as firing it. */
+  private canDeploy(i: number): boolean {
+    const {h} = this;
+    const st = getWeaponStats(weaponDef(h.loadout[i]!).weaponType);
+    return !st.groundedOnly || (h.movement.getState().onGround && !h.movement.skiHeld);
+  }
+
   selectSlot(i: number): void {
     const {h} = this;
-    if (i !== h.weaponIndex) {
+    if (i !== h.weaponIndex && this.canDeploy(i)) {
       h.weaponIndex = i;
       this.emitWeaponSwitch(h.loadout[i]);
     }
@@ -402,10 +410,16 @@ export class PlayerLoadout {
   cycleWeapon(step: number): void {
     const {h} = this;
     const n = h.loadout.length;
-    const idx = (h.weaponIndex + step + n) % n;
-    if (idx !== h.weaponIndex) {
-      h.weaponIndex = idx;
-      this.emitWeaponSwitch(h.loadout[idx]);
+    // Skip undeployable slots rather than dead-stopping the wheel.
+    for (let k = 1; k <= n; k += 1) {
+      const idx = (h.weaponIndex + step * k + n * k) % n;
+      if (this.canDeploy(idx)) {
+        if (idx !== h.weaponIndex) {
+          h.weaponIndex = idx;
+          this.emitWeaponSwitch(h.loadout[idx]);
+        }
+        return;
+      }
     }
   }
 }

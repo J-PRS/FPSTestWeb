@@ -38,6 +38,10 @@ export function kickF(v: ViewModel, strength = 1): void {
     if (v.activeWeapon === WeaponType.Chaingun) {
       v.spinVel = Math.min(v.spinVel + strength * 140, SPIN_MAX);
     }
+    // Sliding barrel (howitzer): snap the front tube back into the
+    // receiver; the update envelope re-extends it on the reload clock.
+    const slide = v.weapons.get(v.activeWeapon)?.getObjectByName('barrels');
+    if (slide) { v.slideKickT = 1; v.slideRef = slide; }
     v.flashMat.color.setHex(f.color);
     v.flashT = FLASH_LIFE * f.life;
     v.flashLifeScale = f.life;

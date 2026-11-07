@@ -70,6 +70,10 @@ export class ViewModel {
   // a blind rotation.z cartwheels the triad. Computed at adoption.
   spinAxis = new THREE.Vector3(0, 0, -1); // public — VmBaked recomputes bore axes
   spinVel = 0;
+  /** Sliding-barrel kick (howitzer): slideKickT counts 1→0, slideRef is
+   *  the 'slide' child of the active weapon (set in vmKick). */
+  slideKickT = 0;
+  slideRef: THREE.Object3D | null = null;
   // spinVel cap lives in vmKick.ts (SPIN_MAX) — it owns the spool.
   activeWeapon = 0; // public — the switch envelope rewrites it at the dip
   private timer = 0;
@@ -481,6 +485,7 @@ export class ViewModel {
     }
 
     this.tickChainBarrels(dt);
+    this.tickBarrelSlide(dt);
     this.tickDiscAmmo(dt);
     this.tickBow(dt);
 
@@ -504,6 +509,19 @@ export class ViewModel {
 
     this.lastFrameYVel = playerVel.y;
     this.lastFrameVel.copy(playerVel);
+  }
+
+  /** Sliding barrel (howitzer): kick snaps it in ~40ms, then it rides
+   *  back out on the fireInterval-ish clock — artillery recoil travel. */
+  private tickBarrelSlide(dt: number): void {
+    const s = this.slideRef;
+    if (!s || this.slideKickT <= 0) {
+      if (s) {s.position.z = s.userData.baseZ as number; this.slideRef = null;}
+      return;
+    }
+    this.slideKickT = Math.max(0, this.slideKickT - dt * (this.slideKickT > 0.6 ? 16 : 1.4));
+    const k = this.slideKickT;
+    s.position.z = (s.userData.baseZ as number) + k * k * 0.14; // in on fire, back out slow
   }
 
   /** Chaingun cluster tick — spin decay (~0.7s coast after firing stops)

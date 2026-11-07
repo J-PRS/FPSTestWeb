@@ -503,13 +503,14 @@ this.structEpoch += 1;
 
   /** Knockback/AOE impulses the server itself applied — the sim must get
    *  the same delta or every blast reads as a divergence. */
-  applyImpulse(playerId: string, dv: Vec3Like): void {
+  applyImpulse(playerId: string, dv: Vec3Like, fallBoost?: number): void {
     const sh = this.shadows.get(playerId);
     // sim-vel names a poisoned shadow but doesn't fix it — a NaN dv
     // writes straight into the sim's velocity, so the funnel drops it.
     if (!sh || !Number.isFinite(dv.x + dv.y + dv.z)) {return;}
     this.jev({ kind: 'impulse', pid: playerId, dv: { x: dv.x, y: dv.y, z: dv.z } });
     sh.sim.impulse(dv);
+    if (fallBoost !== undefined) {sh.sim.armFallBoost(fallBoost);}
     sh.lastImpulseAt = wallNow();
   }
 
@@ -788,7 +789,7 @@ sh.gapStreak += 1;
         // T1 fall damage (floodyberry part 3): -v·n at the contact kill
         // pays (impact - 25) * 0.005 of the bar — the funnel lives one
         // layer up so respawn/killfeed ride the same path as any death.
-        if (landing > MOVEMENT_CONFIG.fallDamageMinSpeed) {this.onLanding?.(pid, landing);}
+        if (landing * sh.sim.fallBoost > MOVEMENT_CONFIG.fallDamageMinSpeed) {this.onLanding?.(pid, landing * sh.sim.fallBoost);}
       }
       // Kill zone: the deck ran out and the void starts. Checked on the
       // shadow, not on a claim — the client can't argue its way out of
