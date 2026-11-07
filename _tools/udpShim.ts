@@ -13,8 +13,9 @@ const udp = await Bun.udpSocket({
   },
 });
 let ws: { send(d: string | Uint8Array): void } | null = null;
+const WSPORT = Number(process.env.SHIM_WS_PORT ?? 8787);
 Bun.serve({
-  port: 8787,
+  port: WSPORT,
   fetch(req, server) {
     if (server.upgrade(req)) { return undefined; }
     return new Response('udp shim');
