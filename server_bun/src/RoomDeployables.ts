@@ -13,7 +13,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT, WeaponType } from '../../shared/weapons.ts';
-import { tickCg, tickDrone, tickMine, tickMortar, tickPad, tickSensor, tickSentry, tickStation, tickTurret, tickWatersphere, losClear } from './deployTicks.ts';
+import { tickCg, tickDrone, tickLoiter, tickMine, tickMortar, tickPad, tickSensor, tickSentry, tickStation, tickTurret, tickWatersphere, losClear } from './deployTicks.ts';
 
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
 /** Per-kind tick registry - tick fn + `standsDown` flag (true = the
@@ -30,6 +30,7 @@ const TICK_SPEC: Record<string, { tick: (room: RoomDeployables, d: Deployed, dt:
   cgturret:    { tick: (r, d, dt) => tickCg(r, d, dt),          standsDown: true },
   watersphere: { tick: (r, d, dt) => tickWatersphere(r, d, dt) },
   pad:         { tick: (r, d, dt) => tickPad(r, d, dt) },
+  loiter:      { tick: (r, d, dt) => tickLoiter(r, d, dt) },
 };
 
 import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
@@ -71,6 +72,10 @@ export interface Deployed {
   respawnT: number;
   /** Jump pad's per-body re-trigger cooldown (pid → sim-ms last launch). */
   padHits?: Map<string, number>;
+  /** Loiter munition mid-dive: the kamikaze point + launch velocity +
+   *  elapsed fuse + the committed target. Present only while diving -
+   *  the detonation removes the item either way. */
+  loiterDive?: { x: number; y: number; z: number; vx: number; vy: number; vz: number; t: number; tid: string };
 }
 
 // A downed base asset comes back on its own after this - a repair tech
@@ -201,6 +206,7 @@ export class RoomDeployables {
     else if (k === 'mine') {armDelay = MINE_ARM_S;}
     else if (k === 'station') {armDelay = STATION_HEAL_CD;}
     else if (k === 'pad') {armDelay = DEPLOY_ITEMS.pad.armS!;}
+    else if (k === 'loiter') {armDelay = DEPLOY_ITEMS.loiter.armS!;}
     // Team stamps at plant time - the spawn edge carries this value, so
     // the hash lane must too (a live owner-team lookup desyncs the moment
     // the planter switches sides). Gear fights for its planting team.

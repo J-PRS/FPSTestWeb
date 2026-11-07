@@ -14,6 +14,7 @@ import type { DeployBeacon } from '../entities/DeployBeacon.js';
 import type { DeployTether } from '../entities/DeployTether.js';
 import type { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import type { DeployPad } from '../entities/DeployPad.js';
+import type { DeployLoiter } from '../entities/DeployLoiter.js';
 import type { DeployMortar } from '../entities/DeployMortar.js';
 import type { DeployCg } from '../entities/DeployCg.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -21,6 +22,7 @@ import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 import { structureNormalAt } from './structureSpecs.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { MORTAR_CONFIG } from '../projectiles/mortarConfig.js';
+import { GRENADE_CONFIG } from '../projectiles/grenadeConfig.js';
 import { CHAINGUN_CONFIG } from '../projectiles/chaingunConfig.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -57,7 +59,7 @@ export class DeployAdopter {
   private mkItem<T extends { candId: string; pos: THREE.Vector3; dead: boolean; health: number; armor: number; maxHealth: number;
     takeDamage(dmg: number): void; dispose(scene: THREE.Scene): void }>(
     kind: DeployKind, body: T, owner: DeployOwner | undefined, update: Item['update'], extra?: Partial<Item>,
-  ): void {
+  ): Item {
     const item: Item = {
       kind, candId: body.candId, pos: body.pos, dead: false,
       hurt: (dmg): void => body.takeDamage(dmg),
@@ -69,6 +71,7 @@ export class DeployAdopter {
     const {hurt} = item;
     item.hurt = (dmg): void => { hurt(dmg); if (body.dead) {this.host.killItem(item);} };
     this.items.push(item);
+    return item;
   }
 
   adoptTurret(t: DeployTurret, owner?: DeployOwner): void {
@@ -307,6 +310,29 @@ export class DeployAdopter {
         }
       }
     }, { boing: (): void => s.boing() });
+  }
+
+  /** Loiter munition - the dart hovers and watches the ring; on a commit
+   *  offline it becomes a REAL grenade-row projectile on the dive line
+   *  (honest sweep + blast through the shared funnel). Connected the
+   *  server owns the dive - loiterDive paints the swoop, mineBoom the
+   *  blast, deployGone the body. */
+  adoptLoiter(s: DeployLoiter, owner?: DeployOwner): void {
+    const item = this.mkItem('loiter', s, owner, (dt): void => {
+      const dive = s.update(dt, this.host.foesFor(owner));
+      if (!dive || this.deps.lazyNetworkManager().isConnected()) {return;}
+      const p = new Projectile(this.deps.scene, dive.hover, _shotDir.copy(dive.vel).normalize(), _zeroVel, GRENADE_CONFIG);
+      p.vel.copy(dive.vel); // the dart's powered line - inherit math is for held weapons
+      p.shooterId = owner?.id ?? null;
+      p.shooterTeam = owner?.team ?? null;
+      if (owner) { // a bot's dart can hit the local player; yours can't (same law as bot lobs)
+        p.sweepLocal = (): THREE.Vector3 | null => { const pl = this.deps.lazyPlayer(); return pl.isDead ? null : pl.pos; };
+        p.localClass = (): string | undefined => this.deps.lazyPlayer().appliedClass;
+      }
+      this.deps.world.projectiles.push(p);
+      s.dive(dive.hover, dive.vel);
+      item.dead = true; // munition spent - the projectile carries the blast
+    }, { dive: (p0, v0): void => s.dive(p0, v0) });
   }
 
   /** Barrier dome - the emitter is a plain dep: destructible like any

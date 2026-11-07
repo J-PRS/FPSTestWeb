@@ -230,6 +230,15 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         { name: 'ny', wire: 'num', channel: 'sim' },
         { name: 'nz', wire: 'num', channel: 'sim' },
       ],
+      // Loiter munition commits to a dive - the launch velocity rides the
+      // wire so clients fly the replica on the identical line; the blast
+      // itself arrives through the mineBoom funnel when the dive lands.
+      loiterDive: [
+        { name: 'pos', wire: 'vec3', channel: 'sim' },
+        { name: 'vx', wire: 'num', channel: 'sim' },
+        { name: 'vy', wire: 'num', channel: 'sim' },
+        { name: 'vz', wire: 'num', channel: 'sim' },
+      ],
       sensorPing: [
         { name: 'team', wire: 'str', channel: 'edge', absent: null },
         { name: 'targets', wire: 'arr', channel: 'edge' },

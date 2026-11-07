@@ -172,6 +172,7 @@ export class NetworkManager {
   /** Server's jump pad discharged - launch FX only; the body's new
    *  velocity arrives through the normal sim/impulse channel. */
   public onPadBoing: ((id: number, pos: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }) => void) | null = null;
+  public onLoiterDive: ((id: number, pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number }) => void) | null = null;
   /** Server measured a hard landing on a shadow - remote slam dressing
    *  (thud + dust); the owner already predicted theirs locally. */
   public onLanded: ((playerId: string, pos: { x: number; y: number; z: number }, impact: number) => void) | null = null;

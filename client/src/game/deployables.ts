@@ -25,6 +25,7 @@ import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployTether } from '../entities/DeployTether.js';
 import { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import { DeployPad } from '../entities/DeployPad.js';
+import { DeployLoiter } from '../entities/DeployLoiter.js';
 import type { Terrain } from '../world/terrain.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
 import { Explosion } from '../effects/explosion.js';
@@ -99,7 +100,7 @@ interface Pod {
 }
 
 type PodBody = DeployTurret | DeployMortar | DeployCg | DeployStation
-  | DeployDrone | DeployShield | DeployBeacon | DeployTether | DeployWatersphere | DeployPad;
+  | DeployDrone | DeployShield | DeployBeacon | DeployTether | DeployWatersphere | DeployPad | DeployLoiter;
 
 /** Seated-kinds registry - one entry per bolted-down kit: ctor + the
  *  adopter slot it lands in. A new kind writes ONE row here instead of
@@ -119,6 +120,7 @@ const SEATED: Partial<Record<DeployKind, {
   tether:      { make: (s, t, p) => new DeployTether(s, t, p),      adopt: (a, b, o) => a.adoptTether(b as DeployTether, o) },
   watersphere: { make: (s, t, p) => new DeployWatersphere(s, t, p), adopt: (a, b, o) => a.adoptWatersphere(b as DeployWatersphere, o) },
   pad:         { make: (s, t, p) => new DeployPad(s, t, p),         adopt: (a, b, o) => a.adoptPad(b as DeployPad, o) },
+  loiter:      { make: (s, t, p) => new DeployLoiter(s, t, p),      adopt: (a, b, o) => a.adoptLoiter(b as DeployLoiter, o) },
 };
 
 export interface Item {
@@ -145,6 +147,8 @@ export interface Item {
   flash?: () => void;
   /** Launch fired - the pad's squash snap (padBoing / offline mirror). */
   boing?: () => void;
+  /** Munition committed its dive - swoop visual (loiterDive / offline). */
+  dive?: (pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number }) => void;
   /** The live emitter - lets the aim solve tilt its sky shaft. */
   beacon?: DeployBeacon;
   /** Base-asset lifecycle - deployDown deploys the wreck state (dims
@@ -660,6 +664,7 @@ export class Deployables {
   remoteMortarShot(id: number, owner: string, vx: number, vy: number, vz: number): void { this.remotes.mortarShot(id, owner, vx, vy, vz); }
   remoteMineBoom(id: number, pos: { x: number; y: number; z: number }): void { this.remotes.mineBoom(id, pos); }
   padBoing(id: number, pos: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }): void { this.remotes.padBoing(id, pos, n); }
+  loiterDive(id: number, pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number }): void { this.remotes.loiterDive(id, pos, vel); }
 
 
 

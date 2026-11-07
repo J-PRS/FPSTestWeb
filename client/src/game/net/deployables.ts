@@ -62,6 +62,10 @@ export function wireDeployables(ctx: NetCtx): void {
     if (!Number.isFinite(pos.x + pos.y + pos.z + n.x + n.y + n.z)) {deps.logger.warn(`padBoing #${id} dropped: non-finite payload`); return;}
     mgr().padBoing(id, pos, n);
   };
+  networkManager.onLoiterDive = (id, pos, vel): void => {
+    if (!Number.isFinite(pos.x + pos.y + pos.z + vel.x + vel.y + vel.z)) {deps.logger.warn(`loiterDive #${id} dropped: non-finite payload`); return;}
+    mgr().loiterDive(id, pos, vel);
+  };
   networkManager.onDeployHp = (id, hp, armor, src): void => {
     if (!Number.isFinite(hp + (armor ?? 0))) {return;}
     mgr().applyDeployHp(id, hp, armor);

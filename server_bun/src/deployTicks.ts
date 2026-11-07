@@ -12,7 +12,7 @@ import {
 import { healPool } from './healPool.ts';
 import { DEPLOY_ITEMS } from '../../shared/deployItems.ts';
 import { GRAVITY } from '../../shared/movement.ts';
-import { hmNormal } from '../../shared/heightfield.ts';
+import { hmNormal, hmHeight } from '../../shared/heightfield.ts';
 import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
@@ -140,6 +140,62 @@ export function tickPad(r: RoomDeployables, d: Deployed, _dt: number): void {
         nx: dv.x / sp, ny: dv.y / sp, nz: dv.z / sp,
       }) as ServerMessage);
     }
+  }
+
+  /** Loiter munition: after the arm delay it circles over the plant spot
+   *  and watches a dive ring (LOS-gated like a sentry - no kamikaze
+   *  through walls). A hostile inside commits it: a powered dive on the
+   *  led line, detonating on proximity, fuse expiry, or ground contact.
+   *  The loiterDive edge carries the launch velocity so replicas fly the
+   *  identical swoop; the blast lands through the mineBoom funnel. */
+export function tickLoiter(r: RoomDeployables, d: Deployed, dt: number): void {
+    const def = DEPLOY_ITEMS.loiter;
+    if (d.loiterDive) {
+      const dv = d.loiterDive;
+      dv.t += dt;
+      dv.x += dv.vx * dt; dv.y += dv.vy * dt; dv.z += dv.vz * dt;
+      const tgt = r.room.players.getPlayer(dv.tid);
+      const hit = tgt !== null && tgt !== undefined && !tgt.isDead
+        && ((tgt.position.x - dv.x) ** 2 + (tgt.position.y - dv.y) ** 2 + (tgt.position.z - dv.z) ** 2 < 2.25);
+      const ground = r.room.field ? dv.y <= hmHeight(r.room.field, dv.x, dv.z) + 0.4 : false;
+      if (!hit && !ground && dv.t <= 2) {return;}
+      const pos = { x: dv.x, y: dv.y, z: dv.z };
+      r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mineBoom', 'id', d.id, { owner: d.owner, pos }) as ServerMessage);
+      r.remove(d.id);
+      r.room.messages.mineBlast(d.owner, pos, def.blastDamage!, def.blastRadius!, def.knockback!);
+      return;
+    }
+    d.fireCd -= dt; // doubles as the arm timer - same convention as the mine
+    if (d.fireCd > 0) {return;}
+    const dTeam = r.teamOf(d);
+    const hover = { x: d.pos.x, y: d.pos.y + def.hoverUp!, z: d.pos.z };
+    const tr = def.triggerDist!;
+    let bestD2 = tr * tr, tid: string | null = null;
+    let tp: Vec3 | null = null, tv = { x: 0, y: 0, z: 0 };
+    for (const [pid, p] of r.room.players.getAllPlayers()) {
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
+      if (p.protectedUntil > simNow()) {continue;}
+      const dx = p.position.x - hover.x, dy = p.position.y - hover.y, dz = p.position.z - hover.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= bestD2) {continue;}
+      if (!losClear(r, hover, p.position, dTeam)) {continue;}
+      bestD2 = d2; tid = pid; tp = p.position;
+      tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
+    }
+    if (!tid || !tp) { d.fireCd = 0.15; return; }
+    // Lead the runner on the straight dive - a still target eats it dead
+    // on, a skier crossing at speed watches it land behind them.
+    const sp = def.launchSpeed!;
+    const flight = Math.sqrt(bestD2) / sp;
+    const aim = { x: tp.x + tv.x * flight, y: tp.y + tv.y * flight, z: tp.z + tv.z * flight };
+    const dx = aim.x - hover.x, dy = aim.y - hover.y, dz = aim.z - hover.z;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const vx = dx / len * sp, vy = dy / len * sp, vz = dz / len * sp;
+    d.loiterDive = { x: hover.x, y: hover.y, z: hover.z, vx, vy, vz, t: 0, tid };
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'loiterDive', 'id', d.id, {
+      pos: Object.assign({}, hover), vx, vy, vz,
+    }) as ServerMessage);
   }
 
   /** Resupply pad: friendlies in the envelope get a slow health refill.

@@ -362,6 +362,7 @@ export type ServerMessage =
   // Jump pad discharged - launch FX only; the body's new velocity
   // arrives through the normal sim channel. nx/ny/nz = launch dir.
   | { type: 'padBoing'; id: number; pos: Vec3; nx: number; ny: number; nz: number }
+  | { type: 'loiterDive'; id: number; pos: Vec3; vx: number; vy: number; vz: number }
   // Hard landing measured on the movement shadow - the owner already
   // played their predicted thud/dust; this is for everyone else in
   // earshot (remote bodies get no landing edges otherwise).

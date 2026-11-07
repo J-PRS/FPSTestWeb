@@ -15,6 +15,7 @@ import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployTether } from '../entities/DeployTether.js';
 import { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import { DeployPad } from '../entities/DeployPad.js';
+import { DeployLoiter } from '../entities/DeployLoiter.js';
 import { Explosion } from '../effects/explosion.js';
 import { LightningBeam } from '../effects/lightningBeam.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -102,6 +103,7 @@ const REMOTE_SPEC: Partial<Record<DeployKind, {
   tether:      { make: (s, t, p) => new DeployTether(s, t, p) },
   watersphere: { make: (s, t, p) => new DeployWatersphere(s, t, p) },
   pad:         { make: (s, t, p) => new DeployPad(s, t, p) },
+  loiter:      { make: (s, t, p) => new DeployLoiter(s, t, p) },
 };
 
 export class RemoteDeployables {
@@ -189,6 +191,7 @@ export class RemoteDeployables {
         dispose: (): void => b.dispose(this.deps.scene),
         v: b, owner, flash: typeof bFlash === 'function' ? (bFlash as () => void).bind(b) : undefined,
         boing: typeof (b as unknown as { boing?: unknown }).boing === 'function' ? ((b as unknown as { boing: () => void }).boing).bind(b) : undefined,
+        dive: typeof (b as unknown as { dive?: unknown }).dive === 'function' ? ((b as unknown as { dive: (p: { x: number; y: number; z: number }, v: { x: number; y: number; z: number }) => void }).dive).bind(b) : undefined,
       };
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);
@@ -629,6 +632,13 @@ export class RemoteDeployables {
     this.byId.get(id)?.boing?.();
     this.deps.lazyEffects().spawnBounce(v, _boingDir.set(n.x, n.y, n.z).normalize());
     sfx.bounce();
+  }
+
+  /** Loiter munition committed its dive - the replica flies the same
+   *  launch line the server solved; the blast arrives via mineBoom and
+   *  the body via deployGone. */
+  loiterDive(id: number, pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number }): void {
+    this.byId.get(id)?.dive?.(pos, vel);
   }
 
   /** Server tripped a mine - paint the blast at the reported position.
