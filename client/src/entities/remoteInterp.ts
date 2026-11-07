@@ -347,23 +347,19 @@ export class RemoteInterp {
     }
 
     if (this.replay && Date.now() < this.replay.freshUntil && !localDriven) {
-      // Edge-replay owns the body: replayed input through the shared sim
-      // at render framerate beats 20Hz-interpolated ghosts - and when
-      // edges go quiet the freshness gate hands the corpse back to
-      // interp/DR below without a seam.
+      // Edge-replay owns FACING only: sparse records strip ROT entirely,
+      // so a wire-driven remote would show a frozen heading (the
+      // moonwalk/backwards-velocity look at faceOff ~180). Replayed
+      // input through the shared sim reproduces the real turning.
+      // Position and velocity stay on the wire's own records - a
+      // replayed body is physics the authority never agreed to, and
+      // every divergence (knockback, impulse, terrain edge the replay
+      // can't see) was permanent drift (rΔ 55-420m on prod).
       const rp = this.replay;
       rp.sim.setInput(rp.input);
       rp.sim.update(dt);
       rp.input.jumpPressed = false; // edge-consumed
-      const s = rp.sim.state;
-      this.h.position.set(s.pos.x, s.pos.y, s.pos.z);
-      this.h.velocity.set(s.vel.x, s.vel.y, s.vel.z);
-      this.simulatedVelocity.copy(this.h.velocity);
-      this._simulating = true; // expose "not on buffer" to diagnostics
-      this.watchReach(dt);
-      this.watchWireGap();
-      this.clampWireGap(dt);
-      return;
+      this.h.rotation.yaw = rp.sim.state.yaw;
     }
     if (this._simulating) {
       if (this.convergeTimer > 0) {
