@@ -5,8 +5,9 @@
 import { launchClient, closeClient } from './browser.ts';
 
 const SECS = Number(process.argv[2] ?? '90');
-const c = await launchClient(
-  'http://127.0.0.1:5500/?server=https://play.jprice.app&room=headhunt-1&net=ws');
+const URL = process.argv[3]
+  ?? 'http://127.0.0.1:5500/?server=https://play.jprice.app&room=headhunt-1&net=ws';
+const c = await launchClient(URL);
 try {
   await c.waitFor(`window.__test && window.__test.networkManager && window.__test.networkManager.isConnected()`, 90000);
   console.log(`connected — observing ${SECS}s`);
