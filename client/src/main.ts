@@ -661,7 +661,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
         history.replaceState(null, '', `/${alias}${window.location.pathname.slice(2)}${search}`);
       } else if (!alias) {
         if (!serverParam) {q.set('server', `${u.protocol}//${u.host}`);}
-        history.replaceState(null, '', `${window.location.pathname}?${q}`);
+        history.replaceState(null, '', `${window.location.pathname}${q.size > 0 ? `?${q}` : ''}`);
       }
     }
   }
