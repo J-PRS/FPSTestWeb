@@ -49,6 +49,13 @@ export class HitLedger {
   private hitSeq = 0; // per-room monotonic — reconnect replays carry stale seqs
 
   applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number; endedStreak?: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number; gd?: number }): void {
+    // Corpse hits are pure noise: applyDamage already no-ops them
+    // (killed=false), so every ungated path still emitted a wire
+    // playerHit + poisoned noteHit/charge bookkeeping - the blast lane
+    // was the live offender (~40 hits/30s on a dead client, duelsoak).
+    // The kill path stays: killed=true means the victim was alive when
+    // the damage landed.
+    if (!result.killed && c.playerManager.getPlayer(targetId)?.isDead) {c.hb('drop.deadVictim'); return;}
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) {c.hb('kill');}
