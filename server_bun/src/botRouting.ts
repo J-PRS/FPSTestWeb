@@ -325,16 +325,19 @@ export class BotRouting {
         // per re-roll is wasted compute on a defensive hold.
         return { pos: w, infiltrating: false, running: true, runner: false };
       }
-      // The home run is the map's most predictable line — scent the
-      // approach around the intercept blob when far out; inside ~200m
-      // dive straight, a bend that late only buys chasers runway.
+      // The home run is the map's most predictable line - scent the
+      // approach around the intercept blob when far out; only dive
+      // once the ring entry is near (~150m). The old 200m dive spent
+      // the most-contested stretch on the readable straight line -
+      // chasers intercepted exactly there (flagrun: 15 grabs, 0
+      // conversions; ctf contested seeds: carry deaths mid-line).
       // No post-grab coast waypoint: the carrier aims at home and the
       // steerer carves. Coast waypoints are map-tuned (help complex
       // terrain, hurt open) — a universal bot navigates by heightmap
       // and physics, not per-map turnaround hacks. Momentum through
       // the turn comes from the carve suppressor (no jet into reversals)
       // and ski retention, not from scripted overshoots.
-      if (this.room.influence && dist3(p.position, own.home) > 200) {
+      if (this.room.influence && dist3(p.position, own.home) > 150) {
         const w = this.room.influence.quietApproach(p.position, own.home, this.room.influence.dangerLayer(me), 140);
         return { pos: w, infiltrating: false, running: true, runner: true };
       }
