@@ -12,6 +12,7 @@ import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
 import { noteShellFate, noteTrajDiv, parityProbes, parityMiss, projWireAt } from '../parity.js';
 import { histAt } from '../combat/fire.js';
+import { kineticHitFx } from '../combat/impact.js';
 import type { NetCtx } from './ctx.js';
 const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): number => {
   if (!at || !Number.isFinite(at.x + at.y + at.z)) {return -1;}
@@ -402,12 +403,19 @@ export function wireProjectiles(ctx: NetCtx): void {
       // contact point now.
       if (remoteProjectile.ghostBodyPop && position) {
         const p = remoteProjectile;
-        deps.world.explosions.push(new Explosion(
-          deps.lazyScene(), new THREE.Vector3(position.x, position.y, position.z), true, p.age, deps.lazyTerrain(),
-          p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
-        // blastFx records every other blast here - without it the wire
-        // knockback echo finds no blast and warns + paints a phantom boom.
-        deps.explosionTracker.addExplosion(new THREE.Vector3(position.x, position.y, position.z), p.force, p.shooterId ?? deps.lazyNetworkManager().getLocalPlayerId());
+        const at = new THREE.Vector3(position.x, position.y, position.z);
+        if (p.config.noExplosion) {
+          // noExplosion shells never painted a dome to suppress - the wire
+          // point owes the same kinetic pop their contact path draws.
+          kineticHitFx(deps, p, at);
+        } else {
+          deps.world.explosions.push(new Explosion(
+            deps.lazyScene(), at, true, p.age, deps.lazyTerrain(),
+            p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
+          // blastFx records every other blast here - without it the wire
+          // knockback echo finds no blast and warns + paints a phantom boom.
+          deps.explosionTracker.addExplosion(at, p.force, p.shooterId ?? deps.lazyNetworkManager().getLocalPlayerId());
+        }
       }
     }
     // Kill local projectile if server says it's gone - explode to let
@@ -467,10 +475,15 @@ export function wireProjectiles(ctx: NetCtx): void {
       // predicted blast was suppressed for the wire's contact point too.
       if (localProjectile.ghostBodyPop && position) {
         const p = localProjectile;
-        deps.world.explosions.push(new Explosion(
-          deps.lazyScene(), new THREE.Vector3(position.x, position.y, position.z), true, p.age, deps.lazyTerrain(),
-          p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
-        deps.explosionTracker.addExplosion(new THREE.Vector3(position.x, position.y, position.z), p.force, p.shooterId ?? deps.lazyNetworkManager().getLocalPlayerId());
+        const at = new THREE.Vector3(position.x, position.y, position.z);
+        if (p.config.noExplosion) {
+          kineticHitFx(deps, p, at);
+        } else {
+          deps.world.explosions.push(new Explosion(
+            deps.lazyScene(), at, true, p.age, deps.lazyTerrain(),
+            p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
+          deps.explosionTracker.addExplosion(at, p.force, p.shooterId ?? deps.lazyNetworkManager().getLocalPlayerId());
+        }
       }
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}

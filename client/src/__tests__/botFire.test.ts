@@ -30,6 +30,7 @@ function fakeBot(loadoutIdx = 0, pos = new THREE.Vector3()): GameBot {
     grounded: false,
     wantBelt: false,
     huntTargetId: null,
+    ammoPool: new Map(),
     lastDest: new THREE.Vector3(),
   } as unknown as GameBot;
 }

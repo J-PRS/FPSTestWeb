@@ -36,6 +36,9 @@ const _ropeUp = new THREE.Vector3(0, 1, 0);
 
 /** Backstop fuse - see the age check in updateAlive. */
 const ABSOLUTE_TTL_S = 10;
+/** Death shrink-out: the shell collapses to a point at the contact over
+ *  this window instead of popping out of existence in one frame. */
+const DEATH_FADE_S = 0.12;
 
 
 /**
@@ -274,6 +277,11 @@ export class Projectile {
   private dbgCore: THREE.Mesh | null = null;
   private dbgWake: THREE.Mesh | null = null;
   private projectileRemoved = false;
+  /** Death-fade clock (-1 = alive/embedded) + the scale captured at
+   *  explode() so the shrink starts from the drawn size, not a re-derivation. */
+  private deadAge = -1;
+  private readonly deathScaleBase = new THREE.Vector3();
+  private readonly deathGlowBase = new THREE.Vector3();
   private disposed = false;
   private ribbons: (RibbonTrail | RailSpiral)[] = [];
   // Runtime-owned emit/jump decisions for every trail layer (P1) -
@@ -362,7 +370,17 @@ export class Projectile {
     this.tickRayBurst();
 
     if (this.glue.embedded && !this.glue.tickEmbedded(dt)) {this.removeProjectileMesh();}
-    else if (this.exploded && !this.projectileRemoved) {this.removeProjectileMesh();}
+    else if (this.exploded && !this.projectileRemoved && this.deadAge >= 0) {
+      this.deadAge += dt;
+      const k = 1 - this.deadAge / DEATH_FADE_S;
+      if (k <= 0) {this.removeProjectileMesh();}
+      else {
+        this.mesh.scale.copy(this.deathScaleBase).multiplyScalar(k);
+        if (this.glowMesh) {this.glowMesh.scale.copy(this.deathGlowBase).multiplyScalar(k);}
+        syncProjectileInstance(this.mesh);
+        syncProjectileInstance(this.glowMesh);
+      }
+    }
     for (const r of this.ribbons) {r.update(dt);}
     this.trail.update(dt);
     this.tickRope(dt);
@@ -774,7 +792,7 @@ export class Projectile {
    *  the shell alive through its reel window the same way. */
   private settled(): boolean {
     return this.exploded && this.trail.empty && this.ribbons.every((r): boolean => r.done)
-      && !this.ropeHold && !this.ropeRecall && (!this.glue.embedded || this.projectileRemoved);
+      && !this.ropeHold && !this.ropeRecall && this.projectileRemoved;
   }
 
   /** Reel window countdown - the rope outlives the dart by design. */
@@ -821,7 +839,11 @@ export class Projectile {
     // Embed-capable shells plant on world hits - no target, a swept
     // contact point to sit at. Fuse pops in mid-air still vanish normally.
     if (this.glue.tryEmbed()) {return;}
-    this.removeProjectileMesh();
+    // Shrink-out, not an instant despawn: update() collapses the captured
+    // scale to zero over DEATH_FADE_S, then releases the instance slots.
+    this.deadAge = 0;
+    this.deathScaleBase.copy(this.mesh.scale);
+    if (this.glowMesh) {this.deathGlowBase.copy(this.glowMesh.scale);}
   }
 
   dispose(): void {

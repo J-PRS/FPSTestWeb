@@ -4,7 +4,7 @@ import { WEAPONS } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
 
-// T1 blaster — a fat green energy bolt with a glow shell. Slower than
+// T1 blaster - a fat green energy bolt with a glow shell. Slower than
 // the pistol slug and far more visible: the magazine is your jet tank,
 // so the bolt reads as a charged shot, not a tracer.
 export const BLASTER_CONFIG: ProjectileConfig = {
@@ -47,6 +47,7 @@ export const BLASTER_CONFIG: ProjectileConfig = {
   terrainOffset: 0.06,
   needsServerTracking: true,
   noExplosion: true,
+  vfx: 'bolt', // energy pop on contact - kineticHitFx honors it even with noExplosion
   trailMeshType: 'sphere',
   ribbonTrail: true,
   ribbonLanes: 1,
