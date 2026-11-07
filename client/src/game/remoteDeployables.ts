@@ -28,6 +28,7 @@ import { Projectile } from '../projectiles/Projectile.js';
 import { MORTAR_CONFIG } from '../projectiles/mortarConfig.js';
 import { CHAINGUN_CONFIG } from '../projectiles/chaingunConfig.js';
 import { fxPuff } from '../effects/vfx.js';
+import { structureNormalAt, structureTopAt } from './structureSpecs.js';
 import type { DeployDeps,Item } from './deployables.js';
 
 import type { DeployRockets } from './deployRockets.js';
@@ -80,6 +81,7 @@ const _aim = new THREE.Vector3();
 const _aim2 = new THREE.Vector3();
 const _zero = new THREE.Vector3();
 const _boingDir = new THREE.Vector3();
+const _sn = new THREE.Vector3();
 
 
 /** Remote-kind registry - one row per kind whose remote visual is just
@@ -169,6 +171,17 @@ export class RemoteDeployables {
       // THREE.Sprite *field* named flash, and ?.bind on it threw, killing
       // every remote spawn of those kinds (DEPLOY DESYNC, invisible guns).
       const bFlash = (b as { flash?: unknown }).flash;
+      // A pad seated on a structure tilts to the STRUCTURE's surface
+      // (dome cap / flat top), matching the server's launch normal.
+      const bSeat = (b as unknown as { seatNormal?: (n: THREE.Vector3) => void }).seatNormal;
+      if (bSeat) {
+        // The ctor seats on terrain height - lift to the structure top
+        // the server planted on, then tilt to its face normal.
+        const top = structureTopAt(at.x, at.z);
+        if (top > at.y) {at.y = top; b.pos.y = top; (b as unknown as { group: THREE.Object3D }).group.position.y = top;}
+        const sn = structureNormalAt(at.x, at.y, at.z, _sn);
+        if (sn) {bSeat.call(b, sn);}
+      }
       item = {
         kind, candId: `rdep:${id}`, pos: b.pos, dead: false,
         hurt: (): void => { return; }, // server owns its lifetime - deployGone removes it

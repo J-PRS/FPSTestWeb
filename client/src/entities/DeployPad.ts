@@ -17,6 +17,7 @@ const _dark = new THREE.MeshLambertMaterial({ color: 0x1C_22_29 });
 const _geoDish = new THREE.CylinderGeometry(0.95, 1.15, 0.22, 8);
 const _geoRib = new THREE.BoxGeometry(0.16, 0.1, 1.7);
 const _geoPad = new THREE.BoxGeometry(1.5, 0.06, 1.5);
+const _UP = new THREE.Vector3(0, 1, 0);
 
 export class DeployPad {
   readonly id: number;
@@ -69,6 +70,12 @@ export class DeployPad {
     this.group.position.copy(this.pos);
     this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
     scene.add(this.group);
+  }
+
+  /** Planted on a structure - the tilt keys the structure's surface
+   *  (dome cap or flat top), not the terrain underneath. */
+  seatNormal(n: THREE.Vector3): void {
+    this.group.quaternion.setFromUnitVectors(_UP, n);
   }
 
   /** Trigger ring decal - bakes to the dirt on first armed tick. */

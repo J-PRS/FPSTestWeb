@@ -18,6 +18,7 @@ import type { DeployMortar } from '../entities/DeployMortar.js';
 import type { DeployCg } from '../entities/DeployCg.js';
 import type { DeployKind } from '../../../shared/deployables.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
+import { structureNormalAt } from './structureSpecs.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { MORTAR_CONFIG } from '../projectiles/mortarConfig.js';
 import { CHAINGUN_CONFIG } from '../projectiles/chaingunConfig.js';
@@ -34,6 +35,7 @@ type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: 
 const _zeroVel = new THREE.Vector3();
 const _shotDir = new THREE.Vector3();
 const _padDv = new THREE.Vector3();
+const _padN = new THREE.Vector3();
 
 export interface AdoptHost {
   foesFor(owner?: DeployOwner): Foe[];
@@ -271,7 +273,10 @@ export class DeployAdopter {
     this.mkItem('pad', s, owner, (dt): void => {
       s.update(dt);
       if (this.deps.lazyNetworkManager().isConnected() || !s.armed) {return;}
-      const n = this.deps.lazyTerrain().getNormal(s.pos.x, s.pos.z);
+      // The surface the pad sits on keys the launch - structure normal
+      // (dome cap / flat top) before terrain, same rule the server runs.
+      const n = structureNormalAt(s.pos.x, s.pos.y, s.pos.z, _padN)
+        ?? this.deps.lazyTerrain().getNormal(s.pos.x, s.pos.z);
       const sp = def.launchSpeed!;
       _padDv.set(n.x * sp, n.y * sp + 6, n.z * sp);
       const tr2 = def.triggerDist! * def.triggerDist!;

@@ -4,6 +4,7 @@
 // funnels through applyStructureSpecs so a mid-match power flip can
 // rebuild the identical world without knowing who last wrote it.
 
+import * as THREE from 'three';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { structureColliders } from '../../../shared/ballCollide.js';
 import { ColliderIndex, SolidWorld } from '../../../shared/solidWorld.js';
@@ -34,6 +35,31 @@ let live: SolidWorld | null = null;
  *  beside a deck lip/dome cap doesn't bury in it. */
 export function structureTopAt(x: number, z: number, maxTop = Infinity): number {
   return live?.topAt(x, z, maxTop) ?? -Infinity;
+}
+
+/** Surface normal of the structure the point rests ON: radial on a
+ *  dome cap, up on a flat top, null when no structure top is within
+ *  reach of y. Same rule the server's tickPad uses for its launch
+ *  dir - the visual tilt and the impulse must agree. */
+export function structureNormalAt(x: number, y: number, z: number, out: THREE.Vector3): THREE.Vector3 | null {
+  if (!live) {return null;}
+  for (const c of live.cols) {
+    const dx = x - c.cx, dz = z - c.cz;
+    let surfY: number, nx = 0, ny = 1, nz = 0;
+    if (c.dome) {
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= c.dome * c.dome) {continue;}
+      surfY = (c.cy - c.hy) + Math.sqrt(c.dome * c.dome - d2);
+      nx = dx; ny = y - (c.cy - c.hy); nz = dz;
+    } else {
+      const lx = dx * c.cos + dz * c.sin, lz = -dx * c.sin + dz * c.cos;
+      if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) {continue;}
+      surfY = c.cy + c.hy;
+    }
+    if (Math.abs(y - surfY) > 1.5) {continue;}
+    return out.set(nx, ny, nz).normalize();
+  }
+  return null;
 }
 
 export function applyStructureSpecs(list: readonly StructureSpec[] | undefined, movement?: MoveStructures): void {

@@ -98,7 +98,31 @@ export function tickPad(r: RoomDeployables, d: Deployed, _dt: number): void {
     const def = DEPLOY_ITEMS.pad;
     const tr = def.triggerDist!, sp = def.launchSpeed!;
     const n = _padN;
-    if (r.room.field) {hmNormal(r.room.field, d.pos.x, d.pos.z, n);}
+    n.x = 0; n.y = 1; n.z = 0;
+    // The surface the pad actually SITS on keys the launch dir: on a
+    // dome cap it's radial, on a flat structure top it's up - the
+    // terrain normal under the floor is wrong for both.
+    let onStruct = false;
+    for (const c of r.room.ballSim.colliders) {
+      const dx = d.pos.x - c.cx, dz = d.pos.z - c.cz;
+      let surfY: number, nx = 0, ny = 1, nz = 0;
+      if (c.dome) {
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= c.dome * c.dome) {continue;}
+        surfY = (c.cy - c.hy) + Math.sqrt(c.dome * c.dome - d2);
+        nx = dx; ny = d.pos.y - (c.cy - c.hy); nz = dz;
+      } else {
+        const lx = dx * c.cos + dz * c.sin, lz = -dx * c.sin + dz * c.cos;
+        if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) {continue;}
+        surfY = c.cy + c.hy;
+      }
+      if (Math.abs(d.pos.y - surfY) > 1.5) {continue;}
+      const il = 1 / (Math.hypot(nx, ny, nz) || 1);
+      n.x = nx * il; n.y = ny * il; n.z = nz * il;
+      onStruct = true;
+      break;
+    }
+    if (!onStruct && r.room.field) {hmNormal(r.room.field, d.pos.x, d.pos.z, n);}
     const now = simNow();
     for (const [pid, p] of r.room.players.getAllPlayers()) {
       if (p.isDead) {continue;}

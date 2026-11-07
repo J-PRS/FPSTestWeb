@@ -46,6 +46,7 @@ import type { TargetCandidate } from './targeting.js';
 import { DEPLOY_KINDS, DEPLOY_MAX, type DeployKind } from '../../../shared/deployables.js';
 import { RemoteDeployables } from './remoteDeployables.js';
 import { DEPLOY_ITEMS, deploySolid } from '../../../shared/deployItems.js';
+import { structureNormalAt } from './structureSpecs.js';
 import { canThrowPack, packCost, recyclesSeated } from './deployEconomy.js';
 import type { StructureCollider } from '../../../shared/ballCollide.js';
 export type { DeployKind } from '../../../shared/deployables.js';
@@ -76,6 +77,7 @@ const NUGGET_LOB = 0.55;   // fraction of pod speed - a nugget lobs, not launche
 const NUG_POD_GEO = new THREE.IcosahedronGeometry(0.3, 0);
 const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xFF_EE_88).multiplyScalar(EMIT_GAIN) });
 const _UP = new THREE.Vector3(0, 1, 0);
+const _sn = new THREE.Vector3(); // struct-normal scratch (pad seat)
 const _FAR = new THREE.Vector3(0, -1e5, 0); // dormant-proxy for flying mines
 const _repTo = new THREE.Vector3(); // repair-beam ray scratch
 
@@ -374,7 +376,10 @@ export class Deployables {
       seated.pos.copy(pod.pos);
       seated.group.position.copy(pod.pos);
       // Drone/watersphere skip the tilt - they orient on their own lift.
-      if (pod.kind !== 'drone' && pod.kind !== 'watersphere') {seated.group.quaternion.setFromUnitVectors(_UP, n);}
+      if (pod.kind !== 'drone' && pod.kind !== 'watersphere') {
+        const sn = pod.kind === 'pad' ? structureNormalAt(pod.pos.x, pod.pos.y, pod.pos.z, _sn) : null;
+        seated.group.quaternion.setFromUnitVectors(_UP, sn ?? n);
+      }
       seated.group.scale.setScalar(1); // snap any unfolding tail to done
       seated.unfoldDone();
       SEATED[pod.kind]!.adopt(this.adopter, seated, undefined);
