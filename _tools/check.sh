@@ -118,8 +118,13 @@ fi
 if [ "$FASTEST" -eq 1 ]; then
   echo "check: --fastest — skipping visual screenshot (run full check.sh to capture)"
 elif echo "$CHANGED" | grep -qE '^client/src/(world|effects|structures|projectiles|shaders|entities)/'; then
-  bun _tools/e2e/mapshot.ts && ls -t _tools/e2e/shots/*.png | head -1 | \
-    xargs -I{} echo "check: READ THE SHOT — {} — render code changed; green tests do not see the screen"
+  # E2E_GPU=1 always: SwiftShader shots capture ~4KB black JOINING
+  # screens and the checkpoint would verify nothing (2026-11-07 autopsy).
+  # The size guard fails loudly when a shot lands under ~8KB — real
+  # frames are 24KB+; a black overlay compresses to ~4KB.
+  E2E_GPU=1 bun _tools/e2e/mapshot.ts && shot=$(ls -t _tools/e2e/shots/*.png | head -1) && \
+    [ "$(wc -c < "$shot")" -ge 8000 ] || { echo "check: mapshot looks blind — $shot is under 8KB"; exit 1; }
+  echo "check: READ THE SHOT — $shot — render code changed; green tests do not see the screen"
 fi
 
 # Circular-dependency ratchet: madge counts cycles in client+server; fail
