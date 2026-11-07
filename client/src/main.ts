@@ -1401,11 +1401,16 @@ init().then(async (): Promise<void> => {
   // bundle (and out of main.ts — the file is size-pinned). Runs at boot
   // when the flag is set, and again if the menu DEBUG toggle flips on
   // mid-session (fps:set event) — no reload needed.
+  // devtoolsOn is the STATIC half of the gate: a runtime isDevHost()
+  // alone still emits the chunk into dist/. Prod builds drop devTools
+  // entirely (window.__test lives there - e2e always runs npm run dev);
+  // VITE_FPS_DEVTOOLS=1 opts a prod build back in.
+  const devtoolsOn = import.meta.env.DEV || import.meta.env.VITE_FPS_DEVTOOLS === '1';
   const wireDebugTools = (): Promise<void> => import('./dev/devTools.js').then(m =>
     m.wireDebugTools({ networkManager, player, world, entities, terrain, viewModel, demoManager,
       rendererSetup, demoLifecycle, scene, remotes, teamBots, logger, hud }));
   // Debug wiring (window.__test, __playRec, stateDebug) — dev hosts only.
-  if (isDevHost() && (import.meta.env.DEV || urlParams.debug)) {await wireDebugTools();}
+  if (devtoolsOn && isDevHost() && (import.meta.env.DEV || urlParams.debug)) {await wireDebugTools();}
   // In-game log mirror — subscribes to Logger once so every later line
   // (and the Alt+Q/backquote/DEBUG-toggle reveals) has a live feed.
   initLogPanel();
@@ -1420,6 +1425,6 @@ init().then(async (): Promise<void> => {
     requestAnimationFrame((): number => requestAnimationFrame(reportHudOverlap)));
   window.addEventListener('fps:set', (e): void => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
-    if (key === 'fps-debug' && value === 1 && isDevHost()) {wireDebugTools();}
+    if (key === 'fps-debug' && value === 1 && devtoolsOn && isDevHost()) {wireDebugTools();}
   });
 return; }).catch((): void => undefined);

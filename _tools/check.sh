@@ -49,6 +49,10 @@ node utils/_rootcheck.mjs --scope client
 node utils/_rootcheck.mjs --scope server_bun
 # shared/ is exempt — it's a flat sim library by design, not a clutter target.
 
+# Moat ratchet — no client->server_bun imports outside the gated P2P
+# host + tests. Cheap; every check mode.
+node utils/_moatcheck.mjs || exit 1
+
 # _docs filename convention (YYYY-MM-DD_UPPER_SNAKE.md; KEEP list in the
 # tool covers living trackers). Cheap; fails on off-spec names.
 node _tools/docnames.mjs --check || {

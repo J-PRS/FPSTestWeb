@@ -45,6 +45,18 @@ MPC arrival-pricing fix (`3da8d95f`) landed in `server_bun/src/botMpcSearch.ts`
 — automatically server-only. The split is validated; the risk is only
 *future* crossings.
 
+## Executed (2026-11-07)
+
+- **Item 1 done** — `utils/_moatcheck.mjs` ratchets the boundary: any
+  `client/src -> server_bun` import outside the allowlist
+  (`p2p/host.ts`, test files) fails check.sh. Verified clean.
+- **Item 2 done** — `main.ts` devTools is statically gated on
+  `import.meta.env.DEV || VITE_FPS_DEVTOOLS === '1'` (`devtoolsOn`).
+  Prod `dist/` build: ~37 kB of debug tooling dropped;
+  `wireDebugTools`/`__playRec`/`startBotPilot` zero hits (the one
+  remaining `window.__test` string is a reader, not the provider).
+  E2E unaffected — the harness always runs `npm run dev`.
+
 ## Plan (in order)
 
 1. **Import-boundary ratchet.** A check that fails on `client/src ->
