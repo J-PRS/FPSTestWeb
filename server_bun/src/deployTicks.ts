@@ -198,6 +198,48 @@ export function tickLoiter(r: RoomDeployables, d: Deployed, dt: number): void {
     }) as ServerMessage);
   }
 
+  /** Spider mine: the ground-bound loiter - after the arm it scuttles
+   *  toward the nearest GROUNDED hostile in its ring and detonates in
+   *  reach. Air is the hard counter: an airborne body never trips it
+   *  (sim onGround, or the no-shadow fallback near the surface). d.pos
+   *  IS the spider - it crawls. No wire for the crawl: replicas mirror
+   *  the chase like drones mirror their owner; the blast lands through
+   *  the mineBoom funnel at the server's true point. */
+export function tickSpider(r: RoomDeployables, d: Deployed, dt: number): void {
+    d.fireCd -= dt; // doubles as the arm timer - same convention as the mine
+    if (d.fireCd > 0) {return;}
+    const def = DEPLOY_ITEMS.spider;
+    const dTeam = r.teamOf(d);
+    const tr = def.triggerDist!, sp = def.launchSpeed!;
+    let tid: string | null = null, tp: Vec3 | null = null, bestD2 = tr * tr;
+    for (const [pid, p] of r.room.players.getAllPlayers()) {
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
+      if (p.protectedUntil > simNow()) {continue;}
+      const grounded = r.room.moveSim.simState(pid)?.onGround === true
+        || (r.room.field ? p.position.y - hmHeight(r.room.field, p.position.x, p.position.z) < 2.5 : false);
+      if (!grounded) {continue;}
+      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bestD2) {bestD2 = d2; tid = pid; tp = p.position;}
+    }
+    if (!tid || !tp) {return;}
+    const dx = tp.x - d.pos.x, dz = tp.z - d.pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 1e-4) {
+      const step = Math.min(sp * dt, dist);
+      d.pos.x += dx / dist * step;
+      d.pos.z += dz / dist * step;
+    }
+    if (r.room.field) {d.pos.y = hmHeight(r.room.field, d.pos.x, d.pos.z);}
+    const dy = tp.y - d.pos.y;
+    if (dist < 2.2 && Math.abs(dy) < 2.5) {
+      r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mineBoom', 'id', d.id, { owner: d.owner, pos: Object.assign({}, d.pos) }) as ServerMessage);
+      r.remove(d.id);
+      r.room.messages.mineBlast(d.owner, d.pos, def.blastDamage!, def.blastRadius!, def.knockback!);
+    }
+  }
+
   /** Resupply pad: friendlies in the envelope get a slow health refill.
    *  Energy stays client-side (the move shadow doesn't model the tank
    *  top-off) — health is the server-owned half of the pad's job. */

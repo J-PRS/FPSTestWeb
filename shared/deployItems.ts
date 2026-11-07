@@ -9,7 +9,7 @@
 import { WeaponType } from './weaponTable.ts';
 import { WEAPONS } from './weaponRows.ts';
 
-export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon' | 'watersphere' | 'tether' | 'pad' | 'loiter'
+export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon' | 'watersphere' | 'tether' | 'pad' | 'loiter' | 'spider'
   // Authored-only base assets — cap 0 means a player can never plant one;
   // they exist only via the map spec `deploys` block.
   | 'generator' | 'sensor' | 'baseturret';
@@ -118,6 +118,12 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
   // the dive consumes the item. launchSpeed = dive speed, hoverUp =
   // loiter altitude, triggerDist = dive commit ring.
   loiter:  { label: 'Loiter Munition', cap: 2, hp: 10, ttlS: 90, cost: 3, armS: 1, triggerDist: 18, launchSpeed: 42, hoverUp: 8, blastDamage: 65, blastRadius: 8, knockback: 14, bodyR: 0.9, bodyH: 1.2 },
+  // Spider mine: the ground-bound sibling - a fast scuttler that chases
+  // GROUNDED hostiles inside its ring and detonates in reach. Air is the
+  // hard counter: a jetting or falling body never trips it (a hover is
+  // genuinely safe over the skittering thing), and it dies cheap like
+  // the loiter. launchSpeed = crawl speed.
+  spider:  { label: 'Spider Mine', cap: 3, hp: 10, ttlS: 60, cost: 2, armS: 0.8, triggerDist: 24, launchSpeed: 14, blastDamage: 50, blastRadius: 7, knockback: 14, bodyR: 0.6, bodyH: 0.5 },
   // Base assets are fat targets — a generator is the raid's main prize,
   // so it soaks far more splash than a field plant. Authored ttl is
   // ignored: base gear runs on the respawn clock, not the decay clock.
@@ -133,5 +139,5 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
 // chases its owner (a static hull would punt the owner it shadows) and
 // the nugget never becomes an item. Everything else you can't walk
 // through; the barrier's dome stays walk-through by design above.
-const NOSOLID = new Set<DeployKind>(['drone', 'nugget', 'watersphere', 'tether', 'pad', 'loiter']);
+const NOSOLID = new Set<DeployKind>(['drone', 'nugget', 'watersphere', 'tether', 'pad', 'loiter', 'spider']);
 export function deploySolid(kind: DeployKind): boolean { return !NOSOLID.has(kind); }

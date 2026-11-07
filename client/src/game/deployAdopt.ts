@@ -15,6 +15,7 @@ import type { DeployTether } from '../entities/DeployTether.js';
 import type { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import type { DeployPad } from '../entities/DeployPad.js';
 import type { DeployLoiter } from '../entities/DeployLoiter.js';
+import type { DeploySpider } from '../entities/DeploySpider.js';
 import type { DeployMortar } from '../entities/DeployMortar.js';
 import type { DeployCg } from '../entities/DeployCg.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -333,6 +334,41 @@ export class DeployAdopter {
       s.dive(dive.hover, dive.vel);
       item.dead = true; // munition spent - the projectile carries the blast
     }, { dive: (p0, v0): void => s.dive(p0, v0) });
+  }
+
+  /** Spider mine - ground-scuttler: chases GROUNDED hostiles (air is
+   *  the counter), detonates in reach. Offline the blast is the same
+   *  funnel the mine paints; connected the server owns the hunt and the
+   *  replica just mirrors the crawl (mineBoom lands the truth). */
+  adoptSpider(s: DeploySpider, owner?: DeployOwner): void {
+    const item = this.mkItem('spider', s, owner, (dt): void => {
+      const boom = s.update(dt, this.host.foesFor(owner));
+      if (!boom || this.deps.lazyNetworkManager().isConnected()) {return;}
+      const def = DEPLOY_ITEMS.spider;
+      const player = this.deps.lazyPlayer();
+      this.deps.world.explosions.push(new Explosion(
+        this.deps.scene, s.pos, false, 0, this.deps.lazyTerrain(),
+        def.blastRadius! / EXPLOSION_VFX_RADIUS, 0xFF_AA_44));
+      sfx.explosionAt(s.pos, true);
+      screenShake.blast(s.pos, 2.5, player.pos);
+      for (const c of this.deps.targets) {
+        if (c.dead) {continue;}
+        const d = c.pos.distanceTo(s.pos);
+        if (d < def.blastRadius!) {
+          const dmg = Math.round(def.blastDamage! * (1 - d / def.blastRadius!));
+          if (dmg > 0) {this.deps.lazyCombat()?.hitTargetLocal(c, dmg, owner?.id);}
+        }
+      }
+      for (const b of this.host.foesFor(owner)) {
+        if (!b.playerId) {continue;}
+        const d = b.pos.distanceTo(s.pos);
+        if (b.alive && d < def.blastRadius!) {
+          const dmg = Math.round(def.blastDamage! * (1 - d / def.blastRadius!));
+          if (dmg > 0) {this.deps.damageBot?.(b.playerId, dmg, s.pos);}
+        }
+      }
+      item.dead = true;
+    });
   }
 
   /** Barrier dome - the emitter is a plain dep: destructible like any

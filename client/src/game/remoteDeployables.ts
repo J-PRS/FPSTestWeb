@@ -16,6 +16,7 @@ import { DeployTether } from '../entities/DeployTether.js';
 import { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import { DeployPad } from '../entities/DeployPad.js';
 import { DeployLoiter } from '../entities/DeployLoiter.js';
+import { DeploySpider } from '../entities/DeploySpider.js';
 import { Explosion } from '../effects/explosion.js';
 import { LightningBeam } from '../effects/lightningBeam.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -104,6 +105,7 @@ const REMOTE_SPEC: Partial<Record<DeployKind, {
   watersphere: { make: (s, t, p) => new DeployWatersphere(s, t, p) },
   pad:         { make: (s, t, p) => new DeployPad(s, t, p) },
   loiter:      { make: (s, t, p) => new DeployLoiter(s, t, p) },
+  spider:      { make: (s, t, p) => new DeploySpider(s, t, p),      scans: true },
 };
 
 export class RemoteDeployables {

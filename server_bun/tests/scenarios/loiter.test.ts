@@ -11,7 +11,7 @@ describe('scenario: loiter munition', () => {
     pin(room, 'engi', { x: 0, y: 30, z: 0 });
     room.players.getPlayer('engi')!.beltCharges = 10;
     expect(room.deployables.handleDeploy('engi', 'loiter', { x: 5, y: 30, z: 0 })).toBe(true);
-    const items = (room.deployables as unknown as { items: Map<number, { pos: { x: number; y: number; z: number }; loiterDive?: unknown }> }).items;
+    const items = (room.deployables as unknown as { items: Map<number, { id: number; pos: { x: number; y: number; z: number }; loiterDive?: unknown }> }).items;
     const d = [...items.values()][0]!;
     room.players.addPlayer('prey', 'bravo', 'none', 'medium');
     room.moveSim.track('prey', { x: d.pos.x + 6, y: d.pos.y, z: d.pos.z }, 0, undefined, 'bravo');
@@ -20,7 +20,7 @@ describe('scenario: loiter munition', () => {
     step(room, 10); // 0.5s - arming, hover only
     expect(d.loiterDive).toBeUndefined();
     step(room, 80); // commit + dive + detonate (42 m/s over ~10m)
-    expect(items.has(d.pos ? (d as { id: number }).id : 0)).toBe(false);
+    expect(items.has(d.id)).toBe(false);
     expect(room.players.getPlayer('prey')!.health).toBeLessThan(hp0);
   });
 
