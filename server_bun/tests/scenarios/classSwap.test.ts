@@ -55,4 +55,21 @@ describe('scenario: reclaim applies the rejoiner class', () => {
     room.applyClaimedClass(p.id, 'bogus');
     expect(p.armorClass).toBe('light');
   });
+
+  it('reclaim keeps the banked pick when reconciling a stale seat', () => {
+    const room = mkRoom({ bots: 1 }, 'tdm');
+    const p = firstPlayer(room);
+    // Restart-restore blob left the seat on 'medium'; the rejoiner is
+    // live-'light' with a 'heavy' swap banked (pendingClass). The claim
+    // is the class being played — applying it must not consume the pick.
+    p.armorClass = 'medium';
+    p.pendingClass = 'heavy';
+    room.applyClaimedClass(p.id, 'light');
+    expect(p.armorClass).toBe('light');
+    // Clearing pendingClass here enforced 'light' at respawn while the
+    // client still banked 'heavy' — its heavy kit then reject-spammed.
+    expect(p.pendingClass).toBe('heavy');
+    const res = room.players.respawnPlayer(p.id);
+    expect(res?.armorClass).toBe('heavy');
+  });
 });

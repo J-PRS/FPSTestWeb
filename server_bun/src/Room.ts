@@ -528,7 +528,9 @@ export class Room {
     const p = this.players.getPlayer(playerId);
     if (!p || p.armorClass === claim) {return;}
     p.armorClass = claim;
-    p.pendingClass = undefined;
+    // pendingClass survives: it's the rejoiner's banked pick, still
+    // owed at respawn — clearing it here would strand the client
+    // shouldering the new tier's kit against the old enforced class.
     p.maxHealth = CONFIG.playerMaxHealth + perkMods(p.perk).maxHealth + CLASS_STATS[claim].maxHealth;
     p.health = Math.min(p.health, p.maxHealth);
     this.applyClassScale(playerId);
