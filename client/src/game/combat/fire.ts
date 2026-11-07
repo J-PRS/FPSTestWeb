@@ -128,7 +128,19 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     const jd = coneDir(e.dir, u1 * Math.PI * 2, Math.sqrt(u2) * e.bloomRadius);
     spawnDir = _flakDir.set(jd.x, jd.y, jd.z).clone();
   }
-  const p = new Projectile(deps.lazyScene(), _spawnOrigin, spawnDir, e.playerVel, config);
+  // Momentum perk: cap the launch speed, pay the excess back as a
+  // direct-hit bonus stamped on the shell (orig/cap, capped at 1.5x).
+  // cfg2 drives BOTH the local sim and the wire claim below - the
+  // server's arc replay must see the capped flight or it diverges.
+  const cap = deps.lazyPlayer().mods.projSpeedCap;
+  // maxLifetime scales by the same cut ratio so the capped shell keeps
+  // its original flight RANGE (slower = longer alive, not shorter reach).
+  const cfg2 = cap > 0 && config.speed > cap
+    ? Object.assign({}, config, { speed: cap, maxLifetime: (config.maxLifetime ?? 12) * (config.speed / cap) })
+    : config;
+  const bonus = cap > 0 && config.speed > cap ? Math.min(1.5, config.speed / cap) : 1;
+  const p = new Projectile(deps.lazyScene(), _spawnOrigin, spawnDir, e.playerVel, cfg2);
+  p.directBonus = bonus;
   deps.world.projectiles.push(p);
   p.shooterTeam = deps.world.localTeam ?? null;
   p.shotId = shotId;
@@ -137,7 +149,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // Record projectile fired event for demo
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording) {
-    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, config.inherit ?? 0.5);
+    const velocity = e.dir.clone().normalize().multiplyScalar(cfg2.speed).addScaledVector(e.playerVel, config.inherit ?? 0.5);
     p.demoProjectileId = demoManager.recordProjectileFired(
       { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
       { x: velocity.x, y: velocity.y, z: velocity.z },
@@ -165,7 +177,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // Projectile sim runs — omitting playerVel*0.5 makes the server's
   // arcBlockedAt replay a slower, undeflected arc that clips walls the
   // real shell cleared ("flight blocked" rejects on honest hits).
-  const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
+  const velocity = e.dir.clone().normalize().multiplyScalar(cfg2.speed).addScaledVector(e.playerVel, 0.5);
   // NetProbe: claimed-vs-flown drift - must stay ~0 or the server's
   // arc replay diverges (the 'flight blocked' phantom-reject class).
   // Jittered shells (bloom/spread cones) SKIP this: their claim is the
@@ -286,6 +298,7 @@ function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count
     const p = spawnProjectile(deps, config, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel }, true);
     if (p && simmed) {
       p.fanSlot = `${pullId}#${i}`;
+      p.pullShotId = pullId;
       registry.byFanSlot.set(p.fanSlot, p);
     }
 i += 1;

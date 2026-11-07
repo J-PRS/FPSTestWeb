@@ -281,7 +281,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
 
-  const directDamage = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
+  const directDamage = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1);
 
   // Personal feedback (numbers/marker/score) is for shells I fired - a
 
@@ -345,7 +345,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   if (deps.lazyNetworkManager()?.authoritySims()) {
 
-    expectDamageEcho(playerId, directDamage, p.config.weaponType, p.shotId, { x: p.pos.x, y: p.pos.y, z: p.pos.z },
+    expectDamageEcho(playerId, directDamage, p.config.weaponType, p.pullShotId ?? p.shotId, { x: p.pos.x, y: p.pos.y, z: p.pos.z },
       targetPlayer ? { x: targetPlayer.wirePosition.x, y: targetPlayer.wirePosition.y, z: targetPlayer.wirePosition.z } : undefined);
 
   }
@@ -396,7 +396,7 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: Targetable): vo
 
   // Airtime ramp is body-contact only - wake hits pay flat directDamage.
 
-  const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
+  const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1);
 
   if (p.config.weaponType === WeaponType.Chaingun) {chaingunBank(c, p, ball);}
 

@@ -379,6 +379,14 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (shotId) {
       const shell = deps.world.projectileRegistry.byShotId.get(shotId);
       if (shell && !shell.dead) {shell.dead = true;}
+      // Fan pulls reject under the PULL nonce - pellets keyed their own
+      // shotIds, so the pull id only resolves through unbound fan slots
+      // (a rejected intent never echoes creates, so nothing bound yet).
+      if (!shell) {
+        for (const [slot, pellet] of deps.world.projectileRegistry.byFanSlot) {
+          if (slot.startsWith(`${shotId}#`) && !pellet.dead) {pellet.dead = true;}
+        }
+      }
     }
     // The authority says this pick is class-locked - a stale slot keeps
     // spam-rejecting every pull for the rest of the life. Unshoulder it

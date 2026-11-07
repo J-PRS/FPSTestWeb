@@ -138,6 +138,10 @@ export class Projectile {
    *  under which this pellet sits in registry.byFanSlot, so death and
    *  destroy cleanup can drop it. Single shells leave it unset. */
   fanSlot: string | null = null;
+  /** The pull's wire nonce for fan pellets - the id every pellet's fate,
+   *  reject and damage echo actually rides (fanSlot dies on bind, this
+   *  must outlive it). Null on single shells: shotId IS the pull id. */
+  pullShotId: string | null = null;
   /** Whose shell this is - kill attribution for local-authority shots
    *  (offline GameBots; null = the local player). */
   shooterId: string | null = null;
@@ -162,6 +166,9 @@ export class Projectile {
   hitAge = 0; // projectile age at hit (airtime)
   hitDistance = 0; // travel distance from shot origin
   directHit = false; // true = hit with core hitbox, false = expanding wake hitbox
+  /** Momentum perk: direct-damage bonus stamped at spawn when the launch
+   *  speed was capped down (orig/cap, max 2). 1 = no trade. */
+  directBonus = 1;
   minHitDist = 0; // minimum distance during sweep (for accurate accuracy)
   // Contact bookkeeping - read/written by projCollide (the impact-policy family).
   hitX = 0; hitY = 0; hitZ = 0; hitT = 1;
@@ -642,11 +649,9 @@ export class Projectile {
     const armed = RibbonTrail.acquire(this.scene, {
       color: 0xFF_BB_33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
     });
-    // Late-join ribbons miss the driver's ctor follow-bind - without this
-    // the armed streak's tip trails the shell by a frame of travel.
-    armed.follow = this.rendered;
-    armed.followManaged = true;
-    this.ribbons.push(armed);
+    // driver.add binds the same follow + rides the driver's worldpos
+    // push/jump-clear path - driver.ribbons IS this.ribbons (ctor arg).
+    this.driver.add(armed);
   }
 
   // GL/flak shells always bounce; a mortar only bounces while unarmed -
