@@ -167,6 +167,17 @@ export function tickLoiter(r: RoomDeployables, d: Deployed, dt: number): void {
       return;
     }
     d.fireCd -= dt; // doubles as the arm timer - same convention as the mine
+    // Orbit the plant anchor every tick - the munition CIRCLES while it
+    // watches, so "loiter" reads as a patrol, not a parked balloon. The
+    // anchor is the plant point (pos drifts once the ring starts);
+    // replicas orbit because pos chases the ring each tick.
+    d.orbitA = (d.orbitA ?? 0) + (def.orbitRate ?? 0) * dt;
+    if (d.orbitC === undefined) {d.orbitC = { x: d.pos.x, z: d.pos.z };}
+    const oR = def.orbitR ?? 0;
+    if (oR > 0) {
+      d.pos.x = d.orbitC.x + Math.cos(d.orbitA!) * oR;
+      d.pos.z = d.orbitC.z + Math.sin(d.orbitA!) * oR;
+    }
     if (d.fireCd > 0) {return;}
     const dTeam = r.teamOf(d);
     const hover = { x: d.pos.x, y: d.pos.y + def.hoverUp!, z: d.pos.z };

@@ -79,6 +79,10 @@ export interface Deployed {
    *  elapsed fuse + the committed target. Present only while diving -
    *  the detonation removes the item either way. */
   loiterDive?: { x: number; y: number; z: number; vx: number; vy: number; vz: number; t: number; tid: string };
+  /** Loiter orbit: angle + the plant anchor it circles (pos chases the
+   *  ring so the wire replica orbits too). */
+  orbitA?: number;
+  orbitC?: { x: number; z: number };
 }
 
 // A downed base asset comes back on its own after this - a repair tech

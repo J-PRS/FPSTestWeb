@@ -56,6 +56,10 @@ export interface DeployItemDef {
   knockback?: number;
   /** Hover height above the owner (drone). */
   hoverUp?: number;
+  /** Loiter patrol ring — radius (m) and angular rate (rad/s) the
+   *  munition circles the plant anchor while it watches. */
+  orbitR?: number;
+  orbitRate?: number;
   /** Dome radius (shield). */
   shieldRadius?: number;
   /** Water-dome radius (watersphere) — the pocket of water's footprint on
@@ -117,7 +121,7 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
   // counter is that it's 10hp and audible while it loiters. One-shot:
   // the dive consumes the item. launchSpeed = dive speed, hoverUp =
   // loiter altitude, triggerDist = dive commit ring.
-  loiter:  { label: 'Loiter Munition', cap: 2, hp: 10, ttlS: 90, cost: 3, armS: 1, triggerDist: 18, launchSpeed: 42, hoverUp: 8, blastDamage: 65, blastRadius: 8, knockback: 14, bodyR: 0.9, bodyH: 1.2 },
+  loiter:  { label: 'Loiter Munition', cap: 2, hp: 10, ttlS: 90, cost: 3, armS: 1, triggerDist: 22, launchSpeed: 42, hoverUp: 8, orbitR: 9, orbitRate: 0.55, blastDamage: 65, blastRadius: 8, knockback: 14, bodyR: 0.9, bodyH: 1.2 },
   // Spider mine: the ground-bound sibling - a fast scuttler that chases
   // GROUNDED hostiles inside its ring and detonates in reach. Air is the
   // hard counter: a jetting or falling body never trips it (a hover is
