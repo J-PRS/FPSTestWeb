@@ -1,8 +1,11 @@
 // Wide WAN soak — R rooms × B bots over real wss, join-paced under the
 // server's 20/min/IP flood guard (a 1013 close kills a bot for good —
 // join pace is the whole trick). Usage:
-//   bun tools/netbot/wideSoak.ts --url wss://play.jprice.app/ws \
+//   bun tools/netbot/wideSoak.ts --url wss://play.jprice.app:8443/ws \
 //       --rooms 10 --bots 24 --seconds 90 --pace 3400
+// NOTE (fleet, 2026-11-07): play.jprice.app/ws on :443 is the DIRECTOR —
+// it 404s. Resolve a real worker first: GET
+// https://play.jprice.app/join?room=X → {url:"wss://host:8443/ws",...}.
 import { LatencyLink } from './latency.ts';
 import { NetClient } from './netClient.ts';
 import { NetBot } from './bot.ts';
@@ -101,3 +104,8 @@ for (const [room, r] of perRoom) {
   totR += rTot; totC += r.closed; totGs += r.gs; totTicks += r.ticks; totK += r.kills;
 }
 console.log(`\n=== totals === rooms=${perRoom.size} rejects=${totR} closed=${totC} gameStates=${totGs} ticks=${totTicks} kills=${totK}`);
+const closeInfos = new Map<string, number>();
+for (const s of snap) {
+  if (s.closed) {closeInfos.set(s.closeInfo || 'unknown', (closeInfos.get(s.closeInfo || 'unknown') ?? 0) + 1);}
+}
+if (closeInfos.size > 0) {console.log('close reasons:', [...closeInfos.entries()].map(([r, n]) => `${r} x${n}`).join(', '));}

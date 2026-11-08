@@ -461,6 +461,14 @@ else if (m === 'error') {lvl = LogLevel.ERROR;}
     }
     if (e.altKey && e.code === 'KeyQ') {
       e.preventDefault();
+      // Shift+Alt+Q: game-state dump (scoreboard/ASW), not logs.
+      if (e.shiftKey) {
+        const dump = (window as { __gameDump?: () => string[] }).__gameDump?.() ?? [];
+        const text = `=== GAME STATE ===\n${dump.join('\n')}`;
+        navigator.clipboard.writeText(text).then((): void => { toast(`Game state copied (${dump.length} rows)`); },
+          (): void => { console.log(text); toast('Clipboard unavailable — dumped to console', false); }).catch((): void => undefined);
+        return;
+      }
       const verbose = e.ctrlKey;
       Logger.copyLogs(300, verbose).then((n): void => {
         if (n >= 0) {
