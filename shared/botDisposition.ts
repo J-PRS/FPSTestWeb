@@ -302,6 +302,21 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       b.orbitMul = 0.75 + botRand() * 0.4; // jink in/out too — not just direction
     }
     const mid = (b.h.orbitFar + b.h.orbitClose) * 0.5 * b.orbitMul;
+    // Open-flank rule: five bots on one target all carousel the same ring
+    // at synced phases - a disc's AoE eats the whole stack. An orbit
+    // sector an ally already owns gets skipped forward until it opens:
+    // deterministic from ally positions, no registry, spreads the squad
+    // around the target like a real flanking habit.
+    for (let tries = 0; tries < 3; tries += 1) {
+      const ox = t.pos.x + Math.cos(b.orbitA) * mid;
+      const oz = t.pos.z + Math.sin(b.orbitA) * mid;
+      let taken = false;
+      for (const a of ctx.allies ?? []) {
+        if ((a.x - ox) * (a.x - ox) + (a.z - oz) * (a.z - oz) < 12 * 12) {taken = true; break;}
+      }
+      if (!taken) {return { x: ox, y: ctx.groundY(ox, oz), z: oz };}
+      b.orbitA += Math.PI / 3; // ~60° - hop to the next free sector
+    }
     const ox = t.pos.x + Math.cos(b.orbitA) * mid;
     const oz = t.pos.z + Math.sin(b.orbitA) * mid;
     return { x: ox, y: ctx.groundY(ox, oz), z: oz };

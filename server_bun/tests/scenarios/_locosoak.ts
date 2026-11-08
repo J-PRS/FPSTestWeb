@@ -26,6 +26,8 @@ const spec = JSON.parse(readFileSync('C:/TEMP/_WEB/FPSWebTest/maps/rimrock.json'
 const field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale ?? 1);
 
 const room = mkRoom({ mode: 'headhunt', bots: PER, botSkill: 'medium' }, 'headhunt', arg('seed', 4242), false, field);
+// --ski: downhill charge scoring A/B - hypothesis under test, off by default.
+if (arg('ski', 0)) {for (const b of (room.bots as unknown as { brains: Map<string, { steerer: { skiCharge: boolean } }> }).brains.values()) {b.steerer.skiCharge = true;}}
 // Standard headhunt - gems come from the real kill economy. K/D and
 // held tokens print per 30s so we see whether the economy exists at all.
 
@@ -68,7 +70,15 @@ for (let t = 0; t < TOTAL; t += 1) {
     clumpHold = clumped >= 3 ? clumpHold + 1 : 0;
     const clumpWarn = clumpHold >= 2 ? ` CLUMP x${clumped}` : '';
     const dmg = ps.reduce((a, p): number => a + (p.maxHealth - p.health), 0);
-    console.log(`  t=${(clock * 0.05).toFixed(0)}s(sim) contacts<80m=${contacts} minD=${minD.toFixed(0)} hunts=${hunts}[${huntIds.join(',')}] liveProj=${shots} dmg=${dmg.toFixed(0)} kd=[${kd}] held=${held}${clumpWarn}`);
+    // Goal-distance distribution: legLen measured the ~30m steering
+    // STEP (staged by design) - the transit hypothesis needs the
+    // committed GOAL distance: dist(pos, brain.goal). Short goals mean
+    // no steering fix can ever produce a ski line.
+    const legs = [...(room.bots as unknown as { brains: Map<string, { goalS: { goal: { x: number; z: number } } }> }).brains.entries()]
+      .map(([id, b]): number => {const p = room.players.getAllPlayers().get(id)!; return p ? Math.hypot(b.goalS.goal.x - p.position.x, b.goalS.goal.z - p.position.z) : 0;})
+      .sort((a, b): number => a - b);
+    const legStr = legs.length ? `legs[${legs[0]!.toFixed(0)}/${legs[Math.floor(legs.length / 2)]!.toFixed(0)}/${legs[legs.length - 1]!.toFixed(0)}]` : '';
+    console.log(`  t=${(clock * 0.05).toFixed(0)}s(sim) ${legStr} contacts<80m=${contacts} minD=${minD.toFixed(0)} hunts=${hunts} liveProj=${shots} dmg=${dmg.toFixed(0)} kd=[${kd}] held=${held}${clumpWarn}`);
   }
   for (const p of room.players.getAllPlayers().values()) {
     const r = ring.get(p.id) ?? [];

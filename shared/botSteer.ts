@@ -62,6 +62,7 @@ export class BotSteer {
   steer(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
     let gx = dest.x - pos.x, gz = dest.z - pos.z;
     const gd = Math.hypot(gx, gz);
+    this.legLen = gd;
     if (gd < 0.5) {return dest;}
     // Arrived: drift a lazy figure around the point instead of freezing
     // — statues are how bots out themselves on a held position. The
@@ -245,11 +246,23 @@ export class BotSteer {
   /** Danger score [0..1] for one steering slot: slope probes (climbs,
    *  sheer drops), bodies in the way, and the recently-visited memory
    *  trail that lets a bot escape a local minimum. */
+  /** A/B flag: downhill charge scoring. Off = legacy (slopes only repel). */
+  skiCharge = false;
+  legLen = 0; // dest distance for this steer - fed by steer() each call
+
   private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, probe: { g0: number; now: number; nearGoal: boolean; near: BotVec[] | null; standoff: { x: number; z: number; radius: number; strength: number } | null; pa: number; pb: number }): number {
     const { g0, now, nearGoal, near, standoff, pa, pb } = probe;
     let danger = 0;
     const riseA = ctx.groundY(pos.x + dx * pa, pos.z + dz * pa) - g0;
     const riseB = ctx.groundY(pos.x + dx * pb, pos.z + dz * pb) - g0;
+    // Ski-drive hypothesis: on a long leg a downhill slot is a SPEED
+    // line, not just a safe one - negative danger amplifies the slot's
+    // interest instead of merely clearing it. Only off uphill faces
+    // (rise<0), only when the leg is long enough for speed to matter.
+    if (this.skiCharge && this.legLen > 60) {
+      const fall = Math.min(riseA / pa, riseB / pb); // worst probe still falls
+      if (fall < -0.05) {danger -= Math.min(0.5, -fall * 0.4);}
+    }
     // A bounded lip (dais skirt, deck edge, box face) is not a wall: the
     // legs' step-mount hops+jets straight over it, but masking the slot
     // steered the step tangent — the mount probe never faced the lip and

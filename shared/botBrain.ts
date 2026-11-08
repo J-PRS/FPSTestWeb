@@ -410,7 +410,7 @@ export class BotBrain {
     pinStreak: 0,
     goal: { x: 0, y: 0, z: 0 }, // kept in sync with goalS.goal each think
   };
-  private readonly steerer = new BotSteer();
+  readonly steerer = new BotSteer(); // public for A/B soak flags (skiCharge)
   /** Human-shaped aiming turns (see botSlew.ts) — hosts drive this with
    *  their own yaw/pitch each frame; the spring+volatility+noise model
    *  replaces the old constant-rate slew so crosshair motion reads as a
