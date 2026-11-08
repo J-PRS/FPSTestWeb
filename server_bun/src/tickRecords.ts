@@ -53,6 +53,28 @@ interface RcpCtx {
  *  the shared scratch (evg) so the hot path allocates nothing. */
 interface EvalGeom { dSq: number; dx: number; dz: number; mem: number | undefined; spd: number; }
 
+/** The ensured lastSent snapshot -- Room.lastSentPositions' value type. */
+type SentSnap = NonNullable<ReturnType<Room['lastSentPositions']['get']>>;
+
+/** What recordGate hands the emit half: the ensured snapshot plus the
+ *  per-player wire values computed on the way. */
+interface RecGate {
+  snap: SentSnap;
+  forceSend: boolean;
+  sheep: number;
+  wireStatus: number;
+  hidden: boolean;
+}
+
+/** Per-tick build accumulators -- one per buildRecords call (not per
+ *  player), threaded through emitRecord. */
+interface BuildCtx {
+  recN: number;
+  roster: Record<number, string> | null;
+  rosterDirty: boolean;
+  introPending: boolean;
+}
+
 /** A retired wireId is reissued only after this much dead time -- any
  *  plausible cross-lane reorder window (reliable roster edge vs binary
  *  frames) is sub-second; 60s is paranoia, not measurement. */
@@ -271,166 +293,189 @@ export class TickFanout {
     // fields (regen/dd/forceSendUntil, chargeT) which are all written
     // with simNow -- mixing them desyncs the moment simNow ≠ wall.
     const simT = simNow();
-    let recN = 0;
-    // Lazily minted only when a new wireId binds -- a fresh {} per tick
-    // was steady-state garbage for a delta that almost never fires.
-    let roster: Record<number, string> | null = null;
-    let rosterDirty = false;
-    // Age-sweep the intro windows -- a departed or settled seat must not
-    // keep forcing rec.full encodes forever.
+    this.sweepIntroPlayers(room, players);
+    const bctx: BuildCtx = { recN: 0, roster: null, rosterDirty: false, introPending: room.introPlayers.size > 0 };
+    for (const [playerId, p] of players) {
+      const gate = this.recordGate(room, playerId, p, now, simT);
+      if (gate === null) {continue;}
+      this.writeSnapshot(playerId, p, gate, now);
+      this.emitRecord(room, playerId, p, gate, records, bctx);
+    }
+    records.length = bctx.recN;
+    if (bctx.rosterDirty) {room.connections.broadcast({ type: 'wireIds', add: bctx.roster! });}
+    return records;
+  }
+
+  /** Age-sweep the intro windows -- a departed or settled seat must not
+   *  keep forcing rec.full encodes forever. */
+  private sweepIntroPlayers(room: Room, players: Players): void {
     for (const [pid, at] of room.introPlayers) {
       if (room.tickSeq - at >= 20 || !players.has(pid) && !room.spectators.has(pid)) {room.introPlayers.delete(pid);}
     }
-    const introPending = room.introPlayers.size > 0;
-    for (const [playerId, p] of players) {
-      if (this.skipRecord(room, playerId, p, now)) {continue;}
-      this.tickServerHeals(room, playerId, p, now, simT);
-      this.tickChargeEcho(room, playerId, p, now, simT);
-      this.tickAmmoEcho(room, playerId, p, now);
-      // forceSendUntil is WallMs (hit-window bookkeeping, types.ts:105) --
-      // comparing it to simT only coincides while both clocks read
-      // Date.now(): a warped sim clock would never lapse the window and
-      // a frozen one never engages it.
-      const forceSend = wallNow() < p.forceSendUntil;
-      const lastSent = room.lastSentPositions.get(playerId);
-      const sheep = room.bots.sheepOf(playerId);
-      // Buff bits are server-owned (stripped from client claims at
-      // inputMove) so they must be OR-ed on here, not read off p.status.
-      // The toggle bits ARE claim truth: a legit client drops CLOAK/
-      // SHIELD/MEND the tick its tank empties, so a claim holding one
-      // past the shadow's modeled dry point is a forged channel — mask
-      // it off the wire copy (the record keeps the claim for refill).
-      // Computed before suppression so a transition breaks the window.
-      const tankDry = (room.moveSim.energyOf(playerId) ?? 1) <= 0;
-      const claimed = tankDry ? p.status & ~(STATUS.CLOAK | STATUS.SHIELD | STATUS.MEND) : p.status;
-      const wireStatus = claimed
-        | (simT < p.regenUntil ? STATUS.REGEN : 0)
-        | (simT < p.ddUntil ? STATUS.DD : 0)
-        | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
-      // Wire-invisible cloak: the masked claim's CLOAK bit outside the
-      // shoot-reveal window (lastFireSim is sim-ms domain, like simT)
-      // means the record itself must not reach non-teammates — a hide
-      // done only client-side still ships the position on the wire.
-      const hidden = (claimed & STATUS.CLOAK) !== 0 && simT - p.lastFireSim >= SHOOT_REVEAL_S * 1000;
-      if (lastSent && !forceSend && recordSuppressed(p, lastSent, now, sheep, wireStatus)) {
-this.metrics.recordsSuppressed += 1;
-        continue; // Skip -- within extrapolation tolerance
-      }
-      // Mutate the snapshot in place -- a fresh object per record per tick
-      // was the last steady-state alloc in this loop.
-      let snap = lastSent;
-      if (!snap) {
-        snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, jet: 0, status: 0, sheep: 0, t: 0 };
-        room.lastSentPositions.set(playerId, snap);
-      }
-      // Egress chokepoint: whatever the ingest gates missed shows up here
-      // before it reaches a client's decode pool. Snap fields ARE the wire.
-      inv('wire-row-finite', Number.isFinite(
-        p.position.x + p.position.y + p.position.z
-        + p.velocity.x + p.velocity.y + p.velocity.z
-        + p.rotation.yaw + p.rotation.pitch + p.health),
-        () => ({ id: playerId, pos: p.position, hp: p.health }));
-      // Coherence, not just representation: a row claiming alive at
-      // hp<=0 is a lie even when every field is finite -- the dead
-      // write pairs are atomic. (No upper bound: seeded/superbot pools
-      // legitimately sit over class max.)
-      inv('wire-row-coherent', p.isDead || p.health > 0,
-        () => ({ id: playerId, hp: p.health, dead: p.isDead }));
-      // Cross-field law: a dead row carries no channels and no held keys --
-      // death strips all three at the kill edge, so a corpse claiming
-      // cloak/jet/ski means a write path re-armed them post-mortem.
-      inv('corpse-no-channels', !p.isDead || (p.status === 0 && p.skiing === 0 && p.jetting === 0),
-        () => ({ id: playerId, status: p.status, ski: p.skiing, jet: p.jetting }));
-      snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
-      snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
-      snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;
-      snap.hp = p.health; snap.dead = p.isDead; snap.ski = p.skiing; snap.jet = p.jetting;
-      snap.status = wireStatus;
-      snap.sheep = sheep;
-      snap.t = now;
+  }
 
-      let wireId = room.wireIds.get(playerId);
-      let freshWireId = false;
-      if (wireId === undefined) {
-        wireId = mintWireId(room);
-        room.wireIds.set(playerId, wireId);
-        (roster ??= {})[wireId] = playerId;
-        rosterDirty = true;
-        freshWireId = true;
-      }
-      let rec = records[recN];
-      if (!rec) {
-        rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false, enc: tickEncodeScratch() };
-        records.push(rec);
-      }
-      rec.playerId = playerId;
-      rec.pos = p.position;
-      rec.wireId = wireId;
-      // spd only feeds the >12 m/s travel-budget gate -- squared-compare
-      // skips the hypot on everyone parked (Math.hypot is ~10x sqrt).
-      const vsq = p.velocity.x * p.velocity.x + p.velocity.y * p.velocity.y + p.velocity.z * p.velocity.z;
-      rec.spd = vsq > 144 ? Math.sqrt(vsq) : 0;
-      // The delta basis is per-wireId and shared across recipients, but
-      // fanout skips records per-recipient by distance tier -- a field the
-      // far client never received stays stale in its decode pool FOREVER
-      // (masked-out groups emit the retained slot value). A skipped full
-      // would leave that drift unbounded, so forced fulls must bypass
-      // tier skipping like hit-window forced sends.
-      // introSeq window (tickNack reseed): EVERY client's basis may be
-      // corrupt -- records go room-wide full for ~1s. Per-joiner fulls
-      // ride rec.full below instead, so a fresh seat doesn't poison the
-      // shared delta stream.
-      const fullRecord = freshWireId || room.tickSeq - room.introSeq < 20
-        || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0;
-      rec.force = forceSend || fullRecord;
-      rec.hidden = hidden;
-      // Delta basis follows the wireId, never the slot -- a slot-carried
-      // `last` encodes this player's mask against whoever held the slot
-      // last tick after every roster shuffle.
-      let last = room.v4Last.get(wireId);
-      if (!last || freshWireId) {
-        last = v4Last();
-        room.v4Last.set(wireId, last);
-      }
-      // Delta-masked v4 record: field groups that changed since the
-      // K-deep basis ride the wire -- a field changed once is resent
-      // V4_BASIS_DEPTH times, healing short datagram bursts; a periodic
-      // full record bounds whatever longer loss leaves behind.
-      // Stagger fulls by wireId -- keying on tickSeq alone synced every
-      // record into one egress spike per window; spreading them keeps
-      // the same 750ms drift bound with a flat send curve. A fresh
-      // mint always fulls: a quiet-window-reissued wireId's `last`
-      // could still hold the retired owner's basis, and a masked
-      // record would hand receivers the departed owner's hp/flags.
-      const fields = this.scratchFields;
-      fields.playerId = playerId;
-      fields.position = p.position;
-      fields.rotation = p.rotation;
-      fields.velocity = p.velocity;
-      fields.health = p.health;
-      fields.isDead = p.isDead;
-      // Only advertise a proven ping -- stale heartbeats above would
-      // otherwise broadcast the default 0 for ghosts that never
-      // reported (renders them with a bogus "0ms" ping).
-      fields.ping = p.ping > 0 ? p.ping : undefined;
-      fields.ski = p.skiing;
-      fields.jet = p.jetting;
-      fields.status = snap.status;
-      fields.sheep = sheep;
-      rec.data = encodeTickPlayerV4(wireId, fields, rec.enc, last, fullRecord);
-      // Joiner side-channel: while any seat is in its intro window, a
-      // second FULL copy rides rec.full -- the fanout swaps it in only
-      // for recipients still lacking this wireId's decode basis.
-      if (introPending) {
-        rec.enc2 ??= tickEncodeScratch();
-        rec.full = encodeTickPlayerV4(wireId, fields, rec.enc2, this.introLast, true);
-      } else {rec.full = undefined;}
-recN += 1;
-this.metrics.recordsBuilt += 1;
+  /** Everything between "does this player get a record" and the wire
+   *  encode: skip verdicts, the three server-owned echoes, the buff-bit
+   *  merge, suppression, and the ensured lastSent snapshot. Returns
+   *  null when the player contributes no record this tick. */
+  private recordGate(room: Room, playerId: string, p: PlayerState, now: number, simT: number): RecGate | null {
+    if (this.skipRecord(room, playerId, p, now)) {return null;}
+    this.tickServerHeals(room, playerId, p, now, simT);
+    this.tickChargeEcho(room, playerId, p, now, simT);
+    this.tickAmmoEcho(room, playerId, p, now);
+    // forceSendUntil is Wallms (hit-window bookkeeping, types.ts:105) --
+    // comparing it to simT only coincides while both clocks read
+    // Date.now(): a warped sim clock would never lapse the window and
+    // a frozen one never engages it.
+    const forceSend = wallNow() < p.forceSendUntil;
+    const lastSent = room.lastSentPositions.get(playerId);
+    const sheep = room.bots.sheepOf(playerId);
+    // Buff bits are server-owned (stripped from client claims at
+    // inputMove) so they must be OR-ed on here, not read off p.status.
+    // The toggle bits ARE claim truth: a legit client drops CLOAK/
+    // SHIELD/MEND the tick its tank empties, so a claim holding one
+    // past the shadow's modeled dry point is a forged channel — mask
+    // it off the wire copy (the record keeps the claim for refill).
+    // Computed before suppression so a transition breaks the window.
+    const tankDry = (room.moveSim.energyOf(playerId) ?? 1) <= 0;
+    const claimed = tankDry ? p.status & ~(STATUS.CLOAK | STATUS.SHIELD | STATUS.MEND) : p.status;
+    const wireStatus = claimed
+      | (simT < p.regenUntil ? STATUS.REGEN : 0)
+      | (simT < p.ddUntil ? STATUS.DD : 0)
+      | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
+    // Wire-invisible cloak: the masked claim's CLOAK bit outside the
+    // shoot-reveal window (lastFireSim is sim-ms domain, like simT)
+    // means the record itself must not reach non-teammates — a hide
+    // done only client-side still ships the position on the wire.
+    const hidden = (claimed & STATUS.CLOAK) !== 0 && simT - p.lastFireSim >= SHOOT_REVEAL_S * 1000;
+    if (lastSent && !forceSend && recordSuppressed(p, lastSent, now, sheep, wireStatus)) {
+this.metrics.recordsSuppressed += 1;
+      return null; // Skip -- within extrapolation tolerance
     }
-    records.length = recN;
-    if (rosterDirty) {room.connections.broadcast({ type: 'wireIds', add: roster! });}
-    return records;
+    // Mutate the snapshot in place -- a fresh object per record per tick
+    // was the last steady-state alloc in this loop.
+    let snap = lastSent;
+    if (!snap) {
+      snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, jet: 0, status: 0, sheep: 0, t: 0 };
+      room.lastSentPositions.set(playerId, snap);
+    }
+    return { snap, forceSend, sheep, wireStatus, hidden };
+  }
+
+  /** The lastSent snapshot write + the egress chokepoint invariants:
+   *  whatever the ingest gates missed shows up here before it reaches
+   *  a client's decode pool. Snap fields ARE the wire. */
+  private writeSnapshot(playerId: string, p: PlayerState, gate: RecGate, now: number): void {
+    const { snap } = gate;
+    // Egress chokepoint: whatever the ingest gates missed shows up here
+    // before it reaches a client's decode pool. Snap fields ARE the wire.
+    inv('wire-row-finite', Number.isFinite(
+      p.position.x + p.position.y + p.position.z
+      + p.velocity.x + p.velocity.y + p.velocity.z
+      + p.rotation.yaw + p.rotation.pitch + p.health),
+      () => ({ id: playerId, pos: p.position, hp: p.health }));
+    // Coherence, not just representation: a row claiming alive at
+    // hp<=0 is a lie even when every field is finite -- the dead
+    // write pairs are atomic. (No upper bound: seeded/superbot pools
+    // legitimately sit over class max.)
+    inv('wire-row-coherent', p.isDead || p.health > 0,
+      () => ({ id: playerId, hp: p.health, dead: p.isDead }));
+    // Cross-field law: a dead row carries no channels and no held keys --
+    // death strips all three at the kill edge, so a corpse claiming
+    // cloak/jet/ski means a write path re-armed them post-mortem.
+    inv('corpse-no-channels', !p.isDead || (p.status === 0 && p.skiing === 0 && p.jetting === 0),
+      () => ({ id: playerId, status: p.status, ski: p.skiing, jet: p.jetting }));
+    snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
+    snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
+    snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;
+    snap.hp = p.health; snap.dead = p.isDead; snap.ski = p.skiing; snap.jet = p.jetting;
+    snap.status = gate.wireStatus;
+    snap.sheep = gate.sheep;
+    snap.t = now;
+  }
+
+  /** The wire half: wireId mint/reuse, pooled record slot, delta-masked
+   *  v4 encode, and the joiner side-channel full copy. recN and the
+   *  roster accumulator live on bctx -- one per buildRecords call. */
+  private emitRecord(room: Room, playerId: string, p: PlayerState, gate: RecGate, records: PooledRecord[], bctx: BuildCtx): void {
+    let wireId = room.wireIds.get(playerId);
+    let freshWireId = false;
+    if (wireId === undefined) {
+      wireId = mintWireId(room);
+      room.wireIds.set(playerId, wireId);
+      (bctx.roster ??= {})[wireId] = playerId;
+      bctx.rosterDirty = true;
+      freshWireId = true;
+    }
+    let rec = records[bctx.recN];
+    if (!rec) {
+      rec = { playerId: '', data: new Uint8Array(0), pos: { x: 0, y: 0, z: 0 }, force: false, enc: tickEncodeScratch() };
+      records.push(rec);
+    }
+    rec.playerId = playerId;
+    rec.pos = p.position;
+    rec.wireId = wireId;
+    // spd only feeds the >12 m/s travel-budget gate -- squared-compare
+    // skips the hypot on everyone parked (Math.hypot is ~10x sqrt).
+    const vsq = p.velocity.x * p.velocity.x + p.velocity.y * p.velocity.y + p.velocity.z * p.velocity.z;
+    rec.spd = vsq > 144 ? Math.sqrt(vsq) : 0;
+    // The delta basis is per-wireId and shared across recipients, but
+    // fanout skips records per-recipient by distance tier -- a field the
+    // far client never received stays stale in its decode pool FOREVER
+    // (masked-out groups emit the retained slot value). A skipped full
+    // would leave that drift unbounded, so forced fulls must bypass
+    // tier skipping like hit-window forced sends.
+    // introSeq window (tickNack reseed): EVERY client's basis may be
+    // corrupt -- records go room-wide full for ~1s. Per-joiner fulls
+    // ride rec.full below instead, so a fresh seat doesn't poison the
+    // shared delta stream.
+    const fullRecord = freshWireId || room.tickSeq - room.introSeq < 20
+      || (room.tickSeq + wireId) % TickFanout.FULL_RECORD_EVERY === 0;
+    rec.force = gate.forceSend || fullRecord;
+    rec.hidden = gate.hidden;
+    // Delta basis follows the wireId, never the slot -- a slot-carried
+    // `last` encodes this player's mask against whoever held the slot
+    // last tick after every roster shuffle.
+    let last = room.v4Last.get(wireId);
+    if (!last || freshWireId) {
+      last = v4Last();
+      room.v4Last.set(wireId, last);
+    }
+    // Delta-masked v4 record: field groups that changed since the
+    // K-deep basis ride the wire -- a field changed once is resent
+    // V4_BASIS_DEPTH times, healing short datagram bursts; a periodic
+    // full record bounds whatever longer loss leaves behind.
+    // Stagger fulls by wireId -- keying on tickSeq alone synced every
+    // record into one egress spike per window; spreading them keeps
+    // the same 750ms drift bound with a flat send curve. A fresh
+    // mint always fulls: a quiet-window-reissued wireId's `last`
+    // could still hold the retired owner's basis, and a masked
+    // record would hand receivers the departed owner's hp/flags.
+    const fields = this.scratchFields;
+    fields.playerId = playerId;
+    fields.position = p.position;
+    fields.rotation = p.rotation;
+    fields.velocity = p.velocity;
+    fields.health = p.health;
+    fields.isDead = p.isDead;
+    // Only advertise a proven ping -- stale heartbeats above would
+    // otherwise broadcast the default 0 for ghosts that never
+    // reported (renders them with a bogus "0ms" ping).
+    fields.ping = p.ping > 0 ? p.ping : undefined;
+    fields.ski = p.skiing;
+    fields.jet = p.jetting;
+    fields.status = gate.snap.status;
+    fields.sheep = gate.sheep;
+    rec.data = encodeTickPlayerV4(wireId, fields, rec.enc, last, fullRecord);
+    // Joiner side-channel: while any seat is in its intro window, a
+    // second FULL copy rides rec.full -- the fanout swaps it in only
+    // for recipients still lacking this wireId's decode basis.
+    if (bctx.introPending) {
+      rec.enc2 ??= tickEncodeScratch();
+      rec.full = encodeTickPlayerV4(wireId, fields, rec.enc2, this.introLast, true);
+    } else {rec.full = undefined;}
+    bctx.recN += 1;
+    this.metrics.recordsBuilt += 1;
   }
 
   /** Every reason a player contributes no record this tick, in order:
