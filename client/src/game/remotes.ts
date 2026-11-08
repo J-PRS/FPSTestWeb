@@ -424,7 +424,11 @@ function gameDumpRow(w: WorldState, id: string, rp: RemotePlayer, now: number): 
   const wr = wireRoster.get(id);
   const team = wr?.team ?? (rp as { team?: string }).team ?? '-';
   const [ping, net] = dumpPingNet(id, wr);
-  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
+  // Hero resolve: the escalation dial in raw 0-1 - balancing reads it
+  // straight, no inference from fight outcomes. Offline bots expose
+  // brain.skill through GameBot's getter; wire remotes don't carry it.
+  const rsv = (rp as { skill?: { resolve?: number } }).skill?.resolve;
+  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
 }
 if (typeof window !== 'undefined') {
   (window as { __aswDump?: () => string[] }).__aswDump = (): string[] => {
@@ -463,7 +467,7 @@ function gameDump(): string[] {
   // scoreboard path on the wall clock; mixing epochs prints garbage.
   const now = Date.now();
   const lines: string[] = [`  mode=${w.mode} map=${w.mapName ?? '-'} teams=${JSON.stringify(w.teamScores ?? {})}`];
-  lines.push('  name                 team      cls      F  D  score sheep alive ping net   asw(HA/A/S/W/ST/I)');
+  lines.push('  name                 team      cls      F  D  score sheep alive rsv  ping net   asw(HA/A/S/W/ST/I)');
   lines.push(gameDumpSelfRow(d, w, now));
   for (const [id, rp] of w.remotePlayers) {lines.push(gameDumpRow(w, id, rp, now));}
   return lines;
