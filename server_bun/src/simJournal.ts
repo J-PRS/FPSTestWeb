@@ -89,22 +89,29 @@ export function replayJournal(events: JournalEv[], sim: RoomMoveSim, hashFn: () 
   let t = 0;
   for (const ev of events) {
     while (t < ev.t) {sim.tick(dt); t += 1;}
-    switch (ev.kind) {
-      case 'track': {sim.track(ev.pid, ev.pos, ev.yaw, ev.perk, ev.team, ev.bot, ev.armorClass); break;}
-      case 'untrack': {sim.untrack(ev.pid); break;}
-      case 'input': {sim.setInput(ev.pid, ev.input, ev.status, ev.seq); break;}
-      case 'impulse': {sim.applyImpulse(ev.pid, ev.dv); break;}
-      case 'resync': {sim.resync(ev.pid, ev.pos, ev.yaw, ev.fullEnergy); break;}
-      case 'reconcile': {sim.reconcile(ev.pid, ev.pos, ev.yaw, ev.vel, ev.seq, ev.rtt); break;}
-      case 'energy': {
-        if (ev.drain) {sim.drainEnergy(ev.pid, ev.amount);}
-        else {sim.grantEnergy(ev.pid, ev.amount);}
-        break;
-      }
-      case 'face': {sim.faceYaw(ev.pid, ev.yaw); break;}
-      case 'water': {sim.setWaterLevel(ev.level); break;}
-      case 'hash': {if (hashFn() !== ev.h) {return t;} break;}
-    }
+    if (applyJournalEv(sim, ev, hashFn)) {return t;}
   }
   return -1;
+}
+
+/** One journaled verb against the sim. Returns true on a hash mismatch -
+ *  the caller stops replay there (t is the divergence tick). */
+function applyJournalEv(sim: RoomMoveSim, ev: JournalEv, hashFn: () => number): boolean {
+  switch (ev.kind) {
+    case 'track': {sim.track(ev.pid, ev.pos, ev.yaw, ev.perk, ev.team, ev.bot, ev.armorClass); return false;}
+    case 'untrack': {sim.untrack(ev.pid); return false;}
+    case 'input': {sim.setInput(ev.pid, ev.input, ev.status, ev.seq); return false;}
+    case 'impulse': {sim.applyImpulse(ev.pid, ev.dv); return false;}
+    case 'resync': {sim.resync(ev.pid, ev.pos, ev.yaw, ev.fullEnergy); return false;}
+    case 'reconcile': {sim.reconcile(ev.pid, ev.pos, ev.yaw, ev.vel, ev.seq, ev.rtt); return false;}
+    case 'energy': {
+      if (ev.drain) {sim.drainEnergy(ev.pid, ev.amount);}
+      else {sim.grantEnergy(ev.pid, ev.amount);}
+      return false;
+    }
+    case 'face': {sim.faceYaw(ev.pid, ev.yaw); return false;}
+    case 'water': {sim.setWaterLevel(ev.level); return false;}
+    case 'hash': {return hashFn() !== ev.h;}
+    default: {return false;}
+  }
 }

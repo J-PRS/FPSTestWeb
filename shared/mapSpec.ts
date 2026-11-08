@@ -301,20 +301,27 @@ const isVec = (s: unknown): s is Vec3like =>
   Number.isFinite((s as Vec3like).x) &&
   Number.isFinite((s as Vec3like).y) &&
   Number.isFinite((s as Vec3like).z);
+/** One interior entry: .dif file + position required; rot/scale optional. */
+function parseInterior(s: unknown): InteriorSpec | null {
+  if (!s || typeof s !== 'object') {return null;}
+  const o = s as Record<string, unknown>;
+  const file = typeof o.file === 'string' && /^[\w-]{1,64}\.dif$/i.test(o.file)
+    ? o.file.toLowerCase() : undefined;
+  if (!file || !isVec(o.pos)) {return null;}
+  const rot = Array.isArray(o.rot) && o.rot.length === 4
+    && o.rot.every((v): boolean => typeof v === 'number' && Number.isFinite(v))
+    ? o.rot as number[] : undefined;
+  return { file, pos: o.pos, rot, scale: isVec(o.scale) ? o.scale : undefined };
+}
+
 function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
   if (!Array.isArray(raw)) {return undefined;}
   const out: InteriorSpec[] = [];
   let dropped = 0;
   for (const s of raw) {
-    if (!s || typeof s !== 'object') {dropped += 1; continue; }
-    const o = s as Record<string, unknown>;
-    const file = typeof o.file === 'string' && /^[\w-]{1,64}\.dif$/i.test(o.file)
-      ? o.file.toLowerCase() : undefined;
-    if (!file || !isVec(o.pos)) {dropped += 1; continue; }
-    const rot = Array.isArray(o.rot) && o.rot.length === 4
-      && o.rot.every((v): boolean => typeof v === 'number' && Number.isFinite(v))
-      ? o.rot as number[] : undefined;
-    out.push({ file, pos: o.pos, rot, scale: isVec(o.scale) ? o.scale : undefined });
+    const it = parseInterior(s);
+    if (!it) {dropped += 1; continue;}
+    out.push(it);
     if (out.length >= 256) {break;}
   }
   if (dropped) {specWarn(`interiors: ${dropped} invalid placements dropped`);}

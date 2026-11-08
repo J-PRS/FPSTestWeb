@@ -417,6 +417,11 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1, side =
   // and the capper stays escort (our carrier needs a screen, not a crowd
   // of identical chasers — the escort keeps moving while the mob hunts).
   if (s.thief && s.escort && role !== 'hof' && role !== 'capper') {return s.thief;}
+  return roleGoal(role, s, commit, side);
+}
+
+/** Routine per-role objective dispatch. */
+function roleGoal(role: string, s: FlagSituation, commit: number, side: number): { x: number; y: number; z: number } {
   switch (role) {
     case 'hof': { return hofGoal(s, commit);
     }

@@ -517,7 +517,14 @@ this.d.ops.joins += 1;
     // localPlayerState the veil warms on.
     if (joinedPlayer.spawnHold) {room.players.holdSpawn(playerId);}
 this.d.ops.joins += 1;
-    switch (handshake.transport) {
+    this.countTransportTier(handshake.transport);
+
+    logger.info('Player connected', { playerId, room: room.name, total: room.playerCount() });
+  }
+
+  /** Transport-tier ops counter for the join. */
+  private countTransportTier(transport: unknown): void {
+    switch (transport) {
       case 'ws': {this.d.ops.tierWs += 1; break;
       }
       case 'wt': {this.d.ops.tierWt += 1; break;
@@ -527,7 +534,5 @@ this.d.ops.joins += 1;
       default: {this.d.ops.tierOther += 1;
       }
     }
-
-    logger.info('Player connected', { playerId, room: room.name, total: room.playerCount() });
   }
 }

@@ -106,6 +106,32 @@ function joinThrottleAllow(ip: string): boolean {
   return windowAllow(joinIps, ip, wallNow(), JOIN_IP_WINDOW_MS, JOIN_IP_LIMIT, 1024);
 }
 
+interface JoinArgs { mode: string; map: string; bots?: number; noCreatures: boolean; noballs: boolean; preferHumans: boolean }
+
+/** /join query parse + validation. Returns the args, or a 4xx Response
+ *  the route passes straight through. */
+function joinArgs(url: URL, hasMap: (m: string) => boolean): JoinArgs | Response {
+  const mode = url.searchParams.get('mode') ?? '';
+  const map = url.searchParams.get('map') ?? '';
+  const botsRaw = url.searchParams.get('bots');
+  const bots = botsRaw === null ? undefined
+    : Math.max(0, Math.min(24, Math.floor(Number(botsRaw) || 0)));
+  if (!/^[a-z0-9_-]{0,16}$/.test(mode) || !/^[a-z0-9_-]{0,32}$/.test(map)) {
+    return corsResponse('Bad mode/map', { status: 400 });
+  }
+  // A map that doesn't resolve must not spin up a room — bogus names
+  // otherwise each built (and a tick later tore down) a full Room.
+  if (map && !hasMap(map)) {
+    return corsResponse('Unknown map', { status: 400 });
+  }
+  return {
+    mode, map, bots,
+    noCreatures: url.searchParams.get('nocreatures') === '1',
+    noballs: url.searchParams.get('noballs') === '1',
+    preferHumans: url.searchParams.get('humans') === '1',
+  };
+}
+
 // Plain GET endpoints — a new JSON route is one table entry. Handlers
 // get (url, req) — req is only needed by /join for the client IP.
 export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Request) => Response | Promise<Response>> {
@@ -149,25 +175,11 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     '/join': (url, req): Response => {
       const ip = req ? req && ctx.requestIP?.(req)?.address : undefined;
       if (ip && !joinThrottleAllow(ip)) {return corsResponse('Too many joins', { status: 429 });}
-      const mode = url.searchParams.get('mode') ?? '';
-      const map = url.searchParams.get('map') ?? '';
-      const botsRaw = url.searchParams.get('bots');
-      const bots = botsRaw === null ? undefined
-        : Math.max(0, Math.min(24, Math.floor(Number(botsRaw) || 0)));
-      if (!/^[a-z0-9_-]{0,16}$/.test(mode) || !/^[a-z0-9_-]{0,32}$/.test(map)) {
-        return corsResponse('Bad mode/map', { status: 400 });
-      }
-      // A map that doesn't resolve must not spin up a room — bogus names
-      // otherwise each built (and a tick later tore down) a full Room.
-      if (map && !ctx.gameServer.hasMap(map)) {
-        return corsResponse('Unknown map', { status: 400 });
-      }
+      const args = joinArgs(url, (m): boolean => ctx.gameServer.hasMap(m));
+      if (args instanceof Response) {return args;}
       // Sim gates ride the mint — a bare roomFor'd room ignores the
       // flags the follow-up join carries (creation-time only).
-      const noCreatures = url.searchParams.get('nocreatures') === '1';
-      const noBalls = url.searchParams.get('noballs') === '1';
-      const preferHumans = url.searchParams.get('humans') === '1';
-      const room = ctx.gameServer.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans, CONFIG.clientRooms);
+      const room = ctx.gameServer.quickRoom(args.mode, args.map, args.bots, args.noCreatures, args.noballs, args.preferHumans, CONFIG.clientRooms);
       if (!room) {return corsResponse('Server full', { status: 503 });}
       return json({ room: room.name, mode: room.mode });
     },
