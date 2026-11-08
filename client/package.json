@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "check": "node ../utils/_rootcheck.mjs && tsc --noEmit -p tsconfig.json && oxlint src && vitest run",
-    "lint:audit": "cd .. && oxlint client/src server_bun/src shared --config .oxlintrc.audit.json",
+    "lint:audit": "node ../_tools/lintaudit.mjs",
     "audit:dup": "cd .. && npx -y jscpd@4 client/src server_bun/src shared --min-lines 20 --min-tokens 60 --reporters console",
     "audit:types": "type-coverage --detail",
     "audit:bundle": "npm run build && node ../_tools/bundleSize.cjs",
