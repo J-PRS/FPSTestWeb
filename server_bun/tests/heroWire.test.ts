@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test';
 import { newHuntState, pickFire } from '../../shared/botHunt.ts';
 import type { BrainCtx, BotEnemy } from '../../shared/botBrain.ts';
-import { rollSkill } from '../../shared/botSkill.ts';
+
 
 // The dead-write regression: resolve lerp existed but nothing consumed
 // it - mods bake once at construction. This test drives the real read
@@ -23,7 +23,7 @@ const ctx = {
 
 function freshSt(): ReturnType<typeof newHuntState> {
   const st = newHuntState(spawn, 'medium');
-  st.hunt = { id: foe.id, pos: foe.pos, vel: foe.vel, lastKnown: foe.pos, lastKnownVel: foe.vel, lastSeenAt: 1000, hasLOS: true, unreachableUntil: 0 };
+  st.hunt = foe as unknown as typeof st.hunt;
   // Acquired 60% of a 10-tick reaction ago: inside the cold gate (<1x),
   // past the hot one (>/1.95). reactTicks is a roll (can be 1-2, where
   // no window separates cold/hot) - pinned so the gate IS the test.

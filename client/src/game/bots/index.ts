@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameBot, EYE } from './botBrain.js';
 import { BotWatchdog } from './botWatchdog.js';
 import { SheepMeter } from './botSheep.js';
-import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard } from '../../../../shared/botLoadouts.js';
+import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, rollBotPerk } from '../../../../shared/botLoadouts.js';
 import { botRand } from '../../../../shared/botRand.js';
 import { WeaponType } from '../../../../shared/weapons.js';
 import type { Nugget } from '../../entities/Nugget.js';
@@ -185,7 +185,10 @@ export class TeamBots {
         // never arms an offline bot with contraband guns.
         const kitIdx = (ni - 1) % BOT_LOADOUTS.length;
         const wildcard = botRand() < 0.125;
-        const lo = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;
+        const base = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;
+        // Same perk roll the server roster makes - kit fields weapons,
+        // perk table fields the person; class derives after the roll.
+        const lo = Object.assign({}, base, {perk: rollBotPerk(base, botRand)});
         const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain,
           botClassForLoadout(lo));
         bot.setLoadout(lo);
@@ -681,31 +684,36 @@ bn += 1;
     const scan = this.menaceScan(bot, teams, other);
     const {menace} = scan, menacePos = scan.pos;
     const topKills = Math.max(w.killCounts.get(bot.playerId) ?? 0, scan.topKills);
+    // Team-kill gap is the deficit channel when the mode doesn't score
+    // teams (headhunt leaves teamScores at 0) - mirrors serverSenses.
     const scoreDeficit = teams ? (this.scores[other] - this.scores[bot.team as 'alpha' | 'bravo']) / Math.max(1, this.spec.winAt) : 0;
+    const teamKillGap = teams ? (scan.foeTeamKills - scan.myTeamKills) / Math.max(4, this.spec.winAt) : 0;
     const killGap = teams ? 0 : (topKills - (w.killCounts.get(bot.playerId) ?? 0)) / Math.max(4, this.spec.winAt ?? 10);
-    const deficit = Math.min(1, Math.max(0, Math.max(-scoreDeficit, killGap) * 0.7 + Math.max(0, -ownKd) * 0.5));
+    const deficit = Math.min(1, Math.max(0, Math.max(-scoreDeficit, teamKillGap, killGap) * 0.7 + Math.max(0, -ownKd) * 0.5));
     return { deficit, ownPerf, menace, menacePos };
   }
 
   /** Lobby scan behind heroOf: strongest enemy K/D + pos + the top
    *  kill count (the FFA leader mark the kill-gap measures). */
-  private menaceScan(bot: GameBot, teams: boolean, other: string): { menace: number; pos?: { x: number; y: number; z: number }; topKills: number } {
+  private menaceScan(bot: GameBot, teams: boolean, other: string): { menace: number; pos?: { x: number; y: number; z: number }; topKills: number; foeTeamKills: number; myTeamKills: number } {
     const w = this.deps.world;
     const kdOf = (id: string): number => Math.tanh(((w.killCounts.get(id) ?? 0) - (w.deathCounts.get(id) ?? 0)) / 4);
     let menace = 0, pos: { x: number; y: number; z: number } | undefined;
-    let topKills = 0;
+    let topKills = 0, foeTeamKills = 0, myTeamKills = 0;
     const player = this.deps.lazyPlayer();
     if (!player.isDead && (teams ? this.playerTeam === other : true)) {
       menace = Math.max(0, kdOf('local')); ({ pos } = player);
       topKills = w.killCounts.get('local') ?? 0;
-    }
+    } else if (teams && this.playerTeam === bot.team) {myTeamKills += w.killCounts.get('local') ?? 0;}
     for (const b of this.bots) {
-      if (b === bot || b.isDead || (teams && b.team !== other)) {continue;}
+      if (b === bot || b.isDead) {continue;}
+      if (teams && b.team !== other) {myTeamKills += w.killCounts.get(b.playerId) ?? 0; continue;}
+      foeTeamKills += w.killCounts.get(b.playerId) ?? 0;
       topKills = Math.max(topKills, w.killCounts.get(b.playerId) ?? 0);
       const m = kdOf(b.playerId);
       if (m > menace) {menace = m; pos = b.position;}
     }
-    return { menace, pos, topKills };
+    return { menace, pos, topKills, foeTeamKills, myTeamKills };
   }
 
   /** Rally channel = live teammates (incl. the local player). Team

@@ -342,27 +342,31 @@ export class ServerBotSenses {
     const scan = this.menaceScan(isFoe);
     const {menace} = scan, menacePos = scan.pos;
     const topKills = Math.max(p.kills ?? 0, scan.topKills);
-    // Deficit: teams read the scoreboard margin; FFA has no sides, so
-    // the gap to the kill leader IS the deficit - plus personal slump.
+    // Deficit: teams read the scoreboard margin - but kill-scored modes
+    // (headhunt) leave teamScores at 0, so the TEAM KILL gap is the
+    // fallback deficit channel. FFA reads the gap to the kill leader.
     const scoreDeficit = teams
       ? (this.room.scores[p.team as 'alpha' | 'bravo'] - this.room.scores[p.team === 'alpha' ? 'bravo' : 'alpha']) / Math.max(1, spec!.winAt)
       : 0;
+    const teamKillGap = teams ? (scan.foeTeamKills - scan.myTeamKills) / Math.max(4, spec!.winAt) : 0;
     const killGap = teams ? 0 : (topKills - (p.kills ?? 0)) / Math.max(4, spec?.winAt ?? 10);
-    const deficit = Math.min(1, Math.max(0, Math.max(-scoreDeficit, killGap) * 0.7 + Math.max(0, -ownKd) * 0.5));
+    const deficit = Math.min(1, Math.max(0, Math.max(-scoreDeficit, teamKillGap, killGap) * 0.7 + Math.max(0, -ownKd) * 0.5));
     return { deficit, ownPerf, menace: Math.max(0, menace), menacePos };
   }
 
   /** Lobby scan behind heroOf: the strongest enemy K/D + pos, and the
    *  top kill count (the FFA leader mark the kill-gap measures). */
-  private menaceScan(isFoe: (fid: string, f: { team?: string }) => boolean): { menace: number; pos?: BotVec; topKills: number } {
-    let menace = 0, pos: BotVec | undefined, topKills = 0;
+  private menaceScan(isFoe: (fid: string, f: { team?: string }) => boolean): { menace: number; pos?: BotVec; topKills: number; foeTeamKills: number; myTeamKills: number } {
+    let menace = 0, pos: BotVec | undefined, topKills = 0, foeTeamKills = 0, myTeamKills = 0;
     for (const [fid, f] of this.room.players.getAllPlayers()) {
-      if (f.isDead || !isFoe(fid, f)) {continue;}
+      if (f.isDead) {continue;}
+      if (!isFoe(fid, f)) {myTeamKills += f.kills ?? 0; continue;}
+      foeTeamKills += f.kills ?? 0;
       topKills = Math.max(topKills, f.kills ?? 0);
       const m = Math.tanh(((f.kills ?? 0) - (f.deaths ?? 0)) / 4);
       if (m > menace) {menace = m; pos = f.position;}
     }
-    return { menace, pos, topKills };
+    return { menace, pos, topKills, foeTeamKills, myTeamKills };
   }
 
   /** Which gem to chase: nearest within real reach, unless the bot is so
