@@ -95,6 +95,8 @@ const _sn = new THREE.Vector3();
  *  branches below - forcing them through this table would be worse. */
 type RemoteBody = { pos: THREE.Vector3; health: number; armor: number; maxHealth: number;
   unfoldDone(): void; update(dt: number, foes?: unknown): void; dispose(scene: THREE.Scene): void };
+type Rspec = NonNullable<(typeof REMOTE_SPEC)[DeployKind]>;
+type SpawnVitals = { hp?: number; armor?: number };
 const REMOTE_SPEC: Partial<Record<DeployKind, {
   make: (scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) => RemoteBody;
   scans?: boolean;
@@ -168,71 +170,83 @@ export class RemoteDeployables {
     }
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
-    // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
-    let item!: Item;
     const rspec = REMOTE_SPEC[kind];
+    let item: Item;
     if (rspec) {
-      const b = rspec.make(this.deps.scene, terrain, at);
-      b.unfoldDone();
-      if (hp !== undefined) { b.health = hp; b.armor = armor ?? 0; }
-      // Only DeployShield exposes flash() - turret/mortar/cg carry a
-      // THREE.Sprite *field* named flash, and ?.bind on it threw, killing
-      // every remote spawn of those kinds (DEPLOY DESYNC, invisible guns).
-      const bFlash = (b as { flash?: unknown }).flash;
-      // A pad seated on a structure tilts to the STRUCTURE's surface
-      // (dome cap / flat top), matching the server's launch normal.
-      const bSeat = (b as unknown as { seatNormal?: (n: THREE.Vector3) => void }).seatNormal;
-      if (bSeat) {
-        // The ctor seats on terrain height - lift to the structure top
-        // the server planted on, then tilt to its face normal.
-        const top = structureTopAt(at.x, at.z);
-        if (top > at.y) {at.y = top; b.pos.y = top; (b as unknown as { group: THREE.Object3D }).group.position.y = top;}
-        const sn = structureNormalAt(at.x, at.y, at.z, _sn);
-        if (sn) {bSeat.call(b, sn);}
-      }
-      item = {
-        kind, candId: `rdep:${id}`, pos: b.pos, dead: false,
-        hurt: (): void => { return; }, // server owns its lifetime - deployGone removes it
-        update: (dt): void => b.update(dt, rspec.scans ? this.enemies() : undefined),
-        dispose: (): void => b.dispose(this.deps.scene),
-        v: b, owner, flash: typeof bFlash === 'function' ? (bFlash as () => void).bind(b) : undefined,
-        boing: typeof (b as unknown as { boing?: unknown }).boing === 'function' ? ((b as unknown as { boing: () => void }).boing).bind(b) : undefined,
-        dive: typeof (b as unknown as { dive?: unknown }).dive === 'function' ? ((b as unknown as { dive: (p: { x: number; y: number; z: number }, v: { x: number; y: number; z: number }) => void }).dive).bind(b) : undefined,
-      };
+      item = this.rspecItem(id, kind, owner, at, { hp, armor }, rspec);
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);
     } else if (kind === 'generator' || kind === 'sensor' || kind === 'baseturret') {
       item = this.baseAssetItem(kind, at, hp, armor, team);
       item.owner = owner;
     } else {
-      const group = new THREE.Group();
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(kind === 'mine' ? 0.3 : 0.5, 8, 6),
-        new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8A_5A_2A : 0x4A_55_60 }));
-      m.castShadow = true;
-      group.add(m);
-      group.position.copy(at);
-      group.position.y = terrain.getHeight(at.x, at.z);
-      this.deps.scene.add(group);
-      // Drones chase their owner's shadow server-side - mirror that anchor
-      // here or the visual stays parked at the pod's landing spot.
-      const update = kind === 'drone'
-        ? (): void => {
-            const op = this.deps.lazyNetworkManager().getPlayers().get(owner)?.position;
-            if (op) {group.position.set(op.x, op.y + 2.5, op.z);}
-          }
-        : (): void => { return; };
-      item = {
-        kind, candId: `rdep:${id}`, pos: group.position, dead: false,
-        hurt: (): void => { return; }, update, dispose: (): THREE.Scene<THREE.Object3DEventMap> => this.deps.scene.remove(group),
-        v: { health: hp ?? DEPLOY_V_CAP[kind], armor: armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
-        owner,
-      };
+      item = this.fallbackItem(id, kind, owner, at, { hp, armor }, terrain);
     }
     item.serverId = id;
     item.team = team;
     this.remote.set(id, item);
     this.byId.set(id, item);
+  }
+
+  /** Registry kinds: make the deploy visual, unfold it, seat it on a
+   *  structure face when the pad claims one, then wrap it in the generic
+   *  remote Item (server owns lifetime - hurt is a no-op). */
+  private rspecItem(id: number, kind: DeployKind, owner: string, at: THREE.Vector3, vit: SpawnVitals, rspec: Rspec): Item {
+    const b = rspec.make(this.deps.scene, this.deps.lazyTerrain(), at);
+    b.unfoldDone();
+    if (vit.hp !== undefined) { b.health = vit.hp; b.armor = vit.armor ?? 0; }
+    // Only DeployShield exposes flash() - turret/mortar/cg carry a
+    // THREE.Sprite *field* named flash, and ?.bind on it threw, killing
+    // every remote spawn of those kinds (DEPLOY DESYNC, invisible guns).
+    const bFlash = (b as { flash?: unknown }).flash;
+    // A pad seated on a structure tilts to the STRUCTURE's surface
+    // (dome cap / flat top), matching the server's launch normal.
+    const bSeat = (b as unknown as { seatNormal?: (n: THREE.Vector3) => void }).seatNormal;
+    if (bSeat) {
+      // The ctor seats on terrain height - lift to the structure top
+      // the server planted on, then tilt to its face normal.
+      const top = structureTopAt(at.x, at.z);
+      if (top > at.y) {at.y = top; b.pos.y = top; (b as unknown as { group: THREE.Object3D }).group.position.y = top;}
+      const sn = structureNormalAt(at.x, at.y, at.z, _sn);
+      if (sn) {bSeat.call(b, sn);}
+    }
+    return {
+      kind, candId: `rdep:${id}`, pos: b.pos, dead: false,
+      hurt: (): void => { return; }, // server owns its lifetime - deployGone removes it
+      update: (dt): void => b.update(dt, rspec.scans ? this.enemies() : undefined),
+      dispose: (): void => b.dispose(this.deps.scene),
+      v: b, owner, flash: typeof bFlash === 'function' ? (bFlash as () => void).bind(b) : undefined,
+      boing: typeof (b as unknown as { boing?: unknown }).boing === 'function' ? ((b as unknown as { boing: () => void }).boing).bind(b) : undefined,
+      dive: typeof (b as unknown as { dive?: unknown }).dive === 'function' ? ((b as unknown as { dive: (p: { x: number; y: number; z: number }, v: { x: number; y: number; z: number }) => void }).dive).bind(b) : undefined,
+    };
+  }
+
+  /** Primitive fallback for kinds with no bespoke replica (mine/drone/
+   *  station): a colored sphere on terrain. Drones chase their owner's
+   *  shadow server-side - mirror that anchor or the visual parks at the
+   *  pod's landing spot. */
+  private fallbackItem(id: number, kind: DeployKind, owner: string, at: THREE.Vector3, vit: SpawnVitals, terrain: Terrain): Item {
+    const group = new THREE.Group();
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(kind === 'mine' ? 0.3 : 0.5, 8, 6),
+      new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8A_5A_2A : 0x4A_55_60 }));
+    m.castShadow = true;
+    group.add(m);
+    group.position.copy(at);
+    group.position.y = terrain.getHeight(at.x, at.z);
+    this.deps.scene.add(group);
+    const update = kind === 'drone'
+      ? (): void => {
+          const op = this.deps.lazyNetworkManager().getPlayers().get(owner)?.position;
+          if (op) {group.position.set(op.x, op.y + 2.5, op.z);}
+        }
+      : (): void => { return; };
+    return {
+      kind, candId: `rdep:${id}`, pos: group.position, dead: false,
+      hurt: (): void => { return; }, update, dispose: (): THREE.Scene<THREE.Object3DEventMap> => this.deps.scene.remove(group),
+      v: { health: vit.hp ?? DEPLOY_V_CAP[kind], armor: vit.armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
+      owner,
+    };
   }
 
   /** Remote beacon - same DeployBeacon visual as a local plant; the item
