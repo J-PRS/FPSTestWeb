@@ -215,6 +215,26 @@ this.handlerThrows += 1;
     }
   }
 
+  /** Byte -> frame handler. Known event bytes dispatch here; anything
+   *  else falls through to the tick path (tick frames have no event
+   *  byte - the tickSeq watermark + decodeTickFrame own them). Order
+   *  is irrelevant: every WIRE_* constant is unique. */
+  private readonly binDispatch = new Map<number, (data: Uint8Array) => void>([
+    [WIRE_BATCH, (d): void => { for (const sub of iterBatch(d)) {this.binary(sub);} }],
+    [WIRE_JSON, (d): void => this.onWireJson(d)],
+    [WIRE_HIT, (d): void => this.onWireHit(d)],
+    [WIRE_E_JUMP, (d): void => this.onWidPos(d)],
+    [WIRE_E_JET, (d): void => this.onWidPos(d)],
+    [WIRE_E_LANDED, (d): void => this.onWidPos(d)],
+    [WIRE_E_SHOT, (d): void => this.onWireShot(d)],
+    [WIRE_E_KNOCK, (d): void => this.onWireKnock(d)],
+    [WIRE_KILL, (d): void => this.onWireKill(d)],
+    [WIRE_PROJSPAWN, (d): void => this.onProjSpawn(d)],
+    [WIRE_PROJGONE, (d): void => this.onProjGone(d)],
+    [WIRE_BALLSEG, (d): void => this.onBallWire(d)],
+    [WIRE_BALLBATCH, (d): void => this.onBallWire(d)],
+  ]);
+
   binary(data: Uint8Array): void {
     if (this.gate(data)) {return;}
     this.lastBinRxAt = Date.now();
@@ -225,124 +245,133 @@ this.handlerThrows += 1;
       return;
     }
     recWireIn(`bin:${data[1] ?? -1}`, data.length);
-    // Per-conn tick coalescing: the server ships everything a socket earns
-    // in one tick as len-prefixed subframes - demux and run each through
-    // the normal dispatch (subframes are complete wire frames).
-    if (data[1] === WIRE_BATCH) {
-      for (const sub of iterBatch(data)) {this.binary(sub);}
-      return;
-    }
-    // Reliable events batched into the binary lane arrive JSON-in-binary -
-    // decode to text and run the ordinary message dispatch (same parse,
-    // same watermarks - ev sequencing is preserved by subframe order).
-    if (data[1] === WIRE_JSON) {
-      const text = decodeWireJson(data);
-      if (text === null) {return;}
-      try { this.message(JSON.parse(text)); }
-      catch (error) {this.handlerThrows += 1; logger.warn(`wire-json subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
-      return;
-    }
-    // playerHit on the binary lane - resolve wireIds then run the same
-    // message() dispatch the JSON event used (seq dedupe preserved).
-    if (data[1] === WIRE_HIT) {
-      const h = decodeHit(data);
-      if (!h) {return;}
-      const targetId = this.wireIds.get(h.targetWid);
-      const shooterId = h.shooterWid === 0 ? 'environment' : this.wireIds.get(h.shooterWid);
-      if (!targetId || !shooterId) {this.pendingWidEvents.push({ at: Date.now(), hit: h }); this.drainPendingWidEvents(); return;}
-      try { this.message({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd }); }
-      catch (error) {this.handlerThrows += 1; logger.warn(`wire-hit subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
-      return;
-    }
-    // Presence relays - wireId + pos, run the JSON-path dispatch so the
-    // handlers see the identical message shape either lane.
-    if (data[1] === WIRE_E_JUMP || data[1] === WIRE_E_JET || data[1] === WIRE_E_LANDED) {
-      const w = decodeWidPos(data, data[1]!);
-      const playerId = w ? this.wireIds.get(w.wid) : undefined;
-      if (w && playerId) {
-        try {
-          if (data[1] === WIRE_E_LANDED) {this.message({ type: 'landed', playerId, pos: w.pos, impact: w.extra } as ServerMessage);}
-          else {this.message({ type: data[1] === WIRE_E_JUMP ? 'jump' : 'jetpack', playerId, position: w.pos });}
-        }
-        catch (error) {this.handlerThrows += 1; logger.warn(`wire-presence failed: ${error instanceof Error ? error.message : String(error)}`);}
+    const handler = this.binDispatch.get(data[1] ?? -1);
+    if (handler) {handler(data); return;}
+    this.tickFrame(data);
+  }
+
+  // Reliable events batched into the binary lane arrive JSON-in-binary -
+  // decode to text and run the ordinary message dispatch (same parse,
+  // same watermarks - ev sequencing is preserved by subframe order).
+  private onWireJson(data: Uint8Array): void {
+    const text = decodeWireJson(data);
+    if (text === null) {return;}
+    try { this.message(JSON.parse(text)); }
+    catch (error) {this.handlerThrows += 1; logger.warn(`wire-json subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
+  }
+
+  /** shooterWid 0 is the environment sentinel - everything else resolves
+   *  through the wireId roster (undefined until the roster lands). */
+  private resolveShooterId(wid: number): string | undefined {
+    return wid === 0 ? 'environment' : this.wireIds.get(wid);
+  }
+
+  // playerHit on the binary lane - resolve wireIds then run the same
+  // message() dispatch the JSON event used (seq dedupe preserved).
+  private onWireHit(data: Uint8Array): void {
+    const h = decodeHit(data);
+    if (!h) {return;}
+    const targetId = this.wireIds.get(h.targetWid);
+    const shooterId = this.resolveShooterId(h.shooterWid);
+    if (!targetId || !shooterId) {this.pendingWidEvents.push({ at: Date.now(), hit: h }); this.drainPendingWidEvents(); return;}
+    try { this.message({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd }); }
+    catch (error) {this.handlerThrows += 1; logger.warn(`wire-hit subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
+  }
+
+  // Presence relays - wireId + pos, run the JSON-path dispatch so the
+  // handlers see the identical message shape either lane.
+  private onWidPos(data: Uint8Array): void {
+    const w = decodeWidPos(data, data[1]!);
+    const playerId = w ? this.wireIds.get(w.wid) : undefined;
+    if (w && playerId) {
+      try {
+        if (data[1] === WIRE_E_LANDED) {this.message({ type: 'landed', playerId, pos: w.pos, impact: w.extra } as ServerMessage);}
+        else {this.message({ type: data[1] === WIRE_E_JUMP ? 'jump' : 'jetpack', playerId, position: w.pos });}
       }
-      return;
+      catch (error) {this.handlerThrows += 1; logger.warn(`wire-presence failed: ${error instanceof Error ? error.message : String(error)}`);}
     }
-    if (data[1] === WIRE_E_SHOT) {
-      const s = decodeShotEv(data);
-      const id = s ? this.wireIds.get(s.wid) : undefined;
-      if (s && id) {
-        try { this.message({ type: 'playerShot', id, weaponType: s.weaponType, pos: s.pos, dir: s.dir }); }
-        catch (error) {this.handlerThrows += 1; logger.warn(`wire-shotev failed: ${error instanceof Error ? error.message : String(error)}`);}
-      }
-      return;
+  }
+
+  private onWireShot(data: Uint8Array): void {
+    const s = decodeShotEv(data);
+    const id = s ? this.wireIds.get(s.wid) : undefined;
+    if (s && id) {
+      try { this.message({ type: 'playerShot', id, weaponType: s.weaponType, pos: s.pos, dir: s.dir }); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`wire-shotev failed: ${error instanceof Error ? error.message : String(error)}`);}
     }
-    if (data[1] === WIRE_E_KNOCK) {
-      const k = decodeKnock(data);
-      const targetId = k ? this.wireIds.get(k.wid) : undefined;
-      if (k && targetId) {
-        try { this.message({ type: 'knockback', targetId, position: k.pos, force: k.force, pull: k.pull, yank: k.yank }); }
-        catch (error) {this.handlerThrows += 1; logger.warn(`wire-knock failed: ${error instanceof Error ? error.message : String(error)}`);}
-      }
-      return;
+  }
+
+  private onWireKnock(data: Uint8Array): void {
+    const k = decodeKnock(data);
+    const targetId = k ? this.wireIds.get(k.wid) : undefined;
+    if (k && targetId) {
+      try { this.message({ type: 'knockback', targetId, position: k.pos, force: k.force, pull: k.pull, yank: k.yank }); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`wire-knock failed: ${error instanceof Error ? error.message : String(error)}`);}
     }
-    if (data[1] === WIRE_KILL) {
-      const k = decodeKill(data);
-      const targetId = k ? this.wireIds.get(k.targetWid) : undefined;
-      const shooterId = k ? (k.shooterWid === 0 ? 'environment' : this.wireIds.get(k.shooterWid)) : undefined;
-      if (k && (!targetId || !shooterId)) {this.pendingWidEvents.push({ at: Date.now(), kill: k }); this.drainPendingWidEvents(); return;}
-      if (k && targetId && shooterId) {
-        try { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal }); }
-        catch (error) {this.handlerThrows += 1; logger.warn(`wire-kill failed: ${error instanceof Error ? error.message : String(error)}`);}
-      }
-      return;
+  }
+
+  private onWireKill(data: Uint8Array): void {
+    const k = decodeKill(data);
+    const targetId = k ? this.wireIds.get(k.targetWid) : undefined;
+    const shooterId = k ? this.resolveShooterId(k.shooterWid) : undefined;
+    if (k && (!targetId || !shooterId)) {this.pendingWidEvents.push({ at: Date.now(), kill: k }); this.drainPendingWidEvents(); return;}
+    if (k && targetId && shooterId) {
+      try { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal }); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`wire-kill failed: ${error instanceof Error ? error.message : String(error)}`);}
     }
-    if (data[1] === WIRE_PROJSPAWN || data[1] === WIRE_PROJGONE) {
-      if (data[1] === WIRE_PROJSPAWN) {
-        const s = decodeProjSpawn(data);
-        const ownerId = s ? this.wireIds.get(s.ownerWireId) : undefined;
-        if (s && !ownerId) {this.pendingWidEvents.push({ at: Date.now(), proj: s }); this.drainPendingWidEvents(); return;}
-        if (s && ownerId) {
-          try { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t); }
-          catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projSpawn: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
-        }
-      } else {
-        const g = decodeProjGone(data);
-        if (g) {
-          try { this.h.onProjectileDestroyed?.(`sp-${g.projId}`, g.shotId, g.position, g.age); }
-          catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projGone: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
-        }
-      }
-      return;
+  }
+
+  private onProjSpawn(data: Uint8Array): void {
+    const s = decodeProjSpawn(data);
+    const ownerId = s ? this.wireIds.get(s.ownerWireId) : undefined;
+    if (s && !ownerId) {this.pendingWidEvents.push({ at: Date.now(), proj: s }); this.drainPendingWidEvents(); return;}
+    if (s && ownerId) {
+      try { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projSpawn: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
     }
-    // Binary ball segments decode straight into the JSON message's shape -
-    // netBallSegment sees one type regardless of transport.
-    if (data[1] === WIRE_BALLSEG || data[1] === WIRE_BALLBATCH) {
-      const segs = decodeBallAny(data);
-      for (const seg of segs) {
-        // The frame decodes to flat scalars - the declared updateFields
-        // own which ones cross into the JSON shape handlers see.
-        const src = seg as unknown as Record<string, unknown>;
-        const msg: Record<string, unknown> = { type: 'ballSegment', id: seg.id };
-        for (const f of WORLD_MODEL.ball!.updateFields!) {msg[f.name] = src[f.name];}
-        try { this.h.onBallSegment?.(msg as unknown as Extract<ServerMessage, { type: 'ballSegment' }>); }
-        catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for ballSegment: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`); }
-      }
-      return;
+  }
+
+  private onProjGone(data: Uint8Array): void {
+    const g = decodeProjGone(data);
+    if (g) {
+      try { this.h.onProjectileDestroyed?.(`sp-${g.projId}`, g.shotId, g.position, g.age); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projGone: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
     }
-    // Stale-drop BEFORE decode: v4 decode mutates the byId baseline - an
-    // out-of-order datagram frame would smuggle its stale fields into the
-    // retained slots even when dropped here. tickSeq sits at bytes 6-9.
-    if (data.byteLength >= 15) {
-      const seq = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true);
-      if (seq <= this.lastTickSeq) {
-        // A "lost" seq arriving late is a reorder, not loss - cancel the
-        // miss we counted (unordered lanes reorder constantly; 88% fake
-        // loss on a perfect wire in the seqwatch soak).
-        if (this.pendingMissed.delete(seq)) {this.reorderCancels += 1; this.h.onSeqReorder?.(1);}
-        return;
-      }
+  }
+
+  // Binary ball segments decode straight into the JSON message's shape -
+  // netBallSegment sees one type regardless of transport.
+  private onBallWire(data: Uint8Array): void {
+    const segs = decodeBallAny(data);
+    for (const seg of segs) {
+      // The frame decodes to flat scalars - the declared updateFields
+      // own which ones cross into the JSON shape handlers see.
+      const src = seg as unknown as Record<string, unknown>;
+      const msg: Record<string, unknown> = { type: 'ballSegment', id: seg.id };
+      for (const f of WORLD_MODEL.ball!.updateFields!) {msg[f.name] = src[f.name];}
+      try { this.h.onBallSegment?.(msg as unknown as Extract<ServerMessage, { type: 'ballSegment' }>); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for ballSegment: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`); }
     }
+  }
+
+  /** Tick frames carry no event byte - every unrecognized frame lands
+   *  here: stale-drop, loss-gap accounting, decode, dispatch. */
+  /** Stale-drop BEFORE decode: v4 decode mutates the byId baseline - an
+   *  out-of-order datagram frame would smuggle its stale fields into the
+   *  retained slots even when dropped here. tickSeq sits at bytes 6-9. */
+  private isStaleTick(data: Uint8Array): boolean {
+    if (data.byteLength < 15) {return false;}
+    const seq = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true);
+    if (seq > this.lastTickSeq) {return false;}
+    // A "lost" seq arriving late is a reorder, not loss - cancel the
+    // miss we counted (unordered lanes reorder constantly; 88% fake
+    // loss on a perfect wire in the seqwatch soak).
+    if (this.pendingMissed.delete(seq)) {this.reorderCancels += 1; this.h.onSeqReorder?.(1);}
+    return true;
+  }
+
+  private tickFrame(data: Uint8Array): void {
+    if (this.isStaleTick(data)) {return;}
     // ?dropticks=N - drop every Nth tick frame before decode to exercise
     // the tickNack recovery loop (localhost can't produce real loss).
     if (WireIn.dropEvery > 0 && (WireIn.dropCounter += 1) >= WireIn.dropEvery) { WireIn.dropCounter = 0; return; }
