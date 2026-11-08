@@ -1,12 +1,19 @@
+/* oxlint-disable no-console */
 import { launchClient, closeClient } from './browser.ts';
-import { spawn } from 'bun';
-const vite = spawn(['npx.cmd','vite','--port','5465','--strictPort'],{cwd:'client',stdout:'ignore',stderr:'ignore'});
+const c = await launchClient(
+  'http://127.0.0.1:5500/?server=https://play.jprice.app&room=headhunt-1&net=ws&debug');
 try {
-  for (let i=0;i<100;i++){try{if((await fetch('http://localhost:5465/')).ok)break;}catch{}await new Promise(r=>setTimeout(r,300));}
-  const c = await launchClient('http://localhost:5465/posedump.html?pmodel=scout&state=run&t=0.5',{});
-  await new Promise(r=>setTimeout(r,15000));
-  console.log('ready=', await c.page.evaluate('window.__ready'));
-  const logs = await c.page.evaluate('window.__logs ? window.__logs.slice(-12) : "nologs"');
-  console.log(JSON.stringify(logs).slice(0,2000));
+  await new Promise((r) => setTimeout(r, 20000));
+  const probe = await c.test<any>(`JSON.stringify({
+    hasTest: !!window.__test,
+    nm: typeof window.__test?.networkManager,
+    isConn: window.__test?.networkManager?.isConnected?.(),
+    pid: window.__test?.networkManager?.getLocalPlayerId?.(),
+    dead: window.__test?.player?.isDead,
+    dc: window.__test?.player?.deadConfirmedByWire,
+    hp: window.__test?.player?.health,
+  })`);
+  console.log('probe:', probe);
+} finally {
   await closeClient(c);
-} finally { vite.kill(); }
+}

@@ -43,7 +43,10 @@ const fails: string[] = [];
 const warns = new Map<string, number>();
 const stack = PROD ? null : await upStack();
 const url = PROD
-  ? `http://127.0.0.1:5500/?server=https://play.jprice.app&room=${ROOM}&net=ws`
+  // &debug is required for window.__test on a prod (non-DEV) build -
+  // wireDebugTools gates on urlParams.debug when import.meta.env.DEV
+  // is false. dist must be built with VITE_FPS_DEVTOOLS=1.
+  ? `http://127.0.0.1:5500/?server=https://play.jprice.app&room=${ROOM}&net=ws&debug`
   : stack!.clientUrl(`&room=${ROOM}&map=${MAP}&bots=${BOTS}`);
 const client = await launchClient(url);
 client.page.on('console', (m) => {
@@ -59,9 +62,14 @@ client.page.on('console', (m) => {
 
 try {
   await client.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
-  await client.waitFor(`t.world.remotePlayers.entities.size >= 1`, 30000);
-  const remotes = await client.test<number>(`t.world.remotePlayers.entities.size`);
-  check(remotes > 0, `room populated (${remotes} remotes${PROD ? ', prod' : ''})`);
+  if (PROD) {
+    // A public room can be legitimately empty - no remote-population gate.
+    check(true, `connected to prod room=${ROOM}`);
+  } else {
+    await client.waitFor(`t.world.remotePlayers.entities.size >= 1`, 30000);
+    const remotes = await client.test<number>(`t.world.remotePlayers.entities.size`);
+    check(remotes > 0, `room populated (${remotes} remotes)`);
+  }
 
   console.log(`  soaking ${SECS}s wall (${PROD ? 'prod ' + ROOM : `map=${MAP} bots=${BOTS}`})`);
   await new Promise((r) => setTimeout(r, SECS * 1000));

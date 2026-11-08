@@ -57,10 +57,29 @@ L.push('');
 
   // git dirtiness + freshness
   const st = run('git', ['status', '--porcelain'], REPO);
-  const dirty = st.out.split('\n').filter(Boolean).length;
+  const dirtyLines = st.out.split('\n').filter(Boolean);
+  const dirty = dirtyLines.length;
   const last = run('git', ['log', '-1', '--format=%cr'], REPO).out.trim();
   const ahead = run('git', ['rev-list', '--count', 'origin/master..HEAD'], REPO).out.trim();
   L.push(`- **git**: ${dirty} uncommitted paths, ${ahead} commits unpushed, last commit ${last}`);
+
+  // dirty-file age: uncommitted paths whose mtime is >24h old are
+  // abandoned-WIP candidates (multi-agent tree - work rots silently).
+  const dirtyPaths = dirtyLines.map((l) => {
+    let p = l.slice(3);
+    const arrow = p.indexOf(' -> ');
+    if (arrow >= 0) {p = p.slice(arrow + 4);}
+    return p.replace(/^"|"$/g, '');
+  });
+  const oldDirty = [];
+  for (const p of dirtyPaths) {
+    try {
+      const ageH = (Date.now() - statSync(join(REPO, p)).mtimeMs) / 3600e3;
+      if (ageH > 24) {oldDirty.push(`${p} (${ageH.toFixed(0)}h)`);}
+    } catch { /* deleted/renamed-away paths have no mtime */ }
+  }
+  oldDirty.sort((a, b) => parseFloat(b.match(/\((\d+)h\)/)?.[1] ?? 0) - parseFloat(a.match(/\((\d+)h\)/)?.[1] ?? 0));
+  L.push(`- **dirty-age**: ${oldDirty.length} uncommitted paths untouched >24h${oldDirty.length ? ` — ${oldDirty.slice(0, 8).join(', ')}${oldDirty.length > 8 ? ` +${oldDirty.length - 8}` : ''}` : ''}`);
 
   // stale branches (>30d since last commit)
   const refs = run('git', ['for-each-ref', '--format=%(refname:short)|%(committerdate:unix)', 'refs/heads/'], REPO);
@@ -83,6 +102,36 @@ L.push('');
   };
   for (const d of ['client/src', 'server_bun/src', 'shared']) {srcWalk(join(REPO, d));}
   L.push(`- **markers**: ${todos} TODO/FIXME/HACK/XXX across src`);
+
+  // lint warning trend: total oxlint diagnostics now vs last sweep.
+  // lintratchet stops per-diff growth; this shows whether the TOTAL is
+  // falling - append-only JSONL history lives next to latest.md.
+  {
+    const ox = run(process.execPath,
+      ['client/node_modules/oxlint/bin/oxlint', '--format', 'json',
+        'client/src', 'server_bun/src', 'shared'], REPO, 120e3);
+    let warns = null; let errs = null;
+    try {
+      const j = JSON.parse(ox.out.slice(ox.out.indexOf('{')));
+      warns = j.diagnostics.filter((d) => d.severity === 'warning').length;
+      errs = j.diagnostics.filter((d) => d.severity === 'error').length;
+    } catch { /* oxlint crashed - skip trend, don't fail census */ }
+    if (warns !== null) {
+      const histFile = join(OUT, 'lint-history.jsonl');
+      let prev = null;
+      try {
+        const rows = readFileSync(histFile, 'utf8').trim().split('\n').filter(Boolean);
+        if (rows.length) {prev = JSON.parse(rows[rows.length - 1]);}
+      } catch { /* no history yet */ }
+      const delta = prev ? ` (${warns >= prev.warnings ? '+' : ''}${warns - prev.warnings} vs ${new Date(prev.ts).toISOString().slice(0, 10)})` : ' (first sweep)';
+      L.push(`- **lint**: ${warns} oxlint warnings, ${errs} errors across client+server+shared${delta}`);
+      try {
+        const rows = existsSync(histFile) ? readFileSync(histFile, 'utf8').trim().split('\n').filter(Boolean) : [];
+        rows.push(JSON.stringify({ ts: new Date().toISOString(), warnings: warns, errors: errs }));
+        writeFileSync(histFile, rows.slice(-60).join('\n') + '\n');
+      } catch { /* history is advisory */ }
+    }
+  }
 
   // disk hogs — fixed list of known growable dirs
   const dirSize = (dir) => {
