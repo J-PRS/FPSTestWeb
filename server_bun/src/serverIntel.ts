@@ -158,17 +158,26 @@ export class RoomIntel {
   private emit(now: number, players: Row[]): void {
     for (const v of players) {
       if (v.isBot) {continue;}
-      const m = this.detect.get(v.id);
-      const seen: IntelContact[] = [];
-      const mem: IntelContact[] = [];
-      if (m) {
-        for (const [tid, c] of m) {
-          if (c.until <= now) {m.delete(tid); continue;}
-          (c.freshUntil > now ? seen : mem).push({ id: tid, x: c.x, y: c.y, z: c.z });
-        }
-      }
+      const { seen, mem } = this.contactsOf(v.id, now);
       this.room.sendToPlayer(v.id, { type: 'intel', seen, mem });
     }
+  }
+
+  /** seen = fresh this sweep (live marker), mem = lingering (last-known
+   *  ghost). Expired contacts are pruned from the detect map as a side
+   *  effect - empty sets still send so a dropped contact clears promptly
+   *  instead of waiting out a timeout. */
+  private contactsOf(playerId: string, now: number): { seen: IntelContact[]; mem: IntelContact[] } {
+    const seen: IntelContact[] = [];
+    const mem: IntelContact[] = [];
+    const m = this.detect.get(playerId);
+    if (m) {
+      for (const [tid, c] of m) {
+        if (c.until <= now) {m.delete(tid); continue;}
+        (c.freshUntil > now ? seen : mem).push({ id: tid, x: c.x, y: c.y, z: c.z });
+      }
+    }
+    return { seen, mem };
   }
 
   /** Test seam - the contact set a player would currently be sent. */

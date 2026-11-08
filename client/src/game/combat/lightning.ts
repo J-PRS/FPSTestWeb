@@ -5,7 +5,7 @@ import { LightningBeam } from '../../effects/lightningBeam.js';
 import { lgMuzzleAnchor } from '../lgAnchor.js';
 import {
   LG_RANGE, LG_POP_DMG_CAP, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN,
-  LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT, LG_CHARGE_DECAY_S, LG_BOUNCE_DMG_SCALE, lgBounceDmgScale,
+  LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT, LG_CHARGE_DECAY_S, lgBounceDmgScale,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
 import { lgTickDamage, LG_TICK_BASE, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
@@ -37,6 +37,14 @@ interface LgState {
   shroud: Map<number, { sprite: THREE.Sprite; seenAt: number }>;
 }
 const _traceT = { t: 0 };
+
+/** Connect sizzle — beam frying SOMETHING sounds different than beaming
+ *  air: positional crackle at the contact, throttled so 22t/s doesn't smear. */
+function lgSizzleTick(lg: LgState, lgNow: number, hitTarget: unknown, hitPlayerId: unknown): void {
+  if (!(hitTarget || hitPlayerId) || lgNow - lg.sizzleAt <= 160) {return;}
+  lg.sizzleAt = lgNow;
+  sfx.lgSizzle(_lgHit);
+}
 
 // Charged-enemy shroud: one shared radial texture; per-target sprites
 // scale and flicker with banked pop charge so a loaded victim reads
@@ -355,10 +363,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     sfx.beamLoop(); // continuous drone — keepalive per tick
     // Connect sizzle — beam frying SOMETHING sounds different than beaming
     // air: positional crackle at the contact, throttled so 22t/s doesn't smear
-    if ((hitTarget || hitPlayerId) && lgNow - lg.sizzleAt > 160) {
-      lg.sizzleAt = lgNow;
-      sfx.lgSizzle(_lgHit);
-    }
+    lgSizzleTick(lg, lgNow, hitTarget, hitPlayerId);
 
     // Same anchor as the per-frame refresh — one function, no drift.
     lgAnchorLive(deps, cam, _lgMuzzle);

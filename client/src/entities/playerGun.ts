@@ -119,16 +119,7 @@ export class PlayerGun {
     const ws = handBone.getWorldScale(new THREE.Vector3());
     logger.debug(`GUN ATTACH`, { hand: handBone.name, worldScale: ws.x });
     if (mount?.palms && a.handBoneL && model) {
-      // Palm-line mount: model-root prop driven per frame — position at
-      // the grip palm, +Z along grip→foregrip. No authored quat: the
-      // palm line IS the barrel axis the clip intends, so it survives
-      // every clip's differing hand basis.
-      this.palms = true;
-      this.palmFwd = mount.palmFwd ?? 0;
-      this.palmFlip = Boolean(mount.palmsFlip);
-      this.palmYaw = mount.palmYaw ?? 0;
-      this.palmUp = mount.palmUp ?? 0;
-      this.mountPos = mount.pos ?? [0, 0, 0];
+      this.mountPalms(mount);
       this.mountOnModel(handBone, mount, model, modelScale);
       return;
     }
@@ -153,6 +144,19 @@ export class PlayerGun {
     group.add(this.muzzleFlash);
     handBone.add(group);
     if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
+  }
+
+  /** Palm-line mount state: model-root prop driven per frame — position
+   *  at the grip palm, +Z along grip→foregrip. No authored quat: the
+   *  palm line IS the barrel axis the clip intends, so it survives
+   *  every clip's differing hand basis. */
+  private mountPalms(mount: RigMount): void {
+    this.palms = true;
+    this.palmFwd = mount.palmFwd ?? 0;
+    this.palmFlip = Boolean(mount.palmsFlip);
+    this.palmYaw = mount.palmYaw ?? 0;
+    this.palmUp = mount.palmUp ?? 0;
+    this.mountPos = mount.pos ?? [0, 0, 0];
   }
 
   /** Per-axis bone mount: some rigs (polyart) carry non-uniform bone

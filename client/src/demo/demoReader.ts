@@ -298,49 +298,58 @@ function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultT
     const len = r.u32();
     if (tag === SECTION_TOKEN) {token = JSON.parse(new TextDecoder().decode(r.bytes(len))) as ResultToken; continue;}
     if (tag === SECTION_ATMO) {atmo = JSON.parse(new TextDecoder().decode(r.bytes(len))) as DemoFile['atmo']; continue;}
-    if (tag === SECTION_SNAP) {
-      const before = r.remaining;
-      r.ensure(4, 'snapshot count');
-      const n = r.u32();
-      if (n > 100_000) {throw new Error(`Invalid snapshot count: ${n} (max 100000)`);}
-      r.ensure(n * 4, 'snapshot array');
-      snapshots = [];
-      for (let k = 0; k < n; k += 1) {snapshots.push(r.f32());}
-      // Skip any padding a future writer adds inside the declared length.
-      const consumed = before - r.remaining;
-      if (consumed > len) {throw new Error('SNAP section overruns its length');}
-      r.skip(len - consumed);
-      continue;
-    }
+    if (tag === SECTION_SNAP) {snapshots = readSnapSection(r, len); continue;}
     if (tag !== SECTION_HMAP) {r.skip(len); continue;}
-    const before = r.remaining;
-    const gridN = r.u16();
-    const heightScale = r.f32();
-    const worldScale = r.f32();
-    const srcHash = r.u32();
-    const dataLen = r.u32();
-    if (dataLen !== gridN * gridN) {
-      throw new Error(`HMAP grid ${gridN}x${gridN} != ${dataLen} bytes`);
-    }
-    const data = r.bytes(dataLen);
-    hmap = { gridN, heightScale, worldScale, srcHash, data: data.slice() };
-    // Corrections tail (v8+): finer-grid peak-preserving deltas — absent
-    // in older sections, which end right after the grid data.
-    const corrRemaining = len - (before - r.remaining);
-    if (corrRemaining >= 6) {
-      const corrGrid = r.u16();
-      const nCorr = r.u32();
-      if (nCorr * 5 + 6 > corrRemaining || nCorr > corrGrid * corrGrid) {throw new Error(`Invalid HMAP corrections: ${nCorr}`);}
-      const idx = new Uint32Array(nCorr);
-      const delta = new Int8Array(nCorr);
-      for (let k = 0; k < nCorr; k += 1) {idx[k] = r.u32(); delta[k] = r.i8();}
-      hmap.corr = { grid: corrGrid, idx, delta };
-    }
-    const consumed = before - r.remaining;
-    if (consumed > len) {throw new Error('HMAP section overruns its length');}
-    r.skip(len - consumed);
+    hmap = readHmapSection(r, len);
   }
   return { hmap, token, snapshots, atmo };
+}
+
+/** SNAP section: u32 count + f32 array, then skip declared-length
+ *  padding a future writer may add. */
+function readSnapSection(r: Reader, len: number): number[] {
+  const before = r.remaining;
+  r.ensure(4, 'snapshot count');
+  const n = r.u32();
+  if (n > 100_000) {throw new Error(`Invalid snapshot count: ${n} (max 100000)`);}
+  r.ensure(n * 4, 'snapshot array');
+  const snapshots: number[] = [];
+  for (let k = 0; k < n; k += 1) {snapshots.push(r.f32());}
+  const consumed = before - r.remaining;
+  if (consumed > len) {throw new Error('SNAP section overruns its length');}
+  r.skip(len - consumed);
+  return snapshots;
+}
+
+/** HMAP section: grid header + data + optional v8+ corrections tail. */
+function readHmapSection(r: Reader, len: number): DemoHeightmap {
+  const before = r.remaining;
+  const gridN = r.u16();
+  const heightScale = r.f32();
+  const worldScale = r.f32();
+  const srcHash = r.u32();
+  const dataLen = r.u32();
+  if (dataLen !== gridN * gridN) {
+    throw new Error(`HMAP grid ${gridN}x${gridN} != ${dataLen} bytes`);
+  }
+  const data = r.bytes(dataLen);
+  const hmap: DemoHeightmap = { gridN, heightScale, worldScale, srcHash, data: data.slice() };
+  // Corrections tail (v8+): finer-grid peak-preserving deltas — absent
+  // in older sections, which end right after the grid data.
+  const corrRemaining = len - (before - r.remaining);
+  if (corrRemaining >= 6) {
+    const corrGrid = r.u16();
+    const nCorr = r.u32();
+    if (nCorr * 5 + 6 > corrRemaining || nCorr > corrGrid * corrGrid) {throw new Error(`Invalid HMAP corrections: ${nCorr}`);}
+    const idx = new Uint32Array(nCorr);
+    const delta = new Int8Array(nCorr);
+    for (let k = 0; k < nCorr; k += 1) {idx[k] = r.u32(); delta[k] = r.i8();}
+    hmap.corr = { grid: corrGrid, idx, delta };
+  }
+  const consumed = before - r.remaining;
+  if (consumed > len) {throw new Error('HMAP section overruns its length');}
+  r.skip(len - consumed);
+  return hmap;
 }
 
 export function deserializeDemo(buffer: ArrayBuffer): DemoFile {

@@ -804,7 +804,7 @@ s[kind] += 1; this.propels.set(id, s);
   private deployPickFallback(botId: string, lo: BotLoadout, picked: number, armorClass: string | undefined): number | undefined {
     if (!getWeaponStats(picked).groundedOnly) {this.deployPick.delete(botId); return undefined;}
     const sim = this.room.moveSim.simOf(botId);
-    const plantable = Boolean(sim?.state.onGround) && !sim.input.skiHeld;
+    const plantable = Boolean(sim?.state.onGround) && !sim?.input.skiHeld;
     this.deployPick.set(botId, !plantable);
     if (plantable) {return undefined;}
     return [lo.far, lo.mid, lo.near, lo.side]

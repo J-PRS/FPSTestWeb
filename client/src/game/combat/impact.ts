@@ -41,6 +41,7 @@ import { validateAoeClaim, validateHitClaim, type TrackedProjectile, type HitCla
 import { isBotId } from '../../../../shared/botNames.js';
 
 import { HIT_TARGET_NONE, targetDemoId } from '../../demo/types.js';
+import type { DemoManager } from '../../demo/DemoManager.js';
 
 import { lgDischarge } from './lightning.js';
 
@@ -460,29 +461,25 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: Targetable): vo
 
 // Demo recording + cool-shot logging for any hit (terrain, ball, or player)
 
+/** Demo record for a landed shell: targetId is the ball id for ball
+ *  hits, 0xFFFF for the anonymous player hit; targetType carries the
+ *  ball variant so playback looks the victim up in the right map. */
+function recordHitDemo(demoManager: DemoManager | null, p: Projectile): void {
+  if (!demoManager?.isRecording || !p.demoProjectileId) {return;}
+  let targetId = 0;
+  if (p.hitBall) {targetId = p.hitBall.id;}
+  else if (p.hitPlayerId) {targetId = 0xFF_FF;}
+  const targetType = p.hitBall ? p.hitBall.variant : HIT_TARGET_NONE;
+  demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId, p.config.weaponType, targetType);
+}
+
 export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
 
   const {deps} = c;
 
   const demoManager = deps.lazyDemoManager();
 
-  if (demoManager?.isRecording && p.demoProjectileId) {
-
-    let targetId = 0;
-  if (p.hitBall) {targetId = p.hitBall.id;}
-  else if (p.hitPlayerId) {targetId = 0xFF_FF;}
-
-    // Lane tag for the id: ball variant for ball hits so playback looks the
-
-    // victim up in the right map; HIT_TARGET_NONE otherwise (terrain, and
-
-    // today's anonymous 0xFFFF player hit).
-
-    const targetType = p.hitBall ? p.hitBall.variant : HIT_TARGET_NONE;
-
-    demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId, p.config.weaponType, targetType);
-
-  }
+  recordHitDemo(demoManager, p);
 
   // CoolShot/auto-clip is MY highlight reel - a bot's air shot isn't mine
 
