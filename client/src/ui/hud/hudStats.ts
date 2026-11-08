@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Player } from '../../entities/Player.js';
 import { weaponDef } from '../../weapons.js';
+import { ammoOf, getWeaponStats } from '../../../../shared/weapons.js';
 
 /**
  * HudStats — the per-frame stat painter: vitals (health/energy/armor),
@@ -35,6 +36,8 @@ export interface StatsHost {
   dmgDir: HTMLDivElement;
   dmgDirArc: HTMLDivElement;
   wammoReadout: HTMLDivElement;
+  wammoRegenFill?: HTMLDivElement;
+  crosshair?: HTMLDivElement;
   bloomRing?: HTMLDivElement;
 }
 
@@ -49,6 +52,8 @@ export class HudStats {
   private lastArmor = -1;
   private lastBuffsKey = '';
   private lastWammoCol = '';
+  private lastWammoRegen = '';
+  private lastXhairReady = true;
   private lastBloomPx = -1;
   private lastBloomAlpha = -1;
   private lastBloomW = -1;
@@ -65,12 +70,14 @@ export class HudStats {
   private lastPlayerPos = new THREE.Vector3();
   private lastPlayerYaw = 0;
 
-  // HUD abbreviations indexed by wid = SLOT_DEFS position (all 19 slots —
-  // sidearms included, since a stale persisted loadout can shoulder one).
+  // HUD abbreviations indexed by wid = SLOT_DEFS position (sidearms
+  // included, since a stale persisted loadout can shoulder one). Order
+  // must mirror weapons.ts SLOT_DEFS exactly - RocketLauncher has no
+  // slot def (benched), so 'RKT' is gone and FDL/HOW sit at 25/26.
   private static readonly WEAPON_SHORT = [
-    'BLT', 'DSG', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RAIL', 'LG', 'SG', 'CAN', 'RKT',
+    'BLT', 'DSG', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RAIL', 'LG', 'SG', 'CAN', 'ML',
     'PST', 'REV', 'STK', 'PLG', 'SPR', 'RPR', 'MRV', 'BMB',
-    'LAN', 'BLA', 'HLB', 'GON', 'BSK', 'RKT',
+    'LAN', 'BLA', 'HLB', 'GON', 'BSK', 'FDL', 'HOW',
   ];
 
   constructor(private h: StatsHost) {}
@@ -115,22 +122,47 @@ export class HudStats {
 
     // Pool ammo readout under the crosshair - blank for unlimited weapons.
     // loadout carries slot indices; the pool keys on the real weaponType.
-    // RAW cell read, no accrual: a HUD-side mint + the impulse gate's spend
-    // same frame showed '1' for one frame every trickle cycle. The gate's
-    // own preview accrues every frame anyway, so this is at most a frame
-    // stale - and a minted round spent same-frame never displays.
+    // Live accrual via ammoOf: the raw cell only updates when something
+    // calls accrue, and offline nothing does per-frame - the count AND
+    // the regen sliver's fraction both need the lazy accrue to run here.
     const wid = player.armory?.secondaryWid ?? player.loadout[player.weaponIndex];
     const banked = wid === undefined || player.ammoPool === undefined
-      ? undefined : player.ammoPool.get(weaponDef(wid).weaponType)?.ammo;
+      ? undefined : ammoOf(player.ammoPool, weaponDef(wid).weaponType, performance.now() / 1000);
     if (h.wammoReadout) {
       const n = banked === undefined ? -1 : Math.floor(banked);
-      // Yellow under 5, red at 1/0 - the low-clip tiers ride the cache key
+      // Yellow at 1, red at 0 - the low-clip tiers ride the cache key
       // so a color flip repaints without touching the text every frame.
       let col = '#66ccff';
-      if (n >= 0 && n <= 1) {col = '#f44';}
-      else if (n >= 0 && n < 5) {col = '#ffd54a';}
+      if (n === 0) {col = '#f44';}
+      else if (n === 1) {col = '#ffd54a';}
       this.setText(h.wammoReadout, 'wammo', n < 0 ? '' : String(n));
       if (this.lastWammoCol !== col) {this.lastWammoCol = col; h.wammoReadout.style.color = col;}
+    }
+    // Regen sliver: fractional accrue is the progress to the next round -
+    // hidden on unlimited pools (no counter shown) and full drums.
+    const regen = h.wammoRegenFill;
+    if (regen) {
+      // Show only while a round is actually accruing - unlimited pools
+      // and full drums get no track at all (an empty sliver parked under
+      // every weapon reads as UI cruft).
+      const cap = wid === undefined ? 0 : (getWeaponStats(weaponDef(wid).weaponType).ammoCap ?? 0);
+      const accruing = banked !== undefined && banked < cap;
+      (regen.parentElement as HTMLElement).style.display = accruing ? '' : 'none';
+      const frac = accruing ? banked! % 1 : 0;
+      const pct = `${(frac * 100).toFixed(0)}%`;
+      if (this.lastWammoRegen !== pct) {this.lastWammoRegen = pct; regen.style.width = pct;}
+    }
+
+    // Deploy weapons telegraph a dead pull: groundedOnly and off the
+    // ground/skiing = faint crosshair, same rule the fire gate applies.
+    const ch = h.crosshair;
+    if (ch) {
+      const grounded = wid === undefined
+        || !(getWeaponStats(weaponDef(wid).weaponType).groundedOnly && (!player.onGround || player.skiing));
+      if (grounded !== this.lastXhairReady) {
+        this.lastXhairReady = grounded;
+        ch.style.opacity = grounded ? '' : '0.25';
+      }
     }
 
     // Bloom cone arms: alpha fades in on sqrt(normalized bloom) - they
