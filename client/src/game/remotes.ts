@@ -11,9 +11,9 @@ import { emitLocomotionFx, isCarvingSki } from '../effects/locomotionFx.js';
 import type { NetworkManager , RemotePlayerState } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
-import { rankRows, scoreboardTitle, aswBucket, type AswSplit } from '../ui/hud/scoreboard.js';
+import { rankRows, scoreboardTitle, aswBucket, type AswSplit, type SbRow } from '../ui/hud/scoreboard.js';
 import type { WorldState } from './worldState.js';
-import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
+import { TEAM_COLORS } from '../../../shared/teams.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
 import { settings } from '../core/settings.js';
@@ -518,38 +518,15 @@ function updateScoreboard(deps: RemotesDeps): void {
   // network id only exists for wire rooms. Read the matching score key
   // while keeping the visible row name consistent with online play.
   const { scores: ffa, localScoreId } = scoreboardScores(deps, nm, localId);
-  // My frags land under TWO keys: wire kills credit the network id
-  // (playerKill broadcast), kills on the client-side fill bots credit
-  // 'local' (botKill's authority id). Sum them - reading only one key
-  // silently dropped every kill that went through the other path.
-  const selfFrags = (deps.world.killCounts.get('local') ?? 0)
-    + (localScoreId === 'local' ? 0 : deps.world.killCounts.get(localScoreId) ?? 0);
-  const selfDeaths = (deps.world.deathCounts.get('local') ?? 0)
-    + (localScoreId === 'local' ? 0 : deps.world.deathCounts.get(localScoreId) ?? 0);
   const now = Date.now();
-  const rows = [{ name: settings.get('fps-name') || localId, frags: selfFrags, deaths: selfDeaths, score: ffa.get(localScoreId) ?? null, ping: nm.serverPingMs == null ? nm.getPing() : `${nm.getPing()}/${Math.round(nm.serverPingMs)}`, net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass, asw: aswStr(localId) }];
-  // net is string|null - 'bot' rows carry a label, not a transport tier.
   const queriedIds = new Set<string>([localId]);
-  const remoteRows: { name: string; frags: number; deaths: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string; asw?: AswSplit | null }[] = [...nm.getPlayers().keys()]
-    .filter((id): boolean => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
-    .map(id => {
-      queriedIds.add(id);
-      const ps = nm.getPlayers().get(id);
-      return { name: isBotId(id) ? botRosterName(id) : (ps?.name ?? id), frags: deps.world.killCounts.get(id) ?? 0, deaths: deps.world.deathCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now), cls: ps?.armorClass, asw: aswStr(id) };
-    });
-  // Offline bots live in world.remotePlayers, not the network roster -
-  // they'd be invisible on the scoreboard otherwise.
-  for (const [id, rp] of deps.world.remotePlayers) {
-    if (nm.getPlayers().has(id)) {continue;}
-    queriedIds.add(id);
-    // GameBot carries a team field; FFA bots get a self-id pseudo-team,
-    // which must not count as a real team row.
-    const t = (rp as { team?: string }).team;
-    remoteRows.push({ name: botRosterName(id), frags: deps.world.killCounts.get(id) ?? 0, deaths: deps.world.deathCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now), cls: rp.armorClass, asw: aswStr(id) });
-  }
   // Self sorts into the ranking like everyone else - pinning the local
   // row to the top read as "unordered" whenever the leader wasn't you.
-  const allRows = [...rows, ...remoteRows];
+  const allRows = [
+    selfScoreboardRow(deps, nm, localId, ffa, localScoreId, now),
+    ...wireRosterRows(deps, nm, localId, ffa, now, queriedIds),
+    ...offlineBotRows(deps, nm, ffa, now, queriedIds),
+  ];
   const ranked = rankRows(deps.world.mode, allRows);
   pruneAliveSince(queriedIds);
   pruneAsw(queriedIds);
@@ -560,7 +537,59 @@ function updateScoreboard(deps: RemotesDeps): void {
   hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName));
 }
 
-export function createRemotes(deps: RemotesDeps) {
+// The local player's row - kill/death sums ride selfCount's two-key
+// formula ('local' + the score id).
+function selfScoreboardRow(deps: RemotesDeps, nm: NetworkManager, localId: string, ffa: Map<string, number>, localScoreId: string, now: number): SbRow {
+  const self = deps.lazyPlayer();
+  return { name: settings.get('fps-name') || localId, frags: selfCount(deps.world.killCounts, localScoreId), deaths: selfCount(deps.world.deathCounts, localScoreId), score: ffa.get(localScoreId) ?? null, ping: nm.serverPingMs == null ? nm.getPing() : `${nm.getPing()}/${Math.round(nm.serverPingMs)}`, net: nm.getTransportTier() ?? null, self: true, dead: self.isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, self.isDead, now), cls: self.appliedClass, asw: aswStr(localId) };
+}
+
+// net is string|null - 'bot' rows carry a label, not a transport tier.
+function wireRosterRows(deps: RemotesDeps, nm: NetworkManager, localId: string, ffa: Map<string, number>, now: number, queriedIds: Set<string>): SbRow[] {
+  return [...nm.getPlayers().keys()]
+    .filter((id): boolean => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
+    .map((id): SbRow => {
+      queriedIds.add(id);
+      return wireRow(deps, id, nm.getPlayers().get(id), ffa, now);
+    });
+}
+
+function wireRow(deps: RemotesDeps, id: string, ps: RemotePlayerState | undefined, ffa: Map<string, number>, now: number): SbRow {
+  const bot = isBotId(id);
+  const dead = ps?.isDead ?? false;
+  const name = bot ? botRosterName(id) : (ps?.name ?? id);
+  const net = bot ? 'bot' : (ps?.transport ?? null);
+  return { name, frags: or0(deps.world.killCounts.get(id)), deaths: or0(deps.world.deathCounts.get(id)), score: orN(ffa.get(id)), ping: orN(ps?.ping), net, self: false, dead, team: ps?.team, sheep: orN(ps?.sheep), bot, alive: aliveSecs(id, dead, now), cls: ps?.armorClass, asw: aswStr(id) };
+}
+
+const or0 = (v: number | undefined): number => v ?? 0;
+const orN = <T>(v: T | undefined): T | null => v ?? null;
+
+// Offline bots live in world.remotePlayers, not the network roster -
+// they'd be invisible on the scoreboard otherwise.
+function offlineBotRows(deps: RemotesDeps, nm: NetworkManager, ffa: Map<string, number>, now: number, queriedIds: Set<string>): SbRow[] {
+  const out: SbRow[] = [];
+  for (const [id, rp] of deps.world.remotePlayers) {
+    if (nm.getPlayers().has(id)) {continue;}
+    queriedIds.add(id);
+    // GameBot carries a team field; FFA bots get a self-id pseudo-team,
+    // which must not count as a real team row.
+    const t = (rp as { team?: string }).team;
+    const team = t === 'alpha' || t === 'bravo' ? t : undefined;
+    const sheep = (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null;
+    out.push({ name: botRosterName(id), frags: or0(deps.world.killCounts.get(id)), deaths: or0(deps.world.deathCounts.get(id)), score: orN(ffa.get(id)), ping: null, net: 'bot', self: false, dead: rp.isDead, team, sheep, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now), cls: rp.armorClass, asw: aswStr(id) });
+  }
+  return out;
+}
+
+export interface RemotesApi {
+  networkTick: (dt: number) => void;
+  updateScoreboard: () => void;
+  getLastSentPos: () => { x: number; y: number; z: number };
+  setLastSentPos: (pos: { x: number; y: number; z: number }) => void;
+}
+
+export function createRemotes(deps: RemotesDeps): RemotesApi {
   noteDeps(deps); // the game-dump hook needs deps even offline
   const lastSentPos = { x: 0, y: 0, z: 0 };
   let lastRemotePosLog = '';

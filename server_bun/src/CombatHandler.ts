@@ -331,20 +331,7 @@ w.n += 1;
   }
 
   friendly(shooterId: string, targetId: string): boolean {
-    // Rabbit law: pre-flag (first corpse hasn't spawned it) the lobby is
-    // open season - there is no rabbit to hunt yet. Once the flag exists,
-    // the only legal pairings include the carrier - hunter-vs-hunter is
-    // friendly fire, a dropped flag does NOT reopen the season. The
-    // bottom-feeder is exempt: last place can hit/be hit by anyone.
-    // Self-splash stays legal (rocket jumps).
-    if (this.deps.rabbitCarrier) {
-      if (shooterId === targetId) {return false;}
-      const c = this.deps.rabbitCarrier();
-      if (c && (shooterId === c || targetId === c)) {return false;}
-      if (!c && !this.deps.rabbitFlagLive?.()) {return false;}
-      const bottom = this.deps.rabbitBottom?.();
-      return !(bottom?.has(shooterId) || bottom?.has(targetId));
-    }
+    if (this.deps.rabbitCarrier) {return this.rabbitFriendly(shooterId, targetId);}
     // friendlyFire server option opens the gate entirely; self-splash
     // stays allowed regardless (rocket jumps).
     if (!this.deps.teams || shooterId === targetId || this.deps.friendlyFire) {return false;}
@@ -355,6 +342,21 @@ w.n += 1;
     if (shooterId.startsWith('base:')) {return t?.team === shooterId.slice(5);}
     const s = this.playerManager.getPlayer(shooterId);
     return Boolean(s?.team && t?.team && s.team === t.team);
+  }
+
+  /** Rabbit law: pre-flag (first corpse hasn't spawned it) the lobby is
+   *  open season - there is no rabbit to hunt yet. Once the flag exists,
+   *  the only legal pairings include the carrier - hunter-vs-hunter is
+   *  friendly fire, a dropped flag does NOT reopen the season. The
+   *  bottom-feeder is exempt: last place can hit/be hit by anyone.
+   *  Self-splash stays legal (rocket jumps). */
+  private rabbitFriendly(shooterId: string, targetId: string): boolean {
+    if (shooterId === targetId) {return false;}
+    const c = this.deps.rabbitCarrier!();
+    if (c && (shooterId === c || targetId === c)) {return false;}
+    if (!c && !this.deps.rabbitFlagLive?.()) {return false;}
+    const bottom = this.deps.rabbitBottom?.();
+    return !(bottom?.has(shooterId) || bottom?.has(targetId));
   }
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
