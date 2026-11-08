@@ -319,158 +319,137 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
 
 
 
-export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string, heightScale?: number, tileSize?: number, terrainPreset?: number): Promise<void> {
+export interface TerrainReq {
+  file: string | null;
+  texPath?: string;
+  skyDir?: string;
+  heightScale?: number;
+  tileSize?: number;
+  terrainPreset?: number;
+}
 
-  const mult = heightScale ?? 1;
+type TerrainSwapReq = TerrainReq & { ctx: NetCtx; key: string; mult: number; wscale: number };
 
-  const wscale = tileSize ?? TERRAIN_WORLD_SCALE;
+export async function applyTerrain(ctx: NetCtx, req: TerrainReq): Promise<void> {
 
-  const key = `${file}@${mult}@${wscale}|${texPath}|${skyDir}`;
+  const mult = req.heightScale ?? 1;
+
+  const wscale = req.tileSize ?? TERRAIN_WORLD_SCALE;
+
+  const key = `${req.file}@${mult}@${wscale}|${req.texPath}|${req.skyDir}`;
 
   terrainWanted = key;
 
   if (terrainActive === key) {return;}
 
-  const { deps } = ctx;
-
-  // oxlint-disable-next-line promise/always-return -- serialized swap task resolves void on every path
-
-  terrainSwap = terrainSwap.then(async (): Promise<void> => {
-
-    if (terrainActive === key || terrainWanted !== key) {return;}
-    performance.mark('load:terrainApplyStart');
-
-    Ball.terrainSwapping = true;
-
-    try {
-
-      // Scale applies to whichever field is resident - a scale-only map
-
-      // change still needs CPU samples + shader uniforms re-keyed.
-
-      setHeightScale(mult);
-
-      setWorldScale(wscale);
-
-      deps.lazyTerrain().setHeightScale(TERRAIN_HEIGHT_SCALE * mult);
-
-      deps.lazyTerrain().setWorldScale(wscale);
-
-      deps.lazyTerrain().setPreset(terrainPreset ?? 1);
-
-      interiorHscale.value = TERRAIN_HEIGHT_SCALE * mult;
-
-      const { httpUrl } = await resolveServerEndpoints();
-
-      const fieldKey = `${file}@${mult}`;
-
-      let swappedBin = false;
-
-      if (fieldKey !== fieldLoaded) {
-
-        if (file) {
-
-          await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
-
-        } else {
-
-          await loadHeightfieldBin(BOOT_HEIGHTMAP);
-
-        }
-
-        performance.mark('load:terrainBin');
-        deps.lazyTerrain().reloadHeightmap();
-
-        // Ball.field captured the previous heightfield OBJECT - hmData is
-
-        // swapped, not mutated, so the sim would keep predicting bounces on
-
-        // the old terrain. Re-read it now that the new field is resident.
-
-        Ball.initNetMode(true);
-
-        fieldLoaded = fieldKey;
-
-        swappedBin = true;
-
-      }
-
-      // The bin/tex/sky fetches awaited above gave newer requests time to
-
-      // supersede this one (reconnect gameState beats a boot-primed saved
-
-      // map). Commit only if still wanted - otherwise this task's only
-
-      // footprint is the hmData the newer task's own reload overwrites.
-
-      // If we did swap the bin, un-mark it so the newer task refetches:
-
-      // its dedupe check must not skip reloading over our stale data.
-
-      if (terrainWanted !== key) {if (swappedBin) {fieldLoaded = null;} return;}
-
-
-
-      // Baked albedo (T2 ports) replaces the procedural palette entirely.
-
-      // Isolated from the terrain swap: a missing texture shouldn't leave
-
-      // the old heightfield-resident-but-unbuilt state behind.
-
-      try {
-
-        await applyTerrainTex(deps, httpUrl, texPath);
-        performance.mark('load:terrainTex');
-
-      } catch (error) {
-
-        const src = (error as ProgressEvent)?.target as { src?: string } | undefined;
-
-        deps.logger.warn(`Albedo load failed for ${texPath}: ${src?.src ?? String(error)}`);
-
-      }
-
-      // Cube skybox faces extracted as px/nx/py/ny/pz/nz.png; maps
-
-      // without one fall back to the procedural atmosphere.
-
-      await applySky(deps, httpUrl, skyDir);
-      performance.mark('load:terrainSky');
-
-
-
-      terrainActive = key;
-
-      deps.world.onTerrainApplied?.(file);
-
-      deps.logger.info(`Terrain swapped to maps/${file}`);
-
-    } catch (error) {
-
-      // THREE loaders reject with ProgressEvent (no .message) - log
-
-      // whichever URL failed via the event target, plus Error message.
-
-      const ev = error as ProgressEvent & { target?: { src?: string } };
-
-      const detail = error instanceof Error ? error.message
-
-        : ev?.target?.src ?? String(error);
-
-      deps.logger.warn(`Terrain load failed for ${file ?? BOOT_HEIGHTMAP}: ${detail}`);
-
-    } finally {
-
-      Ball.terrainSwapping = false;
-      try { performance.mark('load:terrainSwapped'); } catch { /* ignore */ }
-      firstTerrainGate.resolve();
-
-    }
-
-  return undefined; });
+  // Serialized swap queue - each request chains behind the last so two
+  // gameStates can't interleave heightfield/texture/sky commits.
+  terrainSwap = terrainSwap.then((): Promise<void> => terrainSwapTask(Object.assign({ ctx, key, mult, wscale }, req)));
 
   return terrainSwap;
 
+}
+
+// One serialized terrain swap: re-key scales, refetch the heightfield
+// bin only when its key moved, then albedo + sky, then commit. The
+// wanted-checks bracket every await - a newer request supersedes this
+// one and this task must leave no half-commit behind.
+async function terrainSwapTask(req: TerrainSwapReq): Promise<void> {
+  const { ctx, key, file, texPath, skyDir, mult, wscale, terrainPreset } = req;
+  const { deps } = ctx;
+  if (terrainActive === key || terrainWanted !== key) {return;}
+  performance.mark('load:terrainApplyStart');
+
+  Ball.terrainSwapping = true;
+
+  try {
+
+    // Scale applies to whichever field is resident - a scale-only map
+    // change still needs CPU samples + shader uniforms re-keyed.
+    applyScaleKeys(deps, mult, wscale, terrainPreset);
+
+    const { httpUrl } = await resolveServerEndpoints();
+
+    const swappedBin = await swapBinIfNeeded(deps, httpUrl, file, mult);
+
+    // The bin/tex/sky fetches awaited above gave newer requests time to
+    // supersede this one (reconnect gameState beats a boot-primed saved
+    // map). Commit only if still wanted - otherwise this task's only
+    // footprint is the hmData the newer task's own reload overwrites.
+    // If we did swap the bin, un-mark it so the newer task refetches:
+    // its dedupe check must not skip reloading over our stale data.
+    if (terrainWanted !== key) {if (swappedBin) {fieldLoaded = null;} return;}
+
+    await applyTerrainSurface(deps, httpUrl, texPath, skyDir);
+
+    terrainActive = key;
+
+    deps.world.onTerrainApplied?.(file);
+
+    deps.logger.info(`Terrain swapped to maps/${file}`);
+
+  } catch (error) {
+
+    // THREE loaders reject with ProgressEvent (no .message) - log
+    // whichever URL failed via the event target, plus Error message.
+    const ev = error as ProgressEvent & { target?: { src?: string } };
+    const detail = error instanceof Error ? error.message
+      : ev?.target?.src ?? String(error);
+    deps.logger.warn(`Terrain load failed for ${file ?? BOOT_HEIGHTMAP}: ${detail}`);
+
+  } finally {
+
+    Ball.terrainSwapping = false;
+    try { performance.mark('load:terrainSwapped'); } catch { /* ignore */ }
+    firstTerrainGate.resolve();
+
+  }
+}
+
+function applyScaleKeys(deps: NetCtx['deps'], mult: number, wscale: number, terrainPreset?: number): void {
+  setHeightScale(mult);
+  setWorldScale(wscale);
+  deps.lazyTerrain().setHeightScale(TERRAIN_HEIGHT_SCALE * mult);
+  deps.lazyTerrain().setWorldScale(wscale);
+  deps.lazyTerrain().setPreset(terrainPreset ?? 1);
+  interiorHscale.value = TERRAIN_HEIGHT_SCALE * mult;
+}
+
+// Heightfield bin refetch, deduped on file@mult - returns whether THIS
+// task swapped it so the wanted-check can un-mark a superseded swap.
+async function swapBinIfNeeded(deps: NetCtx['deps'], httpUrl: string, file: string | null, mult: number): Promise<boolean> {
+  const fieldKey = `${file}@${mult}`;
+  if (fieldKey === fieldLoaded) {return false;}
+  if (file) {
+    await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
+  } else {
+    await loadHeightfieldBin(BOOT_HEIGHTMAP);
+  }
+  performance.mark('load:terrainBin');
+  deps.lazyTerrain().reloadHeightmap();
+  // Ball.field captured the previous heightfield OBJECT - hmData is
+  // swapped, not mutated, so the sim would keep predicting bounces on
+  // the old terrain. Re-read it now that the new field is resident.
+  Ball.initNetMode(true);
+  fieldLoaded = fieldKey;
+  return true;
+}
+
+async function applyTerrainSurface(deps: NetCtx['deps'], httpUrl: string, texPath: string | undefined, skyDir: string | undefined): Promise<void> {
+  // Baked albedo (T2 ports) replaces the procedural palette entirely.
+  // Isolated from the terrain swap: a missing texture shouldn't leave
+  // the old heightfield-resident-but-unbuilt state behind.
+  try {
+    await applyTerrainTex(deps, httpUrl, texPath);
+    performance.mark('load:terrainTex');
+  } catch (error) {
+    const src = (error as ProgressEvent)?.target as { src?: string } | undefined;
+    deps.logger.warn(`Albedo load failed for ${texPath}: ${src?.src ?? String(error)}`);
+  }
+  // Cube skybox faces extracted as px/nx/py/ny/pz/nz.png; maps
+  // without one fall back to the procedural atmosphere.
+  await applySky(deps, httpUrl, skyDir);
+  performance.mark('load:terrainSky');
 }
 
 

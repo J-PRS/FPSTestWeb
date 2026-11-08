@@ -295,7 +295,7 @@ export function wireWorld(ctx: NetCtx): void {
     deps.world.spawnPools = map.spawns || map.teamSpawns ? { spawns: map.spawns, teamSpawns: map.teamSpawns } : null;
     installSpawnGizmos(ctx);
     if (map.terrain || map.heightScale || map.tileSize) {
-      applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize, map.terrainPreset)
+      applyTerrain(ctx, { file: map.terrain ?? null, texPath: map.terrainTex, skyDir: map.sky, heightScale: map.heightScale, tileSize: map.tileSize, terrainPreset: map.terrainPreset })
         .catch((error): void => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
     }
     applyMapFog(ctx, map.fog);
@@ -401,13 +401,19 @@ function installSpawnGizmos(ctx: NetCtx): void {
 }
 
 function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
+  applyMapStructures(ctx, map);
+  applyMapAtmo(ctx, map);
+  applyMapTail(ctx, map);
+}
+
+// Structures + spawn pools + arena dome. clearExtraStructures runs
+// before the spec pass: a map swap must not keep the old world's mode
+// solids. The collider list is the same one the server sims against -
+// ball prediction ricochets off structures identically, and player
+// collision divergence reads as walls that let you through.
+function applyMapStructures(ctx: NetCtx, map?: MapSnapshot): void {
   const { deps } = ctx;
   buildStructures(map?.structures ?? [], deps.lazyScene(), deps.lazyTerrain());
-  // Same collider list the server sims against — ball prediction
-  // ricochets off structures identically instead of phasing through.
-  // Player collision comes from the same table — a divergence there
-  // reads as walls that let you through. clearExtraStructures runs
-  // first: a map swap must not keep the old world's mode solids.
   clearExtraStructures();
   applyStructureSpecs(map?.structures, deps.lazyPlayer().movement);
   // Spawn pools ride the map snapshot — debug command-map layer only.
@@ -419,15 +425,30 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   } else {
     clearArenaDome(deps.lazyScene());
   }
+}
+
+function applyMapAtmo(ctx: NetCtx, map?: MapSnapshot): void {
+  const { deps } = ctx;
   setAmbientCaps(map?.ambient);
   applyMapFog(ctx, map?.fog);
   applyWeather(ctx, map?.weather);
   applyAtmosphere(ctx, map?.atmosphere);
-  deps.world.lastAtmo = { fog: map?.fog, weather: map?.weather, atmosphere: map?.atmosphere, terrain: map?.terrain, terrainTex: map?.terrainTex, terrainPreset: map?.terrainPreset, heightScale: map?.heightScale, tileSize: map?.tileSize, sky: map?.sky };
+  deps.world.lastAtmo = atmoRecord(map);
   ctx.deps.lazyDemoManager?.()?.recordAtmo(deps.world.lastAtmo);
+}
+
+// The atmo slice demos record for playback restore - every field the
+// apply* calls above consume, in one literal.
+function atmoRecord(map?: MapSnapshot): NonNullable<NetCtx['deps']['world']['lastAtmo']> {
+  return { fog: map?.fog, weather: map?.weather, atmosphere: map?.atmosphere, terrain: map?.terrain, terrainTex: map?.terrainTex, terrainPreset: map?.terrainPreset, heightScale: map?.heightScale, tileSize: map?.tileSize, sky: map?.sky };
+}
+
+// Async asset tail - each loader reports its own failure so one bad
+// fetch can't mask the others.
+function applyMapTail(ctx: NetCtx, map?: MapSnapshot): void {
   applyWater(ctx, map?.water);
   applyKillZone(ctx, map?.killY);
-  applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize, map?.terrainPreset)
+  applyTerrain(ctx, { file: map?.terrain ?? null, texPath: map?.terrainTex, skyDir: map?.sky, heightScale: map?.heightScale, tileSize: map?.tileSize, terrainPreset: map?.terrainPreset })
     .catch((error): void => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
   applyInteriors(ctx, map?.interiors)
     .catch((error): void => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));

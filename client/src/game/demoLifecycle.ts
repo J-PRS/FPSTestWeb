@@ -131,6 +131,14 @@ function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
 
 // During playback: only update playback balls, skip live game balls and spawning
 function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
+  tickPlaybackBalls(d, dt);
+  updatePlaybackCreatures(d.playbackWorld, dt);
+  updatePlaybackFlags(d.playbackWorld);
+  syncPlaybackFlagMarkers(d);
+  syncPlaybackNodeMarkers(d);
+}
+
+function tickPlaybackBalls(d: DemoLifecycleCtx, dt: number): void {
   const terrain = d.lazyTerrain();
   const player = d.lazyPlayer();
   let frozenCount = 0;
@@ -160,10 +168,11 @@ d.frozenWarn.n += 1;
   } else {
     d.frozenWarn.n = 0;
   }
-  updatePlaybackCreatures(d.playbackWorld, dt);
-  updatePlaybackFlags(d.playbackWorld);
-  // HUD flag diamonds - the proxy already re-pins to the carrier each
-  // frame, so pointing marker.wirePos at the proxy rides the carrier too.
+}
+
+// HUD flag diamonds - the proxy already re-pins to the carrier each
+// frame, so pointing marker.wirePos at the proxy rides the carrier too.
+function syncPlaybackFlagMarkers(d: DemoLifecycleCtx): void {
   for (const [id, proxy] of d.playbackWorld.playbackFlags) {
     const team = (id & 0xF) === 1 ? 'bravo' : 'alpha';
     let m = d.world.flagMarkers.get(team);
@@ -179,9 +188,14 @@ d.frozenWarn.n += 1;
     }
     d.world.flagStates[team] = PB_FLAG_STATE[proxy.userData.state as number] ?? 'home';
   }
-  // Conquest node pins - recorded marker state decoded verbatim; the
-  // nodeMarkers projection tick (kept alive in playback mode) pins it.
-  const NODE_OWNER = ['neutral', 'alpha', 'bravo'] as const;
+}
+
+const PB_NODE_OWNER = ['neutral', 'alpha', 'bravo'] as const;
+
+// Conquest node pins - recorded marker state decoded verbatim; the
+// nodeMarkers projection tick (kept alive in playback mode) pins it.
+// Nodes whose playback lane went quiet leave their pin behind - reap.
+function syncPlaybackNodeMarkers(d: DemoLifecycleCtx): void {
   for (const [id, n] of d.playbackWorld.playbackNodes) {
     let m = d.world.nodeMarkers.get(id);
     if (!m) {
@@ -190,11 +204,10 @@ d.frozenWarn.n += 1;
       d.playbackNodeIds.add(id);
     }
     m.pos.set(n.x, n.y, n.z);
-    m.owner = NODE_OWNER[n.meta & 3] ?? 'neutral';
+    m.owner = PB_NODE_OWNER[n.meta & 3] ?? 'neutral';
     m.core = Boolean(n.meta & 4); m.gx = n.gx; m.gz = n.gz;
     m.show = Boolean(n.meta & 8); m.hot = Boolean(n.meta & 16);
   }
-  // Nodes whose playback lane went quiet leave their pin behind - reap.
   for (const id of d.playbackNodeIds) {
     if (!d.playbackWorld.playbackNodes.has(id)) {
       d.world.nodeMarkers.delete(id);
@@ -402,7 +415,10 @@ function applyAtmoSection(d: DemoLifecycleCtx, atmo: unknown): void {
   applyMapFog(ctx, a?.fog as never);
   applyWeather(ctx, a?.weather as never);
   applyAtmosphere(ctx, a?.atmosphere as never);
-  applyTerrain(ctx, (a?.terrain ?? null) as never, a?.terrainTex as never, a?.sky as never, a?.heightScale as never, a?.tileSize as never, a?.terrainPreset as never)
+  applyTerrain(ctx, {
+    file: (a?.terrain ?? null) as never, texPath: a?.terrainTex as never, skyDir: a?.sky as never,
+    heightScale: a?.heightScale as never, tileSize: a?.tileSize as never, terrainPreset: a?.terrainPreset as never,
+  })
     .catch((): void => undefined);
 }
 
