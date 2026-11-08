@@ -95,6 +95,8 @@ export const BOT_TUNING = {
                          // 100% of samples <35), so comfyEnergy would
                          // gate the climb off entirely; ~16E buys the
                          // ~1.2s burn that actually clears 5m AGL
+    reconMinSpeed: 10,   // m/s - don't light a recon hover at walking
+                         // pace; wait for the ski line to make it lift
     glideTime: 3,        // s - enforced no-discretionary-jet window after
                          // a committed burn ends (chaos soak _chaos3:
                          // pulse-burn/glide beat scattered taps - the

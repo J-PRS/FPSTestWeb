@@ -300,7 +300,7 @@ export class BotMoves {
     if (this.wantJet(ctx, pos, dest, { rise, speed, gd, airborne }) && tanked && (this.glideT <= 0 || this.jetWhy === 'prey' || this.jetWhy === 'block' || this.jetWhy === 'runIn')) {
       this.jetHold = Math.max(this.jetHold, T.moves.jetHoldBase + botRand() * T.moves.jetHoldRand);
     }
-    this.reconTick(dt, ctx, pos, { g0, rise, airborne, tanked });
+    this.reconTick(dt, ctx, pos, { g0, rise, airborne, tanked, speed });
     this.reconHoldT = Math.max(0, this.reconHoldT - dt); this.apexHoldT = Math.max(0, this.apexHoldT - dt);
     // The dive: a destination at or below the bot wants gravity, not
     // thrust — a capper jets to the stand's zip code, then lets
@@ -379,7 +379,11 @@ export class BotMoves {
     const landDive = ctx.running === true && ctx.objective !== null && ctx.objective !== undefined
       && dyAbove > 8 && od < Math.max(140, dyAbove * T.lines.diveGlideK * 1.5);
     if (inGlide || landDive) {this.jetHold = 0;}
-    const jet = (!diveRun || this.reconHoldT > 0 || this.apexHoldT > 0) && !landDive && (((this.jetHold > 0 || (this.host.escapeJetT() > 0 && !inGlide)) && tanked) || (tail && !inGlide));
+    // Escape burns bypass jetHold and never set jetWhy - name them or
+    // duty telemetry reads a third of all thrust as reasonless ('-').
+    const escJet = this.host.escapeJetT() > 0 && !inGlide;
+    if (escJet && this.jetHold <= 0) {this.jetWhy = 'escape';}
+    const jet = (!diveRun || this.reconHoldT > 0 || this.apexHoldT > 0) && !landDive && (((this.jetHold > 0 || escJet) && tanked) || (tail && !inGlide));
     this.jetOut = jet;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
@@ -497,10 +501,14 @@ export class BotMoves {
    *  ground drops spends the tank on height gravity was about to give
    *  free, and starts the climb slow instead of fast. rise < -boostRise
    *  is the same "terrain ahead drops" read canDive uses. */
-  private reconTick(dt: number, ctx: BrainCtx, pos: BotVec, s: { g0: number; rise: number; airborne: boolean; tanked: boolean }): void {
+  private reconTick(dt: number, ctx: BrainCtx, pos: BotVec, s: { g0: number; rise: number; airborne: boolean; tanked: boolean; speed: number }): void {
     this.reconT = Math.max(0, this.reconT - dt);
+    // Burn-while-fast: past jetMaxFwdAccel the jet's forward share drops
+    // out and the burn is pure lift - a recon lit at walking pace pays
+    // the same 15E/s for a hover that converts to nothing (chaos _chaos3).
     if (this.reconT <= 0 && this.jetHold <= 0 && this.glideT <= 0 && !ctx.posted && ctx.runner !== true && ctx.wave !== true
         && ctx.running !== true && !s.airborne && !this.perched && s.tanked && s.rise > -T.moves.boostRise
+        && s.speed > T.moves.reconMinSpeed
         && (ctx.energy === undefined || ctx.energy > T.moves.reconMinE)
         && pos.y - s.g0 < T.moves.reconAglMax) {
       this.reconT = T.moves.reconPeriod * (0.6 + botRand() * 0.8);
