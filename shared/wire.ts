@@ -1155,6 +1155,9 @@ export function decodeProjSpawn(u8: Uint8Array): WireProjSpawn | null {
     if (o + n > u8.length) {return null;}
     shotId = DEC.decode(u8.subarray(o, o + n));
   }
+  if (!Number.isFinite(age + t) ||
+      !Number.isFinite(position.x + position.y + position.z) ||
+      !Number.isFinite(velocity.x + velocity.y + velocity.z)) {return null;}
   return { projId, ownerWireId, weaponType, pellet: pelletB === 0xFF ? undefined : pelletB, age, t, position, velocity, shotId };
 }
 
@@ -1192,6 +1195,7 @@ export function decodeProjGone(u8: Uint8Array): WireProjGone | null {
     if (o + n > u8.length) {return null;}
     shotId = DEC.decode(u8.subarray(o, o + n));
   }
+  if (!Number.isFinite(age) || !Number.isFinite(position.x + position.y + position.z)) {return null;}
   return { projId, age, position, shotId };
 }
 
@@ -1222,15 +1226,23 @@ export function decodeBallSegmentAt(u8: Uint8Array, off: number): { seg: WireBal
   const slowT = d.getFloat32(o, true); o += 4;
   let tp: WireVec3 | null = null;
   if (flags & 4) {
+    if (o + 12 > u8.byteLength - off) {return null;}
     tp = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
   }
   let targetId: string | null = null;
   if (flags & 8) {
+    if (o >= u8.byteLength - off) {return null;}
     const idLen = d.getUint8(((o += 1) - 1));
     if (o + idLen > u8.byteLength - off) {return null;}
     targetId = DEC.decode(u8.subarray(off + o, off + o + idLen));
     o += idLen;
   }
+  // Same contract as decodePosition: a NaN/Inf vector or timer poisons
+  // the replay sim - refuse the segment, don't sanitize it downstream.
+  if (!Number.isFinite(position.x + position.y + position.z) ||
+      !Number.isFinite(velocity.x + velocity.y + velocity.z) ||
+      !Number.isFinite(t + et + slowT) ||
+      (tp !== null && !Number.isFinite(tp.x + tp.y + tp.z))) {return null;}
   return {
     seg: {
       id, kind, position, velocity,
