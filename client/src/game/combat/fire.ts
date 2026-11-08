@@ -15,7 +15,6 @@ import type { WeaponDef } from '../../weapons.js';
 import { BELT_THROW_TIME, type BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
 import { THROW_RELEASE, SWING_CONTACT_T, SWING_STRIKE_T } from '../../entities/ViewModel.js';
-import { poissonDisc } from '../../utils/poissonSpread.js';
 import { spawnDrift } from '../../debug/netProbe.js';
 import {
   EXPLOSION_VFX_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE, SCORCH_MAX,
@@ -275,33 +274,38 @@ function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
 // pattern isn't visually memorized. One shot sfx for the whole burst.
 function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count: number, spread: number): void {
   sfx.shoot(config.weaponType);
-  const pts = poissonDisc(count);
-  const rot = simRand() * Math.PI * 2;
-  const cs = Math.cos(rot), sn = Math.sin(rot);
-  _flakRight.crossVectors(e.dir, _flakUp0);
-  if (_flakRight.lengthSq() < 1e-8) {_flakRight.set(1, 0, 0);} else {_flakRight.normalize();}
-  _flakUp.crossVectors(_flakRight, e.dir);
+  const simmed = serverSimmed(config.weaponType);
+  // Authority fans are a deterministic Vogel spiral (RoomProjectiles.spawn)
+  // - predicting a different point set guarantees every pellet re-anchors
+  // onto a foreign arc and ghosts hits the server can't make. Same basis,
+  // same index order; shared stats override the def's cosmetic values.
+  const st = getWeaponStats(config.weaponType);
+  const n = simmed && st?.burst ? st.burst : count;
+  const sp = simmed && st?.pelletSpread !== undefined ? st.pelletSpread : spread;
+  let rx = -e.dir.z, rz = e.dir.x; const ry = 0;
+  const rl = Math.hypot(rx, rz);
+  if (rl < 1e-8) {rx = 1; rz = 0;} else {rx /= rl; rz /= rl;}
+  const ux = ry * e.dir.z - rz * e.dir.y, uy = rz * e.dir.x - rx * e.dir.z, uz = rx * e.dir.y - ry * e.dir.x;
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const registry = deps.world.projectileRegistry;
   // Simmed fans ride ONE intent per pull — the server fans the spread
   // itself and echoes pellet indices, so each predicted pellet registers
   // under its own `${pullId}#${idx}` slot for the echo bind.
-  const simmed = serverSimmed(config.weaponType);
-  const pullId = simmed ? nextShotId(deps.world.projectileRegistry) : '';
-  const registry = deps.world.projectileRegistry;
-  let i = 0;
-  for (const pt of pts) {
-    const ox = (pt.x * cs - pt.y * sn) * spread;
-    const oy = (pt.x * sn + pt.y * cs) * spread;
-    _flakDir.copy(e.dir)
-      .addScaledVector(_flakRight, ox)
-      .addScaledVector(_flakUp, oy)
-      .normalize();
+  const pullId = simmed ? nextShotId(registry) : '';
+  for (let i = 0; i < n; i += 1) {
+    const r = Math.sqrt((i + 0.5) / n) * sp;
+    const a = i * golden;
+    const ox = Math.cos(a) * r, oy = Math.sin(a) * r;
+    _flakDir.set(
+      e.dir.x + rx * ox + ux * oy,
+      e.dir.y + ry * ox + uy * oy,
+      e.dir.z + rz * ox + uz * oy).normalize();
     const p = spawnProjectile(deps, config, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel }, true);
     if (p && simmed) {
       p.fanSlot = `${pullId}#${i}`;
       p.pullShotId = pullId;
       registry.byFanSlot.set(p.fanSlot, p);
     }
-i += 1;
   }
   if (simmed) {
     deps.lazyNetworkManager().sendShotFired({
