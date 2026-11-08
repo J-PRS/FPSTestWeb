@@ -1,4 +1,4 @@
-import type { Vec3, ServerMessage } from './types.ts';
+import type { Vec3, ServerMessage, PlayerState } from './types.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
@@ -369,28 +369,41 @@ const SENTRY_KNOCKBACK = DEPLOY_ITEMS.baseturret.knockback!;
  *  the small radius. Moving targets are dodged honestly: nothing homes.
  *  The sentryShot broadcast carries the aim point so clients paint the
  *  same straight-line flight. */
+// A live, unprotected, non-owner, non-teammate body the sentry may shoot.
+function sentryFoe(d: Deployed, dTeam: string | undefined, pid: string, p: PlayerState): boolean {
+  if (p.isDead || pid === d.owner) {return false;}
+  if (dTeam && p.team === dTeam) {return false;}
+  return p.protectedUntil <= simNow();
+}
+
+// Nearest living non-owner non-teammate in range with clear LOS —
+// returns the lead inputs the bolt aim needs, or null to idle-cool.
+function sentryTarget(r: RoomDeployables, d: Deployed): { target: string; tp: { x: number; y: number; z: number }; tv: { x: number; y: number; z: number }; dist: number } | null {
+  const dTeam = r.teamOf(d);
+  let target: string | null = null;
+  let tp: { x: number; y: number; z: number } | null = null;
+  let tv = { x: 0, y: 0, z: 0 };
+  let bestD2 = SENTRY_RANGE * SENTRY_RANGE;
+  for (const [pid, p] of r.room.players.getAllPlayers()) {
+    if (!sentryFoe(d, dTeam, pid, p)) {continue;}
+    const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 >= bestD2) {continue;}
+    if (!losClear(r, d.pos, p.position, dTeam)) {continue;}
+    bestD2 = d2; target = pid; tp = p.position;
+    tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
+  }
+  if (!target || !tp) {return null;}
+  return { target, tp, tv, dist: Math.sqrt(bestD2) };
+}
+
 export function tickSentry(r: RoomDeployables, d: Deployed, dt: number): void {
     d.fireCd -= dt;
     if (d.fireCd > 0) {return;}
-    const dTeam = r.teamOf(d);
-    let target: string | null = null;
-    let tp: { x: number; y: number; z: number } | null = null;
-    let tv = { x: 0, y: 0, z: 0 };
-    let bestD2 = SENTRY_RANGE * SENTRY_RANGE;
-    for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead || pid === d.owner) {continue;}
-      if (dTeam && p.team === dTeam) {continue;}
-      if (p.protectedUntil > simNow()) {continue;}
-      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 >= bestD2) {continue;}
-      if (!losClear(r, d.pos, p.position, dTeam)) {continue;}
-      bestD2 = d2; target = pid; tp = p.position;
-      tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
-    }
-    if (!target || !tp) { d.fireCd = 0.15; return; }
+    const pick = sentryTarget(r, d);
+    if (!pick) { d.fireCd = 0.15; return; }
+    const { tp, tv, dist } = pick;
     d.fireCd = SENTRY_FIRE_INTERVAL;
-    const dist = Math.sqrt(bestD2);
     const flight = dist / SENTRY_BOLT_SPEED;
     // Lead the runner at chest height — a still target gets the bolt dead
     // on, a skier crossing at 40 m/s watches it land behind them.

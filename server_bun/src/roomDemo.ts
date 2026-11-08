@@ -97,43 +97,35 @@ export class RoomDemo {
     if (data[1] === WIRE_HIT) {
       const h = decodeHit(data);
       if (!h) {return;}
-      const targetId = this.pidOfWid(h.targetWid);
-      const shooterId = h.shooterWid === 0 ? 'environment' : this.pidOfWid(h.shooterWid);
-      if (!targetId || !shooterId) {return;}
-      const victimIdx = this.seat(targetId);
-      const shooterIdx = this.seat(shooterId);
-      const s = this.room.moveSim.simState(targetId);
-      const pos = s?.pos ?? { x: 0, y: 0, z: 0 };
-      this.targetEvents.push({
-        eventType: TargetEventType.Hit, timestamp: this.now,
-        posX: pos.x, posY: pos.y, posZ: pos.z,
-        velX: 0, velY: 0, velZ: 0,
-        targetId: victimIdx, targetType: TARGETTYPE_KILL,
-        health: h.damage,
-        hasPeakPosition: true, peakPosX: shooterIdx + 1, peakPosY: 0, peakPosZ: 0,
-      });
+      this.noteTargetEvent(TargetEventType.Hit, h.targetWid, h.shooterWid, h.damage);
       return;
     }
     if (data[1] === WIRE_KILL) {
       const k = decodeKill(data);
       if (!k) {return;}
-      const targetId = this.pidOfWid(k.targetWid);
-      const shooterId = k.shooterWid === 0 ? 'environment' : this.pidOfWid(k.shooterWid);
-      if (!targetId || !shooterId) {return;}
-      const victimIdx = this.seat(targetId);
-      const shooterIdx = this.seat(shooterId);
-      const s = this.room.moveSim.simState(targetId);
-      const pos = s?.pos ?? { x: 0, y: 0, z: 0 };
-      this.targetEvents.push({
-        eventType: TargetEventType.Destroyed, timestamp: this.now,
-        posX: pos.x, posY: pos.y, posZ: pos.z,
-        velX: 0, velY: 0, velZ: 0,
-        targetId: victimIdx, targetType: TARGETTYPE_KILL,
-        health: k.weapon ?? 0,
-        hasPeakPosition: true, peakPosX: shooterIdx + 1, peakPosY: 0, peakPosZ: 0,
-      });
+      this.noteTargetEvent(TargetEventType.Destroyed, k.targetWid, k.shooterWid, k.weapon ?? 0);
       return;
     }
+  }
+
+  // hit/kill share one shape: resolve wids, seat both parties, stamp the
+  // victim's sim pos. shooterWid 0 is the environment lane.
+  private noteTargetEvent(eventType: TargetEventType, targetWid: number, shooterWid: number, health: number): void {
+    const targetId = this.pidOfWid(targetWid);
+    const shooterId = shooterWid === 0 ? 'environment' : this.pidOfWid(shooterWid);
+    if (!targetId || !shooterId) {return;}
+    const victimIdx = this.seat(targetId);
+    const shooterIdx = this.seat(shooterId);
+    const s = this.room.moveSim.simState(targetId);
+    const pos = s?.pos ?? { x: 0, y: 0, z: 0 };
+    this.targetEvents.push({
+      eventType, timestamp: this.now,
+      posX: pos.x, posY: pos.y, posZ: pos.z,
+      velX: 0, velY: 0, velZ: 0,
+      targetId: victimIdx, targetType: TARGETTYPE_KILL,
+      health,
+      hasPeakPosition: true, peakPosX: shooterIdx + 1, peakPosY: 0, peakPosZ: 0,
+    });
   }
   private baselineDone = false;
   /** Baseline spawns — initial-pool deployables/pickups/crawlers live via

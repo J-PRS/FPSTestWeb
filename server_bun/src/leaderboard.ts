@@ -89,25 +89,9 @@ export async function submitDemo(buf: ArrayBuffer, challenge?: Challenge | null)
   if (tk) {
     if (!(await verifyToken(tk, SIGN_SECRET))) { return { ok: false, verdict: 'bad-token' }; }
   } else {
-    // Solo path — no server witnessed the run, so the runSeed must bind
-    // to a challenge this server minted: the client couldn't pick the
-    // dice stream, which is what makes the spawn-dice gates meaningful.
+    const soloFail = await verifySoloSubmission(demo, challenge);
+    if (soloFail) {return soloFail;}
     attest = 'seed';
-    if (!challenge || !(await verifyChallenge(challenge, SIGN_SECRET, wallNow()))) {
-      return { ok: false, verdict: 'no-token', error: 'solo submissions need a live challenge seed (GET /challenge)' };
-    }
-    if (challenge.seed !== demo.header.runSeed) {
-      return { ok: false, verdict: 'bad-token', error: 'runSeed does not match the minted challenge' };
-    }
-    if (!demo.header.runSeed) { return { ok: false, verdict: 'bad-token', error: 'unseeded demo' }; }
-    // The seed binding alone is cosmetic — replay the dice stream and
-    // require the recorded events to land on it before ranking.
-    const sv = verifySolo(demo);
-    if (!sv.ok) {
-      return { ok: false,
-        verdict: sv.reason?.startsWith('impossible-trajectory') ? 'impossible-trajectory' : 'event-mismatch',
-        error: sv.reason };
-    }
   }
 
   const player = demo.header.playerName || 'unknown';
@@ -135,6 +119,29 @@ export async function submitDemo(buf: ArrayBuffer, challenge?: Challenge | null)
   appendFileSync(BOARD, `${JSON.stringify(entry)}\n`);
   logger.info('Leaderboard ranked', { player, kills, matchId });
   return { ok: true, verdict: 'ranked', entry };
+}
+
+// Solo path — no server witnessed the run, so the runSeed must bind
+// to a challenge this server minted: the client couldn't pick the
+// dice stream, which is what makes the spawn-dice gates meaningful.
+// Returns the failure SubmitResult, or null when the run verifies.
+async function verifySoloSubmission(demo: ReturnType<typeof deserializeDemo>, challenge: Challenge | null | undefined): Promise<SubmitResult | null> {
+  if (!challenge || !(await verifyChallenge(challenge, SIGN_SECRET!, wallNow()))) {
+    return { ok: false, verdict: 'no-token', error: 'solo submissions need a live challenge seed (GET /challenge)' };
+  }
+  if (challenge.seed !== demo.header.runSeed) {
+    return { ok: false, verdict: 'bad-token', error: 'runSeed does not match the minted challenge' };
+  }
+  if (!demo.header.runSeed) { return { ok: false, verdict: 'bad-token', error: 'unseeded demo' }; }
+  // The seed binding alone is cosmetic — replay the dice stream and
+  // require the recorded events to land on it before ranking.
+  const sv = verifySolo(demo);
+  if (!sv.ok) {
+    return { ok: false,
+      verdict: sv.reason?.startsWith('impossible-trajectory') ? 'impossible-trajectory' : 'event-mismatch',
+      error: sv.reason };
+  }
+  return null;
 }
 
 // Board: best entry per player per mode, kills desc then accuracy desc.

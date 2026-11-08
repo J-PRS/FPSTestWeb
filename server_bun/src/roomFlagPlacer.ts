@@ -245,51 +245,50 @@ export class FlagPlacer {
       ...(spec.spawns ?? []),
       ...(spec.structures ?? []).map((s): { x: number; y: number; z: number; } => ({ x: s.pos.x, y: 0, z: s.pos.z })),
     ];
-    // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
-    // oxlint-disable-next-line init-declarations -- assigned later
-    let a!: Vec3like, b;
-    if (pts.length >= 2) {
-      let cx = 0, cz = 0;
-      for (const p of pts) { cx += p.x; cz += p.z; }
-      cx /= pts.length; cz /= pts.length;
-      let sxx = 0, sxz = 0, szz = 0;
-      for (const p of pts) { const dx = p.x - cx, dz = p.z - cz; sxx += dx * dx; sxz += dx * dz; szz += dz * dz; }
-      const tr = (sxx + szz) / 2;
-      const disc = Math.hypot((sxx - szz) / 2, sxz);
-      const lam1 = tr + disc, lam2 = tr - disc;
-      let ux = 0, uz = 0;
-      if (disc < 1e-6 || lam1 / lam2 < 1.25) {
-        // Symmetric cloud — the axis is ambiguous, take the diagonal.
-        ux = Math.SQRT1_2; uz = Math.SQRT1_2;
-      } else {
-        let vx = sxz, vz = lam1 - sxx;
-        if (Math.hypot(vx, vz) < 1e-9) { vx = lam1 - szz; vz = sxz; }
-        const n = Math.hypot(vx, vz) || 1;
-        ux = vx / n; uz = vz / n;
-        if (ux < 0 || (ux === 0 && uz < 0)) { ux = -ux; uz = -uz; }
-      }
-      let tMin = Infinity, tMax = -Infinity;
-      for (const p of pts) {
-        const t = (p.x - cx) * ux + (p.z - cz) * uz;
-        if (t < tMin) {tMin = t;}
-        if (t > tMax) {tMax = t;}
-      }
-      const span = tMax - tMin;
-      const seat = (t: number): Vec3like => ({ x: cx + ux * t, y: 0, z: cz + uz * t });
-      if (span < 20) {
-        // Coincident anchors — nothing to split along.
-        a = { x: -50, y: 0, z: 0 }; b = { x: 50, y: 0, z: 0 };
-      } else {
-        a = seat(tMin + span * 0.25); b = seat(tMax - span * 0.25);
-      }
-    } else if (spec.arena) {
+    if (pts.length >= 2) {return this.pcaSeats(pts);}
+    if (spec.arena) {
       const r = spec.arena.radius * 0.6;
-      a = { x: spec.arena.x - r, y: 0, z: spec.arena.z };
-      b = { x: spec.arena.x + r, y: 0, z: spec.arena.z };
-    } else {
-      a = { x: -50, y: 0, z: 0 }; b = { x: 50, y: 0, z: 0 };
+      return { alpha: { x: spec.arena.x - r, y: 0, z: spec.arena.z }, bravo: { x: spec.arena.x + r, y: 0, z: spec.arena.z } };
     }
-    return { alpha: a, bravo: b };
+    return { alpha: { x: -50, y: 0, z: 0 }, bravo: { x: 50, y: 0, z: 0 } };
+  }
+
+  // Principal-axis seating: project anchors onto the cloud's first PC,
+  // seat each side a quarter-span in from its extreme. Symmetric clouds
+  // take the 45° diagonal; coincident anchors fall back to ±50m.
+  private pcaSeats(pts: Vec3like[]): { alpha: Vec3like; bravo: Vec3like } {
+    let cx = 0, cz = 0;
+    for (const p of pts) { cx += p.x; cz += p.z; }
+    cx /= pts.length; cz /= pts.length;
+    let sxx = 0, sxz = 0, szz = 0;
+    for (const p of pts) { const dx = p.x - cx, dz = p.z - cz; sxx += dx * dx; sxz += dx * dz; szz += dz * dz; }
+    const tr = (sxx + szz) / 2;
+    const disc = Math.hypot((sxx - szz) / 2, sxz);
+    const lam1 = tr + disc, lam2 = tr - disc;
+    let ux = 0, uz = 0;
+    if (disc < 1e-6 || lam1 / lam2 < 1.25) {
+      // Symmetric cloud — the axis is ambiguous, take the diagonal.
+      ux = Math.SQRT1_2; uz = Math.SQRT1_2;
+    } else {
+      let vx = sxz, vz = lam1 - sxx;
+      if (Math.hypot(vx, vz) < 1e-9) { vx = lam1 - szz; vz = sxz; }
+      const n = Math.hypot(vx, vz) || 1;
+      ux = vx / n; uz = vz / n;
+      if (ux < 0 || (ux === 0 && uz < 0)) { ux = -ux; uz = -uz; }
+    }
+    let tMin = Infinity, tMax = -Infinity;
+    for (const p of pts) {
+      const t = (p.x - cx) * ux + (p.z - cz) * uz;
+      if (t < tMin) {tMin = t;}
+      if (t > tMax) {tMax = t;}
+    }
+    const span = tMax - tMin;
+    if (span < 20) {
+      // Coincident anchors — nothing to split along.
+      return { alpha: { x: -50, y: 0, z: 0 }, bravo: { x: 50, y: 0, z: 0 } };
+    }
+    const seat = (t: number): Vec3like => ({ x: cx + ux * t, y: 0, z: cz + uz * t });
+    return { alpha: seat(tMin + span * 0.25), bravo: seat(tMax - span * 0.25) };
   }
 
   snapFlagBases(bases: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
