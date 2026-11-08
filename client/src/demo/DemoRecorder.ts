@@ -70,6 +70,17 @@ function pruneProjEvents(events: ProjectileEvent[], cutoff: number, pool: Projec
   events.length -= lo - keep;
 }
 
+// v8 meta — encode wire strings to the u8 lanes; absent stays 0.
+function fillRemoteMeta(f: RemoteFrame, s: RemoteSample): void {
+  f.team = s.team ? (TEAM_CODE[s.team] ?? 0) : 0;
+  f.hp = Math.max(0, Math.min(255, Math.round(s.health ?? 0)));
+  f.held = Math.max(0, Math.min(255, s.held ?? 0));
+  f.sheep = Math.max(0, Math.min(255, s.sheep ?? 0));
+  f.cls = s.armorClass ? (CLS_CODE[s.armorClass] ?? 0) : 0;
+  f.status = (s.status ?? 0) & 0xFF;
+  f.wid = (s.weapon ?? 0) & 0xFF;
+}
+
 // Minimal shape the recorder needs from a live remote player —
 // RemotePlayer and the bots' entries both satisfy it.
 export interface RemoteSample {
@@ -283,42 +294,43 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.lastRemoteSampleT = now;
     const t0 = performance.now();
     for (const s of this.remoteSource()) {
-      let idx = this.rosterIdxById.get(s.id);
-      if (idx === undefined) {
-        idx = this.roster.length;
-        this.rosterIdxById.set(s.id, idx);
-        this.roster.push({ name: s.id });
-      }
-      let flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
-      // Respawn/reclaim jumps read as impossible speed in audit — mark
-      // them like the server recorder does (>8m between samples = a
-      // seat re-root, not motion; 160m/s is the audit flight envelope).
-      const prev = this.lastRemoteByIdx.get(idx);
-      if (prev && Math.hypot(s.posX - prev.posX, s.posY - prev.posY, s.posZ - prev.posZ) > 8) {
-        flags |= RemoteFrameFlags.Teleport;
-      }
-      // Same dead-reckon skip as the local frame: an identical sample
-      // reproduces exactly under playback's timestamp lerp.
-      if (this.deadReckon && this.remoteUnchanged(idx, s, flags)) {continue;}
-      const f = this.remoteFramePool.pop() ?? ({ timestamp: 0, rosterIdx: 0, posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, flags: 0 } as RemoteFrame);
-      f.timestamp = now;
-      f.rosterIdx = idx;
-      f.posX = s.posX; f.posY = s.posY; f.posZ = s.posZ;
-      f.velX = s.velX; f.velY = s.velY; f.velZ = s.velZ;
-      f.yaw = s.yaw; f.pitch = s.pitch;
-      f.flags = flags;
-      // v8 meta — encode wire strings to the u8 lanes; absent stays 0.
-      f.team = s.team ? (TEAM_CODE[s.team] ?? 0) : 0;
-      f.hp = Math.max(0, Math.min(255, Math.round(s.health ?? 0)));
-      f.held = Math.max(0, Math.min(255, s.held ?? 0));
-      f.sheep = Math.max(0, Math.min(255, s.sheep ?? 0));
-      f.cls = s.armorClass ? (CLS_CODE[s.armorClass] ?? 0) : 0;
-      f.status = (s.status ?? 0) & 0xFF;
-      f.wid = (s.weapon ?? 0) & 0xFF;
-      this.remoteFrames.push(f);
+      const f = this.remoteFrameFor(s, now);
+      if (f) {this.remoteFrames.push(f);}
     }
     this.prof.remoteNs += performance.now() - t0;
     this.prof.remoteN += 1;
+  }
+
+  /** One remote sample → pooled frame, or null when the dead-reckon
+   *  skip eats it. Roster idx resolution, teleport edge, and the v8
+   *  meta lanes all live here so the poll loop stays a loop. */
+  private remoteFrameFor(s: RemoteSample, now: number): RemoteFrame | null {
+    let idx = this.rosterIdxById.get(s.id);
+    if (idx === undefined) {
+      idx = this.roster.length;
+      this.rosterIdxById.set(s.id, idx);
+      this.roster.push({ name: s.id });
+    }
+    let flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
+    // Respawn/reclaim jumps read as impossible speed in audit — mark
+    // them like the server recorder does (>8m between samples = a
+    // seat re-root, not motion; 160m/s is the audit flight envelope).
+    const prev = this.lastRemoteByIdx.get(idx);
+    if (prev && Math.hypot(s.posX - prev.posX, s.posY - prev.posY, s.posZ - prev.posZ) > 8) {
+      flags |= RemoteFrameFlags.Teleport;
+    }
+    // Same dead-reckon skip as the local frame: an identical sample
+    // reproduces exactly under playback's timestamp lerp.
+    if (this.deadReckon && this.remoteUnchanged(idx, s, flags)) {return null;}
+    const f = this.remoteFramePool.pop() ?? ({ timestamp: 0, rosterIdx: 0, posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, flags: 0 } as RemoteFrame);
+    f.timestamp = now;
+    f.rosterIdx = idx;
+    f.posX = s.posX; f.posY = s.posY; f.posZ = s.posZ;
+    f.velX = s.velX; f.velY = s.velY; f.velZ = s.velZ;
+    f.yaw = s.yaw; f.pitch = s.pitch;
+    f.flags = flags;
+    fillRemoteMeta(f, s);
+    return f;
   }
 
   private sampleTargets(now: number): void {
