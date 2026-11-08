@@ -285,6 +285,18 @@ export class PlayerInput {
 
 
 
+  // Corpse clicks are spectate/respawn — queuing fire/jet here would
+  // fire a shot or burn fuel the first frame back alive.
+  private deadMouseDown(e: MouseEvent): void {
+    const { h } = this;
+    if (e.button === 0) {
+      // Orbiting a teammate: LMB steps back through the ring; free-fly
+      // ghost keeps LMB = respawn so a click still revives.
+      if (h.isDeadSpectating()) {h.deadSpectateCycle(-1);} else {h.respawn();}
+    }
+    if (e.button === 2) {h.deadSpectateCycle(1); e.preventDefault();}
+  }
+
   private bindInput(): void {
 
     const {h} = this;
@@ -337,27 +349,7 @@ export class PlayerInput {
 
       this.keys[`Mouse${e.button}`] = true;
 
-      if (h.isDead()) {
-
-        // Corpse clicks are spectate/respawn — queuing fire/jet here would
-
-        // fire a shot or burn fuel the first frame back alive.
-
-        if (e.button === 0) {
-
-          // Orbiting a teammate: LMB steps back through the ring; free-fly
-
-          // ghost keeps LMB = respawn so a click still revives.
-
-          if (h.isDeadSpectating()) {h.deadSpectateCycle(-1);} else {h.respawn();}
-
-        }
-
-        if (e.button === 2) {h.deadSpectateCycle(1); e.preventDefault();}
-
-        return;
-
-      }
+      if (h.isDead()) { this.deadMouseDown(e); return; }
 
       if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
 

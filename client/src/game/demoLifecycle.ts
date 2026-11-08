@@ -9,6 +9,7 @@ import { WIRE_SPECIES } from './netCrawlers.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
 import { applyMapFog, applyWeather, applyAtmosphere, applyTerrain } from './net/mapAssets.js';
 import type { DemoManager } from '../demo/index.js';
+import type { InterpolatedRemote } from '../demo/DemoPlayer.js';
 import type { Ball , Targetable } from '../entities/balls.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { FragMessages } from '../ui/FragMessages.js';
@@ -290,6 +291,204 @@ function snapshotExistingBallsForRecording(d: DemoLifecycleCtx, onBallRecorded?:
   }
 }
 
+// v5 HMAP: the clip carries its terrain - use it when the live field
+// is absent or doesn't match the recorded action; the live map wins
+// when it checks out against the embedded fingerprint.
+function restoreClipHeightmap(d: DemoLifecycleCtx, demoManager: DemoManager): void {
+  const emb = demoManager.player.demoData?.heightmap;
+  if (!emb || d.hmRestore) {return;}
+  const live = getHeightfield();
+  if (live && hmapMatches(emb, live)) {return;}
+  // hmapToField applies the corr tail (peak-preserving deltas on a
+  // finer grid) — injecting the raw coarse bytes loses the bounce
+  // fidelity the recorder paid bytes to keep.
+  const ef = hmapToField(emb);
+  d.hmRestore = injectHeightmapBytes(ef.data, ef.size, ef.heightScale ?? emb.heightScale, ef.worldScale ?? emb.worldScale);
+  applyHeightfieldScale(d.lazyTerrain());
+  d.lazyTerrain().reloadHeightmap();
+  demoManager.ui.setStatus(live ? 'map mismatch - embedded terrain' : 'embedded terrain');
+  logger.warn(live
+    ? 'demo heightmap disagrees with live map - playing on embedded grid'
+    : 'no live heightmap - playing on embedded grid');
+}
+
+// Dispose every live-game entity so nothing hangs frozen in the scene
+// during playback — balls not owned by the clip, projectiles, species.
+function disposeLiveEntities(d: DemoLifecycleCtx): void {
+  const playbackBallSet = new Set(d.playbackBallById.values());
+  for (let i = d.balls.length - 1; i >= 0; i -= 1) {
+    const b = d.balls[i];
+    if (!playbackBallSet.has(b)) {
+      b.dispose();
+      d.balls.splice(i, 1);
+      const ti = d.targets.indexOf(b);
+      if (ti !== -1) {d.targets.splice(ti, 1);}
+    }
+  }
+  // Clear live projectiles
+  for (const r of d.world.projectiles) {r.dispose();}
+  d.world.projectiles.length = 0;
+  // All live species are game objects too - dispose so they don't hang
+  // frozen in the scene during playback
+  for (const m of d.mines) {m.onDetonate = undefined;} // teardown isn't a detonation
+  type DisposableTarget = Targetable & { dispose(): void };
+  for (const list of [d.crawlers, d.turrets, d.rollers, d.seekers, d.overlords, d.mines, d.totems, d.rakks] as DisposableTarget[][]) {
+    for (const e of list) {
+      e.dispose();
+      const ti = d.targets.indexOf(e);
+      if (ti !== -1) {d.targets.splice(ti, 1);}
+    }
+    list.length = 0;
+  }
+}
+
+function playbackStart(d: DemoLifecycleCtx, demoManager: DemoManager): void {
+  // The replay is its own world - the live wire must not fight it
+  d.world.playbackMode = true;
+  // SECTION_ATMO: replay the recorded map look - without it a rimrock
+  // clip rendered on caldera's map inherits the wrong haze/sky. Restored
+  // to world.lastAtmo on stop.
+  const atmo = demoManager.player.demoData?.atmo;
+  if (atmo) {applyAtmoSection(d, atmo);}
+  restoreClipHeightmap(d, demoManager);
+  // Cool-shot clicks come from the overlay menu - a replay behind an
+  // open menu is invisible. Close it and grab pointer lock (the click
+  // is a user gesture, so the request is legal).
+  d.overlay.style.display = 'none';
+  document.body.classList.remove('menu-open');
+  // The feed plays clips without a user gesture - pointer lock would
+  // throw (and is meaningless there: no aiming, no input).
+  if (!feedMode.on) {d.rendererCanvas.requestPointerLock()?.catch?.((): void => { return; });}
+  // Live remote players would otherwise stand ghosted inside the replay
+  for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(true);}
+  disposeLiveEntities(d);
+  clearTransientObjects(d);
+}
+
+function playbackStop(d: DemoLifecycleCtx, demoManager: DemoManager, onPlaybackStop: () => void): void {
+  d.world.playbackMode = false;
+  // Re-arm so the next replay re-applies its own weapon instead of
+  // inheriting whatever the previous clip left selected.
+  d.playbackWid = -1;
+  for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(false);}
+  // Hand the live sky/haze back - the clip's atmo was a guest.
+  if (demoManager.player.demoData?.atmo) {
+    applyAtmoSection(d, d.world.lastAtmo);
+  }
+  clearTransientObjects(d);
+  // Show overlay menu so user can replay or pick another clip
+  if (document.pointerLockElement === d.rendererCanvas) {
+    document.exitPointerLock();
+  }
+  // Feed mode owns the screen - the menu must never resurface there.
+  if (!feedMode.on) {
+    d.overlay.style.display = 'flex';
+    document.body.classList.add('menu-open'); // hides the HUD layer - same as overlayInput.setOverlay
+  }
+  demoManager.fetchCoolShotsFromServer();
+  // Hand the live map back before recording resumes - a clip's embedded
+  // grid must never leak into the next recording's HMAP trailer.
+  if (d.hmRestore) {d.hmRestore(); d.hmRestore = null; applyHeightfieldScale(d.lazyTerrain()); d.lazyTerrain().reloadHeightmap();}
+  // Resume recording for new cool shots - the feed never records.
+  if (!feedMode.on) {demoManager.startRecording();}
+  onPlaybackStop();
+}
+
+// SECTION_ATMO apply sequence — shared by playback start (clip's
+// recorded look) and stop (hand the live map's look back).
+function applyAtmoSection(d: DemoLifecycleCtx, atmo: unknown): void {
+  const ctx = { deps: d } as never;
+  const a = atmo as Record<string, unknown> | undefined;
+  applyMapFog(ctx, a?.fog as never);
+  applyWeather(ctx, a?.weather as never);
+  applyAtmosphere(ctx, a?.atmosphere as never);
+  applyTerrain(ctx, (a?.terrain ?? null) as never, a?.terrainTex as never, a?.sky as never, a?.heightScale as never, a?.tileSize as never, a?.terrainPreset as never)
+    .catch((): void => undefined);
+}
+
+// Recorded remote players - states arrive already interpolated at demo
+// time; RemotePlayer's own snapshot buffer gets them as live updates,
+// so replica smoothing is literally the production netcode path.
+// One interpolated remote state → replica update + HUD mirror +
+// positional move audio (playback bypasses net/remotes.ts).
+// Overhead chevron + cosmetics for one playback remote - bypasses
+// net/remotes.ts where the live HUD marker updates, so without this
+// replayed bodies walk around unmarked. Same renderLift anchor as live.
+// Roster-declared weapon rides the wire bit - only re-arm the model
+// viewmodel when the clip's wid actually changed.
+function syncPlaybackWeapon(s: InterpolatedRemote, rp: RemotePlayer): void {
+  if (s.wid === undefined || s.wid === pbWidOf.get(s.rosterIdx)) {return;}
+  pbWidOf.set(s.rosterIdx, s.wid);
+  rp.model.setWeapon(s.wid);
+}
+
+function remotePlaybackHud(d: DemoLifecycleCtx, s: InterpolatedRemote, rp: RemotePlayer, dead: boolean, pos: { x: number; y: number; z: number }, roster: ReturnType<DemoManager['getRoster']>): void {
+  const indId = `pb:${s.rosterIdx}`;
+  const hud = d.lazyHud();
+  const teamName = s.team ? TEAM_NAME[s.team] : undefined;
+  if (s.cls && rp.armorClass !== CLS_NAME[s.cls]) {rp.setClass(CLS_NAME[s.cls]);}
+  // Same cosmetic lanes the live tick drives: status auras/cloak,
+  // team tint, held-token crown, roster-declared weapon.
+  const visible = applyStatusVisuals(d.world.localTeam, hud, null, indId, rp, s.status ?? 0, teamName);
+  applyTeamTint(d.world.localTeam, pbTintOf, indId, rp, teamName);
+  rp.setHeld(s.held ?? 0);
+  syncPlaybackWeapon(s, rp);
+  if (dead || !visible) {hud.removePlayerIndicator(indId); return;}
+  _pbMark.x = rp.position.x; _pbMark.y = rp.position.y + rp.renderLift; _pbMark.z = rp.position.z;
+  const rid = roster[s.rosterIdx] ?? indId;
+  // Roster-keyed mirrors - health bars read playback actors through
+  // the same maps the wire roster feeds them live.
+  d.world.playbackRemotePlayers.set(rid, rp);
+  d.world.playbackPlayers.set(rid, { position: pos, isDead: dead, health: s.hp, team: teamName });
+  hud.updatePlayerIndicator(indId, _pbMark, d.lazyCamera(), {
+    friendly: Boolean(teamName) && teamName === d.world.localTeam,
+    sheep: s.sheep, bot: isBotId(rid), cls: CLS_NAME[s.cls ?? 0] ?? rp.armorClass,
+    hp: s.hp || undefined, held: s.held || undefined,
+    name: rid,
+  });
+}
+
+function remotePlaybackState(d: DemoLifecycleCtx, s: InterpolatedRemote, dt: number, roster: ReturnType<DemoManager['getRoster']>): void {
+  let rp = d.playbackRemotes.get(s.rosterIdx);
+  const pos = { x: s.posX, y: s.posY, z: s.posZ };
+  if (!rp) {
+    rp = new RemotePlayer(d.lazyScene(), roster[s.rosterIdx] ?? `remote${s.rosterIdx}`, pos, d.lazyTerrain());
+    d.playbackRemotes.set(s.rosterIdx, rp);
+  }
+  rp.update(pos, { yaw: s.yaw, pitch: s.pitch }, dt, 0, { x: s.velX, y: s.velY, z: s.velZ });
+  rp.tick(dt, d.lazyCamera().position);
+  const dead = (s.flags & RemoteFrameFlags.Dead) !== 0;
+  rp.setStaleHidden(dead);
+  remotePlaybackHud(d, s, rp, dead, pos, roster);
+  // Playback remotes bypass net/remotes.ts, which is where jet/ski
+  // audio normally fires - replay the same positional loop decision.
+  // No wireJet bit in the recording, so the powered-climb heuristic
+  // stands in for it; the ski bit IS recorded.
+  sfxWorld.remoteMoveAudio(`pb:${s.rosterIdx}`, rp.position, rp.vel.length(),
+    !dead && s.velY > 4.5, !dead && (s.flags & RemoteFrameFlags.Ski) !== 0,
+    rp.vel, rp.armorClass ?? 'medium');
+}
+
+function remotePlayback(d: DemoLifecycleCtx, demoManager: DemoManager, states: InterpolatedRemote[], dt: number): void {
+  const roster = demoManager.getRoster();
+  const seen = new Set<number>();
+  for (const s of states) {
+    seen.add(s.rosterIdx);
+    remotePlaybackState(d, s, dt, roster);
+  }
+  // Roster players absent at this time keep their replica but hidden -
+  // e.g. they joined after the seek target or hadn't spawned yet.
+  for (const [idx, rp] of d.playbackRemotes) {
+    if (!seen.has(idx)) {
+      rp.setStaleHidden(true);
+      sfxWorld.remoteMoveAudioGone(`pb:${idx}`);
+      d.lazyHud().removePlayerIndicator(`pb:${idx}`);
+      const rid = roster[idx];
+      if (rid) {d.world.playbackRemotePlayers.delete(rid); d.world.playbackPlayers.delete(rid);}
+    }
+  }
+}
+
 function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlaybackStop: () => void): void {
   // Handle projectile events from demo playback: spawn projectiles on Fired, explode on Destroyed
   demoManager.onPlaybackEvent = (events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }): void => {
@@ -354,117 +553,10 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   };
 
   // User explicitly stops playback (ESC, UI stop button) - full cleanup
-  demoManager.onPlaybackStop = (): void => {
-    d.world.playbackMode = false;
-    // Re-arm so the next replay re-applies its own weapon instead of
-    // inheriting whatever the previous clip left selected.
-    d.playbackWid = -1;
-    for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(false);}
-    // Hand the live sky/haze back - the clip's atmo was a guest.
-    if (demoManager.player.demoData?.atmo) {
-      const ctx = { deps: d } as never;
-      const live = d.world.lastAtmo;
-      applyMapFog(ctx, live?.fog as never);
-      applyWeather(ctx, live?.weather as never);
-      applyAtmosphere(ctx, live?.atmosphere as never);
-      const a = live as Record<string, unknown> | undefined;
-      applyTerrain(ctx, (a?.terrain ?? null) as never, a?.terrainTex as never, a?.sky as never, a?.heightScale as never, a?.tileSize as never, a?.terrainPreset as never)
-        .catch((): void => undefined);
-    }
-    clearTransientObjects(d);
-    // Show overlay menu so user can replay or pick another clip
-    if (document.pointerLockElement === d.rendererCanvas) {
-      document.exitPointerLock();
-    }
-    // Feed mode owns the screen - the menu must never resurface there.
-    if (!feedMode.on) {
-      d.overlay.style.display = 'flex';
-      document.body.classList.add('menu-open'); // hides the HUD layer - same as overlayInput.setOverlay
-    }
-    demoManager.fetchCoolShotsFromServer();
-    // Hand the live map back before recording resumes - a clip's embedded
-    // grid must never leak into the next recording's HMAP trailer.
-    if (d.hmRestore) {d.hmRestore(); d.hmRestore = null; applyHeightfieldScale(d.lazyTerrain()); d.lazyTerrain().reloadHeightmap();}
-    // Resume recording for new cool shots - the feed never records.
-    if (!feedMode.on) {demoManager.startRecording();}
-    onPlaybackStop();
-  };
+  demoManager.onPlaybackStop = (): void => {playbackStop(d, demoManager, onPlaybackStop);};
 
   // Clear live game objects when playback starts so they don't hang frozen in the scene
-  demoManager.onPlaybackStart = (): void => {
-    // The replay is its own world - the live wire must not fight it
-    d.world.playbackMode = true;
-    // SECTION_ATMO: replay the recorded map look - without it a rimrock
-    // clip rendered on caldera's map inherits the wrong haze/sky. Restored
-    // to world.lastAtmo on stop.
-    const atmo = demoManager.player.demoData?.atmo;
-    if (atmo) {
-      const ctx = { deps: d } as never;
-      applyMapFog(ctx, atmo.fog as never);
-      applyWeather(ctx, atmo.weather as never);
-      applyAtmosphere(ctx, atmo.atmosphere as never);
-      const a = atmo as Record<string, unknown>;
-      applyTerrain(ctx, (a.terrain ?? null) as never, a.terrainTex as never, a.sky as never, a.heightScale as never, a.tileSize as never, a.terrainPreset as never)
-        .catch((): void => undefined);
-    }
-    // v5 HMAP: the clip carries its terrain - use it when the live field
-    // is absent or doesn't match the recorded action; the live map wins
-    // when it checks out against the embedded fingerprint.
-    const emb = demoManager.player.demoData?.heightmap;
-    if (emb && !d.hmRestore) {
-      const live = getHeightfield();
-      if (!live || !hmapMatches(emb, live)) {
-        // hmapToField applies the corr tail (peak-preserving deltas on a
-        // finer grid) — injecting the raw coarse bytes loses the bounce
-        // fidelity the recorder paid bytes to keep.
-        const ef = hmapToField(emb);
-        d.hmRestore = injectHeightmapBytes(ef.data, ef.size, ef.heightScale ?? emb.heightScale, ef.worldScale ?? emb.worldScale);
-        applyHeightfieldScale(d.lazyTerrain());
-        d.lazyTerrain().reloadHeightmap();
-        demoManager.ui.setStatus(live ? 'map mismatch - embedded terrain' : 'embedded terrain');
-        logger.warn(live
-          ? 'demo heightmap disagrees with live map - playing on embedded grid'
-          : 'no live heightmap - playing on embedded grid');
-      }
-    }
-    // Cool-shot clicks come from the overlay menu - a replay behind an
-    // open menu is invisible. Close it and grab pointer lock (the click
-    // is a user gesture, so the request is legal).
-    d.overlay.style.display = 'none';
-    document.body.classList.remove('menu-open');
-    // The feed plays clips without a user gesture - pointer lock would
-    // throw (and is meaningless there: no aiming, no input).
-    if (!feedMode.on) {d.rendererCanvas.requestPointerLock()?.catch?.((): void => { return; });}
-    // Live remote players would otherwise stand ghosted inside the replay
-    for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(true);}
-    // Dispose all non-playback balls (live game balls)
-    const playbackBallSet = new Set(d.playbackBallById.values());
-    for (let i = d.balls.length - 1; i >= 0; i -= 1) {
-      const b = d.balls[i];
-      if (!playbackBallSet.has(b)) {
-        b.dispose();
-        d.balls.splice(i, 1);
-        const ti = d.targets.indexOf(b);
-        if (ti !== -1) {d.targets.splice(ti, 1);}
-      }
-    }
-    // Clear live projectiles
-    for (const r of d.world.projectiles) {r.dispose();}
-    d.world.projectiles.length = 0;
-    // All live species are game objects too - dispose so they don't hang
-    // frozen in the scene during playback
-    for (const m of d.mines) {m.onDetonate = undefined;} // teardown isn't a detonation
-    type DisposableTarget = Targetable & { dispose(): void };
-    for (const list of [d.crawlers, d.turrets, d.rollers, d.seekers, d.overlords, d.mines, d.totems, d.rakks] as DisposableTarget[][]) {
-      for (const e of list) {
-        e.dispose();
-        const ti = d.targets.indexOf(e);
-        if (ti !== -1) {d.targets.splice(ti, 1);}
-      }
-      list.length = 0;
-    }
-    clearTransientObjects(d);
-  };
+  demoManager.onPlaybackStart = (): void => {playbackStart(d, demoManager);};
 
   // Clear playback projectiles on seek so they don't get orphaned
   demoManager.onPlaybackSeek = (): void => {
@@ -475,72 +567,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   // Recorded remote players - states arrive already interpolated at demo
   // time; RemotePlayer's own snapshot buffer gets them as live updates,
   // so replica smoothing is literally the production netcode path.
-  demoManager.onRemotePlayback = (states, dt): void => {
-    const roster = demoManager.getRoster();
-    const seen = new Set<number>();
-    for (const s of states) {
-      seen.add(s.rosterIdx);
-      let rp = d.playbackRemotes.get(s.rosterIdx);
-      const pos = { x: s.posX, y: s.posY, z: s.posZ };
-      if (!rp) {
-        rp = new RemotePlayer(d.lazyScene(), roster[s.rosterIdx] ?? `remote${s.rosterIdx}`, pos, d.lazyTerrain());
-        d.playbackRemotes.set(s.rosterIdx, rp);
-      }
-      rp.update(pos, { yaw: s.yaw, pitch: s.pitch }, dt, 0, { x: s.velX, y: s.velY, z: s.velZ });
-      rp.tick(dt, d.lazyCamera().position);
-      const dead = (s.flags & RemoteFrameFlags.Dead) !== 0;
-      rp.setStaleHidden(dead);
-      // Overhead chevron - playback remotes bypass net/remotes.ts where
-      // the live HUD marker updates, so without this replayed bodies
-      // walk around unmarked. Same renderLift anchor as the live path.
-      const indId = `pb:${s.rosterIdx}`;
-      const hud = d.lazyHud();
-      const teamName = s.team ? TEAM_NAME[s.team] : undefined;
-      if (s.cls && rp.armorClass !== CLS_NAME[s.cls]) {rp.setClass(CLS_NAME[s.cls]);}
-      // Same cosmetic lanes the live tick drives: status auras/cloak,
-      // team tint, held-token crown, roster-declared weapon.
-      const visible = applyStatusVisuals(d.world.localTeam, hud, null, indId, rp, s.status ?? 0, teamName);
-      applyTeamTint(d.world.localTeam, pbTintOf, indId, rp, teamName);
-      rp.setHeld(s.held ?? 0);
-      if (s.wid !== undefined && s.wid !== pbWidOf.get(s.rosterIdx)) {
-        pbWidOf.set(s.rosterIdx, s.wid);
-        rp.model.setWeapon(s.wid);
-      }
-      if (dead || !visible) {hud.removePlayerIndicator(indId);}
-      else {
-        _pbMark.x = rp.position.x; _pbMark.y = rp.position.y + rp.renderLift; _pbMark.z = rp.position.z;
-        const rid = roster[s.rosterIdx] ?? indId;
-        // Roster-keyed mirrors - health bars read playback actors through
-        // the same maps the wire roster feeds them live.
-        d.world.playbackRemotePlayers.set(rid, rp);
-        d.world.playbackPlayers.set(rid, { position: pos, isDead: dead, health: s.hp, team: teamName });
-        hud.updatePlayerIndicator(indId, _pbMark, d.lazyCamera(), {
-          friendly: Boolean(teamName) && teamName === d.world.localTeam,
-          sheep: s.sheep, bot: isBotId(rid), cls: CLS_NAME[s.cls ?? 0] ?? rp.armorClass,
-          hp: s.hp || undefined, held: s.held || undefined,
-          name: rid,
-        });
-      }
-      // Playback remotes bypass net/remotes.ts, which is where jet/ski
-      // audio normally fires - replay the same positional loop decision.
-      // No wireJet bit in the recording, so the powered-climb heuristic
-      // stands in for it; the ski bit IS recorded.
-      sfxWorld.remoteMoveAudio(`pb:${s.rosterIdx}`, rp.position, rp.vel.length(),
-        !dead && s.velY > 4.5, !dead && (s.flags & RemoteFrameFlags.Ski) !== 0,
-        rp.vel, rp.armorClass ?? 'medium');
-    }
-    // Roster players absent at this time keep their replica but hidden -
-    // e.g. they joined after the seek target or hadn't spawned yet.
-    for (const [idx, rp] of d.playbackRemotes) {
-      if (!seen.has(idx)) {
-        rp.setStaleHidden(true);
-        sfxWorld.remoteMoveAudioGone(`pb:${idx}`);
-        d.lazyHud().removePlayerIndicator(`pb:${idx}`);
-        const rid = roster[idx];
-        if (rid) {d.world.playbackRemotePlayers.delete(rid); d.world.playbackPlayers.delete(rid);}
-      }
-    }
-  };
+  demoManager.onRemotePlayback = (states, dt): void => {remotePlayback(d, demoManager, states, dt);};
 
   // Offline clip render advances playback projectiles/beams by step-dt,
   // not the wall dt the game loop hands updatePlaybackProjectiles.

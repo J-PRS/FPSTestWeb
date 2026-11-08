@@ -952,21 +952,25 @@ export class Deployables {
     const { localTeam } = this.deps.world;
     const lp = this.deps.lazyPlayer();
     for (const list of [this.items, this.remotes.values()]) {
-      for (const i of list) {
-        if (i.kind !== 'tether' || i.dead) {continue;}
-        if (i.owner !== undefined && i.owner !== me && (!i.team || i.team !== localTeam)) {
-          const dx = lp.pos.x - i.pos.x, dz = lp.pos.z - i.pos.z;
-          if (dx * dx + dz * dz < r2) {this.lashPair(i.pos.x, i.pos.y, i.pos.z, lp.pos.x, lp.pos.y, lp.pos.z);}
-        }
-        for (const [pid, rp] of nm.getPlayers()) {
-          if (pid === me || pid === i.owner || rp.isDead || (i.team !== undefined && rp.team === i.team)) {continue;}
-          const dx = rp.position.x - i.pos.x, dz = rp.position.z - i.pos.z;
-          if (dx * dx + dz * dz < r2) {this.lashPair(i.pos.x, i.pos.y, i.pos.z, rp.position.x, rp.position.y, rp.position.z);}
-        }
-      }
+      for (const i of list) {this.lashItem(i, me, localTeam, lp, r2, nm);}
     }
     for (let i = this.lashN; i < this.lashPool.length; i += 1) {
       this.lashPool[i]!.visible = false;
+    }
+  }
+
+  // One tether's lash candidates: the local player when he's an enemy
+  // outside the owner's team, then every enemy roster body in radius.
+  private lashItem(i: Item, me: string, localTeam: string | undefined, lp: ReturnType<DeployDeps['lazyPlayer']>, r2: number, nm: ReturnType<DeployDeps['lazyNetworkManager']>): void {
+    if (i.kind !== 'tether' || i.dead) {return;}
+    if (i.owner !== undefined && i.owner !== me && (!i.team || i.team !== localTeam)) {
+      const dx = lp.pos.x - i.pos.x, dz = lp.pos.z - i.pos.z;
+      if (dx * dx + dz * dz < r2) {this.lashPair(i.pos.x, i.pos.y, i.pos.z, lp.pos.x, lp.pos.y, lp.pos.z);}
+    }
+    for (const [pid, rp] of nm.getPlayers()) {
+      if (pid === me || pid === i.owner || rp.isDead || (i.team !== undefined && rp.team === i.team)) {continue;}
+      const dx = rp.position.x - i.pos.x, dz = rp.position.z - i.pos.z;
+      if (dx * dx + dz * dz < r2) {this.lashPair(i.pos.x, i.pos.y, i.pos.z, rp.position.x, rp.position.y, rp.position.z);}
     }
   }
 

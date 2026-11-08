@@ -179,26 +179,37 @@ export class DeployRockets {
         if (dmg > 0) {this.deps.lazyCombat()?.hitTargetLocal(c, dmg, r.owner);}
       }
     }
+    this.detonateBots(r);
+    this.deps.scene.remove(r.group);
+  }
+
+  // Bot-side splash: same falloff as the target loop. A bolt caught on
+  // the local body pays through the environment-damage funnel (dedicated
+  // rooms already paid at fire time — the claim would double-charge).
+  private detonateBots(r: Rocket): void {
     for (const b of (r.team === undefined ? this.deps.enemyBots?.() : this.deps.botFoes?.(r.team)) ?? []) {
       if (!b.alive) {continue;}
       const d = b.pos.distanceTo(r.pos);
       if (d >= ROCKET_AOE) {continue;}
       const dmg = Math.round(ROCKET_DMG * r.dmgScale * (1 - d / ROCKET_AOE));
       if (dmg <= 0) {continue;}
-      if (b.playerId === 'local') {
-        // Base-turret bolt caught the player — same authority funnel
-        // every offline hit uses (clamped, resist-scaled). Dedicated
-        // rooms already pay through turretAttack at fire time — the
-        // claim would double-charge the same bolt.
-        if (this.deps.lazyNetworkManager().authoritySims() !== true) {
-          this.deps.lazyNetworkManager().sendEnvironmentDamage(dmg, r.owner);
-        }
-        this.deps.lazyPlayer().lastDamageSource = 'a base turret';
-      } else {
-        this.deps.damageBot?.(b.playerId!, dmg, r.pos);
-      }
+      this.rocketBotHit(r, b, dmg);
     }
-    this.deps.scene.remove(r.group);
+  }
+
+  private rocketBotHit(r: Rocket, b: { playerId?: string; alive: boolean; pos: THREE.Vector3 }, dmg: number): void {
+    if (b.playerId === 'local') {
+      // Base-turret bolt caught the player — same authority funnel
+      // every offline hit uses (clamped, resist-scaled). Dedicated
+      // rooms already pay through turretAttack at fire time — the
+      // claim would double-charge the same bolt.
+      if (this.deps.lazyNetworkManager().authoritySims() !== true) {
+        this.deps.lazyNetworkManager().sendEnvironmentDamage(dmg, r.owner);
+      }
+      this.deps.lazyPlayer().lastDamageSource = 'a base turret';
+    } else {
+      this.deps.damageBot?.(b.playerId!, dmg, r.pos);
+    }
   }
 
   dispose(): void {

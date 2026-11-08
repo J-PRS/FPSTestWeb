@@ -305,14 +305,7 @@ export class CtfFlags {
     if (!enemy || !own) { return null; }
     if (bot.carryingFlag) { return { pos: own.home.clone(), infiltrating: false, running: true }; }
     const role = this.roles.get(bot.playerId) ?? 'offense';
-    const thief = own.state === 'carried' && own.carrier ? this.ctx.carrierPos(own.carrier) : null;
-    const escortPos = enemy.carrier ? this.ctx.carrierPos(enemy.carrier) : null;
-    // The goal point aims at the stand's flag height, not the pedestal's
-    // base — the wire bots sense the same lift (serverSenses) so offline/
-    // P2P bots press the same spot the networked ones do.
-    const enemyStand = enemy.state === 'carried'
-      ? null
-      : new THREE.Vector3(enemy.pos.x, enemy.pos.y + FLAG_STAND_LIFT, enemy.pos.z);
+    const { thief, escortPos, enemyStand } = this.flagRefs(enemy, own);
     const sit: FlagSituation = {
       sweat: bot.sweatLevel,
       home: own.home,
@@ -345,6 +338,20 @@ export class CtfFlags {
       // escorting doesn't break off to chase.
       thief: CtfFlags.thiefBeacon(thief, pick, own),
     };
+  }
+
+  // Live flag references for the objective read: own-flag thief, enemy
+  // escort, and the grabbable enemy stand. The goal point aims at the
+  // stand's flag height, not the pedestal's base — the wire bots sense
+  // the same lift (serverSenses) so offline/P2P bots press the same
+  // spot the networked ones do.
+  private flagRefs(enemy: Flag, own: Flag): { thief: THREE.Vector3 | null; escortPos: THREE.Vector3 | null; enemyStand: THREE.Vector3 | null } {
+    const thief = own.state === 'carried' && own.carrier ? this.ctx.carrierPos(own.carrier) : null;
+    const escortPos = enemy.carrier ? this.ctx.carrierPos(enemy.carrier) : null;
+    const enemyStand = enemy.state === 'carried'
+      ? null
+      : new THREE.Vector3(enemy.pos.x, enemy.pos.y + FLAG_STAND_LIFT, enemy.pos.z);
+    return { thief, escortPos, enemyStand };
   }
 
   /** Closest hostile inside the home ring — the HoF's body-block

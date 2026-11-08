@@ -930,12 +930,17 @@ this.sendDrops += 1;
       const key = k as keyof RemotePlayerState;
       (next as unknown as Record<string, unknown>)[k] = patch[key] ?? next[key] ?? ROSTER_DEFAULTS[key];
     }
-    // NaN components from any edge (join/respawn/roster heal) would
-    // poison the stored row forever - drop the whole vec, not the player.
+    this.mergeVecPatch(next, patch);
+    if (!existing) {this.players.set(playerId, next);}
+  }
+
+  // Vec fields merge component-wise — a NaN component from any edge
+  // (join/respawn/roster heal) would poison the stored row forever, so
+  // the whole vec drops rather than the player.
+  private mergeVecPatch(next: RemotePlayerState, patch: Partial<RemotePlayerState>): void {
     if (patch.position && Number.isFinite(patch.position.x + patch.position.y + patch.position.z)) { next.position.x = patch.position.x; next.position.y = patch.position.y; next.position.z = patch.position.z; next.posAt = Date.now(); }
     if (patch.rotation && Number.isFinite(patch.rotation.yaw + patch.rotation.pitch)) { next.rotation.yaw = patch.rotation.yaw; next.rotation.pitch = patch.rotation.pitch; }
     if (patch.velocity && Number.isFinite(patch.velocity.x + patch.velocity.y + patch.velocity.z)) { next.velocity.x = patch.velocity.x; next.velocity.y = patch.velocity.y; next.velocity.z = patch.velocity.z; }
-    if (!existing) {this.players.set(playerId, next);}
   }
 
   // Patch-in-place-or-drop for one-off edges - returns false when the
