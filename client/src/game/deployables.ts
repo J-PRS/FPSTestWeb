@@ -49,7 +49,7 @@ import type { TargetCandidate } from './targeting.js';
 
 import { DEPLOY_KINDS, DEPLOY_MAX, type DeployKind } from '../../../shared/deployables.js';
 import { RemoteDeployables } from './remoteDeployables.js';
-import { DEPLOY_ITEMS, deploySolid } from '../../../shared/deployItems.js';
+import { DEPLOY_ITEMS, deploySolid, type WaterDome } from '../../../shared/deployItems.js';
 import { structureNormalAt, structureTopAt, structureSegHit } from './structureSpecs.js';
 import { canThrowPack, packCost, recyclesSeated } from './deployEconomy.js';
 import type { StructureCollider } from '../../../shared/ballCollide.js';
@@ -892,7 +892,19 @@ export class Deployables {
     // Same live array for the shell sweep - a planted generator stops a
     // disc on contact instead of letting it phase through to the wall.
     if (Projectile.dynColliders !== this.solidCols) {Projectile.dynColliders = this.solidCols;}
+    // Watersphere domes → projectile drag (Projectile.waterDomes, the
+    // same by-reference hand-off as dynColliders). EVERY shell wades
+    // them - environmental obstacle, no team check, matching the server.
+    this.domeScratch.length = 0;
+    const wr = DEPLOY_ITEMS.watersphere.waterRadius ?? 0;
+    if (wr > 0) {
+      for (const i of this.items) {if (!i.dead && i.kind === 'watersphere') {this.domeScratch.push({ x: i.pos.x, y: i.pos.y, z: i.pos.z, r: wr });}}
+      for (const i of this.remotes.values()) {if (!i.dead && i.kind === 'watersphere') {this.domeScratch.push({ x: i.pos.x, y: i.pos.y, z: i.pos.z, r: wr });}}
+    }
+    Projectile.waterDomes = this.domeScratch;
   }
+
+  private readonly domeScratch: WaterDome[] = [];
 
   // --- Tether lash ------------------------------------------------------
   // Black tendrils from each tether to every enemy caught in its ring. The

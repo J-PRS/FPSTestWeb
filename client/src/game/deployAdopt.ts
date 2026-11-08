@@ -382,7 +382,9 @@ export class DeployAdopter {
           if (dmg > 0) {this.deps.damageBot?.(b.playerId, dmg, s.pos);}
         }
       }
-      item.dead = true;
+      // killItem, not bare dead=true - the flag alone left the body
+      // standing where it went off (the visible corpse bug).
+      this.host.killItem(item);
     });
   }
 

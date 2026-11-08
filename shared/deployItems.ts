@@ -155,3 +155,36 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
 // through; the barrier's dome stays walk-through by design above.
 const NOSOLID = new Set<DeployKind>(['drone', 'nugget', 'watersphere', 'tether', 'pad', 'loiter', 'spider']);
 export function deploySolid(kind: DeployKind): boolean { return !NOSOLID.has(kind); }
+
+// Watersphere dome drag on PROJECTILES — a shell wading through the
+// pocket loses speed on every axis, exponential and submersion-scaled like
+// the body rule in movement.ts but normalized to a shell's hull instead
+// of an eye height. Applies to EVERY projectile (environmental obstacle,
+// not a team tool). Server runs it in RoomProjectiles.tick, the client
+// in Projectile.stepFrame - the identical pass or replicas desync.
+export interface WaterDome { x: number; y: number; z: number; r: number }
+export const WATERDOME_PROJ_DRAG = 6;
+const PROJ_SUBMERSION_NORM = 0.5;
+
+/** 0..1 how deep `pos` sits under the dome's hemisphere surface - the
+ *  same surf = y + sqrt(r²-d²) law the body drag uses. */
+export function waterDomeSubmersion(pos: { x: number; y: number; z: number }, dome: WaterDome): number {
+  const dx = pos.x - dome.x, dz = pos.z - dome.z;
+  const d2 = dx * dx + dz * dz;
+  if (d2 >= dome.r * dome.r) {return 0;}
+  const depth = dome.y + Math.sqrt(dome.r * dome.r - d2) - pos.y;
+  return depth > 0 ? Math.min(depth / PROJ_SUBMERSION_NORM, 1) : 0;
+}
+
+/** Damp vel on ALL axes by the deepest dome submersion at pos - real
+ *  water isn't a horizontal filter. Mutates vel. */
+export function waterDomeDrag(pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number }, domes: readonly WaterDome[], dt: number): void {
+  let sub = 0;
+  for (const d of domes) {
+    const s = waterDomeSubmersion(pos, d);
+    if (s > sub) {sub = s;}
+  }
+  if (sub <= 0) {return;}
+  const k = Math.max(0, 1 - WATERDOME_PROJ_DRAG * sub * dt);
+  vel.x *= k; vel.y *= k; vel.z *= k;
+}

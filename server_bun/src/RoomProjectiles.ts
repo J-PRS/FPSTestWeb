@@ -25,6 +25,7 @@ import { structureColliders, type StructureCollider } from '../../shared/ballSim
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage, directHitAoeBonus, RIDE_CATCH_R, canHostRide, BELT_THROW_WEAPONS } from '../../shared/weapons.ts';
+import { waterDomeDrag, type WaterDome } from '../../shared/deployItems.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3, ServerMessage } from './types.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
@@ -143,6 +144,9 @@ export interface ProjHost {
     /** Live gear hulls - a shell detonates on contact instead of
      *  phasing through a generator and popping on the wall behind it. */
     solidCols?: readonly StructureCollider[];
+    /** Live watersphere domes - every shell wades them (environmental
+     *  drag, no team check). Absent = dry map. */
+    waterDomes?(): readonly WaterDome[];
   };
   moveSim?: { structureTop(x: number, z: number): number; transitOf?(playerId: string): number; transitVarOf?(playerId: string): number };
 }
@@ -162,6 +166,9 @@ export class RoomProjectiles {
   solidIndex: ColliderIndex | null = null;
   private projs = new Map<string, LiveProj>();
   private nextId = 1;
+  /** Watersphere domes, refreshed once per tick - the drag pass reads
+   *  this for every flying shell. */
+  private domes: readonly WaterDome[] = [];
   /** Reused start-of-step position - feeds swept collision + detonate;
    *  read synchronously each iteration, never retained. */
   private readonly stepScratch: Vec3 = { x: 0, y: 0, z: 0 };
@@ -301,6 +308,7 @@ export class RoomProjectiles {
   }
 
   tick(dt: number): void {
+    this.domes = this.room.deployables?.waterDomes?.() ?? [];
     // Map iterators tolerate mid-loop delete (detonate) - no snapshot.
     for (const proj of this.projs.values()) {
       const {stats} = proj;
@@ -334,6 +342,10 @@ export class RoomProjectiles {
       const from = this.stepScratch;
       if (proj.stuck) {from.x = p.pos.x; from.y = p.pos.y; from.z = p.pos.z;}
       else {projStep(p, dt, stats.gravity ? GRAVITY : 0, from);}
+      // Watersphere drag - post-integration, pre-contact: this tick's
+      // sweep still sees the full-speed segment, next tick flies slower.
+      // The client applies the identical pass in stepFrame.
+      if (!proj.stuck) {waterDomeDrag(p.pos, p.vel, this.domes, dt);}
       if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { from.x = p.pos.x; from.y = p.pos.y; from.z = p.pos.z; this.detonate(proj, from); continue; }
       if (proj.stuck) {continue;} // frozen - only the fuse ends it now
 
@@ -555,7 +567,12 @@ export class RoomProjectiles {
       const d = Math.hypot(dx, dy, dz);
       if (d > radius) {continue;}
       const closing = proj.p.vel.x * dx + proj.p.vel.y * dy + proj.p.vel.z * dz;
-      if (closing <= 0) {continue;} // moving away - ignore
+      // Parked bomb: a bounced/fused AOE shell sitting in range is still a
+      // live threat — closing=0 must not make it invisible to the dodge
+      // sense (howitzer shell at your feet).
+      const parked = proj.stats.aoeRadius > 0
+        && proj.p.vel.x * proj.p.vel.x + proj.p.vel.y * proj.p.vel.y + proj.p.vel.z * proj.p.vel.z < 4;
+      if (closing <= 0 && !parked) {continue;} // moving away - ignore
       out.push(proj.p.pos);
     }
     return out;

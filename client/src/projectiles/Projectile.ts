@@ -21,6 +21,7 @@ import { tickRemote } from './projRemote.js';
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
 import { ProjCollide } from './projCollide.js';
+import { waterDomeDrag, type WaterDome } from '../../../shared/deployItems.js';
 import { ballGhostPos } from './sweep.js';
 import { ProjStuck } from './projStuck.js';
 const _rayDir = new THREE.Vector3();
@@ -29,7 +30,7 @@ const _rayDir = new THREE.Vector3();
 // Visual only: once attached the rope may shorten but never stretch; a longer
 // span detaches the thrower end and reels it back toward the anchor.
 const ROPE_REEL_S = 0.2;
-const _ropeGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 5, 1, true);
+const _ropeGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 5, 1, false);
 const _ropeMat = new THREE.MeshBasicMaterial({ color: 0x1A_14_0C });
 const _ropeV = new THREE.Vector3();
 const _ropeUp = new THREE.Vector3(0, 1, 0);
@@ -233,6 +234,10 @@ export class Projectile {
    *  shells detonate on contact instead of phasing through a generator
    *  and popping on the wall behind it (server sweeps the same set). */
   static dynColliders: readonly StructureCollider[] = [];
+  /** Live watersphere domes - the Deployables array by reference (same
+   *  pattern as dynColliders); the server applies the identical drag in
+   *  RoomProjectiles.tick so predicted and replica arcs stay honest. */
+  static waterDomes: readonly WaterDome[] = [];
 
   get explosionRadius(): number { return this.config.explosionRadius; }
   get force(): number { return this.config.force; }
@@ -546,6 +551,9 @@ export class Projectile {
     this.hitPointValid = false;
     if (this.config.gravity) {this.vel.y += GRAVITY * dt;}
     this.pos.addScaledVector(this.vel, dt);
+    // Watersphere drag - same post-integration pass the server runs in
+    // RoomProjectiles.tick: this step flew full speed, next step is slower.
+    if (!this.stuck && Projectile.waterDomes.length > 0) {waterDomeDrag(this.pos, this.vel, Projectile.waterDomes, dt);}
     if (this.fuseExpired()) {return true;}
 
     this.tickRayDischarge();

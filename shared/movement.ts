@@ -93,8 +93,8 @@ export const MOVEMENT_CONFIG = {
   // not a sea - nothing floats up out of it) and no fall-damage waiver.
   // The cap is the slow: a body wading through tops out at the cap
   // instead of its class speed, so a skier blasting past loses the run.
-  waterDomeDrag: 3.2,    // per-second linear damping at full submersion
-  waterDomeSpeed: 8,     // horizontal speed cap inside the dome (m/s)
+  waterDomeDrag: 6.5,    // per-second linear damping at full submersion (all axes)
+  waterDomeSpeed: 5,     // horizontal speed cap inside the dome (m/s)
   // Tether snare (the tether pack): outward speed bled per second by how
   // fast you're going - a full stop under tetherStopSpeed, 20% at
   // tetherMidSpeed, nothing at tetherFreeSpeed. Fast skiers blow through.
@@ -593,10 +593,11 @@ export class MoveSim {
     // ground. The dome's top is a hemisphere over its centre, so the
     // water surface at horizontal distance d is y + sqrt(r²-d²): a body
     // at the centre stands fully under it, a body at the rim is dry.
-    // Drag + a horizontal cap is the whole effect - no buoyancy (nothing
-    // floats out of a puddle) and no fall-damage waiver (a puddle is not
-    // a safe landing). The cap is what slows a skier: inside the dome a
-    // body tops out at the cap instead of its class speed.
+    // All-axis exponential damp like the sea's drag, plus a horizontal
+    // cap - no buoyancy (nothing floats out of a puddle) and no
+    // fall-damage waiver (a puddle is not a safe landing). The cap is
+    // what slows a skier: inside the dome a body tops out at the cap
+    // instead of its class speed.
     if (this.waterDome !== undefined) {
       const dm = this.waterDome;
       const ddx = s.pos.x - dm.x, ddz = s.pos.z - dm.z;
@@ -607,7 +608,7 @@ export class MoveSim {
         if (depth > 0) {
           const sub = Math.min(depth / this.eyeHeight, 1);
           const k = Math.max(0, 1 - MOVEMENT_CONFIG.waterDomeDrag * sub * dt);
-          s.vel.x *= k; s.vel.z *= k;
+          s.vel.x *= k; s.vel.y *= k; s.vel.z *= k;
           const hs = dhypot2(s.vel.x, s.vel.z);
           const cap = MOVEMENT_CONFIG.waterDomeSpeed * sub;
           if (hs > cap && hs > 0) {

@@ -138,7 +138,10 @@ export class ProjCollide {
     // a later bolt's - hitAt was overwritten by each tested obstacle.
     sweepObstacle(h, best);
     best.onBlocked?.(h as never);
-    h.hitBolt = best;
+    // Only a real turret bolt may cook off - obstacles that own their
+    // hit story (onBlocked: domes, crystal hulls) must not read as a
+    // shootable bolt or the kill fires a phantom directHit mega blast.
+    if (best.onBlocked === undefined) {h.hitBolt = best;}
     if (h.config.sticks) {
       // Shot down mid-flight - cook off on the spot, the bolt eats the pop.
       h.explode();

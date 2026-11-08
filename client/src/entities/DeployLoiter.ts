@@ -100,11 +100,21 @@ export class DeployLoiter {
       return null;
     }
     this.hoverPos(this._hover);
-    this._hover.y += Math.sin(this.animT * 2.2 + this.id) * (this.armed ? 0.5 : 0.15);
+    if (this.armed) {
+      this._hover.y += Math.sin(this.animT * 2.2 + this.id) * 0.5;
+    } else {
+      // The climb IS the arm window: the dart rises from the plant point
+      // to its hover over armS and arms on docking - no teleport pop.
+      const armS = DEPLOY_ITEMS.loiter.armS ?? 1;
+      const k = Math.min(1, this.animT / armS);
+      this._hover.y = this.pos.y + DEPLOY_ITEMS.loiter.hoverUp! * (1 - (1 - k) ** 3);
+    }
     this.group.position.copy(this._hover);
     const pulse = this.armed ? Math.sin(this.animT * 5) * 0.5 + 0.5 : 0;
     this.glow.material.opacity = 0.3 + pulse * 0.6;
-    this.ring!.intensity = this.armed ? 0.45 + pulse * 0.3 : 0.15;
+    // The ring is a 22m footprint - keep it a whisper; the dart's spin +
+    // glow already carry the armed read, the decal just marks the ring.
+    this.ring!.intensity = this.armed ? 0.16 + pulse * 0.12 : 0.07;
 
     return this.pickDiveTarget(foes);
   }

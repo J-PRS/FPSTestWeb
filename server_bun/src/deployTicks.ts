@@ -188,9 +188,17 @@ export function tickLoiter(r: RoomDeployables, d: Deployed, dt: number): void {
     const dv = d.loiterDive!;
     dv.t += dt;
     dv.x += dv.vx * dt; dv.y += dv.vy * dt; dv.z += dv.vz * dt;
-    const tgt = r.room.players.getPlayer(dv.tid);
-    const hit = tgt !== null && tgt !== undefined && !tgt.isDead
-      && ((tgt.position.x - dv.x) ** 2 + (tgt.position.y - dv.y) ** 2 + (tgt.position.z - dv.z) ** 2 < 2.25);
+    // Proximity fuze on ANY hostile, not just the committed target - a
+    // juke means the led line misses tid but still flies past a body,
+    // and air-bursting the near miss beats whistling into dirt.
+    const fuze2 = 2.5 * 2.5;
+    const dTeam = r.teamOf(d);
+    let hit = false;
+    for (const [pid, p] of r.room.players.getAllPlayers()) {
+      if (!sentryFoe(d, dTeam, pid, p)) {continue;}
+      const dx = p.position.x - dv.x, dy = p.position.y - dv.y, dz = p.position.z - dv.z;
+      if (dx * dx + dy * dy + dz * dz < fuze2) {hit = true; break;}
+    }
     const ground = r.room.field ? dv.y <= hmHeight(r.room.field, dv.x, dv.z) + 0.4 : false;
     if (!hit && !ground && dv.t <= 2) {return;}
     const pos = { x: dv.x, y: dv.y, z: dv.z };

@@ -16,6 +16,12 @@ import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MUL
 import { tickCg, tickDrone, tickJammer, tickLoiter, tickMine, tickMortar, tickMotion, tickPad, tickSensor, tickSentry, tickSpider, tickStation, tickTurret, tickWatersphere, losClear } from './deployTicks.ts';
 
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
+import { DEPLOY_ITEMS, deploySolid, type WaterDome } from '../../shared/deployItems.ts';
+import type { StructureCollider } from '../../shared/ballCollide.ts';
+import { segSolidHit } from '../../shared/solidWorld.ts';
+import { hmHeight, hmChord } from '../../shared/heightfield.ts';
+import { simNow } from './simClock.ts';
+import type { TeamId } from '../../shared/teams.ts';
 /** Per-kind tick registry - tick fn + `standsDown` flag (true = the
  *  kind freezes while players are invulnerable/intermission; support
  *  kinds keep healing/pinging). One row per tickable kind. */
@@ -36,12 +42,6 @@ const TICK_SPEC: Record<string, { tick: (room: RoomDeployables, d: Deployed, dt:
   motion:      { tick: (r, d, dt) => tickMotion(r, d, dt) },
 };
 
-import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
-import type { StructureCollider } from '../../shared/ballCollide.ts';
-import { segSolidHit } from '../../shared/solidWorld.ts';
-import { hmHeight, hmChord } from '../../shared/heightfield.ts';
-import { simNow } from './simClock.ts';
-import type { TeamId } from '../../shared/teams.ts';
 export type { DeployKind } from '../../shared/deployables.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
 const MAX_PER_PLAYER = DEPLOY_MAX;
@@ -349,6 +349,18 @@ export class RoomDeployables {
   posOf(depId: string): Vec3 | null {
     const d = this.items.get(Number(depId.slice(4)));
     return d ? d.pos : null;
+  }
+
+  /** Live watersphere domes as projectile drag volumes - RoomProjectiles
+   *  reads this once per tick; every shell wades them regardless of team. */
+  waterDomes(): WaterDome[] {
+    const out: WaterDome[] = [];
+    const r = DEPLOY_ITEMS.watersphere.waterRadius ?? 0;
+    if (r <= 0) {return out;}
+    for (const d of this.items.values()) {
+      if (d.kind === 'watersphere' && d.hp > 0) {out.push({ x: d.pos.x, y: d.pos.y, z: d.pos.z, r });}
+    }
+    return out;
   }
 
   /** Shield sweep: does this shell's frame segment enter an ENEMY dome?
