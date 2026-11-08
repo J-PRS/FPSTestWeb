@@ -12,6 +12,9 @@
 //     trips; editing around it doesn't.
 //   - eslint(max-lines) is skipped: file size is sizeWatch's job, and
 //     blaming a whole file would block every edit to it.
+//   - non-local rules (no-unused-vars etc.) blame the whole FILE —
+//     deleting the last use fires the warning on the untouched decl
+//     line, the eslint-plugin-diff rulesReportedOutsideChangedLines case.
 //
 // Modes: default = staged diff (pre-commit). --worktree = diff vs HEAD
 // (check.sh). Escape hatch: LINTRATCHET=off, or git commit --no-verify.
@@ -60,6 +63,14 @@ const FUNCTION_RULES = new Set([
   'eslint(max-params)', 'eslint(max-depth)', 'eslint(max-statements)',
 ]);
 const SKIP_RULES = new Set(['eslint(max-lines)']); // file size = sizeWatch's job
+// Non-local rules: the diagnostic can land on an unchanged line far from
+// its cause (delete the last use of a var -> warning fires on the decl).
+// eslint-plugin-diff's rulesReportedOutsideChangedLines equivalent:
+// blame the whole file so any edit forces the cleanup.
+const NONLOCAL_RULES = new Set([
+  'eslint(no-unused-vars)', 'typescript(no-unused-vars)',
+  'eslint(no-redeclare)', 'eslint(no-dupe-keys)',
+]);
 
 const sfCache = new Map();
 const sourceFile = (f) => {
@@ -92,7 +103,11 @@ for (const d of report.diagnostics ?? []) {
   const line = label.span.line;
   let blame = [[line, line]];
   let fnName = '';
-  if (FUNCTION_RULES.has(d.code)) {
+  if (NONLOCAL_RULES.has(d.code)) {
+    const sf = sourceFile(f);
+    const e = ts.getLineAndCharacterOfPosition(sf, sf.end).line + 1;
+    blame = [[1, e]];
+  } else if (FUNCTION_RULES.has(d.code)) {
     const sf = sourceFile(f);
     const fn = enclosingFunction(sf, label.span.offset);
     if (fn) {
