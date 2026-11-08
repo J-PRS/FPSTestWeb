@@ -119,7 +119,7 @@ export function isSessionVeiled(): boolean { return sessionVeil !== null; }
  *  whatever the last packet before disconnect reported, and replaying a
  *  stale knockback vector on reload produced phantom launches. */
 function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): void {
-  const { deps, nm } = ctx;
+  const { deps } = ctx;
   deps.logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
   const player = deps.lazyPlayer();
   // A non-finite stored vector would poison the sim on every reconnect —
@@ -133,52 +133,65 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
 
   const v = localPlayerState.velocity;
   const anchorVel = v && Math.hypot(v.x, v.y, v.z) < 10 ? v : { x: 0, y: 0, z: 0 };
+  restoreBodyPosition(ctx, player, localPlayerState, p, anchorVel);
+  noteLocalSnap();
+  deps.setLastSentPos({ x: p.x, y: p.y, z: p.z });
+  applyRestoredVitals(ctx, player, localPlayerState);
 
-  // The anchor is the shadow's last-accepted position — on a lossy link
-  // that's seconds stale. Rewind to it and replay the journaled inputs
-  // the server never consumed (same machinery a correction runs), so a
-  // WT flap converges to where you actually are instead of yanking the
-  // body back to where the wire last saw it. A fresh join's journal is
-  // empty — same-input-seq or a dead body restores take the plain snap.
+  deps.logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
+}
+
+type LocalPlayer = ReturnType<NetCtx['deps']['lazyPlayer']>;
+
+// Body restore: journal replay when the shadow's anchor is stale (same
+// machinery a correction runs - rewind to last-accepted pos, replay the
+// inputs the server never consumed), else the plain snap. A fresh
+// join's journal is empty - same-input-seq or a dead body takes the snap.
+function restoreBodyPosition(ctx: NetCtx, player: LocalPlayer, localPlayerState: LocalPlayerState, p: { x: number; y: number; z: number }, anchorVel: { x: number; y: number; z: number }): void {
+  const { deps, nm } = ctx;
   const journal = !localPlayerState.isDead && localPlayerState.inputSeq !== undefined
     ? nm().inputsAfter(localPlayerState.inputSeq, nm().getPing()) : [];
-  if (journal.length > 0) {
-    player.movement.setState({
-      pos: new THREE.Vector3(p.x, p.y, p.z),
-      vel: new THREE.Vector3(anchorVel.x, anchorVel.y, anchorVel.z),
-      yaw: player.yaw, pitch: player.pitch,
-      // localPlayerState doesn't carry grounded — seeded true, but only
-      // the first replayed update() consults it before raycasting real
-      // contact, so a mid-air restore costs at most one step of friction.
-      onGround: true,
-    });
-    const now = performance.now();
-    for (let i = 0; i < journal.length; i += 1) {
-      const e = journal[i];
-      const nextT = i + 1 < journal.length ? journal[i + 1]!.t : now;
-      player.movement.setInput({
-        forward: e.input.forward, right: e.input.right,
-        jumpPressed: Boolean(e.input.jump), jumpHeld: Boolean(e.input.jump),
-        skiHeld: Boolean(e.input.ski), jetHeld: Boolean(e.input.jet),
-      });
-      player.movement.update(Math.min(0.25, Math.max(0, (nextT - e.t) / 1000)));
-    }
-    const st = player.movement.getState();
-    player.pos.set(st.pos.x, st.pos.y, st.pos.z);
-    player.vel.set(st.vel.x, st.vel.y, st.vel.z);
-    player.onGround = st.onGround;
-    deps.logger.info(`Reconnect restore replayed: ${journal.length} inputs from seq ${localPlayerState.inputSeq}`);
-  } else {
+  if (journal.length === 0) {
     player.pos.set(p.x, p.y, p.z);
     if (Number.isFinite(localPlayerState.rotation.yaw + localPlayerState.rotation.pitch)) {
       player.yaw = localPlayerState.rotation.yaw;
       player.pitch = localPlayerState.rotation.pitch;
     }
     player.vel.set(anchorVel.x, anchorVel.y, anchorVel.z);
+    return;
   }
-  noteLocalSnap();
-  deps.setLastSentPos({ x: p.x, y: p.y, z: p.z });
+  player.movement.setState({
+    pos: new THREE.Vector3(p.x, p.y, p.z),
+    vel: new THREE.Vector3(anchorVel.x, anchorVel.y, anchorVel.z),
+    yaw: player.yaw, pitch: player.pitch,
+    // localPlayerState doesn't carry grounded — seeded true, but only
+    // the first replayed update() consults it before raycasting real
+    // contact, so a mid-air restore costs at most one step of friction.
+    onGround: true,
+  });
+  const now = performance.now();
+  for (let i = 0; i < journal.length; i += 1) {
+    const e = journal[i];
+    const nextT = i + 1 < journal.length ? journal[i + 1]!.t : now;
+    player.movement.setInput({
+      forward: e.input.forward, right: e.input.right,
+      jumpPressed: Boolean(e.input.jump), jumpHeld: Boolean(e.input.jump),
+      skiHeld: Boolean(e.input.ski), jetHeld: Boolean(e.input.jet),
+    });
+    player.movement.update(Math.min(0.25, Math.max(0, (nextT - e.t) / 1000)));
+  }
+  const st = player.movement.getState();
+  player.pos.set(st.pos.x, st.pos.y, st.pos.z);
+  player.vel.set(st.vel.x, st.vel.y, st.vel.z);
+  player.onGround = st.onGround;
+  deps.logger.info(`Reconnect restore replayed: ${journal.length} inputs from seq ${localPlayerState.inputSeq}`);
+}
 
+// Vitals + seat bookkeeping after the body lands: tokens/health/armor/
+// dead flag, controller reseat, declared-discontinuity teleport mark,
+// death overlay, seated mark, and the veil-less spawn-hold release.
+function applyRestoredVitals(ctx: NetCtx, player: LocalPlayer, localPlayerState: LocalPlayerState): void {
+  const { deps, nm } = ctx;
   player.heldTokens = localPlayerState.held ?? 0;
   if (Number.isFinite(localPlayerState.health)) {player.health = localPlayerState.health;}
   player.armor = Number.isFinite(localPlayerState.armor) ? localPlayerState.armor! : 0;
@@ -200,8 +213,6 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   // to fire it — release the spawn-hold now; the server no-ops 'ready'
   // on a seat that isn't held. Veiled seats release via the drop cb.
   if (!isSessionVeiled()) {nm().sendReady();}
-
-  deps.logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
 }
 
 
@@ -482,19 +493,32 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
  *  old match's residue. The `room` gate keeps offline modes (TeamBots
  *  localTeam) untouched: only the server sends a room name. */
 function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
-  const { deps } = ctx;
   const scores = roomInfo?.scores && Number.isFinite(roomInfo.scores.alpha + roomInfo.scores.bravo)
     ? roomInfo.scores : undefined;
   const ffaScores = roomInfo?.ffaScores && !Object.values(roomInfo.ffaScores).some((v): boolean => !Number.isFinite(v))
     ? roomInfo.ffaScores : undefined;
   const matchEndsAt = Number.isFinite(roomInfo?.matchEndsAt) ? roomInfo!.matchEndsAt : undefined;
   if (roomInfo?.room !== undefined) {
-    deps.world.localTeam = roomInfo.team;
-    deps.world.teamScores = scores ?? null;
-    deps.world.ffaScores = new Map(Object.entries(ffaScores ?? {}));
-    deps.world.matchEndsAt = matchEndsAt ?? null;
+    applyRoomMeta(ctx.deps, roomInfo, scores, ffaScores, matchEndsAt);
     return;
   }
+  applyPartialMeta(ctx, roomInfo, scores, ffaScores, matchEndsAt);
+}
+
+// Room-scoped gameState is authoritative - a hop that drops team/scores/
+// clock/board clears them rather than leaving the old match's residue.
+function applyRoomMeta(deps: NetCtx['deps'], roomInfo: RoomInfo, scores: { alpha: number; bravo: number } | undefined, ffaScores: Record<string, number> | undefined, matchEndsAt: number | undefined): void {
+  deps.world.localTeam = roomInfo?.team;
+  deps.world.teamScores = scores ?? null;
+  deps.world.ffaScores = new Map(Object.entries(ffaScores ?? {}));
+  deps.world.matchEndsAt = matchEndsAt ?? null;
+}
+
+// Offline/partial updates (no room name): each present field applies
+// independently - absence means "not provided", not "clear". The
+// recordMatchMeta edge only fires when scores or clock actually moved.
+function applyPartialMeta(ctx: NetCtx, roomInfo: RoomInfo, scores: { alpha: number; bravo: number } | undefined, ffaScores: Record<string, number> | undefined, matchEndsAt: number | undefined): void {
+  const { deps } = ctx;
   if (roomInfo?.team !== undefined) {deps.world.localTeam = roomInfo.team;}
   if (scores) {deps.world.teamScores = scores;}
   if (matchEndsAt !== undefined) {deps.world.matchEndsAt = matchEndsAt;}
