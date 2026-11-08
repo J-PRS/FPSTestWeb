@@ -23,6 +23,7 @@ import { dropVolatileWorldFx } from './resync.js';
 import { voidPendingEchoes } from '../parity.js';
 import { applyTerrain, applyInteriors, applyMapFog, applyWeather, applyAtmosphere, applyWater, applyKillZone, firstTerrain, type MapSnapshot } from './mapAssets.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
+import type { WorldState } from '../worldState.js';
 // Boot/terrain machinery lives in mapAssets.js — re-exported so main.ts
 // and lastRoom.ts keep a single import site.
 export { firstTerrain, probeBootMap, bootPrimeTerrain, bootPrimedPreset } from './mapAssets.js';
@@ -33,6 +34,26 @@ export type { MapSnapshot } from './mapAssets.js';
 // reject the token. Rendering the default spawn in that gap flashes a
 // fake position/health, so we cover it until the first gameState lands.
 const _reseatPos = new THREE.Vector3();
+
+// The snapshot replaces the world — reseat every remote at its wire pos
+// (or drop it when the roster doesn't name it). Locally-owned bodies are
+// never on the wire and are cleaned up by their owner (TeamBots; the
+// ?dummy/?dummylineup hook) — purging them here disposed a body
+// mid-GLB-load and left it invisible with zero registered clips (the
+// 'heavy robot T-posed/messed up' report: class_heavy is the biggest
+// body, so it was the one still loading when the first snapshot landed).
+// Same ownership exemption RemoteSet.prune already applies. A NaN row
+// would reseat the remote into a poisoned motion state — the net.push
+// finite gate doesn't cover this path.
+function purgeStaleRemotes(world: WorldState, wire: ReadonlyMap<string, { x: number; y: number; z: number }>): void {
+  for (const [id, rp] of world.remotePlayers) {
+    if (id.startsWith('bot:') || id.startsWith('dummy')) {continue;}
+    const pos = wire.get(id);
+    if (!pos || !finiteVec(pos)) { world.remotePlayers.remove(id); continue; }
+    _reseatPos.set(pos.x, pos.y, pos.z);
+    rp.teleportTo(_reseatPos);
+  }
+}
 let sessionVeil: HTMLDivElement | null = null;
 let sessionVeilTimer: ReturnType<typeof setTimeout> | null = null;
 let sessionVeilLabelTimer: ReturnType<typeof setTimeout> | null = null;
@@ -312,26 +333,7 @@ export function wireWorld(ctx: NetCtx): void {
     // remote: wire pos where the roster has one, own position otherwise —
     // either way the buffer clears and the next push re-anchors.
     const wire = new Map(players.map(p => [p.id, p.position]));
-    for (const [id, rp] of deps.world.remotePlayers) {
-      const pos = wire.get(id);
-      // Locally-owned bodies are never on the wire and are cleaned up by
-      // their owner (TeamBots; the ?dummy/?dummylineup hook) — purging
-      // them here disposed a body mid-GLB-load and left it invisible with
-      // zero registered clips (the 'heavy robot T-posed/messed up'
-      // report: class_heavy is the biggest body, so it was the one still
-      // loading when the first snapshot landed). Same ownership exemption
-      // RemoteSet.prune already applies.
-      if (id.startsWith('bot:') || id.startsWith('dummy')) {continue;}
-      // A room hop's roster replaces wholesale — an entity the snapshot
-      // doesn't name is from the old room: keeping it leaves a ghost body
-      // that renders and collides-feels real but can never update.
-      if (!pos) { deps.world.remotePlayers.remove(id); continue; }
-      // Roster pos bypasses the net.push finite gate — a NaN row would
-      // reseat the remote into a poisoned motion state.
-      if (!finiteVec(pos)) { deps.world.remotePlayers.remove(id); continue; }
-      _reseatPos.set(pos.x, pos.y, pos.z);
-      rp.teleportTo(_reseatPos);
-    }
+    purgeStaleRemotes(deps.world, wire);
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) {restoreLocalPlayer(ctx, localPlayerState);}
     // Warm every class-body rig parse — remote ctors fire on paced spawn

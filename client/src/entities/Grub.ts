@@ -154,24 +154,9 @@ export class Grub implements Targetable, SwarmSlotOwner {
     const dy = playerPos.y - this.pos.y;
     const biteSq = distSq + dy * dy;
 
-    if (this.emergeT > 0) {
-      this.emergeT -= dt;
-      const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
-      const eg = terrain.getHeight(this.pos.x, this.pos.z);
-      if (Number.isFinite(eg)) {this.groundY = eg;}
-      this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
-      this.writeInstances(terrain);
-      return;
-    }
+    if (this.tickEmerge(dt, terrain)) {return;}
 
-    if (this.stunTimer <= 0 && distSq < GRUB_AGGRO_DIST * GRUB_AGGRO_DIST) {
-      const d = Math.sqrt(distSq) || 0.001;
-      this.vel.x = (dx / d) * GRUB_SPEED;
-      this.vel.z = (dz / d) * GRUB_SPEED;
-    } else {
-      this.vel.x *= Math.max(0, 1 - 4 * dt);
-      this.vel.z *= Math.max(0, 1 - 4 * dt);
-    }
+    this.steer(dt, dx, dz, distSq);
     this.vel.y = 0;
     this.pos.addScaledVector(this.vel, dt);
     // Glued to the dirt — a maggot doesn't hop
@@ -194,6 +179,31 @@ export class Grub implements Targetable, SwarmSlotOwner {
     }
     this.pushTrail();
     this.writeInstances(terrain);
+  }
+
+  // Aggro chase inside radius, else oozing deceleration.
+  private steer(dt: number, dx: number, dz: number, distSq: number): void {
+    if (this.stunTimer <= 0 && distSq < GRUB_AGGRO_DIST * GRUB_AGGRO_DIST) {
+      const d = Math.sqrt(distSq) || 0.001;
+      this.vel.x = (dx / d) * GRUB_SPEED;
+      this.vel.z = (dz / d) * GRUB_SPEED;
+    } else {
+      this.vel.x *= Math.max(0, 1 - 4 * dt);
+      this.vel.z *= Math.max(0, 1 - 4 * dt);
+    }
+  }
+
+  // Burrow emerge: rises out of the ground on an ease-out curve. True
+  // while emerging — caller skips the rest of update.
+  private tickEmerge(dt: number, terrain: Terrain): boolean {
+    if (this.emergeT <= 0) {return false;}
+    this.emergeT -= dt;
+    const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
+    const eg = terrain.getHeight(this.pos.x, this.pos.z);
+    if (Number.isFinite(eg)) {this.groundY = eg;}
+    this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
+    this.writeInstances(terrain);
+    return true;
   }
 
   // Record the head's traveled path — flat [x,z,...], newest first.

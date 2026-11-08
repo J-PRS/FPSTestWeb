@@ -168,15 +168,14 @@ export class Scarab implements Targetable, SwarmSlotOwner {
     this.animT += dt;
     const s = this.sim;
 
-    if (this.emergeT > 0) {
-      this.emergeT -= dt;
-      const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
-      this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius - this.emergeDepth * (1 - k * k);
-      if (s) {s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;}
-      this.writeInstances(terrain);
-      return;
-    }
+    if (this.tickEmerge(dt, terrain)) {return;}
+    if (this.tickLocal(dt, terrain, playerPos, s)) {return;}
+    this.writeInstances(terrain);
+  }
 
+  // Local-sim leg: events map to callbacks, death skips the instance
+  // write. True when the sim reported dead.
+  private tickLocal(dt: number, terrain: Terrain, playerPos: THREE.Vector3, s: SimCrawler | null): boolean {
     if (s) {
       commitTarget(s, 'local', playerPos);
       const wasAir = this.airborne;
@@ -186,10 +185,10 @@ export class Scarab implements Targetable, SwarmSlotOwner {
         this.biteCd = SCARAB_BITE_CD;
         this.onBite?.(this);
       }
-      if (s.dead) {this.dead = true; return;}
-      if (this.vel.lengthSq() > 1) {this.yaw = Math.atan2(this.vel.x, this.vel.z);}
-    } else if (this.vel.lengthSq() > 1) {this.yaw = Math.atan2(this.vel.x, this.vel.z);}
-    this.writeInstances(terrain);
+      if (s.dead) {this.dead = true; return true;}
+    }
+    if (this.vel.lengthSq() > 1) {this.yaw = Math.atan2(this.vel.x, this.vel.z);}
+    return false;
   }
 
   writeInstances(terrain: Terrain): void { writeInstances(this, terrain); }
@@ -204,6 +203,19 @@ export class Scarab implements Targetable, SwarmSlotOwner {
     if (s) { if (applyCrawlerDamage(s, damage)) { this.dead = true; return true; } }
     else if ((this.health -= damage) <= 0) { this.dead = true; return true; }
     return false;
+  }
+
+  // Burrow emerge: rises out of the ground on an ease-out curve, keeping
+  // the replica sim's xyz in step. True while emerging.
+  private tickEmerge(dt: number, terrain: Terrain): boolean {
+    if (this.emergeT <= 0) {return false;}
+    this.emergeT -= dt;
+    const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
+    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius - this.emergeDepth * (1 - k * k);
+    const s = this.sim;
+    if (s) {s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;}
+    this.writeInstances(terrain);
+    return true;
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {

@@ -166,50 +166,53 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.foot.conform(this.pos.x, this.pos.z, this.pos.y, terrain);
   }
 
-  update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
+  update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, _playerVel?: THREE.Vector3): void {
     if (this.dead) {return;}
     if (this.netDriven) { this.updateNet(dt, terrain); return; }
     if (this.flash > 0) {this.flash -= dt;}
     const s = this.sim;
 
-    if (this.state === 'materialize' || !s) {
-      // Grow-in dressing — the sim has no materialize state; it idles in
-      // 'aim' until the body exists.
-      this.stateTimer -= dt;
-      const p = 1 - Math.max(0, this.stateTimer / TOTEM_MATERIALIZE);
-      this.bodyScale = 0.3 + p * 0.7;
-      this.eyeScale = 0.4 + p * 0.4;
-      this.eyeBright = p * 0.5;
-      if (this.stateTimer <= 0) {
-        this.state = 'aim';
-        this.bodyScale = 1;
-        this.eyeBright = 0.8;
-      }
-    } else {
-      commitTarget(s, 'local', playerPos);
-      const prevState = s.state;
-      const ev = updateLocalSim(this, dt, terrain, stepTotem, playerPos);
-      this.mirrorSim(dt, prevState);
-      if (ev === 'blink') {this.onBlink?.(this.pos);}
-      if (ev === 'fire') {
-        this.onSimFire();
-        // Local authority resolves the locked beam against the LIVE
-        // position — same contract as totemFireTargets on the server.
-        const ex = s.x, ey = s.y + s.sp.EYE_HEIGHT * s.radius, ez = s.z;
-        if (totemBeamHit(s, playerPos.x, playerPos.y + 1, playerPos.z)) {
-          const proj = (playerPos.x - ex) * s.lockDirX + (playerPos.y + 1 - ey) * s.lockDirY + (playerPos.z - ez) * s.lockDirZ;
-          _v.set(ex + s.lockDirX * proj, ey + s.lockDirY * proj, ez + s.lockDirZ * proj);
-          this.onBoltHit?.(this, _v);
-        } else if (s.lockDist < s.sp.RANGE) {
-          _v.set(ex + s.lockDirX * s.lockDist, ey + s.lockDirY * s.lockDist, ez + s.lockDirZ * s.lockDist);
-          this.onBoltLand?.(_v);
-        }
-      }
-      if (s.dead) {this.dead = true; return;}
-    }
+    if (this.state === 'materialize' || !s) {this.tickMaterialize(dt); return;}
+    commitTarget(s, 'local', playerPos);
+    const prevState = s.state;
+    const ev = updateLocalSim(this, dt, terrain, stepTotem, playerPos);
+    this.mirrorSim(dt, prevState);
+    if (ev === 'blink') {this.onBlink?.(this.pos);}
+    if (ev === 'fire') {this.fireBeam(s, playerPos);}
+    if (s.dead) {this.dead = true; return;}
 
     this.writeInstances();
     if (this.foot) {getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);}
+  }
+
+  // 'fire' event: resolve the locked beam against the LIVE player
+  // position — same contract as totemFireTargets on the server.
+  private fireBeam(s: SimTotem, playerPos: THREE.Vector3): void {
+    this.onSimFire();
+    const ex = s.x, ey = s.y + s.sp.EYE_HEIGHT * s.radius, ez = s.z;
+    if (totemBeamHit(s, playerPos.x, playerPos.y + 1, playerPos.z)) {
+      const proj = (playerPos.x - ex) * s.lockDirX + (playerPos.y + 1 - ey) * s.lockDirY + (playerPos.z - ez) * s.lockDirZ;
+      _v.set(ex + s.lockDirX * proj, ey + s.lockDirY * proj, ez + s.lockDirZ * proj);
+      this.onBoltHit?.(this, _v);
+    } else if (s.lockDist < s.sp.RANGE) {
+      _v.set(ex + s.lockDirX * s.lockDist, ey + s.lockDirY * s.lockDist, ez + s.lockDirZ * s.lockDist);
+      this.onBoltLand?.(_v);
+    }
+  }
+
+  // Grow-in dressing — the sim has no materialize state; it idles in
+  // 'aim' until the body exists. Caller guarantees materialize-or-simless.
+  private tickMaterialize(dt: number): void {
+    this.stateTimer -= dt;
+    const p = 1 - Math.max(0, this.stateTimer / TOTEM_MATERIALIZE);
+    this.bodyScale = 0.3 + p * 0.7;
+    this.eyeScale = 0.4 + p * 0.4;
+    this.eyeBright = p * 0.5;
+    if (this.stateTimer <= 0) {
+      this.state = 'aim';
+      this.bodyScale = 1;
+      this.eyeBright = 0.8;
+    }
   }
 
   /** netDriven leg — the shared sim owns the state machine; this maps its
