@@ -232,6 +232,25 @@ function aswAccrue(id: string, dead: boolean, alt: number, skiing: boolean, dt: 
   e[aswBucket(alt, speed, skiing)] += dt;
 }
 
+// LOCOMOTION, not gait: a circling bot shows 80% ski and ~0 net travel.
+// loco = |pos - pos@30s| / 30 in m/s - a transiting player reads 20-40,
+// a bowl-parked bot reads <3 while "skiing" the whole time.
+const locoRing = new Map<string, { x: number; z: number; t: number }[]>();
+function locoNote(id: string, dead: boolean, x: number, z: number): void {
+  const now = performance.now();
+  if (dead) { locoRing.delete(id); return; }
+  const ring = locoRing.get(id) ?? [];
+  ring.push({ x, z, t: now });
+  while (ring.length > 1 && now - ring[0].t > 30000) {ring.shift();}
+  locoRing.set(id, ring);
+}
+function locoOf(id: string, x: number, z: number): number | undefined {
+  const ring = locoRing.get(id);
+  if (!ring || ring.length < 2 || ring[0].t > performance.now() - 25000) {return undefined;}
+  const d = Math.hypot(x - ring[0].x, z - ring[0].z);
+  return d / ((performance.now() - ring[0].t) / 1000);
+}
+
 
 
 // Friend-or-foe marker: teammates wear their team's color, enemies are
@@ -299,6 +318,7 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // asw sampler splits ordinary air (<5m) from high air (>5m).
   const alt = aswAltFor(playerId, remotePlayer.position.x, remotePlayer.position.z, remotePlayer.feetY, deps.lazyTerrain(), dt);
   aswAccrue(playerId, playerState.isDead, alt, Boolean(playerState.ski), dt, remotePlayer.vel.length());
+  locoNote(playerId, playerState.isDead, remotePlayer.position.x, remotePlayer.position.z);
   // Class rides every tick record because strict-tier role re-fits
   // (hof→heavy, capper→light) land mid-life on the server - the
   // silhouette must follow the sim's body, not the create-time class.
@@ -428,7 +448,8 @@ function gameDumpRow(w: WorldState, id: string, rp: RemotePlayer, now: number): 
   // straight, no inference from fight outcomes. Offline bots expose
   // brain.skill through GameBot's getter; wire remotes don't carry it.
   const rsv = (rp as { skill?: { resolve?: number } }).skill?.resolve;
-  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
+  const lc = locoOf(id, rp.position.x, rp.position.z);
+  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${lc === undefined ? '-' : lc.toFixed(1).padStart(4)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
 }
 if (typeof window !== 'undefined') {
   (window as { __aswDump?: () => string[] }).__aswDump = (): string[] => {
@@ -457,7 +478,8 @@ function gameDumpSelfRow(d: RemotesDeps, w: WorldState, now: number): string {
   const selfD = selfCount(w.deathCounts, localScoreId);
   const ss = aswStr(localId);
   const shown = d.lazyPlayerSheep?.().shown;
-  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
+  const lc = locoOf(localId, self.pos.x, self.pos.z);
+  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${' - '.padStart(4)} ${lc === undefined ? '-' : lc.toFixed(1).padStart(4)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
 }
 function gameDump(): string[] {
   const d = depsRef;
@@ -467,7 +489,7 @@ function gameDump(): string[] {
   // scoreboard path on the wall clock; mixing epochs prints garbage.
   const now = Date.now();
   const lines: string[] = [`  mode=${w.mode} map=${w.mapName ?? '-'} teams=${JSON.stringify(w.teamScores ?? {})}`];
-  lines.push('  name                 team      cls      F  D  score sheep alive rsv  ping net   asw(HA/A/S/W/ST/I)');
+  lines.push('  name                 team      cls      F  D  score sheep alive rsv  loco ping net   asw(HA/A/S/W/ST/I)');
   lines.push(gameDumpSelfRow(d, w, now));
   for (const [id, rp] of w.remotePlayers) {lines.push(gameDumpRow(w, id, rp, now));}
   return lines;
@@ -682,6 +704,7 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
     // locomotion FX; the asw column wants clearance, not the flag.
     const selfAlt = aswAltFor(localPlayerId, player.pos.x, player.pos.z, player.pos.y - CLASS_STATS[player.appliedClass].eyeHeight, deps.lazyTerrain(), dt);
     aswAccrue(localPlayerId, player.isDead, selfAlt, player.skiing, dt, player.vel.length());
+    locoNote(localPlayerId, player.isDead, player.pos.x, player.pos.z);
 
     // Roster work - player list UI + join/leave log - is polled at 2Hz.
     // Per-position logging at 60Hz was a console flood, and building the
@@ -723,6 +746,7 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
         hud.updatePlayerIndicator(id, _markPos, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass, hp: (rp as { botHp?: number }).botHp });
       }
       aswAccrue(id, rp.isDead, aswAltFor(id, rp.position.x, rp.position.z, rp.feetY, deps.lazyTerrain(), dt), gb.wireSki ?? false, dt, rp.vel.length());
+      locoNote(id, rp.isDead, rp.position.x, rp.position.z);
     }
     tickFlagMarkers(deps, localPlayerId, player.pos, hud, cam);
     tickNodeMarkers(deps, hud, cam);
