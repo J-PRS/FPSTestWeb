@@ -86,6 +86,17 @@ export const BOT_TUNING = {
     destHighRise: 3,     // m — destination rise that arms 'destHigh'
     destHighNear: 60,    // m — objective only counts in the climb deficit inside this ring
     grabOrbitGd: 14,     // m — runner orbit-brake ring around the objective (covers the ~2.2m touch + overshoot lap)
+    reconPeriod: 10,     // s - mean gap between discretionary altitude buys (jittered ×0.6-1.4)
+    reconBurn: 2.8,      // s - committed burn per recon climb
+    reconAglMax: 18,     // m AGL - skip the burn when already high
+    reconMinE: 16,       // energy - client tanks live at 2-21E (jetprobe:
+                         // 100% of samples <35), so comfyEnergy would
+                         // gate the climb off entirely; ~16E buys the
+                         // ~1.2s burn that actually clears 5m AGL
+    climbTapMinE: 22,    // energy - the small-rise tap had NO floor and
+                         // spent every regen trickle to the 2.4E sputter
+                         // floor (jetprobe: enAvg 4-9 across the roster),
+                         // which is also why recon climbs never had fuel
     grabWatchGd: 30,     // m — the wider orbit-detection ring: a lazy lap swinging 15-25m out never arms the 14m brake
     grabOrbitS: 1,     // s — closure-rate window inside the ring
     grabOrbitMinGain: 3, // m/window — closure slower than this = orbit lap, brake it
@@ -194,6 +205,10 @@ export const BOT_TUNING = {
     heroThinkK: 0.45,  // think-period multiplier while heroing
     wanderBase: 0.7,   // wanderlust roll base
     wanderRand: 0.6,   // wanderlust roll spread
+    wanderLegMin: 50,  // m - leg floor (was 25: short legs let every roll terminate in the next hollow - the bowl-lock)
+    wanderLegSpan: 110,// m - leg roll on top of the floor
+    wanderDownP: 0.3,  // share of rolls still preferring downhill (ski flavor)
+    wanderClimbP: 0.45,// share preferring climbs (jet/HA fuel); the rest take max |elevation change|
     dutyBase: 0.5,     // duty roll base (1.1 broke replay determinism — cadence shift desyncs same-seed rooms)
     dutyRand: 0.9,     // duty roll spread
   },

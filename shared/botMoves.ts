@@ -25,6 +25,8 @@ export class BotMoves {
    *  probes flicker mid-climb and the jet strobes on/off, which reads
    *  as buzzing instead of thrusting. */
   private jetHold = 0;
+  /** Glide-tap cooldown - downhill hops are bursts, not a burn. */
+  private glideTapT = 0;
   /** Last gate that armed a burn — harness telemetry reads this to tell
    *  climbs apart from boosts without parsing behavior logs. */
   jetWhy = '-';
@@ -56,6 +58,16 @@ export class BotMoves {
   /** One-shot brake demand from the closure-rate window; consumed the
    *  moment the bot reaches crawl speed. */
   private brakeNow = false;
+  /** Recon-climb cooldown - free-roaming bots periodically buy altitude
+   *  for no tactical reason (the human "pop up and look"). Staggered
+   *  spawn offset keeps a squad from burning in sync. */
+  private reconT = 4 + botRand() * 10;
+  /** Live recon burn window - separate from jetWhy so a concurrent
+   *  hop/boost reason can't hand the hold back to the dive veto. */
+  private reconHoldT = 0;
+  /** Short latch letting an apex-extension burn survive the diveRun
+   *  veto - same role reconHoldT plays for recon climbs. */
+  private apexHoldT = 0;
   /** Crawl latch — armed after a parked stop inside the grab ring;
    *  keeps the walk key but forbids ski/jet so a downhill stand can't
    *  re-spin the orbit the brake just killed. */
@@ -262,40 +274,27 @@ export class BotMoves {
     // pursuit lets the chaser close sooner; speed IS the carrier's
     // defense, the banked shield rarely got to fire.
     const tanked = ctx.energy === undefined || ctx.energy > tapFloor;
-    // Step mount: a face below climbRise (dais skirt 2.2m, deck lip
-    // 0.85m, any collider top — the probe reads structures through
-    // ctx.groundY) still walls the walk key, and no climb ever arms
-    // for it. A stalled shove pays the free jump; the tap covers only
-    // what jump apex can't. Fires on stall, not on rise alone, so a
-    // moving walker keeps running through gentle grades.
-    // Posted anchors aren't exempt: a defender stalled against the stand
-    // lip has no other way back onto its post — the stall gates above
-    // already keep a freely-moving post planted (soak: four pinned
-    // anchors ringed around the henge dais, all posted, all rise~3.6m).
-    // Mount-commit: a runner/carrier below an elevated flag whose tank
-    // holds a real burn stops orbiting at speed (the stall-gate hop only
-    // arms near-stationary — a moving orbiter never mounts, peaks carry
-    // leg: 150s circling 15-25m under the stand) and burns the face now.
-    const mountCommit = (ctx.runner === true || ctx.running === true) && dyAbove < -6 &&
-      odTap < T.moves.destHighNear * 1.5 && ctx.energy !== undefined && ctx.energy >= T.moves.breathHold;
-    if (!airborne && rise > T.moves.stepRise && (speed < T.moves.jumpUphillSpeed || mountCommit)) {
-      this.jetWhy = 'hop';
-      // A lip above jump apex but below breathRise has no perch — with a
-      // dry tank the hop kept firing anyway and the bot rim-orbited the
-      // dais forever (soak: HALO/MARA pinned at the henge stand). Hold
-      // the shove while the tank refills to the hop's floor, then mount.
-      if (rise > T.moves.stepJetRise && ctx.energy !== undefined && ctx.energy < (dyAbove < -20 && ctx.running ? T.moves.breathHold : T.moves.mountE)) {
-        this.mountWait = true;
-        return { ski: false, jet: false, jump: false, park: true };
-      }
-      return { ski: false, jet: rise > T.moves.stepJetRise && tanked, jump: true };
+    const mount = this.stepMount(ctx, { rise, speed, airborne, dyAbove, odTap, tanked,
+      mountCommit: (ctx.runner === true || ctx.running === true) && dyAbove < -6 && odTap < T.moves.destHighNear * 1.5 && (ctx.energy ?? -1) >= T.moves.breathHold });
+    if (mount) {return mount;}
+    this.jetHold = Math.max(0, this.jetHold - dt); this.glideTapT = Math.max(0, this.glideTapT - dt);
+    // Tribes energy play: ski DOWNHILL for free speed, JET UPHILL so the
+    // face doesn't eat momentum. A modest rise ahead while moving gets a
+    // short tap - the mission gates above only arm on real climbs, this
+    // covers the constant small-hill hopping humans never stop doing.
+    if (!airborne && !ctx.posted && !ctx.runner && rise > 1.5 && rise < 8 && speed > 12 && this.glideTapT <= 0
+        && (ctx.energy === undefined || ctx.energy > T.moves.climbTapMinE)) {
+      this.glideTapT = 2.5;
+      this.jetHold = Math.max(this.jetHold, 0.35);
+      this.jetWhy = 'climb-tap';
     }
-    this.jetHold = Math.max(0, this.jetHold - dt);
     // Re-arm while the reason holds (a long climb = one long burn),
     // plus a minimum pulse so a gate flicker can't chop the burn.
     if (this.wantJet(ctx, pos, dest, { rise, speed, gd, airborne }) && tanked) {
       this.jetHold = Math.max(this.jetHold, T.moves.jetHoldBase + botRand() * T.moves.jetHoldRand);
     }
+    this.reconTick(dt, ctx, pos, { g0, rise, airborne, tanked });
+    this.reconHoldT = Math.max(0, this.reconHoldT - dt); this.apexHoldT = Math.max(0, this.apexHoldT - dt);
     // The dive: a destination at or below the bot wants gravity, not
     // thrust — a capper jets to the stand's zip code, then lets
     // momentum carry the touch. The runway scales with what has to
@@ -331,7 +330,11 @@ export class BotMoves {
     const agl = pos.y - g0;
     const canDive = rise < -T.moves.boostRise || agl > T.moves.diveAglMin;
     const diveRun = gd < runway && tgtY < pos.y + T.moves.diveArriveMargin && canDive && this.jetWhy !== 'prey' && this.jetWhy !== 'block' && !flatRun;
-    if (diveRun) {this.jetHold = 0;}
+    // A recon burn survives the dive read: it IS altitude bought on
+    // purpose, and the skim-down that follows is the ski leg. Vetoing
+    // it here meant roamers (usually descending - that's why they ski)
+    // cancelled every climb before it started.
+    if (diveRun && this.reconHoldT <= 0 && this.apexHoldT <= 0) {this.jetHold = 0;}
     // Tail-of-hop tap — the timing the standalone sweep measured: jetting
     // only the DESCENDING arc of each hop holds ~43m/s at ~1/10 the energy
     // per meter of a held burn (66m/s): every thrust tick lands as forward
@@ -369,7 +372,7 @@ export class BotMoves {
     const landDive = ctx.running === true && ctx.objective !== null && ctx.objective !== undefined
       && dyAbove > 8 && od < Math.max(140, dyAbove * T.lines.diveGlideK * 1.5);
     if (inGlide || landDive) {this.jetHold = 0;}
-    const jet = !diveRun && !landDive && (((this.jetHold > 0 || (this.host.escapeJetT() > 0 && !inGlide)) && tanked) || (tail && !inGlide));
+    const jet = (!diveRun || this.reconHoldT > 0 || this.apexHoldT > 0) && !landDive && (((this.jetHold > 0 || (this.host.escapeJetT() > 0 && !inGlide)) && tanked) || (tail && !inGlide));
     this.jetOut = jet;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
@@ -432,6 +435,60 @@ export class BotMoves {
     };
   }
 
+  /** Step mount: a face below climbRise (dais skirt 2.2m, deck lip
+   *  0.85m, any collider top - the probe reads structures through
+   *  ctx.groundY) still walls the walk key, and no climb ever arms
+   *  for it. A stalled shove pays the free jump; the tap covers only
+   *  what jump apex can't. Fires on stall, not on rise alone, so a
+   *  moving walker keeps running through gentle grades.
+   *  Posted anchors aren't exempt: a defender stalled against the stand
+   *  lip has no other way back onto its post - the stall gates above
+   *  already keep a freely-moving post planted (soak: four pinned
+   *  anchors ringed around the henge dais, all posted, all rise~3.6m).
+   *  Mount-commit: a runner/carrier below an elevated flag whose tank
+   *  holds a real burn stops orbiting at speed (the stall-gate hop only
+   *  arms near-stationary - a moving orbiter never mounts, peaks carry
+   *  leg: 150s circling 15-25m under the stand) and burns the face now.
+   *  Returns null when the gate doesn't fire so hints() continues. */
+  private stepMount(ctx: BrainCtx, s: { rise: number; speed: number; airborne: boolean; dyAbove: number; odTap: number; tanked: boolean; mountCommit: boolean }): BrainOut['move'] | null {
+    if (s.airborne || s.rise <= T.moves.stepRise) {return null;}
+    if (s.speed >= T.moves.jumpUphillSpeed && !s.mountCommit) {return null;}
+    this.jetWhy = 'hop';
+    // A lip above jump apex but below breathRise has no perch - with a
+    // dry tank the hop kept firing anyway and the bot rim-orbited the
+    // dais forever (soak: HALO/MARA pinned at the henge stand). Hold
+    // the shove while the tank refills to the hop's floor, then mount.
+    if (s.rise > T.moves.stepJetRise && (ctx.energy ?? Infinity) < (s.dyAbove < -20 && ctx.running ? T.moves.breathHold : T.moves.mountE)) {
+      this.mountWait = true;
+      return { ski: false, jet: false, jump: false, park: true };
+    }
+    return { ski: false, jet: s.rise > T.moves.stepJetRise && s.tanked, jump: true };
+  }
+
+  /** Recon climb: a free-roaming bot with a healthy tank periodically
+   *  buys altitude - the human "pop up and look" that doubles as the
+   *  AGL the HA column measures. Posted anchors and route-committed
+   *  bodies (runner/wave/carrier) keep their own burn policy; hunting
+   *  bots still climb - humans jet mid-fight constantly. diveRun/
+   *  inGlide/landDive still veto the burn below.
+   *  MPC phase rule (botMpcSearch solves on rimrock): the altitude buy
+   *  belongs at the descent bottom, not mid-slope. Jetting while the
+   *  ground drops spends the tank on height gravity was about to give
+   *  free, and starts the climb slow instead of fast. rise < -boostRise
+   *  is the same "terrain ahead drops" read canDive uses. */
+  private reconTick(dt: number, ctx: BrainCtx, pos: BotVec, s: { g0: number; rise: number; airborne: boolean; tanked: boolean }): void {
+    this.reconT = Math.max(0, this.reconT - dt);
+    if (this.reconT <= 0 && this.jetHold <= 0 && !ctx.posted && ctx.runner !== true && ctx.wave !== true
+        && ctx.running !== true && !s.airborne && !this.perched && s.tanked && s.rise > -T.moves.boostRise
+        && (ctx.energy === undefined || ctx.energy > T.moves.reconMinE)
+        && pos.y - s.g0 < T.moves.reconAglMax) {
+      this.reconT = T.moves.reconPeriod * (0.6 + botRand() * 0.8);
+      this.jetHold = Math.max(this.jetHold, T.moves.reconBurn);
+      this.reconHoldT = T.moves.reconBurn;
+      this.jetWhy = 'recon';
+    }
+  }
+
   /** True when the ground ~12m along the direction of travel falls away
    *  — the hop chain would leave descent-pump speed on the table. Uses
    *  velocity, not steer yaw: the surface under the slide is what pumps
@@ -457,7 +514,7 @@ export class BotMoves {
    *  extending the arc when the destination is off-axis. */
   private apexNeedsJet(ctx: BrainCtx, pos: BotVec): boolean {
     const v = ctx.vel;
-    if (!v || !ctx.runner) {return false;}
+    if (!v || ctx.running) {return false;}
     // Don't jet at the apex when close to the objective — near the flag
     // you want to DESCEND into it, not jet up and sail over.
     if (ctx.objective) {
@@ -722,6 +779,20 @@ export class BotMoves {
     const tap = !turning && (ctx.runner === true || ctx.wave === true) && !bank && !comfy && airborne &&
       (ctx.vel?.y ?? 0) < 0 && od > T.moves.boostGdMin &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && rise <= T.moves.boostRise;
+    // MPC transit finding (_tools/_mpctransit.ts, rimrock A/B): airborne
+    // descent jets are load-bearing - banning them cost ~15-25% transit
+    // speed and halved mean AGL. apexNeedsJet is the "reach the next
+    // face" dead-reckon; runners get it below as a burn extender, but
+    // roamers had NO airborne jet path at all. Give them the trigger -
+    // carriers keep their own landing discipline, posted anchors never
+    // reach this far.
+    if (airborne && !turning && ctx.runner !== true && ctx.wave !== true && ctx.running !== true
+        && ctx.energy !== undefined && ctx.energy > T.moves.mountE
+        && this.apexNeedsJet(ctx, pos)) {
+      this.jetWhy = 'apex';
+      this.apexHoldT = T.moves.jetHoldBase + T.moves.jetHoldRand;
+      return true;
+    }
     // Sustained-climb deep-probe experiment REVERTED: jetting a slow
     // massif walk bought altitude that bled straight back — soak warns
     // rose both maps (katabatic 34→40, henge 17→24). The 6m lip probe

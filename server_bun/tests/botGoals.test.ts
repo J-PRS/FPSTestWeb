@@ -211,7 +211,7 @@ describe('BotGoals wander', () => {
     // the pull says -x; the roll should land toward the crowd.
     g.pick(flat({ others: [{ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, { x: -10, y: 0, z: 0 }] }), { x: 500, y: 0, z: 0 });
     expect(s.goal.x).toBeLessThan(500);
-    expect(s.goal.x).toBeGreaterThan(400); // a wander roll, not a teleport
+    expect(s.goal.x).toBeGreaterThan(300); // a wander roll, not a teleport
   });
 
   it('committed waypoint holds until reached or timed out', () => {

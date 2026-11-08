@@ -10,6 +10,7 @@
  */
 import { botRand } from './botRand.ts';
 import { BOT_EYE } from './botHunt.ts';
+import { BOT_TUNING as T } from './botTuning.ts';
 import { distSq } from './botVec.ts';
 import { ENERGY } from './movement.ts';
 import type { BotVec, BrainCtx } from './botBrain.ts';
@@ -230,9 +231,10 @@ export class BotGoals {
     return s.wanderWp;
   }
 
-  /** Roll a few candidate waypoints; downhill lines win - picking the
-   *  low ground is what makes wander read as skiing runs instead of a
-   *  jog across flats. Death spots are skipped outright. */
+  /** Roll a few candidate waypoints; the leg style (downhill ski run,
+   *  climb, or max-change traverse) is picked once per roll so a leg
+   *  commits to its character instead of flip-flopping per candidate.
+   *  Death spots are skipped outright. */
   private rollWander(ctx: BrainCtx, pos: BotVec): BotVec | null {
     const g0 = ctx.groundY(pos.x, pos.z);
     // A cold field's best pull is the crowd - every live body's position
@@ -250,8 +252,17 @@ export class BotGoals {
       pull = Math.min(1, Math.hypot(dcx, dcz) / 180); // full crowd-aim past ~180m
       hv = { x: h0.x * (1 - pull) + dcx * pull, z: h0.z * (1 - pull) + dcz * pull };
     }
+    // Leg style per roll: pure-downhill picking ratcheted every bot into
+    // terrain minima - ski down into the hollow, next roll picks the next
+    // hollow, herd'd together by the crowd pull (the bowl-lock). A third
+    // of rolls now commits to climbing and a third takes the biggest
+    // elevation change either way; only the ski share stays downhill.
+    const leg = botRand();
+    let mode = 0;
+    if (leg < T.brain.wanderDownP) {mode = 1;}
+    else if (leg < T.brain.wanderDownP + T.brain.wanderClimbP) {mode = -1;}
     let best: BotVec | null = null;
-    let bestDrop = -Infinity;
+    let bestScore = -Infinity;
     for (let tries = 0; tries < 3; tries += 1) {
       // Committed lines: a skier picks a direction and holds it - the
       // roll is a forward cone off the current heading with real run
@@ -259,12 +270,13 @@ export class BotGoals {
       // The cone narrows as the crowd pull grows - a far wanderer
       // beelines for the lobby, it doesn't slalom to it.
       const a = Math.atan2(hv.z, hv.x) + (botRand() - 0.5) * 2.4 * (1 - pull);
-      const r = (25 + botRand() * 55) * this.wanderlust();
+      const r = (T.brain.wanderLegMin + botRand() * T.brain.wanderLegSpan) * this.wanderlust();
       const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
       if (this.nearDeath(wp)) {continue;}
       const drop = g0 - ctx.groundY(wp.x, wp.z);
-      if (drop > bestDrop) {
-        bestDrop = drop;
+      const score = mode === 0 ? Math.abs(drop) : mode * drop;
+      if (score > bestScore) {
+        bestScore = score;
         best = { x: wp.x, y: ctx.groundY(wp.x, wp.z) + BOT_EYE, z: wp.z };
       }
     }
