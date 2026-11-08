@@ -237,7 +237,7 @@ function aswAccrue(id: string, dead: boolean, alt: number, skiing: boolean, dt: 
 // reads ~0 at every window (loops fool a single 30s mark); a real
 // transiting player stays high across all of them.
 const locoRing = new Map<string, { x: number; z: number; t: number }[]>();
-const LOCO_WINS = [1000, 5000, 10000, 15000];
+const LOCO_WINS = [1000, 2000, 5000, 10000, 15000];
 function locoNote(id: string, dead: boolean, x: number, z: number): void {
   const now = performance.now();
   if (dead) { locoRing.delete(id); return; }
@@ -246,24 +246,24 @@ function locoNote(id: string, dead: boolean, x: number, z: number): void {
   while (ring.length > 1 && now - ring[0].t > 16000) {ring.shift();}
   locoRing.set(id, ring);
 }
-/** 'm/s@1s/m/s@5s/m/s@10s/m/s@15s' or '-' while the ring fills. */
-function locoStr(id: string, x: number, z: number): string {
+/** Per-window displacement rates (1/2/5/10/15s), '-' per unfilled window. */
+function locoVals(id: string): string[] {
   const ring = locoRing.get(id);
-  if (!ring || ring.length < 2) {return '-';}
+  if (!ring || ring.length < 2) {return [];}
   const now = performance.now();
-  const parts: string[] = [];
-  for (const win of LOCO_WINS) {
+  const cur = ring[ring.length - 1];
+  return LOCO_WINS.map((win): string => {
     const cutoff = now - win;
     let anchor: { x: number; z: number; t: number } | undefined;
     for (let i = ring.length - 1; i >= 0; i -= 1) {
       if (ring[i].t <= cutoff) {anchor = ring[i]; break;}
     }
-    if (!anchor || now - anchor.t < win * 0.5) {parts.push('-'); continue;}
-    const d = Math.hypot(x - anchor.x, z - anchor.z);
-    parts.push((d / ((now - anchor.t) / 1000)).toFixed(1));
-  }
-  return parts.join('/');
+    if (!anchor || now - anchor.t < win * 0.5) {return '-';}
+    const d = Math.hypot(cur.x - anchor.x, cur.z - anchor.z);
+    return (d / ((now - anchor.t) / 1000)).toFixed(1);
+  });
 }
+const locoStr = (id: string): string => { const v = locoVals(id); return v.length ? v.join('/') : '-'; };
 
 
 
@@ -462,7 +462,7 @@ function gameDumpRow(w: WorldState, id: string, rp: RemotePlayer, now: number): 
   // straight, no inference from fight outcomes. Offline bots expose
   // brain.skill through GameBot's getter; wire remotes don't carry it.
   const rsv = (rp as { skill?: { resolve?: number } }).skill?.resolve;
-  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${locoStr(id, rp.position.x, rp.position.z).padEnd(13)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
+  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${locoStr(id).padEnd(13)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
 }
 if (typeof window !== 'undefined') {
   (window as { __aswDump?: () => string[] }).__aswDump = (): string[] => {
@@ -491,7 +491,7 @@ function gameDumpSelfRow(d: RemotesDeps, w: WorldState, now: number): string {
   const selfD = selfCount(w.deathCounts, localScoreId);
   const ss = aswStr(localId);
   const shown = d.lazyPlayerSheep?.().shown;
-  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${' - '.padStart(4)} ${locoStr(localId, self.pos.x, self.pos.z).padEnd(13)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
+  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${' - '.padStart(4)} ${locoStr(localId).padEnd(13)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
 }
 function gameDump(): string[] {
   const d = depsRef;
@@ -586,7 +586,7 @@ function updateScoreboard(deps: RemotesDeps): void {
 // formula ('local' + the score id).
 function selfScoreboardRow(deps: RemotesDeps, nm: NetworkManager, localId: string, ffa: Map<string, number>, localScoreId: string, now: number): SbRow {
   const self = deps.lazyPlayer();
-  return { name: settings.get('fps-name') || localId, frags: selfCount(deps.world.killCounts, localScoreId), deaths: selfCount(deps.world.deathCounts, localScoreId), score: ffa.get(localScoreId) ?? null, ping: nm.serverPingMs == null ? nm.getPing() : `${nm.getPing()}/${Math.round(nm.serverPingMs)}`, net: nm.getTransportTier() ?? null, self: true, dead: self.isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, self.isDead, now), cls: self.appliedClass, asw: aswStr(localId) };
+  return { name: settings.get('fps-name') || localId, frags: selfCount(deps.world.killCounts, localScoreId), deaths: selfCount(deps.world.deathCounts, localScoreId), score: ffa.get(localScoreId) ?? null, ping: nm.serverPingMs == null ? nm.getPing() : `${nm.getPing()}/${Math.round(nm.serverPingMs)}`, net: nm.getTransportTier() ?? null, self: true, dead: self.isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, self.isDead, now), cls: self.appliedClass, asw: aswStr(localId), loco: locoVals(localId) };
 }
 
 // net is string|null - 'bot' rows carry a label, not a transport tier.
@@ -604,7 +604,7 @@ function wireRow(deps: RemotesDeps, id: string, ps: RemotePlayerState | undefine
   const dead = ps?.isDead ?? false;
   const name = bot ? botRosterName(id) : (ps?.name ?? id);
   const net = bot ? 'bot' : (ps?.transport ?? null);
-  return { name, frags: or0(deps.world.killCounts.get(id)), deaths: or0(deps.world.deathCounts.get(id)), score: orN(ffa.get(id)), ping: orN(ps?.ping), net, self: false, dead, team: ps?.team, sheep: orN(ps?.sheep), bot, alive: aliveSecs(id, dead, now), cls: ps?.armorClass, asw: aswStr(id) };
+  return { name, frags: or0(deps.world.killCounts.get(id)), deaths: or0(deps.world.deathCounts.get(id)), score: orN(ffa.get(id)), ping: orN(ps?.ping), net, self: false, dead, team: ps?.team, sheep: orN(ps?.sheep), bot, alive: aliveSecs(id, dead, now), cls: ps?.armorClass, asw: aswStr(id), loco: locoVals(id) };
 }
 
 const or0 = (v: number | undefined): number => v ?? 0;
@@ -622,7 +622,7 @@ function offlineBotRows(deps: RemotesDeps, nm: NetworkManager, ffa: Map<string, 
     const t = (rp as { team?: string }).team;
     const team = t === 'alpha' || t === 'bravo' ? t : undefined;
     const sheep = (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null;
-    out.push({ name: botRosterName(id), frags: or0(deps.world.killCounts.get(id)), deaths: or0(deps.world.deathCounts.get(id)), score: orN(ffa.get(id)), ping: null, net: 'bot', self: false, dead: rp.isDead, team, sheep, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now), cls: rp.armorClass, asw: aswStr(id) });
+    out.push({ name: botRosterName(id), frags: or0(deps.world.killCounts.get(id)), deaths: or0(deps.world.deathCounts.get(id)), score: orN(ffa.get(id)), ping: null, net: 'bot', self: false, dead: rp.isDead, team, sheep, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now), cls: rp.armorClass, asw: aswStr(id), loco: locoVals(id) });
   }
   return out;
 }

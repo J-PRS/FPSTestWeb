@@ -108,6 +108,10 @@ export type SbRow = {
 
   asw?: AswSplit | null;
 
+  /** Displacement m/s at 1/2/5/10/15s windows - locomotion, not gait. */
+
+  loco?: string[] | null;
+
 };
 
 
@@ -226,6 +230,20 @@ function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
     });
   } else {aswTd.textContent = '—';}
   tr.append(aswTd);
+  // Loco windows 1/2/5/10/15s - same asw palette, no label (the
+  // displacement story reads across the window chain, not one number).
+  const locoTd = document.createElement('td');
+  if (r.loco && r.loco.length > 0) {
+    const LOCO_HUES = ['s', 'a', 'w', 'st', 'i'];
+    r.loco.forEach((v, i): void => {
+      if (i > 0) {locoTd.append(document.createTextNode('/'));}
+      const span = document.createElement('span');
+      span.className = `asw-${LOCO_HUES[i] ?? 's'}`;
+      span.textContent = v;
+      locoTd.append(span);
+    });
+  } else {locoTd.textContent = '—';}
+  tr.append(locoTd);
 
   return tr;
 
