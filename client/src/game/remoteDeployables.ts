@@ -446,21 +446,9 @@ export class RemoteDeployables {
         if (g.kind === 'generator' && g.team === it.team && g.downed) {it.fireCd = 0.5; return;}
       }
     }
-    let target: Foe | null = null;
-    let bestD2 = BT.range! * BT.range!;
-    for (const f of this.deps.botFoes?.(it.team ?? '') ?? []) {
-      if (!f.alive) {continue;}
-      const d2 = f.pos.distanceToSquared(it.pos);
-      if (d2 >= bestD2) {continue;}
-      // Server losClear: muzzle (+2.4) to chest (+1.0) against the
-      // structure hulls - a pad-edge ray would falsely clip its plinth.
-      if (segSolidHit(
-        { x: it.pos.x, y: it.pos.y + 2.4, z: it.pos.z },
-        { x: f.pos.x, y: f.pos.y + 1, z: f.pos.z },
-        Projectile.solidColliders, Projectile.solidIndex ?? undefined, it.team)) {continue;}
-      bestD2 = d2; target = f;
-    }
-    if (!target) {it.fireCd = 0.15; it.aimYaw = undefined; return;}
+    const pick = this.nearestFoe(it);
+    if (!pick) {it.fireCd = 0.15; it.aimYaw = undefined; return;}
+    const { target, bestD2 } = pick;
     it.fireCd = BT.fireInterval!;
     // Lead the runner - the bolt flies straight at the frozen aim point.
     const dist = Math.sqrt(bestD2);
@@ -475,6 +463,25 @@ export class RemoteDeployables {
     if (it.head) {it.aimYaw = Math.atan2(_aim.x - it.pos.x, _aim.z - it.pos.z);}
     this.rockets.spawn(_aim2.copy(it.pos).setY(it.pos.y + 2.2), { pos: _aim.clone(), vel: _zero, alive: true }, 1, it.owner, it.team);
     sfx.shotAt(it.pos, WeaponType.MissileLauncher);
+  }
+
+  // Nearest living foe in turret range with structure-LOS clear —
+  // muzzle (+2.4) to chest (+1.0); a pad-edge ray would falsely clip
+  // its plinth. Returns the foe + its distance² for flight-time lead.
+  private nearestFoe(it: Item): { target: Foe; bestD2: number } | null {
+    let target: Foe | null = null;
+    let bestD2 = BT.range! * BT.range!;
+    for (const f of this.deps.botFoes?.(it.team ?? '') ?? []) {
+      if (!f.alive) {continue;}
+      const d2 = f.pos.distanceToSquared(it.pos);
+      if (d2 >= bestD2) {continue;}
+      if (segSolidHit(
+        { x: it.pos.x, y: it.pos.y + 2.4, z: it.pos.z },
+        { x: f.pos.x, y: f.pos.y + 1, z: f.pos.z },
+        Projectile.solidColliders, Projectile.solidIndex ?? undefined, it.team)) {continue;}
+      bestD2 = d2; target = f;
+    }
+    return target ? { target, bestD2 } : null;
   }
 
   /** deployHp broadcast - server is the vitals authority; the local

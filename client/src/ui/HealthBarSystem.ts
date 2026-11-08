@@ -243,36 +243,46 @@ export class HealthBarSystem {
   }
 
   private updatePlayerBars(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3, localTeam?: string): void {
+    const view = { dt, cameraPos, cameraDir, localTeam };
     for (const [playerId, bar] of this.bars) {
-      const playerState = players.get(playerId);
-      const rp = remotePlayers?.get(playerId);
-      // Local bots ('bot:', 'BOT-') have a rendered body but no wire-roster
-      // entry — a live rp is sufficient authority for the bar.
-      if ((!playerState && !rp) || rp?.isDead || playerState?.isDead) {
-        this.removeBar(playerId);
-        continue;
-      }
-
-      this.tagAlly(bar, playerState?.team ?? (rp as { team?: string } | undefined)?.team, localTeam);
-
-      const pos = rp ? rp.position : playerState!.position;
-      // Wire class decides the pool — class bonuses stay invisible until
-      // the roster carries it, which still beats a flat 100 for heavies.
-      bar.maxHealth = this.maxFor(playerId, (rp as { armorClass?: string } | undefined)?.armorClass);
-      // Sync health + armor from authoritative state
-      const kh = this.knownHealth.get(playerId);
-      if (kh !== undefined) {bar.currentHealth = kh;}
-      const ka = this.knownArmor.get(playerId);
-      if (ka !== undefined) {bar.currentArmor = ka;}
-      // pos is EYE height - a small margin above it is already over the head.
-      // renderLift rides along: the slope lift raises the mesh, not the
-      // logical position, so anchoring raw eye sinks the bar mid-body.
-      // Stack ABOVE the +1.0 indicator marker — the wounded-popup bar at
-      // +0.5 collapsed onto the class silhouette at distance. Repair
-      // bars use +1.6 for the same reason; +1.8 clears the marker row.
-      const targetPos = _targetPos.set(pos.x, pos.y + ((rp as { renderLift?: number } | undefined)?.renderLift ?? 0) + 1.8, pos.z);
-      this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, (): void => this.removeBar(playerId));
+      this.syncPlayerBar(playerId, bar, players, remotePlayers, view);
     }
+  }
+
+  private syncPlayerBar(playerId: string, bar: HealthBar, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, view: { dt: number; cameraPos: THREE.Vector3; cameraDir: THREE.Vector3; localTeam?: string }): void {
+    const { dt, cameraPos, cameraDir, localTeam } = view;
+    const playerState = players.get(playerId);
+    const rp = remotePlayers?.get(playerId);
+    // Local bots ('bot:', 'BOT-') have a rendered body but no wire-roster
+    // entry — a live rp is sufficient authority for the bar.
+    if ((!playerState && !rp) || rp?.isDead || playerState?.isDead) {
+      this.removeBar(playerId);
+      return;
+    }
+
+    this.tagAlly(bar, playerState?.team ?? (rp as { team?: string } | undefined)?.team, localTeam);
+
+    const pos = rp ? rp.position : playerState!.position;
+    // Wire class decides the pool — class bonuses stay invisible until
+    // the roster carries it, which still beats a flat 100 for heavies.
+    bar.maxHealth = this.maxFor(playerId, (rp as { armorClass?: string } | undefined)?.armorClass);
+    this.syncVitals(playerId, bar);
+    // pos is EYE height - a small margin above it is already over the head.
+    // renderLift rides along: the slope lift raises the mesh, not the
+    // logical position, so anchoring raw eye sinks the bar mid-body.
+    // Stack ABOVE the +1.0 indicator marker — the wounded-popup bar at
+    // +0.5 collapsed onto the class silhouette at distance. Repair
+    // bars use +1.6 for the same reason; +1.8 clears the marker row.
+    const targetPos = _targetPos.set(pos.x, pos.y + ((rp as { renderLift?: number } | undefined)?.renderLift ?? 0) + 1.8, pos.z);
+    this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, (): void => this.removeBar(playerId));
+  }
+
+  // Sync health + armor from authoritative state.
+  private syncVitals(playerId: string, bar: HealthBar): void {
+    const kh = this.knownHealth.get(playerId);
+    if (kh !== undefined) {bar.currentHealth = kh;}
+    const ka = this.knownArmor.get(playerId);
+    if (ka !== undefined) {bar.currentArmor = ka;}
   }
 
   private updateBallBar(ball: Targetable, bar: HealthBar, dt: number, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3): void {
@@ -417,6 +427,37 @@ export class HealthBarSystem {
       bar.flashTimer -= dt;
     }
 
+    this.paintBar(bar);
+
+    const toTarget = _toTarget.subVectors(targetPos, cameraPos);
+    const behind = toTarget.angleTo(cameraDir) > Math.PI / 2;
+
+    const projected = _projected.copy(targetPos);
+    projected.project(this.camera);
+
+    if (behind) {
+      bar.el.style.display = 'none';
+      return;
+    }
+
+    const scr = { x: 0, y: 0 };
+    ndcToClient(projected.x, projected.y, scr);
+    const {x} = scr;
+    const {y} = scr;
+
+    const onScreen = x >= 0 && x <= window.innerWidth && y >= 0 && y <= window.innerHeight;
+    if (!onScreen) {
+      bar.el.style.display = 'none';
+      return;
+    }
+
+    bar.el.style.display = 'block';
+    // transform positioning — compositor-only, no layout work per frame
+    bar.el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+  }
+
+  // Ratio math + element writes — health/armor/damage/white-flash paint.
+  private paintBar(bar: HealthBar): void {
     const armor = bar.currentArmor ?? 0;
     const total = bar.currentHealth + armor;
     const totalRatio = Math.max(0, Math.min(1, total / bar.maxHealth));
@@ -451,31 +492,5 @@ export class HealthBarSystem {
     } else if (bar.whiteEl.style.display !== 'none') {
       bar.whiteEl.style.display = 'none';
     }
-
-    const toTarget = _toTarget.subVectors(targetPos, cameraPos);
-    const behind = toTarget.angleTo(cameraDir) > Math.PI / 2;
-
-    const projected = _projected.copy(targetPos);
-    projected.project(this.camera);
-
-    if (behind) {
-      bar.el.style.display = 'none';
-      return;
-    }
-
-    const scr = { x: 0, y: 0 };
-    ndcToClient(projected.x, projected.y, scr);
-    const {x} = scr;
-    const {y} = scr;
-
-    const onScreen = x >= 0 && x <= window.innerWidth && y >= 0 && y <= window.innerHeight;
-    if (!onScreen) {
-      bar.el.style.display = 'none';
-      return;
-    }
-
-    bar.el.style.display = 'block';
-    // transform positioning — compositor-only, no layout work per frame
-    bar.el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }
 }

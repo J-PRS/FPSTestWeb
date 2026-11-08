@@ -28,6 +28,7 @@ const sideOf = (n: string): string =>
   /left|l$/.test(n) ? 'l' : /right|r$/.test(n) ? 'r'
     : /^l(?!ower)/.test(n) ? 'l' : /^r(?!ight)/.test(n) ? 'r' : '';
 const SIDE_STRIP = /(left|right|l|r)$/;
+const depthOf = (b: THREE.Object3D): number => { let d = 0, o: THREE.Object3D | null = b; while (o.parent) { d += 1; o = o.parent; } return d; };
 
 interface Link {
   bone: THREE.Bone; idx: number; parentIdx: number;
@@ -57,10 +58,16 @@ export class VerletRagdoll {
 
   /** bones = deduped skeleton bones; vel = corpse launch velocity (seeds momentum). */
   constructor(bones: THREE.Bone[], vel: THREE.Vector3, seedDt = 1 / 30) {
+    const boneIdx = this.indexPoints(bones, vel, seedDt);
+    if (this.pts.length < 5) {this.pts.length = 0; return;} // unmapped rig — caller falls back
+    this.buildLinks(boneIdx);
+  }
+
+  // Bone → particle pass: dedupe multi-skin name collisions on
+  // slot+side, seed each point with the corpse launch velocity.
+  private indexPoints(bones: THREE.Bone[], vel: THREE.Vector3, seedDt: number): Map<THREE.Bone, number> {
     const boneIdx = new Map<THREE.Bone, number>();
     const keyed = new Map<string, number>(); // slot+side → point index (first skin wins)
-    const boneSlot = new Map<THREE.Bone, string>();
-    const depthOf = (b: THREE.Object3D): number => { let d = 0, o: THREE.Object3D | null = b; while (o.parent) { d += 1; o = o.parent; } return d; };
     for (const b of bones) {
       const n = norm(b.name);
       // Mid-name side probe for rigs that prefix the letter before the
@@ -75,14 +82,16 @@ export class VerletRagdoll {
       if (keyed.has(key)) {continue;} // multi-skin rigs duplicate bone names
       keyed.set(key, this.pts.length);
       boneIdx.set(b, this.pts.length);
-      boneSlot.set(b, key);
       const pos = b.getWorldPosition(new THREE.Vector3());
       this.pts.push({ pos, prev: pos.clone().addScaledVector(vel, -seedDt) });
     }
-    if (this.pts.length < 5) {this.pts.length = 0; return;} // unmapped rig — caller falls back
+    return boneIdx;
+  }
+
+  // Link pass: nearest mapped ancestor is the stick parent — the chain
+  // rebuilds itself, unmapped bones just ride their parent's transform.
+  private buildLinks(boneIdx: Map<THREE.Bone, number>): void {
     for (const [b, idx] of boneIdx) {
-      // Nearest mapped ancestor = the stick parent. The chain rebuilds
-      // itself — unmapped bones just ride their parent's transform.
       let anc: THREE.Object3D | null = b.parent, pIdx = -1;
       while (anc) { const i = boneIdx.get(anc as THREE.Bone); if (i !== undefined) { pIdx = i; break; } anc = anc.parent; }
       const parentObj = anc ?? b.parent!;
@@ -103,7 +112,7 @@ export class VerletRagdoll {
   get valid(): boolean { return this.pts.length > 0; }
 
   step(dt: number, terrain: Terrain | null): void {
-    if (dt <= 0 || !this.pts.length) {return;}
+    if (dt <= 0 || this.pts.length === 0) {return;}
     if (this.sinking) {
       // Slow slide under the surface — no relax, no ground clamp (it
       // would fight the sink); prev tracks pos so nothing flips on exit.

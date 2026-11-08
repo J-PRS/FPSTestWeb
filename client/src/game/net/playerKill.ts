@@ -36,18 +36,11 @@ const FULL_GIB_GAP_MS = 250;
 
 /** Victim fx: ragdoll with the blast's impulse + a shard burst — unless a
  *  power weapon connected point-blank, then the body full-gibs instead. */
-function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer, weapon?: number): void {
+function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer): void {
   const { deps, nm } = ctx;
-  // Find matching explosion from this shooter
-  let explosionPos: THREE.Vector3 | undefined = undefined;
-  let explosionForce: number | undefined = undefined;
-  for (const exp of deps.explosionTracker.getRecentExplosions()) {
-    if (exp.shooterId === shooterId) {
-      explosionPos = exp.position;
-      explosionForce = exp.force;
-      break;
-    }
-  }
+  const exp = findShooterExplosion(deps, shooterId);
+  const explosionPos = exp?.position;
+  const explosionForce = exp?.force;
 
   // Play death animation (ragdoll physics with explosion impulse)
   remotePlayer.playDeath(explosionPos, explosionForce);
@@ -77,6 +70,18 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   // ~120m real body parts are indistinguishable from primitive shards,
   // so far kills take the instanced path — mesh-path gibs are ~20
   // unique materials and matrix writes each (~7ms spikes under throttle).
+  gibBurst(ctx, remotePlayer, team, impulseDir, centerY);
+
+  // respawn()'s showRemote restores on the next life.
+  deps.lazyHud().removePlayerIndicator(targetId);
+  deps.lazyHealthBarSystem().removeBar(targetId);
+}
+
+// The corpse→debris half of gibVictim: throttle-gated real body parts
+// near, instanced shards far, hide-first so a ctor throw can't leave a
+// standing body.
+function gibBurst(ctx: NetCtx, remotePlayer: RemotePlayer, team: TeamId | undefined, impulseDir: THREE.Vector3 | undefined, centerY: number): void {
+  const { deps } = ctx;
   const cam = deps.lazyPlayer().pos;
   const gdx = remotePlayer.position.x - cam.x, gdy = centerY - cam.y, gdz = remotePlayer.position.z - cam.z;
   const nearEnough = gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120;
@@ -101,11 +106,15 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
       ATLAS_BLACK ? _gibBlack : new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
       { impulseDir, inheritVel: remotePlayer.vel, parts, shardGeos: parts?.map((p) => p.geo), count: fullGib ? undefined : 6, smoke: fullGib },
     ));
-  } catch (err) { deps.logger.warn('PlayerDebris spawn failed', { err: String(err) }); }
+  } catch (error) { deps.logger.warn('PlayerDebris spawn failed', { err: String(error) }); }
+}
 
-  // respawn()'s showRemote restores on the next life.
-  deps.lazyHud().removePlayerIndicator(targetId);
-  deps.lazyHealthBarSystem().removeBar(targetId);
+function findShooterExplosion(deps: NetCtx['deps'], shooterId: string): { position: THREE.Vector3; force: number } | undefined {
+  // Find matching explosion from this shooter
+  for (const exp of deps.explosionTracker.getRecentExplosions()) {
+    if (exp.shooterId === shooterId) {return exp;}
+  }
+  return undefined;
 }
 
 
@@ -141,10 +150,40 @@ function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<
   }
 }
 
+// Local-fragger streak announce — only on the crossing kill (`>=`
+// repeated the title on every frag past the threshold). A frag that
+// rode real airtime earns the booth's 'precision kill'.
+function noteOwnStreak(ctx: NetCtx, targetId: string, roster: Map<string, { name?: string }>, air?: number): void {
+  const { deps } = ctx;
+  const streakName = STREAK_NAMES.find(([n]): boolean => (deps.world.killStreak += 1) === n)?.[1];
+  const name = displayName(targetId, roster);
+  deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
+  sfx.killConfirm();
+  // The rainbow lob — a frag that rode real airtime earns the booth's
+  // 'precision kill' (threshold above the casual-hop band).
+  if ((air ?? 0) >= 1.5) {speakAnnounce('PRECISION KILL', 'announce_precision');}
+}
+
 export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean): void {
   const { deps, nm } = ctx;
-  const {logger} = deps;
   if (deps.world.playbackMode) {return;}
+  noteKillEdge(ctx, shooterId, targetId, weapon);
+  const localId = nm().getLocalPlayerId();
+  const roster = nm().getPlayers();
+  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId,
+    { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team, weapon, air,
+      sName: displayName(shooterId, roster), tName: displayName(targetId, roster) });
+  if (targetId === localId) {ownDeath(ctx, shooterId, targetId, roster); return;}
+
+  // Streak counts run-kills since your last death (reset above) and
+  // match boundaries (match.ts) — a new match never continues the count.
+  if (shooterId === localId) {noteOwnStreak(ctx, targetId, roster, air);}
+  applyKillWorld(ctx, shooterId, targetId, localId, steal);
+}
+
+// Kill bookkeeping head: battle log, scoreboard counters, demo marker.
+function noteKillEdge(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number): void {
+  const { deps, nm } = ctx;
   noteKill(shooterId, targetId, weapon); // Alt+Q battle log
   deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
   deps.world.deathCounts.set(targetId, (deps.world.deathCounts.get(targetId) ?? 0) + 1);
@@ -156,26 +195,13 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   if (victimPos) {
     deps.lazyDemoManager?.()?.recordKill(shooterId === 'environment' ? null : shooterId, targetId, weapon ?? 0, victimPos);
   }
-  const roster = nm().getPlayers();
-  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId,
-    { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team, weapon, air,
-      sName: displayName(shooterId, roster), tName: displayName(targetId, roster) });
-  if (targetId === localId) {ownDeath(ctx, shooterId, targetId, roster); return;}
+}
 
-  // Streak counts run-kills since your last death (reset above) and
-  // match boundaries (match.ts) — a new match never continues the count.
-  if (shooterId === localId) {
-    // Announce only on the crossing kill — `>=` repeated the title on
-    // every frag past the threshold, so a 4-kill life yelled SPREE twice.
-    const streakName = STREAK_NAMES.find(([n]): boolean => (deps.world.killStreak += 1) === n)?.[1];
-    const name = displayName(targetId, roster);
-    deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
-    sfx.killConfirm();
-    // The rainbow lob — a frag that rode real airtime earns the booth's
-    // 'precision kill' (threshold above the casual-hop band).
-    if ((air ?? 0) >= 1.5) {speakAnnounce('PRECISION KILL', 'announce_precision');}
-  }
-
+// Kill world-state tail: mark the roster dead, gib the replica, and
+// pop the lifesteal implode on the killer when the server flagged it.
+function applyKillWorld(ctx: NetCtx, shooterId: string, targetId: string, localId: string, steal?: boolean): void {
+  const { deps, nm } = ctx;
+  const {logger} = deps;
   // Mark dead immediately so the main loop stops simulating them
   const playerData = nm().getPlayers().get(targetId);
   if (playerData) {
@@ -185,7 +211,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
 
   const remotePlayer = deps.world.remotePlayers.get(targetId);
   if (remotePlayer) {
-    gibVictim(ctx, shooterId, targetId, remotePlayer, weapon);
+    gibVictim(ctx, shooterId, targetId, remotePlayer);
     logger.info(`Player ${targetId} killed by ${shooterId}`);
   }
 
