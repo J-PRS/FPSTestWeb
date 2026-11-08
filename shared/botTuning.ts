@@ -86,7 +86,7 @@ export const BOT_TUNING = {
     destHighRise: 3,     // m — destination rise that arms 'destHigh'
     destHighNear: 60,    // m — objective only counts in the climb deficit inside this ring
     grabOrbitGd: 14,     // m — runner orbit-brake ring around the objective (covers the ~2.2m touch + overshoot lap)
-    reconPeriod: 10,     // s - mean gap between discretionary altitude buys (jittered ×0.6-1.4)
+    reconPeriod: 7,     // s - mean gap between discretionary altitude buys (jittered ×0.6-1.4)
     reconBurn: 4.5,      // s - committed burn per recon climb (chaos
                          // _chaos3: 5s burns top ridges the 2.8s ones
                          // can't - altitude is what the glide spends)
@@ -97,7 +97,7 @@ export const BOT_TUNING = {
                          // ~1.2s burn that actually clears 5m AGL
     reconMinSpeed: 10,   // m/s - don't light a recon hover at walking
                          // pace; wait for the ski line to make it lift
-    glideTime: 3,        // s - enforced no-discretionary-jet window after
+    glideTime: 5,        // s - enforced no-discretionary-jet window after
                          // a committed burn ends (chaos soak _chaos3:
                          // pulse-burn/glide beat scattered taps - the
                          // descent converts altitude to speed for free)
