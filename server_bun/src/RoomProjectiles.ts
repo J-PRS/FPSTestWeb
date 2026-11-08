@@ -573,7 +573,9 @@ export class RoomProjectiles {
       const parked = proj.stats.aoeRadius > 0
         && proj.p.vel.x * proj.p.vel.x + proj.p.vel.y * proj.p.vel.y + proj.p.vel.z * proj.p.vel.z < 4;
       if (closing <= 0 && !parked) {continue;} // moving away - ignore
-      out.push(proj.p.pos);
+      // vel rides along so the dodge sense can anticipate the launch,
+      // not just the splash (BotVec + vel duck type).
+      out.push(Object.assign({}, proj.p.pos, { vel: proj.p.vel }));
     }
     return out;
   }

@@ -136,6 +136,8 @@ mirrors (`serverSenses`/`index.ts`) are the pattern, not the exception.
 | `resolve` | BotSkill + heroTick | 0..4 escalation: lerps all dials + overdrive |
 | `menacePos` | hero→sounds | earshot 50+250×r — predator investigation radius |
 | `heardGoal` | botGoals | investigate roll 0.15+duty·0.5+r·0.4 → certain |
+| `attention cone` | scanVisible | committed hunt collapses acquisition to ±60° on target bearing, 25m reflex radius — flankable like a human |
+| `dodge horizon` | botEscape.dodge | shell vel×closing shrinks effective distance — skill-scaled anticipation horizon |
 | `form` | skill | per-bot random-walk form multiplier |
 | `confidence` | ctx | team margin + own K/D nerve |
 | `duty/social/greed/wanderlust/courage` | personality | argmax goal weights |

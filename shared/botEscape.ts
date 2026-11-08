@@ -202,12 +202,24 @@ s.stuckStreak += 1;
  *  current momentum wins (dodging backward through your own velocity
  *  reads as a stumble, not a juke). Hero sharpens both senses: it sees
  *  the shell sooner and hops farther. */
-export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): BotVec {
+export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean, skill = 1): BotVec {
+  // Anticipation, not reaction: a shell closing inside the horizon
+  // reads as already arrived - better movers dodge the LAUNCH, worse
+  // ones the impact. horizon scales with the movement dial; threats
+  // without velocity (server path sends positions only) fall back to
+  // the plain distance gate.
+  const horizon = 0.25 + skill * 0.6;
   let nearest: BotVec | null = null;
   let nearestD = hero ? DODGE_RANGE * 1.7 : DODGE_RANGE;
   for (const t of ctx.threats ?? []) {
     const d = dist3(pos, t);
-    if (d < nearestD) { nearestD = d; nearest = t; }
+    const tv = (t as { vel?: BotVec }).vel;
+    let effD = d;
+    if (tv && d > 0.01) {
+      const closing = (tv.x * (pos.x - t.x) + tv.y * (pos.y - t.y) + tv.z * (pos.z - t.z)) / d;
+      if (closing > 0) {effD = d - closing * horizon;}
+    }
+    if (effD < nearestD) { nearestD = effD; nearest = t; }
   }
   if (!nearest) {return dest;}
   // A runner on final approach doesn't juke — ANY dest tilt bleeds

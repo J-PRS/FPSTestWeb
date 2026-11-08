@@ -1018,7 +1018,7 @@ export class BotBrain {
     }
 
     // --- dodge: sidestep the nearest closing shell ---
-    dest = dodge(ctx, pos, dest, hero);
+    dest = dodge(ctx, pos, dest, hero, this.h.skill?.movement ?? 1);
     pm('escape', tp);
 
     tp = pf();

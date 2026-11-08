@@ -156,12 +156,26 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
 /** Nearest visible enemy of each class - no wallhack: only acquire
  *  what the eye line can actually see; an occluded enemy clears the
  *  hunt entirely so breaking LOS shakes pursuit like a human's. */
-export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRange: number, seenAll?: BotEnemy[]): { player: BotEnemy | null; beast: BotEnemy | null; playerD: number; beastD: number } {
+export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRange: number, seenAll?: BotEnemy[], focus?: BotVec): { player: BotEnemy | null; beast: BotEnemy | null; playerD: number; beastD: number } {
+  // Attention cone: while committed to a live hunt the eye line is
+  // tunnel vision - ~60° half-angle on the target's bearing. A flanker
+  // beyond the brawl radius goes unnoticed; a body in the face is a
+  // reflex, not a read. The 360° sweep was the un-human cheat.
+  let fx = 0, fz = 0;
+  if (focus) {
+    const fdx = focus.x - pos.x, fdz = focus.z - pos.z;
+    const fl = Math.hypot(fdx, fdz) || 1;
+    fx = fdx / fl; fz = fdz / fl;
+  }
   let player: BotEnemy | null = null, beast: BotEnemy | null = null;
   let playerD = range, beastD = beastRange;
   for (const e of ctx.enemies) {
     if (!e.alive) {continue;}
     const d = dist3(pos, e.pos);
+    if (focus && d > 25) {
+      const ex = (e.pos.x - pos.x) / (d || 1), ez = (e.pos.z - pos.z) / (d || 1);
+      if (ex * fx + ez * fz < 0.5) {continue;} // outside the cone
+    }
     // Cheapest gate first: an out-of-range enemy never earns the LOS
     // march - it was paying a ~dist/6-probe walk for a guaranteed discard.
     if (d >= (e.id.startsWith('b:') ? beastRange : range)) {continue;}
@@ -351,7 +365,10 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     ectx = Object.assign({}, ctx, {enemies});
   }
   const seenAll: BotEnemy[] = [];
-  const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ectx, pos, range, beastRange, seenAll);
+  // Committed hunts collapse the awareness cone onto the quarry's
+  // bearing - engaged bots get flanked like humans do.
+  const focus = st.hunt?.alive && dist3(pos, st.hunt.pos) < 60 ? st.hunt.pos : undefined;
+  const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ectx, pos, range, beastRange, seenAll, focus);
   st.seenEnemies = seenAll;
   // FINISHER bias - humans finish the wounded: a bleeding contact
   // outranks a healthy one a step closer. Stickiness keeps the pick:
