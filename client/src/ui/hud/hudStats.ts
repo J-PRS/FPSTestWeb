@@ -75,8 +75,8 @@ export class HudStats {
   // must mirror weapons.ts SLOT_DEFS exactly - RocketLauncher has no
   // slot def (benched), so 'RKT' is gone and FDL/HOW sit at 25/26.
   private static readonly WEAPON_SHORT = [
-    'BLT', 'DSG', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RAIL', 'LG', 'SG', 'CAN', 'ML',
-    'PST', 'REV', 'STK', 'PLG', 'SPR', 'RPR', 'MRV', 'BMB',
+    'BL', 'DSC', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RG', 'LG', 'SG', 'CAN', 'ML',
+    'PST', 'REV', 'STK', 'PG', 'SPR', 'RPR', 'MRV', 'BMB',
     'LAN', 'BLA', 'HLB', 'GON', 'BSK', 'FDL', 'HOW',
   ];
 
