@@ -22,6 +22,10 @@ export default [
       // The codebase predates the linter and uses `any` deliberately in
       // network-handler glue; fix over time rather than blocking reports.
       '@typescript-eslint/no-explicit-any': 'off',
+      // Namespaces are deliberate here - Logger/StateSnapshot/DemoSerializer
+      // use them as grouped-statics facades (oxlint already allows with
+      // per-site justification).
+      '@typescript-eslint/no-namespace': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     }
   },
