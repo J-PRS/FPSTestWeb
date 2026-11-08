@@ -46,6 +46,13 @@ export class BotSteer {
   /** Holding a point: humans sway on the spot, never stand a perfect
    *  statue — a slow small orbit around the goal, per-bot phase. */
   private swayT = botRand() * Math.PI * 2;
+  /** Progress memory: slot scoring can mask every goalward slot and
+   *  hold the bot on a tangent orbit (moving fast, going nowhere).
+   *  The leg's closest approach so far; a leg that isn't closing
+   *  earns the beeline back - a human who circles a ridge too long
+   *  picks the hard line, not a bigger circle. */
+  private legBest = Infinity;
+  private noProgress = 0;
 
   /** Committed wander lines read off the same heading the steerer keeps —
    *  the cone roll needs "current facing", which is the heading state. */
@@ -110,6 +117,20 @@ export class BotSteer {
       // meters along the ridge — the soak's 300m away-step excursions.
       // A jam on the straight line is stuckBreak's problem, not a
       // reason to wander.
+      this.heading.x = gx; this.heading.z = gz;
+      const step0 = Math.min(gd, T.steer.step);
+      return { x: pos.x + gx * step0, y: pos.y, z: pos.z + gz * step0 };
+    }
+    // Orbit-breaker: slot scoring below can repel every goalward
+    // direction (slope probes, body space, the memory trail itself)
+    // and hold the bot carving a circle at full speed - the live
+    // bowl-lock: fast 1s windows, zero 15s displacement. If this leg
+    // isn't closing at real pace, the goal direction gets the beeline
+    // back until progress resumes. A fresh leg re-arms the tracker.
+    if (gd < this.legBest - 1) { this.legBest = gd; this.noProgress = 0; }
+    else if (gd > this.legBest * 1.6 + 30) { this.legBest = gd; this.noProgress = 0; } // new leg picked - the goal moved, not orbited
+    else { this.noProgress += dt; }
+    if (this.noProgress > 3 && beelineClear) {
       this.heading.x = gx; this.heading.z = gz;
       const step0 = Math.min(gd, T.steer.step);
       return { x: pos.x + gx * step0, y: pos.y, z: pos.z + gz * step0 };
