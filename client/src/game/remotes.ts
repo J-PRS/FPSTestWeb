@@ -156,36 +156,43 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   emitLocomotionFx(deps.lazyEffects(), remotePlayer.position, v, grounded, ski, jetting);
   const skiing = isCarvingSki(v, grounded, ski);
   sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, v.length(), jetting, skiing, v, remotePlayer.armorClass);
+  markIndicator(deps, hud, playerId, remotePlayer, playerState);
+}
+
+/** HUD name-marker pass: dead/undetected ids get the indicator pulled;
+ *  live contacts mark the rendered eye (or the last-known spot when the
+ *  intel contact went stale). */
+function markIndicator(deps: RemotesDeps, hud: HUD, playerId: string, remotePlayer: RemotePlayer, playerState: WirePlayerState): void {
   if (playerState.isDead) {
     hud.removePlayerIndicator(playerId);
-  } else {
-    // Teammates read green, everything else stays enemy red - FFA and
-    // teamless modes leave `team` undefined so nothing turns friendly.
-    const friendly = Boolean(playerState.team) && playerState.team === deps.world.localTeam;
-    // IFF gate: in connected play an enemy marker exists only while the
-    // server's intel feed detects him (sensor net or allied LOS). Tilde
-    // overlays / F1 / offline play bypass - debug visibility, not law.
-    const nm = deps.lazyNetworkManager();
-    const contact = friendly ? undefined : intelContact(playerId);
-    const seeAll = !nm.isConnected() || debugOverlaysOn() || urlParams.debug;
-    if (!friendly && !seeAll && !contact) {
-      hud.removePlayerIndicator(playerId);
-    } else {
-      // Anchor at the RENDERED eye - the slope/lift pass can raise the
-      // mesh ~2.5m over the logical feet; marking raw position sinks the
-      // chevron into the body exactly when the lift is live.
-      _markPos.copy(remotePlayer.position); _markPos.y += remotePlayer.renderLift;
-      // A lingering contact marks where he WAS (last-known), ghosted -
-      // never where he is now.
-      const mem = Boolean(contact && !contact.fresh);
-      if (mem) {_markPos.set(contact!.x, contact!.y, contact!.z);}
-      // Unnamed humans show their id minus the 'player_' prefix - still
-      // marks them as a real person vs a bot's HP number.
-      hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, mem, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held, name: playerState.name ?? playerId.replace(/^player_/, '') });
-    }
-    // The number stays on the indicator; the crown renders the pile itself.
-    remotePlayer.setHeld(playerState.held ?? 0);
+    return;
   }
+  // Teammates read green, everything else stays enemy red - FFA and
+  // teamless modes leave `team` undefined so nothing turns friendly.
+  const friendly = Boolean(playerState.team) && playerState.team === deps.world.localTeam;
+  // IFF gate: in connected play an enemy marker exists only while the
+  // server's intel feed detects him (sensor net or allied LOS). Tilde
+  // overlays / F1 / offline play bypass - debug visibility, not law.
+  const nm = deps.lazyNetworkManager();
+  const contact = friendly ? undefined : intelContact(playerId);
+  const seeAll = !nm.isConnected() || debugOverlaysOn() || urlParams.debug;
+  if (!friendly && !seeAll && !contact) {
+    hud.removePlayerIndicator(playerId);
+    return;
+  }
+  // Anchor at the RENDERED eye - the slope/lift pass can raise the
+  // mesh ~2.5m over the logical feet; marking raw position sinks the
+  // chevron into the body exactly when the lift is live.
+  _markPos.copy(remotePlayer.position); _markPos.y += remotePlayer.renderLift;
+  // A lingering contact marks where he WAS (last-known), ghosted -
+  // never where he is now.
+  const mem = Boolean(contact && !contact.fresh);
+  if (mem) {_markPos.set(contact!.x, contact!.y, contact!.z);}
+  // Unnamed humans show their id minus the 'player_' prefix - still
+  // marks them as a real person vs a bot's HP number.
+  hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, mem, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held, name: playerState.name ?? playerId.replace(/^player_/, '') });
+  // The number stays on the indicator; the crown renders the pile itself.
+  remotePlayer.setHeld(playerState.held ?? 0);
 }
 
 /** Offscreen flag for the anim gate - one frustum extraction per frame,
@@ -611,6 +618,27 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
   }
 
 
+  // Self-position bookkeeping before the send: wire-history journal, the
+  // lastSentPos snapshot, and the declared-teleport edge. Declared
+  // teleport (warp/respawn): precede the position stream so the server
+  // anchors its plausibility check at the NEW spot.
+  function selfPosPreflight(nm: NetworkManager, player: Player): void {
+    lastSentPos.x = player.pos.x;
+    lastSentPos.y = player.pos.y;
+    lastSentPos.z = player.pos.z;
+    const hist = deps.world.localPosHistory;
+    hist.push({ t: performance.now(), x: player.pos.x, y: player.pos.y, z: player.pos.z, vx: player.vel.x, vy: player.vel.y, vz: player.vel.z });
+    if (hist.length > 180) {hist.shift();}
+    if (player.pendingTeleport) {
+      player.pendingTeleport = false;
+      nm.sendTeleport(
+        { x: player.pos.x, y: player.pos.y, z: player.pos.z },
+        { yaw: player.yaw, pitch: player.pitch },
+        { x: player.vel.x, y: player.vel.y, z: player.vel.z },
+      );
+    }
+  }
+
   // Network per-frame work: send position, tick remote players, prune stale ones
   function networkTick(dt: number): void {
     const nm = deps.lazyNetworkManager();
@@ -626,22 +654,7 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
       tickNodeMarkers(deps, deps.lazyHud(), deps.lazyCamera());
       return;
     }
-    lastSentPos.x = player.pos.x;
-    lastSentPos.y = player.pos.y;
-    lastSentPos.z = player.pos.z;
-    const hist = deps.world.localPosHistory;
-    hist.push({ t: performance.now(), x: player.pos.x, y: player.pos.y, z: player.pos.z, vx: player.vel.x, vy: player.vel.y, vz: player.vel.z });
-    if (hist.length > 180) {hist.shift();}
-    // Declared teleport (warp/respawn): precede the position stream so
-    // the server anchors its plausibility check at the NEW spot
-    if (player.pendingTeleport) {
-      player.pendingTeleport = false;
-      nm.sendTeleport(
-        { x: player.pos.x, y: player.pos.y, z: player.pos.z },
-        { yaw: player.yaw, pitch: player.pitch },
-        { x: player.vel.x, y: player.vel.y, z: player.vel.z },
-      );
-    }
+    selfPosPreflight(nm, player);
     nm.sendPosition(
       { x: player.pos.x, y: player.pos.y, z: player.pos.z },
       { yaw: player.yaw, pitch: player.pitch },
