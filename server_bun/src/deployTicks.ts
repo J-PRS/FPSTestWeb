@@ -100,10 +100,15 @@ export function tickPad(r: RoomDeployables, d: Deployed, _dt: number): void {
     const tr = def.triggerDist!, sp = def.launchSpeed!;
     const n = _padN;
     n.x = 0; n.y = 1; n.z = 0;
-    // The surface the pad actually SITS on keys the launch dir: on a
-    // dome cap it's radial, on a flat structure top it's up - the
-    // terrain normal under the floor is wrong for both.
-    let onStruct = false;
+    const onStruct = padStructNormal(r, d, n);
+    if (!onStruct && r.room.field) {hmNormal(r.room.field, d.pos.x, d.pos.z, n);}
+    padHits(r, d, n, sp, tr);
+  }
+
+  // The surface the pad actually SITS on keys the launch dir: on a
+  // dome cap it's radial, on a flat structure top it's up - the
+  // terrain normal under the floor is wrong for both.
+  function padStructNormal(r: RoomDeployables, d: Deployed, n: { x: number; y: number; z: number }): boolean {
     for (const c of r.room.ballSim.colliders) {
       const dx = d.pos.x - c.cx, dz = d.pos.z - c.cz;
       let surfY: number, nx = 0, ny = 1, nz = 0;
@@ -120,10 +125,12 @@ export function tickPad(r: RoomDeployables, d: Deployed, _dt: number): void {
       if (Math.abs(d.pos.y - surfY) > 1.5) {continue;}
       const il = 1 / (Math.hypot(nx, ny, nz) || 1);
       n.x = nx * il; n.y = ny * il; n.z = nz * il;
-      onStruct = true;
-      break;
+      return true;
     }
-    if (!onStruct && r.room.field) {hmNormal(r.room.field, d.pos.x, d.pos.z, n);}
+    return false;
+  }
+
+  function padHits(r: RoomDeployables, d: Deployed, n: { x: number; y: number; z: number }, sp: number, tr: number): void {
     const now = simNow();
     for (const [pid, p] of r.room.players.getAllPlayers()) {
       if (p.isDead) {continue;}

@@ -66,22 +66,25 @@ export class MatchJournal {
       const text = await file.text();
       for (const line of text.split('\n')) {
         if (!line.trim()) {continue;}
-        // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
-        let rec: { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
-        try { rec = JSON.parse(line); } catch { continue; }
-        for (const p of rec.players ?? []) {
-          const row = agg.get(p.id) ?? { playerId: p.id, matches: 0, wins: 0, kills: 0, deaths: 0 };
-row.matches += 1;
-          row.kills += p.kills ?? 0;
-          row.deaths += p.deaths ?? 0;
-          // FFA records name the player; team records name the side.
-          if (rec.winner === p.id || (p.team && rec.winner === p.team)) {row.wins += 1;}
-          agg.set(p.id, row);
-        }
+        this.accumLine(agg, line);
       }
     } catch { /* no journal yet — empty leaderboard */ }
     const rows = [...agg.values()].toSorted((a, b): number => b.wins - a.wins || b.kills - a.kills);
     if (size >= 0) {this.statsCache = { size, rows };}
     return rows;
+  }
+
+  private accumLine(agg: Map<string, { playerId: string; matches: number; wins: number; kills: number; deaths: number }>, line: string): void {
+    let rec: { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
+    try { rec = JSON.parse(line); } catch { return; }
+    for (const p of rec.players ?? []) {
+      const row = agg.get(p.id) ?? { playerId: p.id, matches: 0, wins: 0, kills: 0, deaths: 0 };
+      row.matches += 1;
+      row.kills += p.kills ?? 0;
+      row.deaths += p.deaths ?? 0;
+      // FFA records name the player; team records name the side.
+      if (rec.winner === p.id || (p.team && rec.winner === p.team)) {row.wins += 1;}
+      agg.set(p.id, row);
+    }
   }
 }

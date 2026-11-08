@@ -31,29 +31,33 @@ export interface StructureCollider {
   passTeam?: string;
 }
 
+// Kit pieces collide as their authored hull set (local-space boxes,
+// folded by the piece's own rotY then the spec's) — the visual and
+// the collision are the same table, so a builder tweak that forgets
+// to update KIT_HULLS is the only drift risk left. `scale` is the
+// piece's uniform world scale: hull centers AND extents multiply.
+function kitColliders(s: StructureSpec, cos: number, sin: number, out: StructureCollider[]): void {
+  const k = s.scale ?? 1;
+  for (const h of KIT_HULLS[s.piece ?? ''] ?? []) {
+    const r = s.rotY ?? 0;
+    out.push({
+      cx: s.pos.x + (h.pos.x * k) * cos + (h.pos.z * k) * sin,
+      cy: s.pos.y + h.pos.y * k,
+      cz: s.pos.z - (h.pos.x * k) * sin + (h.pos.z * k) * cos,
+      hx: h.size.x / 2 * k, hy: h.size.y / 2 * k, hz: h.size.z / 2 * k,
+      cos: dcos(r + (h.rotY ?? 0)), sin: dsin(r + (h.rotY ?? 0)),
+      dome: h.dome ? h.dome * k : undefined,
+    });
+  }
+}
+
 export function structureColliders(list: readonly StructureSpec[] | undefined): StructureCollider[] {
   if (!list?.length) {return [];}
   const out: StructureCollider[] = [];
   for (const s of list) {
     const cos = dcos(s.rotY ?? 0), sin = dsin(s.rotY ?? 0);
     if (s.kind === 'kit') {
-      // Kit pieces collide as their authored hull set (local-space boxes,
-      // folded by the piece's own rotY then the spec's) — the visual and
-      // the collision are the same table, so a builder tweak that forgets
-      // to update KIT_HULLS is the only drift risk left. `scale` is the
-      // piece's uniform world scale: hull centers AND extents multiply.
-      const k = s.scale ?? 1;
-      for (const h of KIT_HULLS[s.piece ?? ''] ?? []) {
-        const r = s.rotY ?? 0;
-        out.push({
-          cx: s.pos.x + (h.pos.x * k) * cos + (h.pos.z * k) * sin,
-          cy: s.pos.y + h.pos.y * k,
-          cz: s.pos.z - (h.pos.x * k) * sin + (h.pos.z * k) * cos,
-          hx: h.size.x / 2 * k, hy: h.size.y / 2 * k, hz: h.size.z / 2 * k,
-          cos: dcos(r + (h.rotY ?? 0)), sin: dsin(r + (h.rotY ?? 0)),
-          dome: h.dome ? h.dome * k : undefined,
-        });
-      }
+      kitColliders(s, cos, sin, out);
       continue;
     }
     if (s.kind === 'root') {

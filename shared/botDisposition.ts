@@ -304,6 +304,20 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
    *  hands free — the gate is "nobody close enough to interrupt", not
    *  "nobody visible at all" (a busy room never goes fully quiet, which
    *  starved the sense). */
+// Station first when hurting; otherwise weighted by temperament roll.
+function deployKind(roll: number, healthFrac: number): string {
+  if (healthFrac < 0.4) {return 'station';}
+  if (roll < 0.42) {return 'turret';}
+  if (roll < 0.56) {return 'mortar';} // stand artillery - shells the approach lanes
+  if (roll < 0.72) {return 'cgturret';} // suppression spray on the open ground
+  if (roll < 0.78) {return 'loiter';} // the circling dart - hunts the lane, not just the stand
+  if (roll < 0.83) {return 'spider';} // the ground scuttler - cheap chase, air is the counter
+  if (roll < 0.87) {return 'jammer';} // bubble hides its side from the pulse mast
+  if (roll < 0.92) {return 'motion';} // ring sensor - reads movement through cloak
+  if (roll < 0.96) {return 'mine';}
+  return 'drone';
+}
+
 export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fearing: boolean): BrainOut['deploy'] {
     b.deployT -= dt;
     const handsFree = !b.h.hunt || dist3(pos, b.h.hunt.pos) > 25;
@@ -314,17 +328,7 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
     // otherwise the stand gets guns, a minefield, or a patrol drone
     // by temperament — drones roam the stand's perimeter so they're
     // the pick when the anchor is already watched.
-    const roll = botRand();
-    let kind: string = 'drone';
-    if ((ctx.healthFrac ?? 1) < 0.4) {kind = 'station';}
-    else if (roll < 0.42) {kind = 'turret';}
-    else if (roll < 0.56) {kind = 'mortar';} // stand artillery - shells the approach lanes
-    else if (roll < 0.72) {kind = 'cgturret';} // suppression spray on the open ground
-    else if (roll < 0.78) {kind = 'loiter';} // the circling dart - hunts the lane, not just the stand
-    else if (roll < 0.83) {kind = 'spider';} // the ground scuttler - cheap chase, air is the counter
-    else if (roll < 0.87) {kind = 'jammer';} // bubble hides its side from the pulse mast
-    else if (roll < 0.92) {kind = 'motion';} // ring sensor - reads movement through cloak
-    else if (roll < 0.96) {kind = 'mine';}
+    const kind = deployKind(botRand(), ctx.healthFrac ?? 1);
     const a = botRand() * Math.PI * 2;
     const r = 4 + botRand() * 6;
     const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;
