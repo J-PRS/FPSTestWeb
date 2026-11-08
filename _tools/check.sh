@@ -73,6 +73,10 @@ fi
 # (The fixer leaves edits UNSTAGED; staging is the caller's business.)
 echo "$CHANGED" | xargs -r -n 50 npx -y oxlint --fix
 
+# Debt ratchet: fail when the diff touches code carrying lint warnings
+# (function-scoped rules blame the whole function). Same gate pre-commit runs.
+node _tools/lintratchet.mjs --worktree || exit 1
+
 # tsgo (native tsc) is ~3x faster for the same tsconfig; tsc is the fallback.
 (cd client && npx -y -p @typescript/native-preview tsgo --noEmit) \
   || (cd client && ./node_modules/.bin/tsc --noEmit)

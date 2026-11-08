@@ -153,6 +153,11 @@ if [ -n "$STAGED" ]; then
   echo "$STAGED" | xargs -r git add
 fi
 
+# Debt ratchet: the diff must not touch code carrying lint warnings —
+# function-scoped warnings blame the whole function, line warnings the
+# line. Fix the warning here, or bypass with --no-verify / LINTRATCHET=off.
+node _tools/lintratchet.mjs || exit 1
+
 # Zombie sweep: stale repo-rooted procs (hung runs, orphaned spawns) die
 # quietly on every commit — the box stays sound without CI plumbing.
 # Dev stack (:5400/:8000) + this chain are protected; never blocks.
