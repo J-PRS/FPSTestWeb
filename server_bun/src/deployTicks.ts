@@ -158,55 +158,19 @@ export function tickPad(r: RoomDeployables, d: Deployed, _dt: number): void {
    *  identical swoop; the blast lands through the mineBoom funnel. */
 export function tickLoiter(r: RoomDeployables, d: Deployed, dt: number): void {
     const def = DEPLOY_ITEMS.loiter;
-    if (d.loiterDive) {
-      const dv = d.loiterDive;
-      dv.t += dt;
-      dv.x += dv.vx * dt; dv.y += dv.vy * dt; dv.z += dv.vz * dt;
-      const tgt = r.room.players.getPlayer(dv.tid);
-      const hit = tgt !== null && tgt !== undefined && !tgt.isDead
-        && ((tgt.position.x - dv.x) ** 2 + (tgt.position.y - dv.y) ** 2 + (tgt.position.z - dv.z) ** 2 < 2.25);
-      const ground = r.room.field ? dv.y <= hmHeight(r.room.field, dv.x, dv.z) + 0.4 : false;
-      if (!hit && !ground && dv.t <= 2) {return;}
-      const pos = { x: dv.x, y: dv.y, z: dv.z };
-      r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mineBoom', 'id', d.id, { owner: d.owner, pos }) as ServerMessage);
-      r.remove(d.id);
-      r.room.messages.mineBlast(d.owner, pos, def.blastDamage!, def.blastRadius!, def.knockback!);
-      return;
-    }
+    if (d.loiterDive) { tickLoiterDive(r, d, dt, def); return; }
     d.fireCd -= dt; // doubles as the arm timer - same convention as the mine
-    // Orbit the plant anchor every tick - the munition CIRCLES while it
-    // watches, so "loiter" reads as a patrol, not a parked balloon. The
-    // anchor is the plant point (pos drifts once the ring starts);
-    // replicas orbit because pos chases the ring each tick.
-    d.orbitA = (d.orbitA ?? 0) + (def.orbitRate ?? 0) * dt;
-    if (d.orbitC === undefined) {d.orbitC = { x: d.pos.x, z: d.pos.z };}
-    const oR = def.orbitR ?? 0;
-    if (oR > 0) {
-      d.pos.x = d.orbitC.x + Math.cos(d.orbitA!) * oR;
-      d.pos.z = d.orbitC.z + Math.sin(d.orbitA!) * oR;
-    }
+    loiterOrbit(d, def, dt);
     if (d.fireCd > 0) {return;}
     const dTeam = r.teamOf(d);
     const hover = { x: d.pos.x, y: d.pos.y + def.hoverUp!, z: d.pos.z };
-    const tr = def.triggerDist!;
-    let bestD2 = tr * tr, tid: string | null = null;
-    let tp: Vec3 | null = null, tv = { x: 0, y: 0, z: 0 };
-    for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead || pid === d.owner) {continue;}
-      if (dTeam && p.team === dTeam) {continue;}
-      if (p.protectedUntil > simNow()) {continue;}
-      const dx = p.position.x - hover.x, dy = p.position.y - hover.y, dz = p.position.z - hover.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 >= bestD2) {continue;}
-      if (!losClear(r, hover, p.position, dTeam)) {continue;}
-      bestD2 = d2; tid = pid; tp = p.position;
-      tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
-    }
-    if (!tid || !tp) { d.fireCd = 0.15; return; }
+    const pick = nearestFoe(r, d, dTeam, hover, def.triggerDist!);
+    if (!pick) { d.fireCd = 0.15; return; }
+    const { target: tid, tp, tv, dist } = pick;
     // Lead the runner on the straight dive - a still target eats it dead
     // on, a skier crossing at speed watches it land behind them.
     const sp = def.launchSpeed!;
-    const flight = Math.sqrt(bestD2) / sp;
+    const flight = dist / sp;
     const aim = { x: tp.x + tv.x * flight, y: tp.y + tv.y * flight, z: tp.z + tv.z * flight };
     const dx = aim.x - hover.x, dy = aim.y - hover.y, dz = aim.z - hover.z;
     const len = Math.hypot(dx, dy, dz) || 1;
@@ -215,6 +179,38 @@ export function tickLoiter(r: RoomDeployables, d: Deployed, dt: number): void {
     r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'loiterDive', 'id', d.id, {
       pos: Object.assign({}, hover), vx, vy, vz,
     }) as ServerMessage);
+  }
+
+  // Committed dive: fly the led line, detonate on proximity, fuse
+  // expiry (2s), or ground contact - the blast lands through the
+  // mineBoom funnel at the server's true point.
+  function tickLoiterDive(r: RoomDeployables, d: Deployed, dt: number, def: NonNullable<typeof DEPLOY_ITEMS.loiter>): void {
+    const dv = d.loiterDive!;
+    dv.t += dt;
+    dv.x += dv.vx * dt; dv.y += dv.vy * dt; dv.z += dv.vz * dt;
+    const tgt = r.room.players.getPlayer(dv.tid);
+    const hit = tgt !== null && tgt !== undefined && !tgt.isDead
+      && ((tgt.position.x - dv.x) ** 2 + (tgt.position.y - dv.y) ** 2 + (tgt.position.z - dv.z) ** 2 < 2.25);
+    const ground = r.room.field ? dv.y <= hmHeight(r.room.field, dv.x, dv.z) + 0.4 : false;
+    if (!hit && !ground && dv.t <= 2) {return;}
+    const pos = { x: dv.x, y: dv.y, z: dv.z };
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mineBoom', 'id', d.id, { owner: d.owner, pos }) as ServerMessage);
+    r.remove(d.id);
+    r.room.messages.mineBlast(d.owner, pos, def.blastDamage!, def.blastRadius!, def.knockback!);
+  }
+
+  // Orbit the plant anchor every tick - the munition CIRCLES while it
+  // watches, so "loiter" reads as a patrol, not a parked balloon. The
+  // anchor is the plant point (pos drifts once the ring starts);
+  // replicas orbit because pos chases the ring each tick.
+  function loiterOrbit(d: Deployed, def: NonNullable<typeof DEPLOY_ITEMS.loiter>, dt: number): void {
+    d.orbitA = (d.orbitA ?? 0) + (def.orbitRate ?? 0) * dt;
+    if (d.orbitC === undefined) {d.orbitC = { x: d.pos.x, z: d.pos.z };}
+    const oR = def.orbitR ?? 0;
+    if (oR > 0) {
+      d.pos.x = d.orbitC.x + Math.cos(d.orbitA!) * oR;
+      d.pos.z = d.orbitC.z + Math.sin(d.orbitA!) * oR;
+    }
   }
 
   /** Spider mine: the ground-bound loiter - after the arm it scuttles
@@ -228,21 +224,10 @@ export function tickSpider(r: RoomDeployables, d: Deployed, dt: number): void {
     d.fireCd -= dt; // doubles as the arm timer - same convention as the mine
     if (d.fireCd > 0) {return;}
     const def = DEPLOY_ITEMS.spider;
-    const dTeam = r.teamOf(d);
-    const tr = def.triggerDist!, sp = def.launchSpeed!;
-    let tid: string | null = null, tp: Vec3 | null = null, bestD2 = tr * tr;
-    for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead || pid === d.owner) {continue;}
-      if (dTeam && p.team === dTeam) {continue;}
-      if (p.protectedUntil > simNow()) {continue;}
-      const grounded = r.room.moveSim.simState(pid)?.onGround === true
-        || (r.room.field ? p.position.y - hmHeight(r.room.field, p.position.x, p.position.z) < 2.5 : false);
-      if (!grounded) {continue;}
-      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 < bestD2) {bestD2 = d2; tid = pid; tp = p.position;}
-    }
-    if (!tid || !tp) {return;}
+    const sp = def.launchSpeed!;
+    const pick = spiderTarget(r, d, def.triggerDist!);
+    if (!pick) {return;}
+    const { tp } = pick;
     const dx = tp.x - d.pos.x, dz = tp.z - d.pos.z;
     const dist = Math.hypot(dx, dz);
     if (dist > 1e-4) {
@@ -376,25 +361,47 @@ function sentryFoe(d: Deployed, dTeam: string | undefined, pid: string, p: Playe
   return p.protectedUntil <= simNow();
 }
 
-// Nearest living non-owner non-teammate in range with clear LOS —
-// returns the lead inputs the bolt aim needs, or null to idle-cool.
-function sentryTarget(r: RoomDeployables, d: Deployed): { target: string; tp: { x: number; y: number; z: number }; tv: { x: number; y: number; z: number }; dist: number } | null {
-  const dTeam = r.teamOf(d);
+// Nearest living non-owner non-teammate in range with clear LOS from
+// `from` — shared by the sentry gun and the loiter dive pick. Returns
+// the lead inputs the aim needs, or null to idle-cool.
+function nearestFoe(r: RoomDeployables, d: Deployed, dTeam: string | undefined, from: Vec3, range: number): { target: string; tp: Vec3; tv: { x: number; y: number; z: number }; dist: number } | null {
   let target: string | null = null;
-  let tp: { x: number; y: number; z: number } | null = null;
+  let tp: Vec3 | null = null;
   let tv = { x: 0, y: 0, z: 0 };
-  let bestD2 = SENTRY_RANGE * SENTRY_RANGE;
+  let bestD2 = range * range;
   for (const [pid, p] of r.room.players.getAllPlayers()) {
     if (!sentryFoe(d, dTeam, pid, p)) {continue;}
-    const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+    const dx = p.position.x - from.x, dy = p.position.y - from.y, dz = p.position.z - from.z;
     const d2 = dx * dx + dy * dy + dz * dz;
     if (d2 >= bestD2) {continue;}
-    if (!losClear(r, d.pos, p.position, dTeam)) {continue;}
+    if (!losClear(r, from, p.position, dTeam)) {continue;}
     bestD2 = d2; target = pid; tp = p.position;
     tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
   }
   if (!target || !tp) {return null;}
   return { target, tp, tv, dist: Math.sqrt(bestD2) };
+}
+
+function sentryTarget(r: RoomDeployables, d: Deployed): { target: string; tp: Vec3; tv: { x: number; y: number; z: number }; dist: number } | null {
+  return nearestFoe(r, d, r.teamOf(d), d.pos, SENTRY_RANGE);
+}
+
+// Spider pick: nearest GROUNDED hostile in the ring — air is the hard
+// counter, so an airborne body never trips it. No LOS check: the spider
+// is ground-bound and its blast is point-blank.
+function spiderTarget(r: RoomDeployables, d: Deployed, tr: number): { tp: Vec3 } | null {
+  const dTeam = r.teamOf(d);
+  let tp: Vec3 | null = null, bestD2 = tr * tr;
+  for (const [pid, p] of r.room.players.getAllPlayers()) {
+    if (!sentryFoe(d, dTeam, pid, p)) {continue;}
+    const grounded = r.room.moveSim.simState(pid)?.onGround === true
+      || (r.room.field ? p.position.y - hmHeight(r.room.field, p.position.x, p.position.z) < 2.5 : false);
+    if (!grounded) {continue;}
+    const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < bestD2) {bestD2 = d2; tp = p.position;}
+  }
+  return tp ? { tp } : null;
 }
 
 export function tickSentry(r: RoomDeployables, d: Deployed, dt: number): void {
@@ -434,27 +441,45 @@ const MORTAR_MUZZLE_UP = 1.6; // tube mouth above the tripod base
 export function tickMortar(r: RoomDeployables, d: Deployed, dt: number): void {
     d.fireCd -= dt;
     if (d.fireCd > 0) {return;}
+    const pick = mortarTarget(r, d);
+    if (!pick) { d.fireCd = 0.25; return; }
+    const { target, tv } = pick;
+    // One lead iteration: solve the arc to the led point. Low branch of
+    // asin — same family the bot lob solver uses.
+    const arc = solveMortarArc(d.pos, target, tv);
+    if (!arc) { d.fireCd = 0.5; return; }
+    d.fireCd = MORTAR_FIRE_INTERVAL;
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mortarShot', 'id', d.id, { owner: d.owner, vx: arc.vx, vy: arc.vy, vz: arc.vz }) as ServerMessage);
+    r.bolts.push({ at: arc.aim, ttl: arc.flight, owner: d.owner, dmg: MORTAR_DAMAGE, rad: MORTAR_BLAST_RADIUS, kb: MORTAR_KNOCKBACK });
+  }
+
+  // Nearest hostile inside the [minRange, range] horizontal band — the
+  // arc eats height, so the band check is 2D. No LOS: artillery exists
+  // to drop over the hill the sentry can't shoot through.
+  function mortarTarget(r: RoomDeployables, d: Deployed): { target: Vec3; tv: { x: number; y: number; z: number } } | null {
     const dTeam = r.teamOf(d);
-    let target: { x: number; y: number; z: number } | null = null;
+    let target: Vec3 | null = null;
     let tv = { x: 0, y: 0, z: 0 };
     let bestD2 = MORTAR_RANGE * MORTAR_RANGE;
     const minD2 = MORTAR_MIN_RANGE * MORTAR_MIN_RANGE;
     for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead || pid === d.owner) {continue;}
-      if (dTeam && p.team === dTeam) {continue;}
-      if (p.protectedUntil > simNow()) {continue;}
+      if (!sentryFoe(d, dTeam, pid, p)) {continue;}
       const dx = p.position.x - d.pos.x, dz = p.position.z - d.pos.z;
-      const d2 = dx * dx + dz * dz; // horizontal band — the arc eats height
+      const d2 = dx * dx + dz * dz;
       if (d2 >= bestD2 || d2 < minD2) {continue;}
       bestD2 = d2; target = p.position;
       tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
     }
-    if (!target) { d.fireCd = 0.25; return; }
-    // One lead iteration: solve the arc to the led point. Low branch of
-    // asin — same family the bot lob solver uses.
+    return target ? { target, tv } : null;
+  }
+
+  // Two lead iterations: solve the low-branch lob to the velocity-led
+  // aim point. Returns null when the target sits beyond the envelope's
+  // ballistic reach (discriminant <= 0).
+  function solveMortarArc(muzzle: Vec3, target: Vec3, tv: { x: number; y: number; z: number }): { aim: Vec3; vx: number; vy: number; vz: number; flight: number } | null {
     const g = Math.abs(GRAVITY);
-    const mx = d.pos.x, my = d.pos.y + MORTAR_MUZZLE_UP, mz = d.pos.z;
-    let aim = target;
+    const mx = muzzle.x, my = muzzle.y + MORTAR_MUZZLE_UP, mz = muzzle.z;
+    let aim: Vec3 = target;
     let vx = 0, vy = 0, vz = 0, flight = 0;
     for (let it = 0; it < 2; it += 1) {
       const dx = aim.x - mx, dz = aim.z - mz;
@@ -463,7 +488,7 @@ export function tickMortar(r: RoomDeployables, d: Deployed, dt: number): void {
       const s = MORTAR_SHELL_SPEED;
       const s2 = s * s;
       const disc = s2 * s2 - g * (g * R * R + 2 * dy * s2);
-      if (disc <= 0) {target = null; break;} // beyond the envelope's reach
+      if (disc <= 0) {return null;}
       const pitch = Math.atan2(s2 - Math.sqrt(disc), g * R); // low lob
       flight = R / (s * Math.cos(pitch));
       vx = (dx / R) * s * Math.cos(pitch);
@@ -471,11 +496,8 @@ export function tickMortar(r: RoomDeployables, d: Deployed, dt: number): void {
       vz = (dz / R) * s * Math.cos(pitch);
       aim = { x: target.x + tv.x * flight, y: target.y + tv.y * flight * 0.5, z: target.z + tv.z * flight };
     }
-    if (!target) { d.fireCd = 0.5; return; }
-    d.fireCd = MORTAR_FIRE_INTERVAL;
-    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mortarShot', 'id', d.id, { owner: d.owner, vx, vy, vz }) as ServerMessage);
-    r.bolts.push({ at: { x: aim.x, y: aim.y, z: aim.z }, ttl: flight, owner: d.owner, dmg: MORTAR_DAMAGE, rad: MORTAR_BLAST_RADIUS, kb: MORTAR_KNOCKBACK });
-}
+    return { aim, vx, vy, vz, flight };
+  }
 
 const SENSOR_RANGE = DEPLOY_ITEMS.sensor.range!;
 const SENSOR_SCAN_S = DEPLOY_ITEMS.sensor.fireInterval!;
