@@ -142,6 +142,11 @@ export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string,
     // real setTimeout, so without this a dead seat stays dead for the
     // whole sim - every soak's "combat freeze" was this, not a lull.
     (room as { messages?: { respawnTick?: (n: number) => void } }).messages?.respawnTick?.(simNow());
+    // The match clock rides TickLoop (wall-driven), not room.sims: an
+    // ended match arms intermission godmode (players.invulnerable) and
+    // only startNext() lifts it - a sim that can't tick the clock plays
+    // a lobby that can't die. This is the "kills freeze at ~600s" bug.
+    room.checkMatchClock(simNow());
   }
   } finally {
     if (stream) {botRngRelease();}

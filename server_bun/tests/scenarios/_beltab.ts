@@ -61,7 +61,16 @@ for (; Date.now() - start < WALL * 1000; t += 1) {
     const a = ps.filter((p) => p.team === 'alpha'), b = ps.filter((p) => p.team === 'bravo');
     const ka = a.reduce((s, p) => s + p.kills, 0), kb = b.reduce((s, p) => s + p.kills, 0);
     const da = a.reduce((s, p) => s + p.deaths, 0), db = b.reduce((s, p) => s + p.deaths, 0);
-    console.log(`  t=${((t + 1) * 0.05).toFixed(0)}s(sim) ${OFF ? 'belt=' + BELT_TEAM : 'wide=' + WIDE} alpha ${ka}/${da} bravo ${kb}/${db}`);
+    let alive = 0, hunts = 0, minD = Infinity;
+    const brains = (room.bots as unknown as { brains: Map<string, { h: { hunt: unknown } }> }).brains;
+    for (const p of ps) {
+      if (!p.isDead) {alive += 1;}
+      if (brains.get(p.id)?.h.hunt) {hunts += 1;}
+      for (const q of ps) {if (p.team !== q.team) {const d = Math.hypot(p.position.x - q.position.x, p.position.z - q.position.z); if (d < minD) {minD = d;}}}
+    }
+    const shots = (room.projectiles as unknown as { projs: Map<string, unknown> }).projs.size;
+    const dmg = ps.reduce((s, p) => s + Math.max(0, p.maxHealth - p.health), 0);
+    console.log(`  t=${((t + 1) * 0.05).toFixed(0)}s(sim) ${OFF ? 'belt=' + BELT_TEAM : 'wide=' + WIDE} alpha ${ka}/${da} bravo ${kb}/${db} alive=${alive} hunts=${hunts} minD=${minD.toFixed(0)} proj=${shots} dmg=${dmg.toFixed(0)}`);
   }
 }
 const ps = [...room.players.getAllPlayers().values()];
