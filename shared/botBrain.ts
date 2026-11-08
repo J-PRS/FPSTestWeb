@@ -457,6 +457,8 @@ export class BotBrain {
   deployCdLo = 8;
   deployCdSpan = 10;
   deployObjR = 60;
+  /** Force a deployable kind for item A/B soaks - undefined = the roll. */
+  deployForce: string | undefined;
 
   /** Hosts can pin the builder trait - a technician role shouldn't be
    *  a dice roll away from never touching the deploy kit. */

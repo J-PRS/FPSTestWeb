@@ -26,10 +26,14 @@ const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: "hard" }, 'headhunt'
 // All brains forced builder so every bot carries the kit for the A/B.
 const OFF = process.argv.includes('--off');
 const LOOSE = process.argv.find((a) => a.startsWith('--loose='))?.split('=')[1] ?? 'bravo';
+// Item A/B: --kindA=turret --kindB=mine forces each team's deploy kind.
+const KA = process.argv.find((a) => a.startsWith('--kindA='))?.split('=')[1];
+const KB = process.argv.find((a) => a.startsWith('--kindB='))?.split('=')[1];
 for (const p of room.players.getAllPlayers().values()) {
-  const brain = (room.bots as unknown as { brains: Map<string, { pickDeploy: () => boolean; builder: boolean; deployCdLo: number; deployCdSpan: number; deployObjR: number }> }).brains.get(p.id);
+  const brain = (room.bots as unknown as { brains: Map<string, { pickDeploy: () => boolean; builder: boolean; deployCdLo: number; deployCdSpan: number; deployObjR: number; deployForce: string | undefined }> }).brains.get(p.id);
   if (!brain) {continue;}
   brain.builder = true;
+  if (KA && KB) {brain.deployForce = p.team === 'alpha' ? KA : KB;}
   if (OFF && p.team !== DEPLOY_TEAM) {brain.pickDeploy = (): never => undefined as never;}
   if (!OFF && p.team === LOOSE) {brain.deployCdLo = 8; brain.deployCdSpan = 10; brain.deployObjR = 60;}
 }

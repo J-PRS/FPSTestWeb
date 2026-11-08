@@ -336,7 +336,7 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
     // otherwise the stand gets guns, a minefield, or a patrol drone
     // by temperament — drones roam the stand's perimeter so they're
     // the pick when the anchor is already watched.
-    const kind = deployKind(botRand(), ctx.healthFrac ?? 1);
+    const kind = b.deployForce ?? deployKind(botRand(), ctx.healthFrac ?? 1);
     const a = botRand() * Math.PI * 2;
     const r = 4 + botRand() * 6;
     const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;

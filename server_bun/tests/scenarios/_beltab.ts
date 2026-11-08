@@ -26,6 +26,16 @@ const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: "hard" }, 'headhunt'
 // Two modes: --off = control (belt-on vs belt-blind), default = trigger
 // A/B (both belt, one team runs a WIDE 5-45m/6s window vs stock 10-35m/9s).
 // --wide=alpha|bravo picks the wide side; winner's window becomes default.
+// Item A/B: --itemA=Grenade --itemB=ImpactGrenade forces each team's belt
+// slot - which THROWN weapon earns kills. Weapon names are WeaponType keys.
+const IA = process.argv.find((a) => a.startsWith('--itemA='))?.split('=')[1];
+const IB = process.argv.find((a) => a.startsWith('--itemB='))?.split('=')[1];
+if (IA && IB) {
+  for (const p of room.players.getAllPlayers().values()) {
+    const lo = (room.bots as unknown as { loadouts: Map<string, { belt: string }> }).loadouts.get(p.id);
+    if (lo) {lo.belt = (p.team === 'alpha' ? IA : IB) as never;}
+  }
+}
 const OFF = process.argv.includes('--off');
 const WIDE = process.argv.find((a) => a.startsWith('--wide='))?.split('=')[1] ?? 'bravo';
 for (const p of room.players.getAllPlayers().values()) {
