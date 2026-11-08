@@ -407,6 +407,7 @@ export class BotBrain {
     revengeFrom: { x: 0, y: 0, z: 0 },
     wanderT: 0,
     wanderWp: { x: 0, y: 0, z: 0 },
+    goalAge: 0,
   };
   private readonly goals = new BotGoals(
     (): GoalState => this.goalS,

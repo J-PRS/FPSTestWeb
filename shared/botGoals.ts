@@ -27,6 +27,9 @@ export interface GoalState {
   /** Wander pacing - personal clock so a squad doesn't caravan. */
   wanderT: number;
   wanderWp: BotVec;
+  /** Thinks since the current goal was picked - the stale clock for
+   *  the switching-cost model (a committed line expires, never locks). */
+  goalAge: number;
 }
 
 export class BotGoals {
@@ -223,7 +226,30 @@ export class BotGoals {
       // Hysteresis: the incumbent needs beating by a margin - flipping
       // goals on a 1% re-score reads as bot dithering, not judgment.
       const incumbent = cands.find((c): boolean => distSq(c.goal, s.goal) < 25 * 25);
-      s.goal = incumbent && incumbent.score > best.score * 0.85 ? incumbent.goal : ((((((Object.assign({}, best.goal)))))));
+      // Switching cost, not a lock - humans hold a line but still change
+      // their mind for a good reason. The cost grows with the committed
+      // distance still ahead (sunk transit = momentum), drops under
+      // threat (danger is always a good reason), and expires stale: a
+      // goal older than ~20s earns no loyalty at all, so a wedged line
+      // can always be dropped. Idle IS traveling - a bot's default is
+      // sustained motion, not a parked orbit.
+      s.goalAge += 1;
+      if (incumbent) {
+        const dLeft = Math.sqrt(distSq(pos, incumbent.goal));
+        const stale = s.goalAge > 60;
+        const underFire = (ctx.threats?.length ?? 0) > 0;
+        const bonus = stale ? 0
+          : (0.2 + Math.min(1.8, dLeft / 120)) * (underFire ? 0.4 : 1);
+        if (incumbent.score * (1 + bonus) > best.score) {
+          s.goal = incumbent.goal;
+        } else {
+          s.goal = ((((((Object.assign({}, best.goal)))))));
+          s.goalAge = 0;
+        }
+      } else {
+        s.goal = ((((((Object.assign({}, best.goal)))))));
+        s.goalAge = 0;
+      }
       return;
     }
     // Wander always offers a candidate, so an empty board only happens
