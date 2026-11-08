@@ -40,7 +40,7 @@ import { BotGreedy } from './botGreedy.ts';
 import { simNow } from './simClock.ts';
 import { wallNow } from './wallClock.ts';
 import { botRand } from '../../shared/botRand.ts';
-import { WeaponType, HEALBEAM_ENERGY, HEALBEAM_RANGE, BELT_MAX, BELT_THROW_COST } from '../../shared/weapons.ts';
+import { WeaponType, HEALBEAM_ENERGY, HEALBEAM_RANGE, BELT_MAX, BELT_THROW_COST, idSeed } from '../../shared/weapons.ts';
 
 /** Tribes-flavored squad roles - the type and the objective rules live in
  *  shared/flagGoals.ts so offline CTF plays by the identical table. */
@@ -291,6 +291,13 @@ export class ServerBots {
   private checkStuck(id: string, p: { position: Vec3 }, brain: BotBrain, now: number): void {
     const carrying = this.room.flagCarriedBy(id);
     this.watchdog.checkStuck(id, p.position, brain, carrying, now);
+    if (this.watchdog.unstickPending) {
+      this.watchdog.unstickPending = false;
+      // Unstick, don't just log: lateral pop + lift breaks the pocket
+      // geometry. The leash refires each window until the bot travels.
+      const ang = ((idSeed(id) % 628) / 100);
+      this.room.moveSim.applyImpulse(id, { x: Math.cos(ang) * 8, y: 6, z: Math.sin(ang) * 8 });
+    }
   }
 
   checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void { // public - botDrive host hook
@@ -469,15 +476,14 @@ export class ServerBots {
 
   /** Per-parked-bot one-liners for /metrics - dest, goal, and the
    *  brain's own stall surface in one string per id. */
-  parkedDebug(): { id: string; dest: string; goal: string; brain: string }[] {
-    const rows: { id: string; dest: string; goal: string; brain: string }[] = [];
+  parkedDebug(): { id: string; dest: string; goal: string; brain: string; mv: string; sp: number }[] {
+    const rows: { id: string; dest: string; goal: string; brain: string; mv: string; sp: number }[] = [];
     for (const [id] of this.brains) {
       const p = this.room.players.getPlayer(id);
       if (!p || p.isDead) {continue;}
       const sp = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z);
-      if (sp >= 2) {continue;}
       const f = (v?: { x: number; y: number; z: number } | null): string => v ? `${v.x.toFixed(0)},${v.y.toFixed(0)},${v.z.toFixed(0)}` : '-';
-      rows.push({ id, dest: f(this.lastOut.get(id)?.dest), goal: f(this.brains.get(id)?.goalS.goal), brain: this.debugBrain(id) });
+      rows.push({ id, dest: f(this.lastOut.get(id)?.dest), goal: f(this.brains.get(id)?.goalS.goal), brain: this.debugBrain(id), mv: this.room.moveSim.unburyDebug(id), sp: Number(sp.toFixed(1)) });
     }
     return rows;
   }

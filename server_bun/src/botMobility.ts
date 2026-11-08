@@ -39,6 +39,9 @@ export interface MobilitySample {
  */
 export class MobilityWatchdog {
   private stuck = new Map<string, StuckState>();
+  /** Set when the watchdog fires - the serverBots call site owns moveSim,
+   *  so it consumes this and applies the unstick impulse itself. */
+  unstickPending = false;
   private sheep = new Map<string, SheepState>();
 
   constructor(private roomName: string) {}
@@ -76,6 +79,7 @@ export class MobilityWatchdog {
     const leash = carryingFlag ? STUCK_MS_FLAG : STUCK_MS;
     if (!w.warned && now - w.since > leash) {
       w.warned = true;
+      this.unstickPending = true; // caller applies the impulse (owns moveSim)
       logger.warn('Bot stuck', {
         room: this.roomName, bot: id,
         ms: now - w.since, carrying: carryingFlag,

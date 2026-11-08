@@ -23,6 +23,10 @@ export interface MpcJob {
   /** Deep run-in dive — fires once per run and buys the fast grabs, so
    *  it always gets the full horizon (no stagnation exit). */
   deep?: boolean;
+  /** A/B hook: forbid jet thrust while the terrain under the velocity
+   *  vector drops away (the travelDescent read) - tests whether
+   *  descent jets ever pay for transit line choice. */
+  banDescentJet?: boolean;
 }
 
 interface Node {
@@ -94,6 +98,18 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
     sample: { x: job.snap.st.pos.x, z: job.snap.st.pos.z, y: job.snap.st.pos.y },
     proj: -Infinity,
   }];
+  // Same read as botMoves.travelDescent but airborne-only: the question
+  // is midair line choice (extend the arc onto a better downslope), not
+  // grounded ski thrust. speed >15 and the ground 12m along velocity
+  // drops >0.24m - the slope is pumping, jet buys nothing horizontal.
+  const descentJet = (st: SimSnapshot['st']): boolean => {
+    if (st.onGround) {return false;}
+    const sp = Math.hypot(st.vel.x, st.vel.z);
+    if (sp < 15) {return false;}
+    const drop = hmHeight(field, st.pos.x, st.pos.z)
+      - hmHeight(field, st.pos.x + (st.vel.x / sp) * 12, st.pos.z + (st.vel.z / sp) * 12);
+    return drop > 0.24;
+  };
   let frontier = [0];
   const seen = new Set([key(arena[0]!.snap.st, job.e0)]);
   let bestIdx = -1;
@@ -107,6 +123,7 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
       for (const dOff of DYAWS) {
         for (const jet of [false, true]) {
           if (jet && n.e < ec.elock) {continue;}
+          if (jet && job.banDescentJet && descentJet(n.snap.st)) {continue;}
           cold(n.snap);
           scratch.state.yaw += dOff;
           scratch.setInput({ forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: jet });
