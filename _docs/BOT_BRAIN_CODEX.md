@@ -3,29 +3,37 @@
 One place for what the bots do, why, and the philosophy. Update this
 when the brain changes — it's the "where are we at" doc, not a report.
 
-## Philosophy — the rules everything obeys
+## Philosophy — how the AI thinks
 
-1. **Bots are legal humans.** Every bot input is the same buttons a
-   human presses: move keys, ski, jet, jump, fire direction. No
-   wallhacks, no instant reactions, no guaranteed hits. Any "impossible
-   tier" behavior must be reachable by dials a roll could draw.
-2. **Senses are wire-legal.** A bot sees through LOS (eye line, range
-   caps), hears through `noisesNear`, remembers through `lastSeen`/
-   ghosts, and gets squad spots/radio the same way a teammate would.
-   If it can't know it, it doesn't act on it — menace injection is the
-   only exception and it rides the *hearing* sense, earshot-gated.
-3. **Deterministic & shared.** `shared/bot*.ts` runs identically on
-   server (authoritative) and offline client brains. Seeds roll
-   personality; the same seed replays the same bot. `botRand` streams
-   keep soaks reproducible.
-4. **Errors, not cheats, make them human.** Aim is an error budget
-   (lead distance, flight, jitter) divided by skill — never aimbot.
-   Behavior is utility-argmax with per-bot weights (duty, social,
-   greed, wanderlust, courage, temper, sweat).
-5. **Escalate via dials, not new powers.** Hero mode only ever moves
-   legal dials. If a behavior needs a new lever (track convergence,
-   predator earshot), build it as a legal human skill first, THEN let
-   resolve sharpen it.
+**No hard rules — only probabilities.** Nothing is "never" and nothing
+is "always." Every behavior lives at some chance: the coward still
+heroics sometimes, the sweatlord still whiffs, the tourist occasionally
+hears the fight over the mountain. A lobby of bots should feel like a
+lobby of people — variance IS the product.
+
+**Fun first.** Between "realistic" and "interesting," pick
+interesting. Cool interactions, surprise plays, memorable moments —
+a bot that does something worth telling someone about beats a bot
+that's merely correct. When in doubt: what makes the better story?
+
+**Legal humans.** Every input is the same buttons a human presses:
+move keys, ski, jet, jump, fire direction. Skill is dials a roll could
+draw; escalation moves dials, never grants powers. Legality is the
+frame — inside it, probability writes everything.
+
+**Wire-legal senses.** Sight through LOS, hearing through
+`noisesNear`, memory through ghosts — the senses a human has. The one
+stretch (menacePos into hearing) is still the *hearing* channel with a
+radius — a fight you could plausibly have heard, not radar.
+
+**Errors, not aimbot.** Aim is an error budget divided by skill;
+behavior is utility-argmax with per-bot weights (duty, social, greed,
+wanderlust, courage, temper, sweat). Personalities are distributions,
+not scripts — that's why a squad doesn't read as clones.
+
+**Deterministic & shared.** `shared/bot*.ts` runs identically on
+server and offline brains; seeded streams keep soaks reproducible —
+the *rolls* are reproducible, the outcomes are varied by design.
 
 ## Architecture — where things live
 
