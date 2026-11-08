@@ -368,6 +368,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
   networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor, predicted): void =>
     handleWireHit(ctx, shooterId, targetId, damage, health, armor, predicted);
 
+  let lastClassResync = 0;
   // Rejected claim: a predicted self-blast that never happened server-side
   // leaves our health low until the next real event. Adopt the server's
   // value so state-hash health checks stop screaming desync.
@@ -391,12 +392,22 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // The authority says this pick is class-locked - a stale slot keeps
     // spam-rejecting every pull for the rest of the life. Unshoulder it
     // to the class fallback once and the next pull fires something legal.
+    // unshoulderLiveSlot, not setLoadoutSlot: a banked class swap would
+    // redirect the write into pendingLoadout and the live gun never heals.
     if (reason === 'class-locked weapon' && weaponType !== undefined) {
       for (let i = 0; i < player.loadout.length; i += 1) {
         if (weaponDef(player.loadout[i]).weaponType === weaponType) {
-          player.armory.setLoadoutSlot(i, PlayerLoadout.fallbackWid(player.appliedClass, player.loadout));
+          player.armory.unshoulderLiveSlot(i);
           break;
         }
+      }
+      // The authority's enforced tier disagrees with the one we're
+      // playing - re-bank appliedClass so pendingClass stops lying at
+      // the next respawn. Throttled: a locked spray rejects per pull.
+      const now = performance.now();
+      if (now - lastClassResync > 2000) {
+        lastClassResync = now;
+        networkManager.sendClassUpdate(player.appliedClass);
       }
     }
     if (health !== undefined && Number.isFinite(health) && !player.isDead) {player.health = health;}

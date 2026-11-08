@@ -342,6 +342,23 @@ export class PlayerLoadout {
     }
   }
 
+  /** Authority-forced scrub: the server just refused this slot's weapon
+   *  as class-locked, so the LIVE kit must drop it now. setLoadoutSlot
+   *  can't do this job - while a class swap is banked it edits
+   *  pendingLoadout and the live gun keeps rejecting every pull. */
+  unshoulderLiveSlot(slot: number): void {
+    const {h} = this;
+    const wid = PlayerLoadout.fallbackWid(h.appliedClass, h.loadout);
+    const other = h.loadout.indexOf(wid);
+    if (other !== -1 && other !== slot) {h.loadout[other] = h.loadout[slot]!;}
+    h.loadout[slot] = wid;
+    settings.set('fps-loadout', h.loadout.join(','));
+    settings.set(PlayerLoadout.CLASS_KEY[h.appliedClass], h.loadout.join(','));
+    if (h.weaponIndex === slot || h.weaponIndex === other) {
+      this.emitWeaponSwitch(h.loadout[h.weaponIndex]!);
+    }
+  }
+
   /** Weapon changed: viewmodel/audio hook + the third-person body's
    *  lower→raise swap dip; the hand prop becomes the real weapon. */
   emitWeaponSwitch(wid: number): void {
@@ -397,17 +414,11 @@ export class PlayerLoadout {
     }
   }
 
-  /** Deploy weapons (howitzer) refuse the draw while airborne or
-   *  skiing - pulling it mid-air is the same exploit as firing it. */
-  private canDeploy(i: number): boolean {
-    const {h} = this;
-    const st = getWeaponStats(weaponDef(h.loadout[i]!).weaponType);
-    return !st.groundedOnly || (h.movement.getState().onGround && !h.movement.skiHeld);
-  }
-
   selectSlot(i: number): void {
     const {h} = this;
-    if (i !== h.weaponIndex && this.canDeploy(i)) {
+    // Draw is always legal: prepping a groundedOnly weapon for touchdown
+    // is the play - fire.ts refuses the trigger, not the shoulder.
+    if (i !== h.weaponIndex) {
       h.weaponIndex = i;
       this.emitWeaponSwitch(h.loadout[i]);
     }
@@ -416,16 +427,10 @@ export class PlayerLoadout {
   cycleWeapon(step: number): void {
     const {h} = this;
     const n = h.loadout.length;
-    // Skip undeployable slots rather than dead-stopping the wheel.
-    for (let k = 1; k <= n; k += 1) {
-      const idx = (h.weaponIndex + step * k + n * k) % n;
-      if (this.canDeploy(idx)) {
-        if (idx !== h.weaponIndex) {
-          h.weaponIndex = idx;
-          this.emitWeaponSwitch(h.loadout[idx]);
-        }
-        return;
-      }
+    const idx = (h.weaponIndex + step + n) % n;
+    if (idx !== h.weaponIndex) {
+      h.weaponIndex = idx;
+      this.emitWeaponSwitch(h.loadout[idx]);
     }
   }
 }

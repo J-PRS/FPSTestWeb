@@ -55,3 +55,19 @@ describe('banked kit install', () => {
     expect(host.loadout).toEqual([0, 2, 1, 4]);
   });
 });
+
+describe('unshoulderLiveSlot', () => {
+  it('scrubs the LIVE kit even while a class swap is banked', () => {
+    // A shotRejected class-locked must heal the gun in hand - routing the
+    // write through setLoadoutSlot lands it on pendingLoadout and the live
+    // slot rejects every pull forever (the prod Gonne/Lightning spam).
+    const lightningWid = widOf(WeaponType.Lightning);
+    const host = mkHost({ armorClass: 'heavy', appliedClass: 'light', loadout: [0, 2, 6, lightningWid] });
+    const armory = new PlayerLoadout(host);
+    armory.pendingLoadout = [0, 2, 6, 9];
+    armory.unshoulderLiveSlot(3);
+    expect(host.loadout[3]).not.toBe(lightningWid);
+    expect(PlayerLoadout.lockedForClass('light', host.loadout[3]!)).toBe(false);
+    expect(armory.pendingLoadout).toEqual([0, 2, 6, 9]); // banked kit untouched
+  });
+});
