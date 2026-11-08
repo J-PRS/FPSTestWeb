@@ -181,6 +181,17 @@ mirrors (`serverSenses`/`index.ts`) are the pattern, not the exception.
 - Energy-gated engagement: no "don't duel on empty tank" dial.
 - Pre-aim on approach: slew doesn't pre-stage toward lastSeen.
 - Squad focus-fire share: radio carries spots, not target picks.
+- **Activation skills (Q): unbuilt.** Bots use the 3 channel skills
+  (cloak/shield/mend via `statusIntent` → `out.status` → `applyStatus`)
+  but NOT the 5 instant skills — blink/dash/slam/warp/bounce have no
+  brain path. The claim seam exists: `onSkillUse(pid, skill)` drains
+  energy + stamps cooldown + validates `p.skill`; the actual EFFECT is
+  what the activator does locally (dash = impulse, blink = teleport,
+  slam = AOE at land, warp = beacon throw/release, bounce = hop).
+  Build: (1) `p.skill` assignment on bot loadouts (per class/
+  temperament), (2) `BrainOut.skillPress?: SkillId` intent, (3) both
+  hosts call `onSkillUse` + apply the local effect, (4) A/B each skill
+  in the soak (`_skillab` pattern — team-on vs team-off or skill-vs-skill).
 
 ## Hard-won lessons (why things are this way)
 
