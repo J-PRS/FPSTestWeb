@@ -89,14 +89,7 @@ export class HudStats {
     this.lastPlayerPos.copy(player.pos);
     this.lastPlayerYaw = player.yaw;
     this.tickDamageFx(dt);
-
-    const nrg = Math.round(player.energy);
-    this.setText(h.energy, 'energy', String(nrg));
-    const energyPct = Math.round((nrg / 60) * 100);
-    if (energyPct !== this.lastEnergyPct) {
-      this.lastEnergyPct = energyPct;
-      h.energyBar.style.transform = `scaleX(${energyPct / 100})`;
-    }
+    this.tickEnergy(player);
 
     // Three readouts, all magnitude: |v| total, XZ horizontal, |vy|.
     this.setText(h.speed, 'speed', String(Math.round(player.vel.length())));
@@ -108,17 +101,7 @@ export class HudStats {
     this.setText(h.loss, 'loss', String(Math.round(packetLoss)));
     this.setText(h.jitter, 'jitter', String(Math.round(jitter)));
 
-    // Slots are loadout-driven: labels + highlight re-render only on change.
-    const loadoutKey = `${player.loadout.join(',')  }|${  player.weaponIndex}`;
-    if (loadoutKey !== this.lastWeapon) {
-      this.lastWeapon = loadoutKey;
-      player.loadout.forEach((wid, i): void => {
-        const s = h.weaponSlots[i];
-        if (!s) {return;}
-        s.textContent = `${i + 1} ${HudStats.WEAPON_SHORT[wid] ?? '?'}`;
-        s.classList.toggle('active', i === player.weaponIndex);
-      });
-    }
+    this.tickWeaponSlots(player);
 
     // Pool ammo readout under the crosshair - blank for unlimited weapons.
     // loadout carries slot indices; the pool keys on the real weaponType.
@@ -128,6 +111,41 @@ export class HudStats {
     const wid = player.armory?.secondaryWid ?? player.loadout[player.weaponIndex];
     const banked = wid === undefined || player.ammoPool === undefined
       ? undefined : ammoOf(player.ammoPool, weaponDef(wid).weaponType, performance.now() / 1000);
+    this.tickAmmo(wid, banked);
+    this.tickCrosshair(player, wid);
+    this.tickBloom(player, wid);
+
+    if (this.hitTimer > 0) {
+      this.hitTimer -= dt;
+      if (this.hitTimer <= 0) {h.hitMarker.classList.remove('visible');}
+    }
+  }
+
+  private tickEnergy(player: Player): void {
+    const nrg = Math.round(player.energy);
+    this.setText(this.h.energy, 'energy', String(nrg));
+    const energyPct = Math.round((nrg / 60) * 100);
+    if (energyPct !== this.lastEnergyPct) {
+      this.lastEnergyPct = energyPct;
+      this.h.energyBar.style.transform = `scaleX(${energyPct / 100})`;
+    }
+  }
+
+  // Slots are loadout-driven: labels + highlight re-render only on change.
+  private tickWeaponSlots(player: Player): void {
+    const loadoutKey = `${player.loadout.join(',')}|${player.weaponIndex}`;
+    if (loadoutKey === this.lastWeapon) {return;}
+    this.lastWeapon = loadoutKey;
+    player.loadout.forEach((wid, i): void => {
+      const s = this.h.weaponSlots[i];
+      if (!s) {return;}
+      s.textContent = `${i + 1} ${HudStats.WEAPON_SHORT[wid] ?? '?'}`;
+      s.classList.toggle('active', i === player.weaponIndex);
+    });
+  }
+
+  private tickAmmo(wid: number | undefined, banked: number | undefined): void {
+    const {h} = this;
     if (h.wammoReadout) {
       const n = banked === undefined ? -1 : Math.floor(banked);
       // Yellow at 1, red at 0 - the low-clip tiers ride the cache key
@@ -152,49 +170,47 @@ export class HudStats {
       const pct = `${(frac * 100).toFixed(0)}%`;
       if (this.lastWammoRegen !== pct) {this.lastWammoRegen = pct; regen.style.width = pct;}
     }
+  }
 
-    // Deploy weapons telegraph a dead pull: groundedOnly and off the
-    // ground/skiing = faint crosshair, same rule the fire gate applies.
-    const ch = h.crosshair;
-    if (ch) {
-      const grounded = wid === undefined
-        || !(getWeaponStats(weaponDef(wid).weaponType).groundedOnly && (!player.onGround || player.skiing));
-      if (grounded !== this.lastXhairReady) {
-        this.lastXhairReady = grounded;
-        ch.style.opacity = grounded ? '' : '0.25';
-      }
+  // Deploy weapons telegraph a dead pull: groundedOnly and off the
+  // ground/skiing = faint crosshair, same rule the fire gate applies.
+  private tickCrosshair(player: Player, wid: number | undefined): void {
+    const ch = this.h.crosshair;
+    if (!ch) {return;}
+    const grounded = wid === undefined
+      || !(getWeaponStats(weaponDef(wid).weaponType).groundedOnly && (!player.onGround || player.skiing));
+    if (grounded !== this.lastXhairReady) {
+      this.lastXhairReady = grounded;
+      ch.style.opacity = grounded ? '' : '0.25';
     }
+  }
 
-    // Bloom cone arms: alpha fades in on sqrt(normalized bloom) - they
-    // ramp in FASTER than linear early (quadratic would do the reverse),
-    // invisible at rest, full strength by bloom.max. Gap still rides the
-    // real cone so the arms sit where slugs can land.
-    if (h.bloomRing) {
-      const bloomDef = wid === undefined ? undefined : weaponDef(wid).bloom;
-      // Deadband: hidden for the first ~5% of the cone (the tight taps) -
-      // sqrt then ramps the rest of the way to full at bloom.max.
-      const t = bloomDef ? Math.min(1, Math.max(0, player.bloom / bloomDef.max - 0.05) / 0.95) : 0;
-      const alpha = Math.round(Math.sqrt(t) * 20) / 20; // 5% steps - cache-friendly
-      const px = bloomDef === undefined ? 0
-        : Math.max(4, Math.round(player.bloom * window.innerHeight * 0.5));
-      if (px !== this.lastBloomPx || alpha !== this.lastBloomAlpha) {
-        this.lastBloomPx = px;
-        this.lastBloomAlpha = alpha;
-        h.bloomRing.style.setProperty('--gap', `${px}px`);
-        h.bloomRing.style.opacity = String(alpha);
-      }
-      // Snap the origin to whole pixels or the tick edges anti-alias.
-      const bw = window.innerWidth, bh = window.innerHeight;
-      if (bw !== this.lastBloomW || bh !== this.lastBloomH) {
-        this.lastBloomW = bw; this.lastBloomH = bh;
-        h.bloomRing.style.left = `${Math.round(bw / 2)}px`;
-        h.bloomRing.style.top = `${Math.round(bh / 2)}px`;
-      }
+  // Bloom cone arms: alpha fades in on sqrt(normalized bloom) - they
+  // ramp in FASTER than linear early (quadratic would do the reverse),
+  // invisible at rest, full strength by bloom.max. Gap still rides the
+  // real cone so the arms sit where slugs can land.
+  private tickBloom(player: Player, wid: number | undefined): void {
+    const {h} = this;
+    if (!h.bloomRing) {return;}
+    const bloomDef = wid === undefined ? undefined : weaponDef(wid).bloom;
+    // Deadband: hidden for the first ~5% of the cone (the tight taps) -
+    // sqrt then ramps the rest of the way to full at bloom.max.
+    const t = bloomDef ? Math.min(1, Math.max(0, player.bloom / bloomDef.max - 0.05) / 0.95) : 0;
+    const alpha = Math.round(Math.sqrt(t) * 20) / 20; // 5% steps - cache-friendly
+    const px = bloomDef === undefined ? 0
+      : Math.max(4, Math.round(player.bloom * window.innerHeight * 0.5));
+    if (px !== this.lastBloomPx || alpha !== this.lastBloomAlpha) {
+      this.lastBloomPx = px;
+      this.lastBloomAlpha = alpha;
+      h.bloomRing.style.setProperty('--gap', `${px}px`);
+      h.bloomRing.style.opacity = String(alpha);
     }
-
-    if (this.hitTimer > 0) {
-      this.hitTimer -= dt;
-      if (this.hitTimer <= 0) {h.hitMarker.classList.remove('visible');}
+    // Snap the origin to whole pixels or the tick edges anti-alias.
+    const bw = window.innerWidth, bh = window.innerHeight;
+    if (bw !== this.lastBloomW || bh !== this.lastBloomH) {
+      this.lastBloomW = bw; this.lastBloomH = bh;
+      h.bloomRing.style.left = `${Math.round(bw / 2)}px`;
+      h.bloomRing.style.top = `${Math.round(bh / 2)}px`;
     }
   }
 
