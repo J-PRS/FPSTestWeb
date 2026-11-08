@@ -692,6 +692,14 @@ body:has(#hud.cm-open) #healthbar-container {
 #scoreboard tr td.sb-cls-medium { color: #ffd27f; }
 #scoreboard tr td.sb-cls-heavy { color: #ff8f8f; }
 #scoreboard tr td.sb-cls-none { color: #666; }
+/* Locomotion split column (HA/A/S/W/ST/I) — one hue per bucket, shared
+ *  by the header letters and the per-row values. */
+#scoreboard .asw-ha { color: #b06ee8; }
+#scoreboard .asw-a { color: #6ea8ff; }
+#scoreboard .asw-s { color: #6ee87f; }
+#scoreboard .asw-w { color: #ffe066; }
+#scoreboard .asw-st { color: #ff9a3c; }
+#scoreboard .asw-i { color: #ff5a5a; }
 #team-score {
   position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
   display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;
