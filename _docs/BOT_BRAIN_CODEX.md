@@ -181,17 +181,32 @@ mirrors (`serverSenses`/`index.ts`) are the pattern, not the exception.
 - Energy-gated engagement: no "don't duel on empty tank" dial.
 - Pre-aim on approach: slew doesn't pre-stage toward lastSeen.
 - Squad focus-fire share: radio carries spots, not target picks.
-- **Activation skills (Q): unbuilt.** Bots use the 3 channel skills
-  (cloak/shield/mend via `statusIntent` → `out.status` → `applyStatus`)
-  but NOT the 5 instant skills — blink/dash/slam/warp/bounce have no
-  brain path. The claim seam exists: `onSkillUse(pid, skill)` drains
-  energy + stamps cooldown + validates `p.skill`; the actual EFFECT is
-  what the activator does locally (dash = impulse, blink = teleport,
-  slam = AOE at land, warp = beacon throw/release, bounce = hop).
-  Build: (1) `p.skill` assignment on bot loadouts (per class/
-  temperament), (2) `BrainOut.skillPress?: SkillId` intent, (3) both
-  hosts call `onSkillUse` + apply the local effect, (4) A/B each skill
-  in the soak (`_skillab` pattern — team-on vs team-off or skill-vs-skill).
+- **Activation skills (Q): BUILT (8ae39ab9-era).** `BrainCtx.skill`
+  carries the equipped id (server roster + client TeamBots assign one
+  per class at spawn: lights → blink/dash, heavies → slam/medkit,
+  mediums → dash/bounce/warp/shield). `pickSkill` presses on
+  human-shaped triggers (dash = gap-close/escape, slam = landing dive,
+  blink/warp = infiltrate/flee, bounce = hop). `BrainOut.skill` rides
+  the same seam as `belt`: `ServerBots.applySkill` drains the
+  `ENERGY.skillCost` ante, enforces the 850ms floor, applies
+  impulse/resync/applyBlast; the client `applySkill` in bots/index.ts
+  mirrors it on `bot.velocity`/`bot.position` + the `hit()` funnel.
+  Channel skills stay in `statusIntent`.
+- **Soak methodology lessons (the hard-won part):**
+  - `step()` now fires `respawnTick(simNow())` — respawns are wall-clock
+    `setTimeout`, so without it every dead seat stayed dead for the whole
+    sim. THAT was the "combat freeze": a lobby of corpses, not a lull.
+  - Soak `t`/net values are step counts (dt=0.05s): sim-s = steps × 0.05,
+    real speed = per-step net × 20. Labels now read sim-seconds.
+  - `--pool=a,b,c` on `_beltab`/`_deployab`/`_skillab` gives each bot a
+    different item and tallies kills PER ITEM — one room, whole ranking.
+  - **Corpse-lobby tallies invert.** First sweeps (pre-respawn-fix) said
+    blink/Implodisc/cgturret lead; on a living sim the real ranking is
+    warp > dash > bounce > blink > slam (29k vs 9k), ImpactGrenade >
+    Javelin > RemoteRailgun > Grenade > ClusterBomb > Implodisc (36k vs
+    10k), mortar > jammer > loiter > station > mine > turret/cgturret >
+    spider > drone (23k vs 3k). Denial + AoE earn on live lobbies;
+    aim-tools only looked strong farming the dead.
 
 ## Hard-won lessons (why things are this way)
 
