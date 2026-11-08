@@ -33,7 +33,7 @@ export interface RemoteSetHooks<T extends RemoteEntity, S> {
 
 export class RemoteSet<T extends RemoteEntity, S> {
   private entities = new Map<string, T>();
-  readonly staleMs = 60_000;
+  readonly staleMs = 10_000; // forceSend beats this by ~10x — 10s of silence is a dead feed, not a quiet player
   /** Mutable on purpose: the world owns the set before the module deps
    *  the hooks need (scene, terrain, nm) exist — createRemotes fills it. */
   hooks: RemoteSetHooks<T, S>;

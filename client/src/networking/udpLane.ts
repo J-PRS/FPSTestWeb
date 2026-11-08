@@ -20,15 +20,18 @@ export class UdpLane {
   private ws: WebSocket | null = null;
   private token: Uint8Array | null = null;
   private open = false;
+  /** No shim found last probe, no native shell is running; don't
+   *  re-dial all 5 ports on every reconnect/session. */
+  private shimMissed = false;
 
   /** gameState carried a bind — open the shim. Idempotent per session. */
   adopt(bind: { token: string; port: number }, onBinary: (b: Uint8Array) => void): void {
-    if (this.ws !== null || !bind || typeof bind.token !== 'string') {return;}
+    if (this.ws !== null || this.shimMissed || !bind || typeof bind.token !== 'string') {return;}
     const token = new Uint8Array(TOKEN_BYTES);
     for (let i = 0; i < TOKEN_BYTES; i += 1) {token[i] = Number.parseInt(bind.token.slice(i * 2, i * 2 + 2), 16);}
     this.token = token;
     const tryPort = (i: number): void => {
-      if (i >= SHIM_PORTS.length) {log('shim probe exhausted — staying on ws'); return;}
+      if (i >= SHIM_PORTS.length) {this.shimMissed = true; log('shim probe exhausted — staying on ws'); return;}
       let ws: WebSocket;
       try { ws = new WebSocket(`ws://127.0.0.1:${SHIM_PORTS[i]}/udp`); } catch { tryPort(i + 1); return; }
       ws.binaryType = 'arraybuffer';
