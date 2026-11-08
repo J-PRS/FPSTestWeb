@@ -408,6 +408,27 @@ export class MoveSim {
     }
   }
 
+  // Jumpstart perk: on the ski-press edge a body at/below its class
+  // walk cap gets a flat +jumpstart m/s launch - max payout is
+  // cap + jumpstart, and pressing at pace (> cap) buys nothing.
+  // Fires here in step() (not setInput) so the edge lands inside the
+  // fixed-step stream and client prediction and server shadow replay
+  // it identically.
+  private jumpstartKick(): void {
+    if (this.jumpstart <= 0) {return;}
+    const s = this.state;
+    const hs = dhypot2(s.vel.x, s.vel.z);
+    if (hs > MOVEMENT_CONFIG.maxVelocityGround * this.speedScale + 0.001) {return;}
+    const dir = this.inputDirection();
+    const dl = dhypot2(dir.x, dir.z);
+    let ux: number, uz: number;
+    if (hs > 0.5) { ux = s.vel.x / hs; uz = s.vel.z / hs; }
+    else if (dl > 0) { ux = dir.x; uz = dir.z; }
+    else { ux = dsin(s.yaw); uz = dcos(s.yaw); }
+    s.vel.x += ux * this.jumpstart;
+    s.vel.z += uz * this.jumpstart;
+  }
+
   private step(dt: number): void {
     // Auto-hop: jump key acts as hold-to-jump.
     if (MOVEMENT_CONFIG.autoHop) {this.wishJump = this.input.jumpHeld;}
@@ -417,28 +438,9 @@ export class MoveSim {
     this.groundedBuffered = this.checkGrounded();
     this.impulseT = Math.max(0, this.impulseT - dt);
 
-    // Jumpstart perk: on the ski-press edge a body at/below its class
-    // walk cap gets a flat +jumpstart m/s launch - max payout is
-    // cap + jumpstart, and pressing at pace (> cap) buys nothing.
-    // Fires here in step() (not setInput) so the edge lands inside the
-    // fixed-step stream and client prediction and server shadow replay
-    // it identically.
     const skiEdge = this.input.skiHeld && !this.wasSkiHeld;
     this.wasSkiHeld = this.input.skiHeld;
-    if (skiEdge && this.jumpstart > 0) {
-      const s = this.state;
-      const hs = dhypot2(s.vel.x, s.vel.z);
-      if (hs <= MOVEMENT_CONFIG.maxVelocityGround * this.speedScale + 0.001) {
-        const dir = this.inputDirection();
-        const dl = dhypot2(dir.x, dir.z);
-        let ux: number, uz: number;
-        if (hs > 0.5) { ux = s.vel.x / hs; uz = s.vel.z / hs; }
-        else if (dl > 0) { ux = dir.x; uz = dir.z; }
-        else { ux = dsin(s.yaw); uz = dcos(s.yaw); }
-        s.vel.x += ux * this.jumpstart;
-        s.vel.z += uz * this.jumpstart;
-      }
-    }
+    if (skiEdge) {this.jumpstartKick();}
 
     const anyGrounded = this.state.onGround || this.groundedBuffered;
     if (this.allowNextJump && anyGrounded && this.wishJump) {

@@ -299,7 +299,12 @@ this.structEpoch += 1;
       ?.surface?.getHeight(x, z);
     const prev = this.unburyTicks.get(playerId);
     if (sh) {this.unburyTicks.set(playerId, sh.simTicks);}
-    return `shadow=${sh ? `bot=${sh.bot} y=${pos!.y.toFixed(1)} onG=${sh.sim.state.onGround} tickDelta=${prev === undefined ? '?' : sh.simTicks - prev} surfG=${simG === undefined ? '?' : simG.toFixed(1)} vel=${sh.sim.state.vel.x.toFixed(1)},${sh.sim.state.vel.y.toFixed(1)},${sh.sim.state.vel.z.toFixed(1)}` : 'none'} xz=${x.toFixed(1)},${z.toFixed(1)} fieldG=${f} chordG=${c}`;
+    return `shadow=${this.shadowDesc(sh, simG, prev)} xz=${x.toFixed(1)},${z.toFixed(1)} fieldG=${f} chordG=${c}`;
+  }
+
+  private shadowDesc(sh: Shadow | undefined, simG: number | undefined, prev: number | undefined): string {
+    if (!sh) {return 'none';}
+    return `bot=${sh.bot} y=${sh.sim.state.pos!.y.toFixed(1)} onG=${sh.sim.state.onGround} tickDelta=${prev === undefined ? '?' : sh.simTicks - prev} surfG=${simG === undefined ? '?' : simG.toFixed(1)} vel=${sh.sim.state.vel.x.toFixed(1)},${sh.sim.state.vel.y.toFixed(1)},${sh.sim.state.vel.z.toFixed(1)}`;
   }
   /** unburyDebug's prior simTicks — the tickDelta line that separates a
    *  sim that stopped stepping while buried from one re-seeded per tick. */
@@ -544,12 +549,7 @@ this.structEpoch += 1;
     // uplink half is how stale the shadow's input stream is. It's
     // client-reported, so it's a lower bound on trust: server-measured
     // ping/pong echoes cap it from above in syncTransit.
-    if (rttMs !== undefined && rttMs > 0) {
-      const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
-      if (sh.serverTransitEma === 0) {sh.transitVar = sh.transitVar * 0.9 + Math.abs(tr - sh.transitEma) * 0.1;}
-      sh.clientTransitEma = sh.clientTransitEma === 0 ? tr : sh.clientTransitEma * 0.9 + tr * 0.1;
-      this.syncTransit(sh);
-    }
+    this.noteRtt(sh, rttMs);
     // reportInputSeq = the client's input counter at snapshot time. Only
     // a report stamped ahead of everything RECEIVED counts as a gap — a
     // seq parked in pending is covered, just not drained yet. ≥3
@@ -847,6 +847,18 @@ sh.gapStreak += 1;
    *  inflating bought tolerance/rewind before this channel existed. */
   private syncTransit(sh: Shadow): void {
     sh.transitEma = sh.serverTransitEma > 0 ? sh.serverTransitEma : sh.clientTransitEma;
+  }
+
+  // The report's own RTT estimate feeds the broadcast lead — the
+  // uplink half is how stale the shadow's input stream is. It's
+  // client-reported, so it's a lower bound on trust: server-measured
+  // ping/pong echoes cap it from above in syncTransit.
+  private noteRtt(sh: Shadow, rttMs: number | undefined): void {
+    if (rttMs === undefined || rttMs <= 0) {return;}
+    const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
+    if (sh.serverTransitEma === 0) {sh.transitVar = sh.transitVar * 0.9 + Math.abs(tr - sh.transitEma) * 0.1;}
+    sh.clientTransitEma = sh.clientTransitEma === 0 ? tr : sh.clientTransitEma * 0.9 + tr * 0.1;
+    this.syncTransit(sh);
   }
 
   /** Uplink-transit estimate (ms) for the broadcast lead — the shadow

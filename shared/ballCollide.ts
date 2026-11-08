@@ -154,6 +154,26 @@ const _colCands: StructureCollider[] = [];
 
 /** Sphere vs yaw-OBB: push the ball out along the least-penetration axis
  *  and reflect velocity off the contact normal. Returns true on contact. */
+// Sphere vs hemisphere: contact normal runs from the dome's base
+// center to the ball — the buried half never matters, the plinth
+// hull owns the volume below the spring line. Returns true on contact.
+function collideDome(b: SimBall, c: StructureCollider): boolean {
+  const cy0 = c.cy - c.hy;
+  const sx = b.x - c.cx, sy = b.y - cy0, sz = b.z - c.cz;
+  const d2 = sx * sx + sy * sy + sz * sz;
+  const reach = c.dome! + b.radius;
+  if (d2 >= reach * reach) {return false;}
+  const d = Math.sqrt(d2) || 1;
+  const push = reach - d;
+  b.x += (sx / d) * push; b.y += (sy / d) * push; b.z += (sz / d) * push;
+  const dot = (b.vx * sx + b.vy * sy + b.vz * sz) / d;
+  if (dot < 0) {
+    const k = -(1 + BALL_BOUNCE) * dot / d;
+    b.vx += sx * k; b.vy += sy * k; b.vz += sz * k;
+  }
+  return true;
+}
+
 export function collideStructures(b: SimBall, colliders: readonly StructureCollider[], index?: { queryPoint(x: number, z: number, pad: number, out: StructureCollider[]): void }): boolean {
   let cands: readonly StructureCollider[] = colliders;
   if (index) { _colCands.length = 0; index.queryPoint(b.x, b.z, b.radius + 0.5, _colCands); cands = _colCands; }
@@ -163,23 +183,8 @@ export function collideStructures(b: SimBall, colliders: readonly StructureColli
     const rr = Math.max(c.hx, c.hz) + b.radius + 0.5;
     if (dx * dx + dz * dz > rr * rr) {continue;}
     if (c.dome) {
-      // Sphere vs hemisphere: contact normal runs from the dome's base
-      // center to the ball — the buried half never matters, the plinth
-      // hull owns the volume below the spring line.
-      const cy0 = c.cy - c.hy;
-      const sx = b.x - c.cx, sy = b.y - cy0, sz = b.z - c.cz;
-      const d2 = sx * sx + sy * sy + sz * sz;
-      const reach = c.dome + b.radius;
-      if (d2 >= reach * reach) {continue;}
-      const d = Math.sqrt(d2) || 1;
-      const push = reach - d;
-      b.x += (sx / d) * push; b.y += (sy / d) * push; b.z += (sz / d) * push;
-      const dot = (b.vx * sx + b.vy * sy + b.vz * sz) / d;
-      if (dot < 0) {
-        const k = -(1 + BALL_BOUNCE) * dot / d;
-        b.vx += sx * k; b.vy += sy * k; b.vz += sz * k;
-      }
-      return true;
+      if (collideDome(b, c)) {return true;}
+      continue;
     }
     // into local yaw frame
     const lx = dx * c.cos + dz * c.sin;
