@@ -223,6 +223,10 @@ export class HealthBarSystem {
       this.updateBallBar(ball, bar, dt, cameraPos, cameraDir);
     }
 
+    this.updateRepairBars(dt, cameraPos, cameraDir);
+  }
+
+  private updateRepairBars(dt: number, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3): void {
     // Repair bars — vitals mirror the live item record so the weld
     // visibly knits the bar shut (and the armor sliver grows past full).
     for (const [item, r] of this.repairBars) {

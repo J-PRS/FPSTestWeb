@@ -151,77 +151,7 @@ export class SnapshotBuffer {
       this.latestT = t;
       this.latestArrive = arriveMs;
     }
-    if (gap > 10 && gap < 2000) {
-      // Fast EMA on cadence change (tier-10 streams arrive at 10x the
-      // baseline — 0.15 takes ~7s to converge, during which renderTime
-      // sits past the buffer and the remote mini-warps).
-      const rate = gap > this.arrivalInterval * 2 ? 0.6 : 0.15;
-      this.arrivalInterval += (gap - this.arrivalInterval) * rate;
-      this.arrivalGaps.push(gap);
-      if (this.arrivalGaps.length > 32) {this.arrivalGaps.shift();}
-      this.gapsSorted.length = 0;
-      this.gapsSorted.push(...this.arrivalGaps);
-      this.gapsSorted.sort((a, b) => a - b);
-      const p90gap = this.gapsSorted[Math.floor((this.gapsSorted.length - 1) * 0.9)]!;
-      // The delay must cover a worst-ish arrival interval, not a noise
-      // estimate: the p90 gap IS the coverage need — one late packet in
-      // ten may briefly extrapolate, the other nine render on truth.
-      // BUT the floor is cadence coverage: a delay below the arrival
-      // interval parks renderTime PERMANENTLY past the newest snapshot —
-      // the body then renders ahead of wire truth on extrapolated
-      // velocity every frame (WYSIWYG inversion: aiming at positions
-      // the server never produced). Honest lag beats forward fiction.
-      // Speed-scaled cap as before: delay × speed = rendered meters.
-      const spd = Math.hypot(vel.x, vel.y, vel.z);
-      // Edge-vs-middle: delay = p90gap parks renderTime AT the newest
-      // snapshot's edge — one jittered arrival and it's past the buffer
-      // (the atCap flap driving the per-push adj storms). The margin is
-      // a FULL measured interval: coalesced/burst delivery (~300-400ms
-      // spacing) needs renderTime deep enough inside history that the
-      // inter-burst coast never reaches newest.t — half an interval was
-      // still crossing it on every cycle = the adj oscillation.
-      const cadenceFloor = Math.max(this.arrivalInterval, p90gap)
-        + Math.max(80, this.arrivalInterval);
-      // Ceiling is derived, not static: on a pathological stream whose
-      // proven starvation bound (starveMs) exceeds 600ms, a flat cap
-      // guarantees renderTime NEVER reaches the buffer — permanent
-      // atCap with no recovery. Let the floor meet the measured need.
-      const dynCap = Math.max(SnapshotBuffer.MAX_INTERP_DELAY, this.starveMs);
-      const delayCap = spd > 5
-        ? Math.min(dynCap, Math.max(cadenceFloor, 4000 / spd))
-        : dynCap;
-      const raw = Math.min(
-        delayCap,
-        Math.max(cadenceFloor, SnapshotBuffer.BASE_INTERP_DELAY + p90gap),
-      );
-      // The TARGET also needs damping — a jittered WAN arrival swings
-      // raw ±100ms between pushes, and even a slewed chase renders that
-      // breathing as remote lurch. Slow EMA means a sustained shift still
-      // converges (~1-2s) while packet-to-packet noise stops steering
-      // the render window entirely.
-      // EMA + slew both ride the PUSH count — on a suppressed 2Hz stream
-      // 0.08/push and 8ms/push take ~30s to converge to the cadence floor,
-      // during which renderTime sits past the buffer and the remote DRs
-      // permanently (the all-sim:true dump). Scale by the arrival gap so
-      // a sparse stream converges at the same wall-clock rate as a 20Hz
-      // one — jitter suppression still works because the RATE is fixed.
-      const rateScale = Math.max(1, gap / 50);
-      this.delayTarget += (raw - this.delayTarget) * Math.min(0.5, 0.08 * rateScale);
-      // The cap is a hard error bound (delay×speed = rendered meters) —
-      // it clamps the OUTPUT too, since the EMA lags a speed change.
-      const target = Math.min(this.delayTarget, delayCap);
-      // Slew BOTH ways: instant inflation made every jittered WAN
-      // arrival ratchet the delay up, and each jump rewound/damped
-      // renderTime — remotes lurched on straight paths despite a full
-      // buffer. ~160ms/s up converges on a real degradation in ~1s while
-      // single late packets ride extrapolation instead. Deflate rides
-      // rateScale too - a fixed -10/push on a sparse stream deflated
-      // ~8x slower than it inflated, so recovered streams sat parked
-      // at a stale-high delay (the 575ms delayMs plateaus) long past
-      // the need.
-      const slewUp = Math.min(8 * rateScale, target - this.interpDelay);
-      this.interpDelay += Math.max(-10 * rateScale, slewUp);
-    }
+    this.noteArrivalGap(gap, vel);
 
     // Finite-but-absurd is the other half of the wire class: no mover
     // reaches 300 m/s, and a corrupt tangent/extrapolation at that speed
@@ -425,6 +355,79 @@ export class SnapshotBuffer {
     hermiteBounded(s0, s1, a, (s1.t - s0.t) / 1000, _hermiteOut);
     outPos.set(_hermiteOut.x, _hermiteOut.y, _hermiteOut.z);
     return true;
+  }
+
+  private noteArrivalGap(gap: number, vel: { x: number; y: number; z: number }): void {
+    if (!(gap > 10 && gap < 2000)) {return;}
+    // Fast EMA on cadence change (tier-10 streams arrive at 10x the
+    // baseline — 0.15 takes ~7s to converge, during which renderTime
+    // sits past the buffer and the remote mini-warps).
+    const rate = gap > this.arrivalInterval * 2 ? 0.6 : 0.15;
+    this.arrivalInterval += (gap - this.arrivalInterval) * rate;
+    this.arrivalGaps.push(gap);
+    if (this.arrivalGaps.length > 32) {this.arrivalGaps.shift();}
+    this.gapsSorted.length = 0;
+    this.gapsSorted.push(...this.arrivalGaps);
+    this.gapsSorted.sort((a, b) => a - b);
+    const p90gap = this.gapsSorted[Math.floor((this.gapsSorted.length - 1) * 0.9)]!;
+    // The delay must cover a worst-ish arrival interval, not a noise
+    // estimate: the p90 gap IS the coverage need — one late packet in
+    // ten may briefly extrapolate, the other nine render on truth.
+    // BUT the floor is cadence coverage: a delay below the arrival
+    // interval parks renderTime PERMANENTLY past the newest snapshot —
+    // the body then renders ahead of wire truth on extrapolated
+    // velocity every frame (WYSIWYG inversion: aiming at positions
+    // the server never produced). Honest lag beats forward fiction.
+    // Speed-scaled cap as before: delay × speed = rendered meters.
+    const spd = Math.hypot(vel.x, vel.y, vel.z);
+    // Edge-vs-middle: delay = p90gap parks renderTime AT the newest
+    // snapshot's edge — one jittered arrival and it's past the buffer
+    // (the atCap flap driving the per-push adj storms). The margin is
+    // a FULL measured interval: coalesced/burst delivery (~300-400ms
+    // spacing) needs renderTime deep enough inside history that the
+    // inter-burst coast never reaches newest.t — half an interval was
+    // still crossing it on every cycle = the adj oscillation.
+    const cadenceFloor = Math.max(this.arrivalInterval, p90gap)
+      + Math.max(80, this.arrivalInterval);
+    // Ceiling is derived, not static: on a pathological stream whose
+    // proven starvation bound (starveMs) exceeds 600ms, a flat cap
+    // guarantees renderTime NEVER reaches the buffer — permanent
+    // atCap with no recovery. Let the floor meet the measured need.
+    const dynCap = Math.max(SnapshotBuffer.MAX_INTERP_DELAY, this.starveMs);
+    const delayCap = spd > 5
+      ? Math.min(dynCap, Math.max(cadenceFloor, 4000 / spd))
+      : dynCap;
+    const raw = Math.min(
+      delayCap,
+      Math.max(cadenceFloor, SnapshotBuffer.BASE_INTERP_DELAY + p90gap),
+    );
+    // The TARGET also needs damping — a jittered WAN arrival swings
+    // raw ±100ms between pushes, and even a slewed chase renders that
+    // breathing as remote lurch. Slow EMA means a sustained shift still
+    // converges (~1-2s) while packet-to-packet noise stops steering
+    // the render window entirely.
+    // EMA + slew both ride the PUSH count — on a suppressed 2Hz stream
+    // 0.08/push and 8ms/push take ~30s to converge to the cadence floor,
+    // during which renderTime sits past the buffer and the remote DRs
+    // permanently (the all-sim:true dump). Scale by the arrival gap so
+    // a sparse stream converges at the same wall-clock rate as a 20Hz
+    // one — jitter suppression still works because the RATE is fixed.
+    const rateScale = Math.max(1, gap / 50);
+    this.delayTarget += (raw - this.delayTarget) * Math.min(0.5, 0.08 * rateScale);
+    // The cap is a hard error bound (delay×speed = rendered meters) —
+    // it clamps the OUTPUT too, since the EMA lags a speed change.
+    const target = Math.min(this.delayTarget, delayCap);
+    // Slew BOTH ways: instant inflation made every jittered WAN
+    // arrival ratchet the delay up, and each jump rewound/damped
+    // renderTime — remotes lurched on straight paths despite a full
+    // buffer. ~160ms/s up converges on a real degradation in ~1s while
+    // single late packets ride extrapolation instead. Deflate rides
+    // rateScale too - a fixed -10/push on a sparse stream deflated
+    // ~8x slower than it inflated, so recovered streams sat parked
+    // at a stale-high delay (the 575ms delayMs plateaus) long past
+    // the need.
+    const slewUp = Math.min(8 * rateScale, target - this.interpDelay);
+    this.interpDelay += Math.max(-10 * rateScale, slewUp);
   }
 
   /** Recycle the whole buffer (teleport/disconnect reset). The render-

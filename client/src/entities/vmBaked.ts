@@ -180,24 +180,26 @@ export class VmBaked {
     if (spin) {this.seatChainPivot(spin.node, g);}
     // A bake landing mid-cloak must join the ghost set — otherwise the
     // weapon pops back opaque while you're invisible.
-    if (this.h.ghostMats.length > 0) {
-      const seen = new Set<THREE.Material>();
-      const toShell: THREE.Mesh[] = [];
-      gltf.scene.traverse((o: THREE.Object3D): void => {
-        const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh) {return;}
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        let shelled = false;
-        for (const m of mats) {
-          if (!m || seen.has(m)) {continue;}
-          seen.add(m);
-          if (!m.transparent && !shelled) { toShell.push(mesh); shelled = true; }
-          this.h.ghostify(m);
-        }
-      });
-      for (const mesh of toShell) {this.h.ghostifyMesh(mesh);}
-    }
+    if (this.h.ghostMats.length > 0) {this.ghostBake(gltf.scene);}
     Logger.debug(`[vm] w${wt} baked swap: removed ${swap.size} procedural meshes`);
+  }
+
+  private ghostBake(root: THREE.Object3D): void {
+    const seen = new Set<THREE.Material>();
+    const toShell: THREE.Mesh[] = [];
+    root.traverse((o: THREE.Object3D): void => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) {return;}
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      let shelled = false;
+      for (const m of mats) {
+        if (!m || seen.has(m)) {continue;}
+        seen.add(m);
+        if (!m.transparent && !shelled) { toShell.push(mesh); shelled = true; }
+        this.h.ghostify(m);
+      }
+    });
+    for (const mesh of toShell) {this.h.ghostifyMesh(mesh);}
   }
 
   /** Optional per-weapon edge bake (exported from the weapon's .blend on

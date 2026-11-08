@@ -208,18 +208,19 @@ loopCount += 1;
 
     // Credit spend — weighted random affordable pick from the unlocked pool
     spendTimer -= dt;
-    if (spendTimer <= 0) {
-      spendTimer = SPEND_INTERVAL;
-      const affordable = POOL.filter((p): boolean => p.minT <= elapsed && p.cost <= credits);
-      if (affordable.length > 0) {
-        let roll = simRand() * affordable.reduce((s, p): number => s + p.weight, 0);
-        let [pick] = affordable;
-        for (const p of affordable) { roll -= p.weight; if (roll <= 0) { pick = p; break; } }
-        credits -= pick.cost;
-        deps.logger.debug(`[Director] spend ${pick.cost}c → ${pick.label} (bank ${credits.toFixed(0)})`);
-        pick.spawn(deps.entities);
-      }
-    }
+    if (spendTimer <= 0) {spend();}
+  }
+
+  function spend(): void {
+    spendTimer = SPEND_INTERVAL;
+    const affordable = POOL.filter((p): boolean => p.minT <= elapsed && p.cost <= credits);
+    if (affordable.length === 0) {return;}
+    let roll = simRand() * affordable.reduce((s, p): number => s + p.weight, 0);
+    let [pick] = affordable;
+    for (const p of affordable) { roll -= p.weight; if (roll <= 0) { pick = p; break; } }
+    credits -= pick.cost;
+    deps.logger.debug(`[Director] spend ${pick.cost}c → ${pick.label} (bank ${credits.toFixed(0)})`);
+    pick.spawn(deps.entities);
   }
 
   return { update, get elapsed(): number { return elapsed; }, get credits(): number { return credits; } };

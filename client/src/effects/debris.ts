@@ -389,11 +389,16 @@ this.paintBudget -= 1;
     for (const s of this.shards) {
       if (!s.dead) {this.removeShard(s);}
     }
+    this.drainInsts();
+  }
+
+  private drainInsts(): void {
     for (const b of this.insts) {
       if (!b) {continue;}
       this.scene.remove(b.mesh);
-      let pool = Debris.instPool.get(this.insts.indexOf(b));
-      if (!pool) {Debris.instPool.set(this.insts.indexOf(b), pool = []);}
+      const i = this.insts.indexOf(b);
+      let pool = Debris.instPool.get(i);
+      if (!pool) {Debris.instPool.set(i, pool = []);}
       if (pool.length < Debris.INST_POOL_KEEP) {pool.push(b.mesh);}
       else {b.mesh.dispose();}
     }
@@ -441,7 +446,7 @@ export class PlayerDebris extends Debris {
     // the dead skier's momentum — the same trio that sells ball deaths.
     super(scene, terrain, pos, color, {
       count: opts?.count ?? PLAYER_CHUNK_COUNT,
-      spreadX: 0.8 * pw, spreadY: 1 * pw, spreadZ: 0.8 * pw, // larger/taller spread for players; `power` scales the blast
+      spreadX: 0.8 * pw, spreadY: Number(pw), spreadZ: 0.8 * pw, // larger/taller spread for players; `power` scales the blast
       shellRadius: PLAYER_RADIUS,
       impulseDir: opts?.impulseDir,
       inheritVel: opts?.inheritVel,

@@ -155,15 +155,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
     this.animT += dt;
     const s = this.sim;
 
-    if (this.emergeT > 0) {
-      this.emergeT -= dt;
-      const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
-      this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
-      this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
-      if (s) {s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;}
-      this.writeInstances(terrain);
-      return;
-    }
+    if (this.tickEmerge(dt, terrain, s)) {return;}
 
     if (s) {
       commitTarget(s, 'local', playerPos);
@@ -175,6 +167,17 @@ export class Snake implements Targetable, SwarmSlotOwner {
     }
     this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
     this.writeInstances(terrain);
+  }
+
+  private tickEmerge(dt: number, terrain: Terrain, s: SimSlither | null): boolean {
+    if (this.emergeT <= 0) {return false;}
+    this.emergeT -= dt;
+    const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
+    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
+    this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
+    if (s) {s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;}
+    this.writeInstances(terrain);
+    return true;
   }
 
   groundY = 0; // terrain height at center — segment heights are deltas

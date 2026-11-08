@@ -106,6 +106,10 @@ export class DeployLoiter {
     this.glow.material.opacity = 0.3 + pulse * 0.6;
     this.ring!.intensity = this.armed ? 0.45 + pulse * 0.3 : 0.15;
 
+    return this.pickDiveTarget(foes);
+  }
+
+  private pickDiveTarget(foes?: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]): { hover: THREE.Vector3; vel: THREE.Vector3 } | null {
     if (!foes || !this.armed) {return null;}
     const def = DEPLOY_ITEMS.loiter;
     const tr = def.triggerDist!;

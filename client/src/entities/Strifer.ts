@@ -196,6 +196,13 @@ export class Strifer implements Targetable, SwarmSlotOwner {
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     if (this.pos.y < gy + 1.2) {this.pos.y = gy + 1.2;}
 
+    this.updateFacing(dt, playerPos);
+
+    this.writeInstances();
+    getShadows()?.set(this, this.pos, this.radius, 0.35);
+  }
+
+  private updateFacing(dt: number, playerPos: THREE.Vector3): void {
     if (this.vel.lengthSq() > 1) {
       const targetYaw = Math.atan2(this.vel.x, this.vel.z);
       let dy = targetYaw - this.yaw;
@@ -213,9 +220,6 @@ export class Strifer implements Targetable, SwarmSlotOwner {
       this.yaw += dy * Math.min(1, 6 * dt);
       this.roll *= 0.9;
     }
-
-    this.writeInstances();
-    getShadows()?.set(this, this.pos, this.radius, 0.35);
   }
 
   // Static state table + shared scratch ctx — see Seeker for the pattern.

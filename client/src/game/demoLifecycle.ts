@@ -222,19 +222,7 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
   d.world.playbackRemotePlayers.clear();
   d.world.playbackPlayers.clear();
   pbTintOf.clear(); pbWidOf.clear();
-  // Playback-owned flag markers - remove so live flags reclaim the lane.
-  for (const team of d.playbackFlagTeams) {
-    d.world.flagMarkers.delete(team as 'alpha' | 'bravo');
-    d.lazyHud().removePlayerIndicator(`flag:${team}`);
-    d.lazyHud().removePlayerIndicator(`stand:${team}`);
-  }
-  d.playbackFlagTeams.clear();
-  for (const id of d.playbackNodeIds) {
-    d.world.nodeMarkers.delete(id);
-    d.lazyHud().removePlayerIndicator(`node:${id}`);
-  }
-  d.playbackNodeIds.clear();
-  d.playbackWorld.playbackNodes.clear();
+  clearPlaybackMarkersOwned(d);
   for (const r of d.playbackProjectiles) {r.dispose();}
   d.playbackProjectiles.length = 0;
   d.playbackProjectileById.clear();
@@ -250,6 +238,29 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
   clearPlaybackCreatures(d.playbackWorld);
   clearPlaybackDeployables(d.playbackWorld);
   clearPlaybackMarkers(d.playbackWorld);
+  clearWorldFxLists(d);
+  // Module-global swipe ribbons - not owned by any entity in `d`, so the
+  // per-entity passes above can't reach them.
+  disposeSwings();
+}
+
+// Playback-owned flag/node markers - remove so live flags reclaim the lane.
+function clearPlaybackMarkersOwned(d: DemoLifecycleCtx): void {
+  for (const team of d.playbackFlagTeams) {
+    d.world.flagMarkers.delete(team as 'alpha' | 'bravo');
+    d.lazyHud().removePlayerIndicator(`flag:${team}`);
+    d.lazyHud().removePlayerIndicator(`stand:${team}`);
+  }
+  d.playbackFlagTeams.clear();
+  for (const id of d.playbackNodeIds) {
+    d.world.nodeMarkers.delete(id);
+    d.lazyHud().removePlayerIndicator(`node:${id}`);
+  }
+  d.playbackNodeIds.clear();
+  d.playbackWorld.playbackNodes.clear();
+}
+
+function clearWorldFxLists(d: DemoLifecycleCtx): void {
   for (const e of d.world.debrisList) {e.dispose();}
   d.world.debrisList.length = 0;
   for (const e of d.world.explosions) {e.dispose();}
@@ -265,9 +276,6 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
     releasePlaybackBeam(d.playbackWorld, b);
   }
   d.playbackWorld.beams.length = 0;
-  // Module-global swipe ribbons - not owned by any entity in `d`, so the
-  // per-entity passes above can't reach them.
-  disposeSwings();
 }
 
 // Snapshot existing alive balls into the demo recording - needed when recording
