@@ -27,13 +27,20 @@ const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: "hard" }, 'headhunt'
 // A/B (both belt, one team runs a WIDE 5-45m/6s window vs stock 10-35m/9s).
 // --wide=alpha|bravo picks the wide side; winner's window becomes default.
 // Item A/B: --itemA=Grenade --itemB=ImpactGrenade forces each team's belt
-// slot - which THROWN weapon earns kills. Weapon names are WeaponType keys.
+// slot. --pool=A,B,C gives each bot a different item round-robin and
+// tallies kills PER ITEM - one room answers "which earns" for the list.
+const POOL = process.argv.find((a) => a.startsWith('--pool='))?.split('=')[1]?.split(',');
+const itemOf = new Map<string, string>();
 const IA = process.argv.find((a) => a.startsWith('--itemA='))?.split('=')[1];
 const IB = process.argv.find((a) => a.startsWith('--itemB='))?.split('=')[1];
-if (IA && IB) {
+if (POOL || (IA && IB)) {
+  let i = 0;
   for (const p of room.players.getAllPlayers().values()) {
     const lo = (room.bots as unknown as { loadouts: Map<string, { belt: string }> }).loadouts.get(p.id);
-    if (lo) {lo.belt = (p.team === 'alpha' ? IA : IB) as never;}
+    if (!lo) {continue;}
+    const item = POOL ? POOL[i++ % POOL.length]! : (p.team === 'alpha' ? IA! : IB!);
+    lo.belt = item as never;
+    if (POOL) {itemOf.set(p.id, item);}
   }
 }
 const OFF = process.argv.includes('--off');
@@ -62,3 +69,8 @@ for (const p of ps) {
   console.log(`  ${p.id.padEnd(16)} ${p.team} k=${p.kills} d=${p.deaths} held=${Math.round(p.heldTokens ?? 0)}`);
 }
 console.log(`BELT_TEAM=${BELT_TEAM} sim=${t}s wall=${((Date.now() - start) / 1000).toFixed(0)}s (belt side's kill advantage = the lever's real value)`);
+if (itemOf.size) {
+  const tally = new Map<string, { k: number; d: number }>();
+  for (const p of ps) {const it = itemOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += p.kills; e.d += p.deaths; tally.set(it, e);}
+  console.log('ITEM TALLY:', [...tally.entries()].sort((a, b) => b[1].k - a[1].k).map(([it, e]) => `${it}=${e.k}k/${e.d}d`).join(' '));
+}

@@ -27,13 +27,18 @@ const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: "hard" }, 'headhunt'
 const OFF = process.argv.includes('--off');
 const LOOSE = process.argv.find((a) => a.startsWith('--loose='))?.split('=')[1] ?? 'bravo';
 // Item A/B: --kindA=turret --kindB=mine forces each team's deploy kind.
+// --pool=A,B,C pins each bot to a different kind; kills tally PER KIND.
+const POOL = process.argv.find((a) => a.startsWith('--pool='))?.split('=')[1]?.split(',');
+const kindOf = new Map<string, string>();
 const KA = process.argv.find((a) => a.startsWith('--kindA='))?.split('=')[1];
 const KB = process.argv.find((a) => a.startsWith('--kindB='))?.split('=')[1];
+let pi = 0;
 for (const p of room.players.getAllPlayers().values()) {
   const brain = (room.bots as unknown as { brains: Map<string, { pickDeploy: () => boolean; builder: boolean; deployCdLo: number; deployCdSpan: number; deployObjR: number; deployForce: string | undefined }> }).brains.get(p.id);
   if (!brain) {continue;}
   brain.builder = true;
-  if (KA && KB) {brain.deployForce = p.team === 'alpha' ? KA : KB;}
+  if (POOL) {brain.deployForce = POOL[pi++ % POOL.length]!; kindOf.set(p.id, brain.deployForce);}
+  else if (KA && KB) {brain.deployForce = p.team === 'alpha' ? KA : KB;}
   if (OFF && p.team !== DEPLOY_TEAM) {brain.pickDeploy = (): never => undefined as never;}
   if (!OFF && p.team === LOOSE) {brain.deployCdLo = 8; brain.deployCdSpan = 10; brain.deployObjR = 60;}
 }
@@ -55,3 +60,8 @@ for (const p of ps) {
   console.log(`  ${p.id.padEnd(16)} ${p.team} k=${p.kills} d=${p.deaths} held=${Math.round(p.heldTokens ?? 0)}`);
 }
 console.log(`DEPLOY_TEAM=${DEPLOY_TEAM} sim=${t}s wall=${((Date.now() - start) / 1000).toFixed(0)}s (belt side's kill advantage = the lever's real value)`);
+if (kindOf.size) {
+  const tally = new Map<string, { k: number; d: number }>();
+  for (const p of ps) {const it = kindOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += p.kills; e.d += p.deaths; tally.set(it, e);}
+  console.log('KIND TALLY:', [...tally.entries()].sort((a, b) => b[1].k - a[1].k).map(([it, e]) => `${it}=${e.k}k/${e.d}d`).join(' '));
+}

@@ -18,9 +18,15 @@ const field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale 
 
 const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: 'hard' }, 'headhunt', 4242, false, field);
 
+// --pool=dash,slam,... gives each bot a different skill; kills tally
+// PER SKILL - one room answers "which Q earns" for the whole set.
+const POOL = process.argv.find((a) => a.startsWith('--pool='))?.split('=')[1]?.split(',');
+const skillOf = new Map<string, string>();
+let pi = 0;
 for (const p of room.players.getAllPlayers().values()) {
   const brain = (room.bots as unknown as { brains: Map<string, { skillsOff: boolean }> }).brains.get(p.id);
   if (brain) {brain.skillsOff = p.team !== SKILL_TEAM;}
+  if (POOL) {p.skill = POOL[pi++ % POOL.length]!; skillOf.set(p.id, p.skill);}
 }
 
 const start = Date.now();
@@ -39,3 +45,8 @@ for (const p of room.players.getAllPlayers().values()) {
   console.log(`  ${p.id.padEnd(16)} ${p.team} k=${p.kills} d=${p.deaths} held=${Math.round(p.heldTokens ?? 0)}`);
 }
 console.log(`SKILL_TEAM=${SKILL_TEAM} sim=${t}s wall=${((Date.now() - start) / 1000).toFixed(0)}s`);
+if (skillOf.size) {
+  const tally = new Map<string, { k: number; d: number }>();
+  for (const p of room.players.getAllPlayers().values()) {const it = skillOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += p.kills; e.d += p.deaths; tally.set(it, e);}
+  console.log('SKILL TALLY:', [...tally.entries()].sort((a, b) => b[1].k - a[1].k).map(([it, e]) => `${it}=${e.k}k/${e.d}d`).join(' '));
+}
