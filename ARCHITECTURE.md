@@ -32,8 +32,15 @@ file**, not a full spec — the deep dives live in `_docs/` and the code.
 - `_docs/INDEX.md` — full doc catalog (living vs. archived).
 - `_docs/2026-10-15_CAPPER_STRIKE.md` — capper reference (scoreboard,
   mechanics, physics budget, landmines).
-- `_docs/2026-10-18_NETCODE_OVERHAUL.md` — netcode overhaul.
-- `_docs/2026-10-21_NETCODE_GAP.md` — netcode gap analysis.
+- `_docs/2026-10-18_NETCODE_OVERHAUL.md` — netcode overhaul;
+  `_docs/2026-10-18_NETCODE_DEEP_DIVE_2.md` …
+  `_docs/2026-10-19_NETCODE_DEEP_DIVE_9.md` +
+  `_docs/2026-10-27_NUCLEUS_NETCODE_REFERENCE.md` — the follow-on
+  research that drove the Oct–Nov wire hardening wave.
+- `_docs/2026-10-31_CAPACITY_KNEE.md` /
+  `_docs/2026-10-23_DUEL_CAPACITY.md` — seat/process limits + 1v1
+  economics.
+- `_docs/traps/` — gotcha writeups; read before touching the area.
 - `concepts/netcode.md`, `concepts/movement.md`, `concepts/skiing.md` —
   design philosophy.
 - `client/reports/architecture-review.md` — client architecture review.

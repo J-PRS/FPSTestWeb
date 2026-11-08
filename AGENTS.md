@@ -122,6 +122,14 @@ code," a ghost owns it: `node _tools/procs.mjs --kill`.
   path is scripted yet — when building it, document it in `deployment/`.
 - UDP volatile lane: `FPS_UDP_PORT=9898` + NSG ingress — see
   `deployment/server.md`.
+- Transports (decided 2026-11-07): WT (QUIC datagrams) → WS fallback for
+  dedicated play; the server is public so no ICE needed at all. **No
+  TURN, ever** — metered relay bandwidth would bankrupt the project.
+  `FPS_ICE_SERVERS` stays unset. P2P duels (`?p2p=`) use free Google
+  STUN, best-effort only; symmetric-NAT pairs fail clean. In-game it's
+  presented as **LAN duel** (`lobbyPanel.ts`, `P2P_ENABLED` flag) — on a
+  LAN it needs nothing; over WAN it's best-effort by design. Details:
+  `_docs/2026-10-26_TRANSPORT_TIERS.md`.
 
 ## Layout
 
@@ -129,7 +137,7 @@ code," a ghost owns it: `node _tools/procs.mjs --kill`.
   `client/src/` — render, prediction, HUD. `maps/` — spec JSONs.
   `_tools/` — soaks + headless capture. `ROADMAP.md` is the living
   manifesto (read first). `changelog.txt` prepend `YYYY-MM-DD - <summary>`.
-  `_docs/INDEX.md` is the catalog of all 140+ docs — read it before
+  `_docs/INDEX.md` is the catalog of all 200+ docs — read it before
   hunting in `_docs/`. Full layer map: `ARCHITECTURE.md`.
 - Filename prefixes are the clusters (flat dirs by design):
   `bot*` bot brains · `Room*`/`room*` match sim · `combat*`/`envClaims`/

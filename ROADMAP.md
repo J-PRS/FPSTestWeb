@@ -163,7 +163,9 @@ surface. Detailed research lives in `_docs/reports/`; this file is the current t
   live. Best structural lead left: `botMoves.hints` applies the
   *grab*-orbit park brake to a carrier at its own stand (measured neutral
   when gated, but a real carrier can park 20-32 m short of home).
-- Capper tuning is at a **plateau** (2026-10-15b): the surface is
+- Capper tuning was at a **plateau** (2026-10-15b; superseded 11-05 —
+  MPC arrival-impact pricing in `botMpcSearch` broke it, see Done
+  above): the surface is
   discontinuous — `runnerStale` 3-120, the graph brake 1.3-2.2, a carrier
   brake gate and a time-based stall meter all landed inside noise on three
   disjoint seed sets (126 runs). Pick on one set, confirm on two unseen
@@ -176,6 +178,107 @@ surface. Detailed research lives in `_docs/reports/`; this file is the current t
   replay-from-0 — match-length scrubs are O(interval). Design in
   _docs/2026-10-14_DEMO_SEEK_CHECKPOINTS.md; server-side recording stays
   the later end state for authoritative tournament evidence.
+- Netcode hardening wave (2026-10-23 → 11-07, the biggest landed theme —
+  see `_docs/2026-10-18_NETCODE_DEEP_DIVE_2.md` …
+  `_docs/2026-10-19_NETCODE_DEEP_DIVE_9.md`,
+  `_docs/2026-10-27_NUCLEUS_NETCODE_REFERENCE.md`):
+  - Wire lanes went binary end-to-end: WIRE_BATCH per-conn tick
+    coalescing, WIRE_HIT playerHit (~160B JSON → ~20B), binary claim
+    lane, S→C binary event family, binary projectile edges + batched
+    ball segments (32-seat client 57→35 KB/s), per-conn tick arenas —
+    the shared frameArena was a REAL wire-corruption bug (every queued
+    frame aliased the last-encoded one). Plus evScratch ring, chord-
+    lattice terrain cache, rewind sample pool, in-place JSON ev stamp,
+    publish-fanout de-alloc: 64-socket CPU 50.1%→36.8% (~175 CCU/core).
+  - C1 sub-tick input edges (ageMs u16 stamps, legacy frames still
+    decode). C4 remote edge replay was piloted then REMOVED 11-08
+    (2f17566d): walked back to facing-only, and facing-only proved
+    unobservable — MoveSim never integrates yaw — so the lane produced
+    literally zero output for a per-remote MoveSim + volatile fanout.
+  - Record-cap fairness: spatial index, strained-conn halved cap
+    (STRAN_RECORDS=16), mutual-engagement x0.02 boost (the guy shooting
+    you never loses the cap), edge relay distance-gated ~400m, stop-
+    tier far+static replication, spawn pacing + intro graduation.
+  - Correctness: claim-driven shell birth + muzzle origins (Quake-style
+    pos.y=eye), lag-comp honesty during dead reckoning, phantom-dead
+    ghost fix, client-ready spawn hold, WYSIWYG hit capsules (midpoint
+    sphere → true segment-vs-capsule), rewind-entitlement bounded by
+    server-observed transit.
+  - Interp WYSIWYG pass (11-07): out-of-order records dropped on
+    unordered lanes, symmetric interp-delay deflate, anim stall
+    recovery carries cycle fraction — 90s UDP ghostsoak at 5% loss +
+    120ms jitter held rg max 1.9m, zero POS-JUMP/ghost-hit
+    (`_tools/udpShim.ts` SHIM_LOSS/SHIM_JITTER_MS is the impairment
+    harness).
+- Capacity + ops (2026-10-23 → 11-07): 1v1 capacity report landed L1
+  (empty-world duel mode), L5 (phase marks every 10th tick), L6 (frame
+  arenas — see above): 32 duel rooms ×64 players = ~259 CCU/core.
+  Capacity knee measured ~350-370 seats/process — fanout O(N²) in CPU,
+  intro seats bypass the record cap (`_docs/2026-10-31_CAPACITY_KNEE.md`).
+  OCI box autopsy: Caddy TLS is the top process, ~1000 CCU today,
+  Bun-native TLS est. 1.3-1.5k (`_docs/2026-10-31_OCI_CAPACITY_INVESTIGATION.md`).
+  WAN: 240-bot stress green (62s seating), live netbot battery, nft
+  DDoS guards + per-IP unseated-socket cap + garbage-strike close.
+  Transports decided (11-07): WT→WS is the dedicated ladder, RTC off
+  auto, **no TURN ever**; raw-UDP volatile lane for the native shell
+  (Electrobun spike verified); P2P duels reframed as LAN duel.
+  servers.html public server browser + standing duel-1/headhunt-1
+  lobbies + /rooms `active` flag.
+- Moat + launch (2026-10-29 → 11-08): prod client bundle provably
+  excludes the P2P authority layer + dev tooling (static
+  `import.meta.env` gates, not runtime checks — `_moatcheck.mjs` fails
+  check.sh on client→server_bun imports outside the allowlist).
+  Licensing shipped: LICENSES.md + licensing/ registry +
+  client/public/ATTRIBUTION.txt. Launch audit (`_docs/2026-11-04_LAUNCH_AUDIT.md`)
+  — remaining: one legal item, infra provisioning, live-verify debt,
+  thin moderation. Tech-debt audit `_docs/2026-11-08_TECH_DEBT_AUDIT.md`.
+  Cycle ratchet counts runtime cycles only (madge skipTypeImports):
+  client 99→2, server 36→1; break passes landed 11-02.
+- Weapons + content (2026-10-28 → 11-07): weapon registration
+  consolidation landed (marker fields + derived sets — the
+  `_docs/2026-10-30_WEAPON_REGISTRATION_PLAN.md` blast radius is now
+  the checklist; `_docs/2026-10-29_WEAPON_ARCHITECTURE.md` is the layer
+  map). New weapons: HealBeam (wid 24), Blaster energy sidearm (wid 41 —
+  jet energy IS the magazine), PlasmaGun ammo-pool pilot (clip+regen).
+  Server-authoritative spread landed (per-player bloomSeq + shared
+  jitter01/coneDir — kills the shotId nospread hole); chaingun bloom
+  residue drains unconditionally across swaps; weapon swap draw lock
+  (0.28s draw, firePending rides through). Rocket viewmodel rebuilt.
+  New maps: buttes, terraces, crucible, wyrd (preset 9 arcane),
+  screefall, lagoon rework; terrainPresets to 9; sim-sculpted terrain
+  pipeline (simrock/simwater/simsand/simcellular), structSurface
+  building treatment, skyEnv per-map IBL, directionalFog.
+  Juggernaut/dreadnought class rigs via the SDF→surface-nets pipeline
+  + gunmetal wear bake. Announcer callout density plan
+  (`_docs/2026-11-04_ANNOUNCER_CALLOUTS.md`). Retro palette-quantize
+  post effect.
+- Bots (2026-10-31 → 11-07): path-free drive research + measured bench
+  (`_docs/2026-11-01_PATH_FREE_BOT_DRIVING.md`,
+  `_docs/2026-11-01_BOT_DRIVE_BENCH.md` — greedy 41.6-68.4 m/s vs MPC
+  36.7-41.0 at ~25× cheaper decide cost; hybrid deep-solve is the
+  recommendation). Weapon-use audit: 16 commits, pinned bench board
+  (`_docs/2026-11-05_BOT_WEAPON_USE_AUDIT.md`). Offline brain now feeds
+  its full ctx contract (flagPos/markDeath/pickupVal/moveSkill/
+  desperate/convoy/spillSoon were silently dead-channeled).
+  **Capper broke the plateau** (11-05): MPC arrival-impact pricing —
+  beam children accumulate predicted fall damage, IMPACT_DEATH=0.45
+  hard-veto; plus passFlag refuses backward handoffs. capRun green on
+  all three maps incl. katabatic (was 0 caps).
+- Client/anim/tooling (2026-10-31 → 11-08): clip-strip migration wired
+  (scout pack/kevdev/UAL maps; named unclosed gap: scifisoldier/vexa/
+  polyart have no non-loco bone map — `_docs/2026-11-07_CLIP_STRIP_MIGRATION.md`).
+  **model-stretch root-caused + fixed** (11-08): non-unit bone quats
+  self-amplified into 1e10m skeleton stretch on extreme aim pitch —
+  `.normalize()` after procedural quat writes; trap doc
+  `_docs/traps/2026-11-08_quat-runaway-aim-pitch.md`, repro
+  `_tools/_stretchprobe.ts`. Hook rope cylinder capped. MP4 recorder
+  SOTA: AV1/L1T3, ~0 frame cost measured (`_tools/e2e/_vidprof.ts`).
+  maplab regen autopsy: the 1.9s stall is all gen.ts field math;
+  Alt+Q prof ring + Python numba sidecar bench
+  (`_docs/2026-11-07_MAPLAB_REGEN_PERF.md`). kindMake factory pilot
+  (upheaval C5, ball kind). Commit scope gate (>12 files/>4 areas
+  forces a decision). TTS/DTS cold-boot reference
+  (`_docs/2026-10-26_TTS_DTS_REFERENCE.md`).
 
 ### Perf review 2026-10-01 — heaviest paths, ranked plan
 

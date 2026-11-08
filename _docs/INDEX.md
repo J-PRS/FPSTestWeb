@@ -1,7 +1,7 @@
 # Documentation index — KRIBES
 
 The project produces a lot of documentation. This file is the map.
-**Read this first** before digging in `_docs/` (140+ files).
+**Read this first** before digging in `_docs/` (200+ files).
 
 ## Canonical / living (keep current)
 
@@ -101,11 +101,16 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/traps/2026-10-24_remote-interp-chases-fiction.md` | Trap: converge/DR steering chases the extrapolated (fictional) sample instead of server truth |
 | `_docs/traps/2026-10-25_sweepStale-mass-reap-on-stall.md` | Trap: wall-clock staleness sweep mass-reaps live ribbons after a hidden-tab stall → zombie pushes + shared-slot trails |
 | `_docs/traps/2026-10-31_audio-stop-pop.md` | Trap: bare `stop()` mid-waveform clicks — global 15ms fade patch in `audio.ts` beats patching every call site |
+| `_docs/traps/2026-11-08_quat-runaway-aim-pitch.md` | Trap: non-unit bone quats run away exponentially on extreme aim pitch — procedural pose writes must normalize; repro via `_tools/_stretchprobe.ts` |
 | `_docs/2026-11-05_BOT_WEAPON_USE_AUDIT.md` | Bot weapon-use audit — full cycle-table sweep: 16 commits (body-bounce, bodyArmTime gate, far-slot GL/bolt, situational sidearms, hose/disc orbits, flak+splash serves), pinned-bench board, remaining balance items |
 | `_docs/2026-11-07_MOAT_AUDIT.md` | Bundle-exposure audit + hardening plan: P2P authority sealed, remaining inventory ranked, import-boundary ratchet + static dev-tool gating as next steps |
 | `_docs/2026-11-07_MAPLAB_REGEN_PERF.md` | **maplab regen autopsy** — Alt+Q prof-ring added; 1.9s@449² is all gen.ts math (mesh/shader ~60ms). Python sidecar (`_tools/bench/gen_bench.py`): numba≈WASM≈2–8× only, `prange` 29× on synth; priorityFlood heap-encoding bug found; ranked fixes (separable glacier, cached drainage, worker pool, draft grid) |
 | `_docs/2026-11-07_SESSION_LOG.md` | Session log: capper fix, foreign-WIP batches, LAN/P2P exclusion, moat ratchet, offline ctx fills - commits, verified state, open items, lessons |
 | `_docs/2026-11-07_MAPSHOT_BLIND_SHOTS.md` | check.sh mapshot step runs without E2E_GPU - captured 4KB black JOINING screens while gate passed; GPU rerun renders fine but logs a persistent 123m SNAP-correction storm (staging warp vs authority shadow, journal=0); fix options + bisect note |
+| `_docs/2026-11-04_LAUNCH_AUDIT.md` | Launch re-audit vs `2026-10-08_BETA_AUDIT.md` — most Oct-8 items landed; remaining: one legal item, infra provisioning, live-verification debt, thin moderation |
+| `_docs/2026-11-08_TECH_DEBT_AUDIT.md` | Full-tree debt audit via repo tooling (knip etc.) — every number names its command; warnings are candidates, verify before deleting |
+| `_docs/2026-11-01_20261101084019_UNWRAP.md` | UV-unwrap SOTA for bake maps — xatlas/xatlas-three, uvunwrap (Rust→wasm, texels-per-unit density), and the in-repo precedent: `vertexAO.ts` wear-mask atlas already does detached per-tri cells |
+| `_docs/2026-11-08_AGENT_GATE_SOTA.md` | Agent-gate tooling survey — machine-readable verdicts (verdict.json + hint, strict exit codes), affected-test scoping, latency-layered gate stack vs our check.sh/pre-commit/sweep |
 
 ## Agent memory (append-only, one line each)
 
@@ -114,7 +119,7 @@ The project produces a lot of documentation. This file is the map.
 
 ## Concepts (design philosophy — mostly stable)
 
-`concepts/` — 16 files: `movement.md`, `skiing.md`, `bots.md`, `netcode.md`,
+`concepts/` — 17 files + `README.md`: `movement.md`, `skiing.md`, `bots.md`, `netcode.md`,
 `demo-system.md`, `enemies.md`, `feel-vfx.md`, `footprint-conforming.md`,
 `projectile-inheritance.md`, `proxy-hitbox.md`, `skills.md`,
 `terrain-gen.md`, `turretter.md`, `ballistic-solver.md`, `killcam.md`,
@@ -126,11 +131,13 @@ tick pipeline, sub-tick claims, shadow sims, rewind, fanout, lanes).
 
 ## Traps (gotchas — read before touching the area)
 
-`_docs/traps/` — 7 files: bloom black frames, T2 map porting, updateRanges
+`_docs/traps/` — 13 files: bloom black frames, T2 map porting, updateRanges
 first-shot-only, bloom composite is raw, filter-repo eats worktree,
 hip-yaw local-vs-world (rotated armature parents break local-quat facing
 measures), remote-interp-chases-fiction (converge steering toward the
-extrapolated sample = model sprints ahead of wire truth during starves).
+extrapolated sample = model sprints ahead of wire truth during starves),
+quat-runaway-aim-pitch (non-unit bone quats self-amplify into 1e10m
+skeleton stretch on near-vertical aim — normalize procedural quat writes).
 
 ## Workflows
 
@@ -145,10 +152,12 @@ lean-anti-tamper-validation, server-side-recording-efficiency. Plus
 
 ## _docs/ research archive (point-in-time, NOT current)
 
-`_docs/` holds ~140 files. **Treat anything dated before the latest
+`_docs/` holds ~200 top-level files. **Treat anything dated before the latest
 session as historical research, not ground truth** — the living docs above
 supersede them. Subdirectories:
 - `_docs/GAMES/`, `_docs/OLD/`, `_docs/ROBUSTIFY/`, `_docs/UPHEAVAL/` — archived batches
+- `_docs/reports/` — ~20 dated point-in-time reports (June–July: naia, demo
+  system, backend evals, multiplayer reviews)
 - `_docs/reference/` (incl. `tribesxt/`) — external reference material
 - `_docs/2026-06-*.md` … `2026-10-*.md` — dated research reports and session notes
 

@@ -3,25 +3,65 @@
 ## Current State
 - **Project:** KRIBES — browser multiplayer FPS: Tribes gameplay, Krunker
   performance/accessibility. Skiing, jetpacks, spinfusor, base assets.
-- **Architecture:** Client (Three.js) + Bun server (WS + WebTransport + WebRTC
-  DataChannel tiers, auto-probed) + `shared/` deterministic sims run on
-  BOTH ends (movement, ballistics, creature families, bot brains).
+- **Architecture:** Client (Three.js) + Bun server (WS + WebTransport
+  tiers on the dedicated ladder, auto-probed; RTC off auto, raw-UDP for
+  the native shell) + `shared/` deterministic sims run on BOTH ends
+  (movement, ballistics, creature families, bot brains).
 - **Server-authoritative sims:** players (MoveSim shadow/judge/authority),
   balls (BallSim segment events), creatures (CreatureSim edge stream —
   crawler/scarab/roller/snake/baneling flyer's gnats rakk/totem families
   all ported), flags, pickups, deployables, bots (virtual clients).
 - **Networking:** edges + committed snapshots, not position streams;
-  distance-tiered fanout; players are the only always-on stream (20Hz).
-  PROTOCOL_VERSION=4. `ROADMAP.md` is the living manifesto — read first.
-- **Testing:** `server_bun/tests/` 451 bun tests incl. `tests/scenarios/`
+  distance-tiered fanout; hot lanes are binary (WIRE_BATCH tick
+  coalescing, WIRE_HIT playerHit, claim/event/projectile families);
+  sub-tick input edges (C1) + C4 remote edge replay pilot; players are
+  the only always-on stream (20Hz). PROTOCOL_VERSION=15.
+  `ROADMAP.md` is the living manifesto — read first.
+- **Testing:** `server_bun/tests/` ~1500 bun tests incl. `tests/scenarios/`
   one-file-per-staged-interaction suite (harness.ts); client vitest (99);
   `server_bun/tools/netBot.ts` wire-level soak bots — full client-verb
   coverage, real claim ledger, objective farming (+ `bun run soak`,
-  `rtc:relay`, `rtc:punch` scripts);
+  `rtc:relay`, `rtc:punch` scripts); WAN battery `FPS_SOAK=1
+  NETBOT_URL=wss://play.jprice.app/ws`;
   `_tools/e2e/` real-browser E2E (headless, locked-PC safe): smoke /
   duo / duo_p2p / lobby / reconnect / perf — `bun _tools/e2e/all.ts`,
   CI runs it on every push; `_tools/pvptest/soakreport.ts` headless
-  fleet+server audit.
+  fleet+server audit; `_tools/profload.ts` capacity ladder
+  (`--bots N --secs S --mode`, `--cpuprof`); `_tools/udpShim.ts`
+  impairment shim (SHIM_LOSS/SHIM_JITTER_MS) for jitter/loss soaks;
+  `_tools/e2e/_vidprof.ts` recorder-cost probe; wire fuzz suite
+  `client/src/__tests__/wireFuzz.test.ts` pins the never-throw/finite
+  codec contract.
+- **Recent Changes (2026-10-23 → 11-08 arc — full detail in ROADMAP.md
+  Done + changelog.txt):**
+  - **Netcode hardening wave:** binary wire lanes end-to-end (batch tick
+    coalescing, binary playerHit/claims/events/projectiles), C1
+    sub-tick input edges (C4 edge replay piloted then removed 11-08 —
+    facing-only was unobservable), record-cap
+    fairness (strained/engagement/distance gates), claim-driven shell
+    origins, WYSIWYG capsule hits, interp WYSIWYG pass validated on an
+    impaired UDP ghostsoak. 64-socket CPU 50.1%→36.8% (~175 CCU/core).
+  - **Capacity + ops:** duel capacity L1/L5/L6 landed (~259 CCU/core),
+    seat knee ~350-370/process, OCI autopsy (Caddy TLS = top process,
+    ~1000 CCU today), WAN 240-bot stress + live netbot battery, nft
+    DDoS guards, transports decided (WT→WS, no TURN ever, LAN-duel P2P,
+    raw-UDP native lane), servers.html + standing duel/headhunt lobbies.
+  - **Moat + launch:** P2P authority + dev tooling provably excluded
+    from prod bundle (static gates + `_moatcheck.mjs` ratchet),
+    LICENSES.md/ATTRIBUTION shipped, launch + tech-debt audits written.
+  - **Weapons/content:** registration consolidation done, HealBeam +
+    Blaster + PlasmaGun ammo pool, server-authoritative spread
+    (bloomSeq), swap draw lock, maps buttes/terraces/crucible/wyrd/
+    screefall/lagoon-rework, terrainPresets→9, juggernaut/dreadnought
+    rigs, retro post effect.
+  - **Bots:** path-free drive bench (greedy vs MPC measured), weapon-use
+    audit (16 commits), offline brain full ctx contract, **capper caps
+    katabatic again** via MPC arrival-impact pricing.
+  - **Client/tooling:** clip-strip migration wired (non-loco bone-map
+    gap named), model-stretch quat-runaway fixed + trap doc, MP4
+    recorder SOTA (AV1/L1T3 ~0 cost), maplab regen autopsy + Alt+Q ring,
+    kindMake factory pilot, commit scope gate, cycle ratchet
+    (client→2, server→1 runtime cycles).
 - **Recent Changes:**
   - 4 new native maps (whiteout/caldera/hoodoo/lagoon) + per-map look: terrainPreset widened 0..6 (snow/volcanic/badlands/coast in `client/src/world/terrainPresets.ts`), new MapSpec `weather` {dust,embers,ash,snow} (absent = the old default trio, so older maps render unchanged) and `atmosphere` {rayleigh/mie/sunIntensity multipliers + absolute starIntensity}, threaded spec → Room/roomStructures/MessageHandler → gameState/mapUpdate → client. Field generator + measurement loop in `_tools/mapbake/` (genmap.js / terrainstats.js / hillshade.js); verified by `_tools/e2e/weather.ts` + a new map-switch latency spec in `_tools/e2e/mapswitch.ts`
   - Modes arc: all six advertised modes real end-to-end — rabbit (T2
@@ -99,7 +139,7 @@
   - Update changelog.txt after each task
   - Update architecture.txt for structural changes
   - Maintain TASKS.md for context
-- **Testing Requirements:** `bun test` in server_bun/ (302 tests); `npx vitest run` in client/ (93 tests); `_tools/pvptest/` live E2E (`fleet.ts` honest-bot swarm w/ journal replay + correction metrics + deploy claims + `--drop=N` loss sim, `--test*`/`--watch`/`--balls`/`--spec`), `record.ts`+`replay.ts` wire capture/replay, `netReplay.test.ts` headless replay through real netHandlers, `_tools/poseshot/shoot.js` anim pose gallery on white bg
+- **Testing Requirements:** `bun test` in server_bun/ (~1500 tests as of 2026-11-05); `npx vitest run` in client/ (~680 tests); `_tools/pvptest/` live E2E (`fleet.ts` honest-bot swarm w/ journal replay + correction metrics + deploy claims + `--drop=N` loss sim, `--test*`/`--watch`/`--balls`/`--spec`), `record.ts`+`replay.ts` wire capture/replay, `netReplay.test.ts` headless replay through real netHandlers, `_tools/poseshot/shoot.js` anim pose gallery on white bg
 - **Balance telemetry:** `weaponStats` records per-mode weapon damage/kills (human/bot split), death heatmap (10m cells), duel TTK, flag lifecycle timers, kill-moment speed bins + air share, pickup funnel — `/weaponstats` JSON, `/weaponstats.html` dashboard, `logs/weaponstats.jsonl` rollup
 - **Log hygiene:** `logs/*.log|*.jsonl` auto-rotates to `logs/OLD/<name>_<mtime>.<ext>` at server boot
 - **Security Considerations:**
@@ -108,7 +148,7 @@
   - Validate all client inputs
 
 ## Current Task
-- **Objective:** Continuous overhaul toward Tribes-scale MP (see ROADMAP.md — the living plan). Now landed: multi-room match model (maps/<room>.json: mode/balls/spawns/bases/bots/botFill/ballMix/terrain), server-owned teams+score+CTF flags+nugget pickups+DM frags, match clock w/ OT, match journal→/matches, lobby picker + /join quick-play, server bots w/ shared brain, join throttle + identity cap, wire record/replay harness — plus: bots-as-legal-players (shared MoveSim + BrainCtx senses, energy economy, real projectiles via RoomProjectiles), per-map heightfield pipeline (maps/*.bin → sims + client terrain hot-swap), map rotation, TDM kill-confirmed, server-owned deployables (turret/mine/station/drone), kill feed w/ weapon attribution, RemoteSet entity lifecycle, GameServer → TickLoop + SessionManager split, input-replay corrections + seq-anchored divergence probe + correction grace window.
+- **Objective:** Continuous overhaul toward Tribes-scale MP (see ROADMAP.md — the living plan). Now landed: multi-room match model (maps/<room>.json: mode/balls/spawns/bases/bots/botFill/ballMix/terrain), server-owned teams+score+CTF flags+nugget pickups+DM frags, match clock w/ OT, match journal→/matches, lobby picker + /join quick-play, server bots w/ shared brain, join throttle + identity cap, wire record/replay harness — plus: bots-as-legal-players (shared MoveSim + BrainCtx senses, energy economy, real projectiles via RoomProjectiles), per-map heightfield pipeline (maps/*.bin → sims + client terrain hot-swap), map rotation, TDM kill-confirmed, server-owned deployables (turret/mine/station/drone), kill feed w/ weapon attribution, RemoteSet entity lifecycle, GameServer → TickLoop + SessionManager split, input-replay corrections + seq-anchored divergence probe + correction grace window. Since then: binary wire lanes + sub-tick input edges + C4 remote edge replay, record-cap fairness, duel-mode capacity work (~259 CCU/core), transports settled (WT→WS dedicated, no TURN, LAN-duel P2P, raw-UDP native lane), prod-bundle moat sealed, weapon registration consolidated, capper caps all three maps again.
 
 ## Recently Completed
 - **Deployable predation:** server creatures target `dep:N` ids (CreatureSim extraTargets/targetPos), bites drain RoomDeployables hp; depGnaw scenario proves a turret gets eaten
@@ -128,6 +168,12 @@
 - **Demo download:** Right-click on cool shot tiles in ESC menu downloads the `.demo` file (local or from server)
 
 ## Next Tasks
+- **Capacity knee** — `_docs/2026-10-31_CAPACITY_KNEE.md`: ~350-370
+  seats/process; fanout is O(N²) in CPU (dSq per seat×record) and intro
+  seats bypass the record cap. Spatial-index fix order documented there
+  is the path to thousands-per-box. OCI reality check:
+  `_docs/2026-10-31_OCI_CAPACITY_INVESTIGATION.md` (~1000 CCU today,
+  Caddy TLS the top process).
 - **1v1 capacity** — see `_docs/2026-10-23_DUEL_CAPACITY.md`. Measured baseline: 32 duel rooms × 64 players = 36.6 % of a core (175 CCU/core) vs 2 × 32 = 24.1 % (266 CCU/core). Ordered:
   - [x] **L1 empty-world duel mode** — DONE: ModeSpec `world:'empty'` on duel; `registerSims` skips balls/crawl/pickups/deploy/influence; deploy claims refuse `'nomode'`; profload gains `--mode`. Measured 32×2: 26.6% core, **240 CCU/core** (baseline 36.6%/175, target ≥220).
   - [ ] **L2 quiet-room tick** — heartbeat at ~4 Hz when fully suppressed, instead of an unconditional frame per tick (`TickLoop.ts:334`). Pin loss-metric + stateHash semantics in scenario tests first. Target ~286 CCU/core.
@@ -137,15 +183,28 @@
   - [ ] **Record every run** in the report with command + activity mix (a run without its ball/creature setting is not comparable).
 - **Server hot-path footgun audit** — see `_docs/2026-10-23_SERVER_HOTPATH_AUDIT.md`. Suggested order:
   - [x] **#1 `projStep` scratch** — DONE (f7e962bd): `into?: Vec3` in `shared/projSim.ts`; one `stepScratch` per `RoomProjectiles` covers from/detonate.
-  - [~] **#2 dhypot3 sweep** — hot paths DONE (f7e962bd): projContact + CombatHandler + combatBlast. Remaining warm/cold: `botArsenal.ts` ~15, `CreatureSim.ts` ~4, `Room.ts` ~4, `claimLedger`/`combatAoe`/`botBeam` 1 each.
+  - [~] **#2 dhypot3 sweep** — hot paths DONE (f7e962bd): projContact + CombatHandler + combatBlast. Remaining warm/cold: `botArsenal.ts` ~15, `CreatureSim.ts` ~4, `Room.ts` ~4, `claimLedger`/`combatAoe`/`botBeam` 1 each. NOTE: Oct-23 wire wave landed more alloc removals (evScratch ring, rewind sample pool, chord-lattice cache) — re-audit before grinding the tail.
   - [x] **#4 spatial-grid reuse** — DONE (f7e962bd): persistent `gridCells` + `bodyScratch`, per-query sort kept (contact-order parity).
   - [ ] **#5 roster builders** — inspect `Room.ts:1168` first (per-tick?); `RoomFlags.snapshot()` allocates 3 objects per flag on every `flagUpdate` broadcast.
   - [ ] **#3 / #6 measure first** — `ConnectionManager.ts:210` JSON envelope and `combatBlast.ts:475` power-scaled AOE stats are tidiness until `/wire` and AOE profiles say otherwise.
   - [ ] **Measure every landed item** — `bun _tools/profload.ts --bots 64 --secs 40` before/after, append a "Measured" subsection per item in the audit doc.
 - ~~**Replay through real netHandlers**~~ — DONE: `netReplay.test.ts` feeds committed `.rec` captures through `handleMessage`/`handleBinaryMessage` via a DOM-stubbed harness (`netHarness.ts`).
 - ~~**WT tier in tests**~~ — DONE: `FPS_WT_PORT=19443` test server + `fleet.ts --tier=wt` ran 2/2 QUIC joins, 732 tick frames, kills through the claim funnel, 0 shot rejects.
-- **Ops items needing JP's domain+VPS:** TURN server, CA cert for WebTransport — see `_docs/2026-09-28_DEPLOY_NETCODE_V2.md`
+- ~~**Ops items needing JP's domain+VPS**~~ — RESOLVED 2026-10-27/11-07:
+  WT is live on play.jprice.app (the "dead WT" was a missing
+  FPS_WT_ADVERTISE_PORT env, fixed); UDP volatile lane bound +
+  advertising; transports decided WT→WS dedicated, **no TURN ever**
+  (metered relay = bankruptcy), RTC off the auto ladder, P2P = LAN duel.
+  Remaining ops debt is client hosting: static bundle moves to an
+  unmetered CDN (no deploy path scripted yet — see AGENTS.md Deployment).
 - ~~**Post-processing fog pass**~~ — DONE differently: `world/directionalFog.ts` tints `scene.fog.color` + sky horizon + terrain fog by camera-vs-sun facing (sunward warm, away cool). Chosen over a depth-buffer post-pass because it works in every pixel-mode including the hard/medium/floyd paths that bypass the composer. Per-fragment sun direction would need patching every material's fog chunk — revisit if the flat-camera tint reads wrong in game.
 - **w4 mortar palette** — authored albedo near-black; normalization lifts but it stays darkest. JP's call.
 - ~~**Remote fire events for anim**~~ — DONE: `playerShot` relays hitscan/melee trigger-pulls with weaponType; observers get positional audio, recoil anim, weapon-tinted muzzle flash, LG beam flash.
+- **Launch audit leftovers** — `_docs/2026-11-04_LAUNCH_AUDIT.md`: one legal item, infra provisioning (CDN for the static client), live-verification debt, thin moderation.
+- **Clip-strip gap** — scifisoldier/vexa/polyart have no non-loco bone map after the clip migration (`_docs/2026-11-07_CLIP_STRIP_MIGRATION.md`); they stay clip-less until maps land.
+- **maplab regen perf** — the 1.9s@449² stall is all gen.ts field math; ranked fixes in `_docs/2026-11-07_MAPLAB_REGEN_PERF.md` (separable glacier min-filter, cached drainage, worker pool).
+- **Tech-debt audit candidates** — `_docs/2026-11-08_TECH_DEBT_AUDIT.md` (knip output; verify before deleting).
+- ~~**C4 edge replay graduation**~~ — RESOLVED 11-08: the lane was
+  removed end-to-end (2f17566d) after facing-only proved unobservable.
+  Revisit only if remote-body fidelity demands a real per-remote sim.
 - **Remove deprecated files** — `server/` old Node.js server, `.deprecated`/`.old` files — user's call when to remove

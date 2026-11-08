@@ -56,9 +56,11 @@ from the raced set on 2026-10-26.
   where the QUIC edge is open.
 - **WS remains the universal floor.** No client should ever be unable to
   connect; the 4s WT cap exists so a non-QUIC edge doesn't starve joins.
-- **P2P is the only surface where ICE still matters** — if friend
-  hosting moves to production, its own STUN/TURN story is the review
-  point, not the server tier.
+- **P2P is the only surface where ICE still matters** — and TURN was
+  rejected 2026-11-07 (relayed-bandwidth cost vs benefit). P2P stays
+  free-STUN best-effort: symmetric-NAT pairs fail cleanly instead of
+  paying for relays. If duels ever need guaranteed connectivity that's a
+  paid-product decision, not a launch item.
 
 ## Provenance
 

@@ -66,18 +66,77 @@ the `.ogg`s are tracked on purpose; only the `.wav` masters stay local.
 
 ## 2. Infra — provisioning, not code
 
-- **TURN still unprovisioned.** Decision made (Cloudflare Realtime free
-  tier, `_docs/workflows/beta-launch.md:36-38`) but needs the CF account
-  + key/token mint → `FPS_ICE_SERVERS`. Only affects p2p duels now that
-  the main ladder is WS+WT (~15-20% symmetric-NAT pairs can't duel).
+- **TURN — decided AGAINST, 2026-11-07.** Not provisioning. Paid TURN
+  relays meter every relayed byte and would bankrupt the project on any
+  real traffic; Cloudflare Realtime's free tier was the earlier plan but
+  the marginal benefit doesn't justify a billing surface. Transport story:
+  **WT (QUIC datagrams) → WS always works** for dedicated play (zero ICE,
+  zero relays — the server is public). P2P friend hosting (`?p2p=`) keeps
+  its hardcoded free Google STUN and is **best-effort by design**:
+  ~15-20% symmetric-NAT pairs simply can't duel and get a clean failure,
+  not degraded play. `FPS_ICE_SERVERS` stays unset; if duels ever matter
+  enough to pay for, revisit then — it's a product decision, not infra
+  debt.
 - **Client CDN path unscripted.** Public client is still the local
   `:5500` preview tunneled out (per AGENTS.md). Surge deploy works but
   the stated direction is unmetered CDN — pick + script it.
 - **Env checklist for the box** — verify all set at go-live:
   `FPS_PUBLIC_BETA=1`, `FPS_ADMIN_TOKEN`, `FPS_SECRET`,
-  `FPS_CORS_ORIGIN`, `FPS_ICE_SERVERS`, `KRIBES_SIGN_KEY` (leaderboard).
+  `FPS_CORS_ORIGIN`, `KRIBES_SIGN_KEY` (leaderboard).
+  (`FPS_ICE_SERVERS` intentionally unset — TURN rejected above.)
 - **Quick-tunnel dependence.** Any path still using trycloudflare rots
   URLs on restart; confirm the canonical deploy uses the domain only.
+
+## 2b. Live net-surface sweep — 2026-11-07 (netbots + probes vs prod)
+
+Verified clean:
+
+- WS floor over WAN: `wideSoak` 32/32 joins, ~47k ticks, p50
+  first-gameState 211ms, 0 corrections, real combat flowing.
+- Fleet edge hardening: only `/health` `/rooms` `/join` answer on :443 —
+  every ops/upload/auth route 404s at the director.
+- Worker gates: `/status` `/metrics` `/weaponstats` all 401;
+  `/demos/upload` rejects junk (400) and >16MB bodies (413).
+- P2P relay caps: 3rd `/rtc` member closed 1008 `room full`; rooms table
+  capped at 512. `POST /client-log` live.
+- Protocol hygiene: gameplay-before-join closed 1008 `Expected join
+  handshake`; bogus join closed 1008 `Invalid playerId`; 3MB frame
+  closed 1009 `Received too big message`.
+
+- ~~WT is OFF on prod~~ **FIXED 2026-11-07.** Two stacked faults:
+  (a) renewed `certs/cert.pem` didn't pair with `key.pem` → w0 logged
+  `E_TLS KeyMismatch` at boot, listener never started; (b) the
+  firewalld `UDP 443→9443` redirect predated the fleet — w0's actual WT
+  port is 9444 (FPS_PORT 8001+1443). Fixed both: regenerated cert+key
+  pair, retargeted forward `443→9444`, restarted `kribes-fleet`.
+  Browser-verified: real Chrome opened a UDP socket to `box:443`
+  (QUIC) — WT tier now actually rides. `/wthash` → `{"enabled":true,
+  "port":443}`.
+- **Kernel DDoS limits added 2026-11-07** — dedicated `inet kribes`
+  nftables table at prerouting priority: per-source 300pps on UDP
+  443/9444/9898 + 30 new-conn/s on TCP 443/8443-8445, persisted via
+  `kribes-ddos.service`. Floods now cost a kernel meter lookup, zero
+  app CPU. Plus `UdpLane` per-addr 200dgram/s budget + `GameServer`
+  garbage-strike close (64 invalid frames → 1008) — every app-level
+  surface now has a rate cap, size cap, or kill switch.
+- **Client probes localhost :8787-8791 `/udp`** even on remote-server
+  games — the UDP-lane helper scan fires regardless; harmless but noisy,
+  and 8791 collided with the (running) gallery server.
+
+Notes (not bugs, watch items):
+
+- **Join flood guard 20/min/IP** — killed 8/32 soak bots with `1013`;
+  shared-NAT pools (LAN cafe, carrier NAT) could trip it for humans.
+- **Room minting**: one IP can create ~18 distinct named rooms before
+  the join guard fires — empty rooms GC, bounded cost.
+- **Malformation tolerance**: garbage-first-text and binary-garbage
+  frames are tolerated (socket stays open, no close). Post-join inbound
+  IS rate-limited per message type (`MessageHandler` rateLimiter →
+  `serverWarn` → `ws.pause()` 1s kernel-buffer); a 3000-ping burst sat
+  inside budget. Malformed-but-parseable floods are the only un-budgeted
+  cost left — bounded by the same pause machinery if they ever trip a type.
+- **wideSoak default URL predates fleet** (`/ws` 404s on the director);
+  header comment now documents `/join` resolution.
 
 ## 3. Unverified-live debt (fixes in code, never confirmed in a match)
 
@@ -126,11 +185,16 @@ From `deployment/known-issues.md` — each needs one live soak to close:
 
 1. ~~Resolve `announce_*.ogg`~~ — done: WARLORD pack, CC BY-SA 4.0,
    attribution added. No remaining "can't ship as-is" items.
-2. Env + TURN + CDN: one provisioning session closes §2.
+2. Env + CDN: one provisioning session closes §2 (TURN off the table).
 3. Live soak to close §3 (one WAN match exercises all four items).
 4. Onboarding card + decide moderation floor explicitly.
-5. Fix or quarantine the 4 failing tests — a red suite at launch hides
-   real regressions.
+5. ~~Fix or quarantine the failing tests~~ — done 2026-11-07: scenario
+   suite is green; the client vitest reds were one real bug
+   (HOWITZER_CONFIG inherited mortar's 0.3 bodyRadius vs shared 0.35 —
+   the exact drift class the registry test exists to catch) plus three
+   stale tests (botFire `.rotation` fixture, trailLead zero-lead retune,
+   bombard's damage-table invariant now that Howitzer=150 legitimately
+   tops it). 684/684 client tests pass.
 
 Sources: `_docs/2026-10-08_BETA_AUDIT.md` (baseline),
 `deployment/known-issues.md`, `_docs/workflows/beta-launch.md`,
