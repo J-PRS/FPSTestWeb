@@ -16,7 +16,7 @@ const kit = (over: { wanderlust?: number; heading?: { x: number; z: number }; ne
   const s: GoalState = {
     goal: { x: 0, y: 0, z: 0 },
     revengeT: 0, revengeFrom: { x: 0, y: 0, z: 0 },
-    wanderT: 0, wanderWp: { x: 0, y: 0, z: 0 }, goalAge: 0,
+    wanderT: 0, wanderWp: { x: 0, y: 0, z: 0 }, goalAge: 0, goalScore: 0,
   };
   const g = new BotGoals(
     () => s,
@@ -223,5 +223,51 @@ describe('BotGoals wander', () => {
     // waypoint is >3m away.
     g.pick(flat(), pos);
     expect(s.goal).toEqual(first);
+  });
+});
+
+describe('BotGoals switching cost — committed lines, free minds', () => {
+  const pos = { x: 0, y: 0, z: 0 };
+  const FAR = { x: 60, y: 0, z: 60 };     // ~85m of committed transit - wins the first argmax outright
+  const NEAR = { x: 10, y: 0, z: 10 };    // a marginal detour - better raw score, worse reason
+
+  it('a marginal near offer does NOT yank a committed far line', () => {
+    const { s, g } = kit();
+    botRng(() => 0.5);
+    g.pick(flat({ pickup: FAR }), pos);
+    expect(s.goal).toEqual(FAR);
+    // A nearer, only-mildly-better pickup: score wins raw, loses the
+    // switching cost - the committed line holds.
+    g.pick(flat({ pickup: NEAR }), pos);
+    expect(s.goal).toEqual(FAR);
+  });
+
+  it('a clearly better offer IS a good reason to turn', () => {
+    const { s, g } = kit();
+    botRng(() => 0.5);
+    g.pick(flat({ pickup: FAR }), pos);
+    // An objective offer outweights a pickup ~4x at the same spot -
+    // the human "worth turning for" case.
+    g.pick(flat({ pickup: NEAR, objective: NEAR }), pos);
+    expect(s.goal).toEqual(NEAR);
+  });
+
+  it('under fire the loyalty drops - danger always interrupts', () => {
+    const { s, g } = kit();
+    botRng(() => 0.5);
+    g.pick(flat({ pickup: FAR }), pos);
+    // Same marginal detour as test 1, but with a threat live: the
+    // switching cost shrinks and the bot reroutes.
+    g.pick(flat({ pickup: NEAR, threats: [{ x: 1, y: 0, z: 1 }] }), pos);
+    expect(s.goal).toEqual(NEAR);
+  });
+
+  it('a stale line earns no loyalty - wedged transit is droppable', () => {
+    const { s, g } = kit();
+    botRng(() => 0.5);
+    g.pick(flat({ pickup: FAR }), pos);
+    s.goalAge = 61; // >60 thinks ≈ >20s on the same line
+    g.pick(flat({ pickup: NEAR }), pos);
+    expect(s.goal).toEqual(NEAR);
   });
 });

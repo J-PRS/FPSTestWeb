@@ -30,6 +30,9 @@ export interface GoalState {
   /** Thinks since the current goal was picked - the stale clock for
    *  the switching-cost model (a committed line expires, never locks). */
   goalAge: number;
+  /** Score the incumbent won with - remembered so a goal whose offer
+   *  vanishes next think still defends its commitment. */
+  goalScore: number;
 }
 
 export class BotGoals {
@@ -102,11 +105,13 @@ export class BotGoals {
     const cands: Array<{ goal: BotVec; score: number }> = [];
     // Crowding discount: a goal that already has allies on it loses
     // pull fast - Tribes players spread, they don't stack in a bowl.
-    // Each ally within 18m of the CANDIDATE quarters the score.
+    // The FIRST ally at the candidate is often the anchor itself (a
+    // rally/escort offer lives ON a teammate) - penalty counts extra
+    // stacking beyond them, not their existence.
     const crowd = (g: BotVec): number => {
       let n = 0;
       for (const a of ctx.allies ?? []) {if (distSq(g, a) < 18 * 18) {n += 1;}}
-      return n;
+      return Math.max(0, n - 1);
     };
     const offer = (goal: BotVec | null | undefined, weight: number, ignoreScent = false): void => {
       if (!goal) {return;}
@@ -234,20 +239,23 @@ export class BotGoals {
       // can always be dropped. Idle IS traveling - a bot's default is
       // sustained motion, not a parked orbit.
       s.goalAge += 1;
-      if (incumbent) {
-        const dLeft = Math.sqrt(distSq(pos, incumbent.goal));
-        const stale = s.goalAge > 60;
-        const underFire = (ctx.threats?.length ?? 0) > 0;
-        const bonus = stale ? 0
-          : (0.2 + Math.min(1.8, dLeft / 120)) * (underFire ? 0.4 : 1);
-        if (incumbent.score * (1 + bonus) > best.score) {
-          s.goal = incumbent.goal;
-        } else {
-          s.goal = ((((((Object.assign({}, best.goal)))))));
-          s.goalAge = 0;
-        }
+      const underFire = (ctx.threats?.length ?? 0) > 0;
+      const stale = s.goalAge > 60;
+      const cost = (g: BotVec): number => stale ? 0
+        : (0.2 + Math.min(1.8, Math.sqrt(distSq(pos, g)) / 120)) * (underFire ? 0.4 : 1);
+      // The incumbent is EITHER a re-offered candidate or the live goal
+      // itself defending on its remembered score - a line whose offer
+      // source vanished (wander re-roll, spent pickup) doesn't die
+      // instantly to the next best thing.
+      const incScore = incumbent ? incumbent.score : s.goalScore;
+      const incGoal = incumbent ? incumbent.goal : s.goal;
+      if (process.env.BOTGOALS_DEBUG) {console.log('PICK', JSON.stringify({cands: cands.map((c): { g: BotVec; s: number } => ({g: c.goal, s: +c.score.toFixed(2)})), inc: incumbent?.goal, incScore, cost: +cost(incGoal).toFixed(2), best: best.goal, bestScore: +best.score.toFixed(2)}));}
+      if (incScore * (1 + cost(incGoal)) > best.score) {
+        s.goal = incGoal;
+        s.goalScore = incScore;
       } else {
         s.goal = ((((((Object.assign({}, best.goal)))))));
+        s.goalScore = best.score;
         s.goalAge = 0;
       }
       return;

@@ -26,6 +26,8 @@ const spec = JSON.parse(readFileSync('C:/TEMP/_WEB/FPSWebTest/maps/rimrock.json'
 const field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale ?? 1);
 
 const room = mkRoom({ mode: 'headhunt', bots: PER, botSkill: 'medium' }, 'headhunt', 4242, false, field);
+// Standard headhunt - gems come from the real kill economy. K/D and
+// held tokens print per 30s so we see whether the economy exists at all.
 
 const ring = new Map<string, { x: number; z: number; t: number }[]>();
 const WINS = [1, 2, 5, 10, 15];
@@ -35,6 +37,23 @@ let clock = 0;
 for (let t = 0; t < TOTAL; t += 1) {
   clock += 1;
   step(room, 1);
+  if (clock % 30 === 0) {
+    const ps = [...room.players.getAllPlayers().values()];
+    const kd = ps.map((p): string => `${p.id.split('-')[0]}${p.kills}/${p.deaths}`).join(' ');
+    const held = ps.reduce((a, p): number => a + (p.heldTokens ?? 0), 0);
+    let contacts = 0, minD = Infinity, hunts = 0;
+    const huntIds: string[] = [];
+    for (const p of ps) {const h = (room.bots as unknown as { brains: Map<string, { h: { hunt?: { id: string } } }> }).brains.get(p.id)?.h.hunt; if (h) {hunts += 1; huntIds.push(h.id.slice(0, 10));}}
+    const shots = (room.projectiles as unknown as { projs: Map<string, unknown> }).projs.size;
+    for (let i = 0; i < ps.length; i += 1) {for (let j = i + 1; j < ps.length; j += 1) {
+      if (ps[i]!.team === ps[j]!.team) {continue;}
+      const d = Math.hypot(ps[i]!.position.x - ps[j]!.position.x, ps[i]!.position.z - ps[j]!.position.z);
+      if (d < minD) {minD = d;}
+      if (d < 80) {contacts += 1;}
+    }}
+    const dmg = ps.reduce((a, p): number => a + (p.maxHealth - p.health), 0);
+    console.log(`  t=${clock}s contacts<80m=${contacts} minD=${minD.toFixed(0)} hunts=${hunts}[${huntIds.join(',')}] liveProj=${shots} dmg=${dmg.toFixed(0)} kd=[${kd}] held=${held}`);
+  }
   for (const p of room.players.getAllPlayers().values()) {
     const r = ring.get(p.id) ?? [];
     const prev = r[r.length - 1]!;
