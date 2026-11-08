@@ -175,6 +175,28 @@ export class WireIn {
     // size it cost a full second pass over reclaim replays (a 1024-frame
     // burst arrived as one giant main-thread task).
     this.h.noteRx(bytes ?? 256);
+    this.noteWireMeta(data);
+    // Avoid JSON.stringify on every message - tickUpdate arrives at 20Hz
+    const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
+    if (handler) {
+      // A malformed-but-parseable message mustn't reach the connection's
+      // onError path - one bad packet shouldn't cost a reconnect.
+      try { handler(data); }
+      catch (error) {
+        // Swallow containment isn't free: the handler may have half-applied
+        // state. The count surfaces in the Alt+Q dump so "feels off" reports
+        // can be checked for silent partial-apply storms.
+this.handlerThrows += 1;
+        logger.warn(`Handler threw for ${data.type}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+      }
+    } else {
+      logger.warn(`Unknown message type: ${data.type}`);
+    }
+  }
+
+  /** Per-message bookkeeping that isn't dispatch: ev watermark, session
+   *  token capture, health-event ring, declared-verb field check. */
+  private noteWireMeta(data: ServerMessage): void {
     // Offset cursor: every reliable frame carries a room-scoped `ev`.
     // Replays only ever carry seq > our watermark, so tracking the max
     // doubles as the dup guard if a transport ever re-delivers.
@@ -197,22 +219,6 @@ export class WireIn {
     // drops a declared field warns here instead of desyncing silently.
     const decl = verbForType(data.type);
     if (decl) {checkPacket(decl.kind, decl.verb, data as unknown as Record<string, unknown>);}
-    // Avoid JSON.stringify on every message - tickUpdate arrives at 20Hz
-    const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
-    if (handler) {
-      // A malformed-but-parseable message mustn't reach the connection's
-      // onError path - one bad packet shouldn't cost a reconnect.
-      try { handler(data); }
-      catch (error) {
-        // Swallow containment isn't free: the handler may have half-applied
-        // state. The count surfaces in the Alt+Q dump so "feels off" reports
-        // can be checked for silent partial-apply storms.
-this.handlerThrows += 1;
-        logger.warn(`Handler threw for ${data.type}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
-      }
-    } else {
-      logger.warn(`Unknown message type: ${data.type}`);
-    }
   }
 
   /** Byte -> frame handler. Known event bytes dispatch here; anything
@@ -526,10 +532,6 @@ dropCensus.total += 1;
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
     performance.mark('load:gameStateArrived');
-    // Protocol handshake: a stale bundle can't parse a new wire format -
-    // force-reload once (cache-busted) instead of silently desyncing. The
-    // sessionStorage counter caps it at 2 attempts so a genuinely newer
-    // server can't reload-loop the tab.
     // A new gameState means a new room instance - both seq spaces
     // restart at 1 (hitSeq and tickSeq are per-room), so the prior
     // room's high watermarks must not gate it. A room hop without
@@ -540,35 +542,12 @@ dropCensus.total += 1;
     this.h.dropClaims(false);
     this.h.clearResyncQuiet(); // truth landed - position claims are judged fresh
     const serverProto = data.protocolVersion ?? 0;
-    if (serverProto !== PROTOCOL_VERSION) {
-      // Storage can throw (private mode / disabled embeds) - treat a dead
-      // counter as budget spent: warn + bail, never crash the handler.
-      let tries = 2;
-      try { tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0'); } catch { /* fall through */ }
-      logger.warn(`Protocol mismatch: client=${PROTOCOL_VERSION} server=${serverProto} (attempt ${tries + 1})`);
-      // Browser-only escape: headless harnesses (vitest, e2e replays) have
-      // no location to reload - they get the warn + early return only.
-      if (tries < 2 && typeof location !== 'undefined') {
-        try {
-          sessionStorage.setItem('fps-proto-reload', String(tries + 1));
-          const url = new URL(window.location.href);
-          url.searchParams.set('pv', String(Date.now())); // cache-buster vs CDN staleness
-          window.location.href = url.toString();
-        } catch { /* storage/nav both optional - warn already logged */ }
-      } else if (typeof location !== 'undefined') {
-        // Budget spent - a live socket with remotes frozen forever reads as
-        // "game is broken", not "stale build". Close it so the normal
-        // disconnect UI can name the failure. (Harnesses without a location
-        // keep the warn + return.)
-        this.h.disconnect();
-      }
-      return;
-    }
+    if (!this.checkProtocol(serverProto)) {return;}
     try { sessionStorage.removeItem('fps-proto-reload'); } catch { /* no budget to reset */ } // clean connect - reset the budget
     // pv did its one job (bust the CDN's stale bundle on the mismatch
     // reload) — drop it from the bar so /s/ links stay clean.
-    if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('pv')) {
-      const u = new URL(location.href);
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('pv')) {
+      const u = new URL(window.location.href);
       u.searchParams.delete('pv');
       history.replaceState(null, '', u.toString());
     }
@@ -606,6 +585,37 @@ dropCensus.total += 1;
     }
     logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
     this.h.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
+  }
+
+  /** Protocol handshake: a stale bundle can't parse a new wire format -
+   *  force-reload once (cache-busted) instead of silently desyncing. The
+   *  sessionStorage counter caps it at 2 attempts so a genuinely newer
+   *  server can't reload-loop the tab. Returns false when the caller must
+   *  bail (mismatch handled here). */
+  private checkProtocol(serverProto: number): boolean {
+    if (serverProto === PROTOCOL_VERSION) {return true;}
+    // Storage can throw (private mode / disabled embeds) - treat a dead
+    // counter as budget spent: warn + bail, never crash the handler.
+    let tries = 2;
+    try { tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0'); } catch { /* fall through */ }
+    logger.warn(`Protocol mismatch: client=${PROTOCOL_VERSION} server=${serverProto} (attempt ${tries + 1})`);
+    // Browser-only escape: headless harnesses (vitest, e2e replays) have
+    // no location to reload - they get the warn + early return only.
+    if (tries < 2 && typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('fps-proto-reload', String(tries + 1));
+        const url = new URL(window.location.href);
+        url.searchParams.set('pv', String(Date.now())); // cache-buster vs CDN staleness
+        window.location.href = url.toString();
+      } catch { /* storage/nav both optional - warn already logged */ }
+    } else if (typeof window !== 'undefined') {
+      // Budget spent - a live socket with remotes frozen forever reads as
+      // "game is broken", not "stale build". Close it so the normal
+      // disconnect UI can name the failure. (Harnesses without a location
+      // keep the warn + return.)
+      this.h.disconnect();
+    }
+    return false;
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; count?: number; ackSeq?: number; inputAck?: number; tickSeq?: number }): void {
@@ -759,32 +769,40 @@ dedupCensus.hitSeqDrops += 1;
       // a stale frame can't resolve against a recycled id's new owner.
       if (now - p.at > 1500) {
         this.pendingWidEvents.splice(i, 1);
-        logger.warn(`binary ${p.hit ? 'hit' : p.kill ? 'kill' : 'projSpawn'} orphaned - wid never minted for ${JSON.stringify(p.hit ?? p.kill ?? p.proj)}`);
+        let kind = 'projSpawn';
+        if (p.hit) {kind = 'hit';} else if (p.kill) {kind = 'kill';}
+        logger.warn(`binary ${kind} orphaned - wid never minted for ${JSON.stringify(p.hit ?? p.kill ?? p.proj)}`);
         continue;
       }
-      if (p.hit) {
-        const targetId = this.wireIds.get(p.hit.targetWid);
-        const shooterId = p.hit.shooterWid === 0 ? 'environment' : this.wireIds.get(p.hit.shooterWid);
-        if (!targetId || !shooterId) {continue;}
-        this.pendingWidEvents.splice(i, 1);
-        this.message({ type: 'playerHit', shooterId, targetId, damage: p.hit.damage, health: p.hit.health, armor: p.hit.armor, seq: p.hit.seq, shotId: p.hit.shotId, gd: p.hit.gd });
-        continue;
-      }
-      const k = p.kill;
-      if (k) {
-        const targetId = this.wireIds.get(k.targetWid);
-        const shooterId = k.shooterWid === 0 ? 'environment' : this.wireIds.get(k.shooterWid);
-        if (!targetId || !shooterId) {continue;}
-        this.pendingWidEvents.splice(i, 1);
-        this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal });
-        continue;
-      }
-      const s = p.proj!;
-      const ownerId = this.wireIds.get(s.ownerWireId);
-      if (!ownerId) {continue;}
+      const run = this.widReplay(p);
+      if (!run) {continue;}
       this.pendingWidEvents.splice(i, 1);
-      this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t);
+      run();
     }
+  }
+
+  /** Resolve one queued wid event against the roster; returns the dispatch
+   *  closure (caller splices BEFORE running it - replay-once even if the
+   *  handler throws) or null while its wids are still unminted. */
+  private widReplay(p: (typeof this.pendingWidEvents)[number]): (() => void) | null {
+    if (p.hit) {
+      const targetId = this.wireIds.get(p.hit.targetWid);
+      const shooterId = p.hit.shooterWid === 0 ? 'environment' : this.wireIds.get(p.hit.shooterWid);
+      if (!targetId || !shooterId) {return null;}
+      const h = p.hit;
+      return (): void => { this.message({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd }); };
+    }
+    const k = p.kill;
+    if (k) {
+      const targetId = this.wireIds.get(k.targetWid);
+      const shooterId = k.shooterWid === 0 ? 'environment' : this.wireIds.get(k.shooterWid);
+      if (!targetId || !shooterId) {return null;}
+      return (): void => { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal }); };
+    }
+    const s = p.proj!;
+    const ownerId = this.wireIds.get(s.ownerWireId);
+    if (!ownerId) {return null;}
+    return (): void => { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t); };
   }
 
   /** Routed through the NetworkManager seam so tests can wrap/count it. */
