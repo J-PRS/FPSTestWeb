@@ -353,11 +353,28 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   const seenAll: BotEnemy[] = [];
   const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ectx, pos, range, beastRange, seenAll);
   st.seenEnemies = seenAll;
+  // FINISHER bias - humans finish the wounded: a bleeding contact
+  // outranks a healthy one a step closer. Stickiness keeps the pick:
+  // the current hunt only yields to a target meaningfully MORE wounded
+  // (25% hp gap), so the bot doesn't flicker mid-duel.
+  let finisher = player;
+  if (seenAll.length > 1) {
+    const cur = st.hunt?.alive ? seenAll.find((e): boolean => e.id === st.hunt!.id) : undefined;
+    const curHp = cur?.hpFrac ?? 1;
+    let bestHurt = player;
+    for (const e of seenAll) {
+      if (!e.alive) {continue;}
+      const hp = e.hpFrac ?? 1;
+      const bHp = bestHurt?.hpFrac ?? 1;
+      if (hp < 0.6 && hp < bHp - 0.1) {bestHurt = e;}
+    }
+    if (bestHurt && (!cur || (bestHurt.hpFrac ?? 1) < curHp - 0.25)) {finisher = bestHurt;}
+  }
   // In economy rooms, only an actual nearby player threat outranks
   // the harvest - otherwise the bot keeps farming past a firefight
   // across the map like a human focused on the score. In any mode a
   // creature on top of the bot is urgent: deal with what's biting.
-  const best = bestBeast && (!player || bestD > THREAT_M || bestBeastD < CREATURE_URGENT_M) ? bestBeast : player;
+  const best = bestBeast && (!finisher || bestD > THREAT_M || bestBeastD < CREATURE_URGENT_M) ? bestBeast : finisher;
   // The flag thief is the fallback hunt: a beacon-marked carrier is
   // legally trackable without LOS, but a bot only commits when it's
   // close enough to matter - farther out the objective goal still
