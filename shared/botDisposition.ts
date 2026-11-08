@@ -374,17 +374,22 @@ export function statusIntent(b: BotBrain, ctx: BrainCtx, fearing: boolean): numb
     // there is what a player does before a jet. Below it, the bot is
     // planted in the exchange and the DR is worth the tank.
     const planted = isPlanted(ctx.vel);
+    // Channel honesty: a bot channels only the skill it actually has
+    // equipped - a dash-equipped fighter has no shield bubble to hold.
+    // Hosts that never declare ctx.skill keep the legacy all-channels
+    // read so nothing regresses on un-declared seats.
+    const has = (s: string): boolean => ctx.skill === undefined || ctx.skill === s;
     let status = 0;
-    if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10) {status |= STATUS.MEND;}
+    if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10 && has('medkit')) {status |= STATUS.MEND;}
     // REVERTED: SHIELD for committed runners inside 200m of the objective —
     // same-seed soak identical (5g/2c, eHp 44->42). The ring kill window is
     // crossfire volume, not a tank problem; shields already fire once the
     // hunt flags 'fighting' inside the ring anyway.
-    else if (fighting && planted && ctx.energy >= ENERGY.shieldCost + 15) {status |= STATUS.SHIELD;}
+    else if (fighting && planted && ctx.energy >= ENERGY.shieldCost + 15 && has('shield')) {status |= STATUS.SHIELD;}
     // Infiltration cloak: pressing an enemy stand unseen beats shielding
     // through it. A WOUNDED infiltrator slips the veil back on while
     // retreating — the pest survives by breaking contact, not trading.
-    if (ctx.infiltrating && (!fighting || fearing) && ctx.energy >= ENERGY.cloakCost + 15) {status |= STATUS.CLOAK;}
+    if (ctx.infiltrating && (!fighting || fearing) && ctx.energy >= ENERGY.cloakCost + 15 && has('cloak')) {status |= STATUS.CLOAK;}
     return status;
   }
 

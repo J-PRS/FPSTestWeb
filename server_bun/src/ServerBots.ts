@@ -428,6 +428,9 @@ export class ServerBots {
     // The generic hunt lob is the definition of a low-value toss.
     if (out.belt && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) {this.arsenal.throwBelt(p);}
     if (out.skill) {this.applySkill(id, p, out);}
+    // Grapple transit: lobAt already aims belt weapons at explicit
+    // points - the rope is gravity-free so the anchor lands where aimed.
+    if (out.hook) {this.arsenal.lobAt(p, out.hook);}
     this.arsenal.tryPropel(id, p, out, goal, sh, now);
     // Sentry-clearing lob: hostile gear watching the objective gets a
     // grenade on its own slow cadence - the same legal path humans use

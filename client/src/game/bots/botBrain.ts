@@ -95,6 +95,8 @@ interface BotThinkCtx {
 
   skill?: string;
 
+  beltItem?: WeaponType;
+
   enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
 
   nugget: Nugget | null;
@@ -317,6 +319,9 @@ export class GameBot extends RemotePlayer {
   /** Equipped Q-skill id + the brain's press intent from the last think. */
   skillId: string | undefined;
   wantSkill: string | null = null;
+
+  /** Grapple-transit intent - the anchor point to rope toward. */
+  wantHook: { x: number; y: number; z: number } | null = null;
 
   /** Builder intent from the shared brain - TeamBots plants it. */
 
@@ -613,6 +618,7 @@ export class GameBot extends RemotePlayer {
 
     this.wantBelt = Boolean(out.belt);
     this.wantSkill = out.skill ?? null;
+    this.wantHook = out.hook ?? null;
 
     this.wantDeploy = out.deploy ?? null;
 

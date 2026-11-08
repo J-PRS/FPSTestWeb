@@ -66,7 +66,7 @@ export const BOT_LOADOUTS: BotLoadout[] = [
     alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.Howitzer, WeaponType.MissileLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] },
   },  // anchor - heavies can't shoulder medium-only Cannon either
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc, WeaponType.GrenadeLauncher], belt: [WeaponType.Implodisc, WeaponType.Javelin], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc, WeaponType.GrenadeLauncher], belt: [WeaponType.Implodisc, WeaponType.Javelin, WeaponType.Hook], side: [WeaponType.Revolver] },
   },  // skirmisher
   { perk: 'lifesteal',    near: WeaponType.Sprinkler, mid: WeaponType.Chaingun, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol,
     alts: { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },

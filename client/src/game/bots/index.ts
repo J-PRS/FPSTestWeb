@@ -47,7 +47,6 @@ import type { BodyCapsule } from '../../../../shared/movement.js';
 import type { DeployOwner } from '../deployables.js';
 import type { MapSpec } from '../../../../shared/mapSpec.js';
 
-const _markPos = new THREE.Vector3(); // headhunt badge anchor scratch
 const _seedVel = new THREE.Vector3(); // seeded tokens drop in place
 
 export interface BotsDeps extends GameContext {
@@ -350,20 +349,12 @@ bn += 1;
   overAt = 0; // public — botMatch writes it via the host interface
   private sbAutoShown = false;
 
-  /** Headhunt overhead held badges — wire remotes get theirs through
-   *  remotes.ts; offline bots never ride that path so the referee feeds
-   *  the same indicator channel directly. */
+  /** Headhunt held-token crowns — the marker itself rides remotes.ts's
+   *  local-bot lane (position + renderLift anchor, same as wire remotes);
+   *  a second writer here flickered the chevron ~2m every frame. This
+   *  pass now only syncs the crown count. */
   private headhuntBadges(): void {
-    const hud = this.deps.lazyHud();
-    const cam = this.deps.lazyCamera();
-    const localTeam = this.teamOf.get('local');
-    for (const b of this.bots) {
-      if (b.isDead) { hud.removePlayerIndicator?.(b.playerId); continue; }
-      _markPos.copy(b.position); _markPos.y += 1.6;
-      hud.updatePlayerIndicator?.(b.playerId, _markPos, cam,
-        { friendly: b.team === localTeam, bot: true, cls: b.armorClass, hp: b.botHp, held: b.heldTokens });
-      b.setHeld(b.heldTokens); // the crown is the pile
-    }
+    for (const b of this.bots) {b.setHeld(b.heldTokens);} // the crown is the pile
   }
 
   /** Per-bot think pass — interp tick, respawn countdown, brain, fire. */
@@ -512,6 +503,7 @@ bn += 1;
     if (bot.wantBelt) {this.fire.throwBelt(bot);}
     if (bot.wantDeploy) {this.tryDeploy(bot);}
     if (bot.wantSkill) {this.applySkill(bot);}
+    if (bot.wantHook) {this.fire.siegeLob(bot, bot.wantHook); bot.wantHook = null;}
     // Flag pass: the carrier's intent carries the receiver's pos -
     // same arc a human G-press resolves, aimed at the teammate.
     if (bot.wantPass) {this.ctf?.throwBot(bot, bot.wantPass); bot.wantPass = null;}
@@ -578,6 +570,7 @@ bn += 1;
     ctx.flagPos = flagTeam ? this.ctf!.flagPos(flagTeam, false) ?? null : null;
     ctx.moveSkill = bot.skill?.movement;
     ctx.skill = bot.skillId;
+    ctx.beltItem = bot.loadout?.belt;
     ctx.pickupVal = ctx.nugget?.val;
     this.fillSenses(ctx, bot, others);
     return ctx;

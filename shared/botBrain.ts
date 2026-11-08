@@ -30,6 +30,7 @@ import { stuckBreak, dodge, wallTopOnPath, ownGate, breachAlongWall, type Escape
 import { driftForm, heroTick, HERO_ON, type BotSkill, type BotSkillSpec } from './botSkill.ts';
 import { pickDest, pickDeploy, pickRepair, statusIntent } from './botDisposition.ts';
 import { dist3, distSqXZ, dirXZ, type BotVec } from './botVec.ts';
+import { WeaponType } from './weapons.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
 
 const f = (v: BotVec): string => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
@@ -193,6 +194,9 @@ export interface BrainCtx {
    *  'bounce'|'cloak'|'shield'|'medkit') - the host shadows its
    *  cooldown, so a press is legal whenever the brain picks it. */
   skill?: string;
+  /** The belt slot's equipped weapon (WeaponType.Hook only matters here -
+   *  the grapple-transit intent is legal to aim only with the rope). */
+  beltItem?: WeaponType;
   /** Own health as a 0..1 fraction - mend decision input. */
   healthFrac?: number;
   /** Own held tokens (headhunt) - the hoard-protection read: carriers
@@ -296,6 +300,10 @@ export interface BrainOut {
   /** Instant Q-skill press this step - the host validates energy +
    *  cooldown via onSkillUse, then applies the effect locally. */
   skill?: string;
+  /** Grapple-transit intent: an anchor point ahead of the destination
+   *  to fire the rope-dart belt item at - hit terrain, reel to it,
+   *  keep skiing. Only valid when the loadout's belt slot IS Hook. */
+  hook?: BotVec;
   /** Flag pass to a teammate (standoff pass or pre-death handoff) -
    *  the host resolves the toss through the same throwFor a human's
    *  throwFlag intent reaches. Carries the receiver's position so the
@@ -380,6 +388,7 @@ export class BotBrain {
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
   private beltT = 8; // staggered in the constructor along with thinkT
   private skillT = 5; // same stagger cadence - presses, not channels
+  private hookT = 3; // staggered with the others
   /** Belt trigger window/cooldown - tunable for A/B trigger soaks. */
   beltMin = 5;
   beltMax = 45;
@@ -782,6 +791,26 @@ export class BotBrain {
     return undefined;
   }
 
+  /** Grapple transit: fire the rope at an anchor ahead of the line the
+   *  bot is already walking - the human "hook the ridge, reel, keep
+   *  skiing" move. Only fires when the belt slot actually carries the
+   *  rope, the leg is long, nobody's worth a duel right now, and the
+   *  reel isn't wasted on a body already at ski speed. */
+  private pickHook(dt: number, pos: BotVec, ctx: BrainCtx, dest: BotVec): BotVec | undefined {
+    this.hookT -= dt;
+    if (ctx.beltItem !== WeaponType.Hook || this.hookT > 0 || (ctx.energy ?? 99) < 30) {return undefined;}
+    if (this.h.hunt !== null) {return undefined;} // fighting > transiting
+    const d = dist3(pos, dest);
+    if (d < 60) {return undefined;} // short hops don't buy a reel
+    const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
+    if (speed > 22) {return undefined;} // already skiing - a reel adds nothing
+    const dir = dirXZ(dest.x - pos.x, dest.z - pos.z);
+    const reach = Math.min(45, d * 0.5);
+    const ax = pos.x + dir.x * reach, az = pos.z + dir.z * reach;
+    this.hookT = 6;
+    return { x: ax, y: ctx.groundY(ax, az) + 2, z: az };
+  }
+
   /** Fear/hero state rides the health fraction - a rare hero roll on the
    *  rising edge of getting hurt decides whether low HP means retreat or
    *  a desperate last stand. Latch resets once healed so the next wound
@@ -1097,6 +1126,9 @@ export class BotBrain {
     // --- Q-skill: press the equipped instant skill on its own terms ---
     const skillPress = this.pickSkill(dt, pos, ctx, fearing);
 
+    // --- grapple: hook an anchor ahead on long quiet transits ---
+    const hook = this.pickHook(dt, pos, ctx, dest);
+
     // --- deploy: a quiet defender with hands free fortifies the stand ---
     const deploy = pickDeploy(this, dt, ctx, pos, fearing);
 
@@ -1141,7 +1173,7 @@ export class BotBrain {
         && dist3(mate, ctx.objective) < dist3(pos, ctx.objective) - 10
         && botRand() < (hp < 0.4 ? 0.7 : 0.3)) { passFlag = { x: mate.x, y: mate.y, z: mate.z }; this.passT = 4; }
     }
-    return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, skill: skillPress, deploy, repair, say, passFlag };
+    return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, skill: skillPress, hook, deploy, repair, say, passFlag };
   }
 
   /** Stall verdict for a goal the bot can't walk to: climbable face →
