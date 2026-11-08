@@ -35,8 +35,10 @@ export interface VariantHost {
   spawnBurst(pos: THREE.Vector3, l: BurstLayer): void;
   blastTinted(pos: THREE.Vector3, spec: BlastSpec): void;
   spawnFlash(pos: THREE.Vector3, mult: number): void;
-  spawnGroundRing(pos: THREE.Vector3, mult: number, terrain?: Terrain): void;
+  spawnGroundRing(pos: THREE.Vector3, mult: number, terrain?: Terrain, staticRing?: boolean): void;
   allocShock(pos: THREE.Vector3, color: number | THREE.Color, life: number, maxRadius: number, opacity: number): void;
+  /** Hot point-light punch - decays inside update() like the shockwaves. */
+  spawnLight(pos: THREE.Vector3, color: number, intensity: number, dist: number): void;
 }
 
 const _c = new THREE.Color();
@@ -48,13 +50,13 @@ export class BlastVariants {
   /** Dispatch to a weapon-class recipe; false means "fall through to the
    *  shared powder blast". */
   spawn(vfx: string | undefined, pos: THREE.Vector3, mult: number,
-      directHit: boolean, timeScale: number, terrain?: Terrain): boolean {
+      directHit: boolean, timeScale: number, terrain?: Terrain, staticRing = false): boolean {
     if (vfx === 'splash') {
       // Watery variant (sprinkler) — droplets + mist, no sparks/spikes/
       // shock dome: a hose splashes, it doesn't detonate.
       this.h.spawnFlash(pos, mult * 0.5);
       this.splash(pos, mult, directHit);
-      this.h.spawnGroundRing(pos, mult * 0.8, terrain);
+      this.h.spawnGroundRing(pos, mult * 0.8, terrain, staticRing);
       return true;
     }
     if (vfx === 'punch') {
@@ -83,7 +85,7 @@ export class BlastVariants {
       // of speedlines + dust. No fireball, no dome — it punctures,
       // it doesn't detonate.
       this.kinetic(pos, mult);
-      this.h.spawnGroundRing(pos, mult * 0.6, terrain);
+      this.h.spawnGroundRing(pos, mult * 0.6, terrain, staticRing);
       return true;
     }
     if (vfx === 'arc') {
@@ -102,7 +104,7 @@ export class BlastVariants {
       this.bolt(pos, mult);
       this.electricSparks(pos, mult * 0.7);
       if (directHit) {this.directHitLayers(pos, timeScale * 0.6);}
-      this.h.spawnGroundRing(pos, mult * 0.7, terrain);
+      this.h.spawnGroundRing(pos, mult * 0.7, terrain, staticRing);
       return true;
     }
     if (vfx === 'shellburst') {
@@ -111,7 +113,7 @@ export class BlastVariants {
       // lingering smoke cloud, and dark iron chips. No hot dome, no
       // energy read: a period gun, not a sci-fi blast.
       this.shellburst(pos, mult, terrain);
-      this.h.spawnGroundRing(pos, mult * 0.7, terrain);
+      this.h.spawnGroundRing(pos, mult * 0.7, terrain, staticRing);
       return true;
     }
     if (vfx === 'flak') {
@@ -119,7 +121,7 @@ export class BlastVariants {
       // spherical bloom of hot fragments, not a ground-rooted fireball.
       // Small flash, many fast shards, thin wisps; no dome, token ring.
       this.flak(pos, mult);
-      this.h.spawnGroundRing(pos, mult * 0.4, terrain);
+      this.h.spawnGroundRing(pos, mult * 0.4, terrain, staticRing);
       return true;
     }
     return false;
@@ -337,8 +339,55 @@ export class BlastVariants {
         spark.pos.set(pos.x + nx * aoeR, pos.y + ny * aoeR, pos.z + nz * aoeR);
       }
     }
+    // Artillery read: at siege scale (howitzer, mult≥1.5) a period-gun
+    // puff undersells a 20m+ killzone — add the fireball dome + second
+    // flash punch the cannon-family small rounds deliberately skip.
+    if (mult >= 1.5) {
+      blastBurst(pos, { // fireball dome — the hot orange canopy a big shell earns
+        count: Math.floor(8 * mult), spdMin: 4, spdMax: 12, vy: 4,
+        lifeMin: 0.4, lifeMax: 0.7,
+        sizeMin: 2.2 * mult, sizeMax: 3.2 * mult,
+        gravity: -4,
+        c1: [1, 0.62, 0.22], c2: [0.85, 0.28, 0.06],
+        opacity: 0.9,
+      }, true);
+      this.h.spawnFlash(pos, mult * 0.85);
+      // The two multipliers the recipe was missing: a hot light that
+      // lights terrain+flesh for a beat, and a fast shock shell scaling
+      // out with the wavefront (distinct from the terrain AOE-edge ring).
+      this.h.spawnLight(pos, 0xFF_AA_44, 60 * mult, 14 * mult);
+      this.h.allocShock(pos, 0xFF_CC_88, 0.22, 7.5 * mult, 0.5);
+      // Aftermath: the blast dies fast but the field shouldn't. Ember
+      // rain - glowing bits arcing out and drifting down for seconds,
+      // and a slow dust column rising on the thermal updraft.
+      for (let i = 0; i < Math.floor(30 * mult); i += 1) {
+        const s = this.h.sparks.alloc(pos);
+        s.r = 1; s.g = 0.55 + Math.random() * 0.25; s.b = 0.15;
+        s.o = 0.9;
+        const ang = Math.random() * Math.PI * 2, elv = Math.random() * 0.9;
+        const spd = 10 + Math.random() * 22;
+        s.vel.set(Math.cos(ang) * spd * Math.cos(elv), spd * Math.sin(elv) * 1.3, Math.sin(ang) * spd * Math.cos(elv));
+        s.grav = 12;                              // heavy embers - arc down, don't float
+        s.life = 1.8 + Math.random() * 1.6;       // the long tail
+        if (Math.random() < 0.4) {s.life += 1;}   // stragglers land even later
+      }
+      this.h.spawnBurst(pos, { // dust column - the thermal updraft after the shell
+        count: Math.floor(10 * mult), countMult: 1,
+        elvBase: 0.1, elvSpan: Math.PI * 0.4,
+        spdMin: 1, spdMax: 4, spdBoost: 1, vy: 6,
+        lifeMin: 2.5, lifeVar: 1.5, lifeBoost: 1,
+        sizeMin: 1.2 * mult, sizeVar: 0.8, sizeBoost: 1,
+        gravity: -0.5,                            // nearly neutral - it drifts, not falls
+        r1: 0.42, g1: 0.37, b1: 0.3, r2: 0.24, g2: 0.21, b2: 0.18,
+        kind: 'smoke', stagger: 0.5, spin: 0.8,
+      });
+    }
+    // Smoke scales DOWN at siege mult - at howitzer size count×mult was
+    // 35 fat white sprites, the "huge clouds" that buried the blast. The
+    // dust column already carries the big-blast aftermath; this heart
+    // stays a dense core puff at any size.
     this.h.spawnBurst(pos, { // white smoke heart — the potassium sulfide signature (cut back count; smoke is the LONG tail, not the burst)
-      count: 12, countMult: mult,
+      count: 12, countMult: Math.min(mult, 1.2),
       elvBase: 0.4, elvSpan: Math.PI,
       spdMin: 1.5, spdMax: 7, spdBoost: 1, vy: 3,   // slower than the shock — smoke must not outpace the wavefront
       lifeMin: 1.2, lifeVar: 1, lifeBoost: 1,     // powder smoke lingers for seconds
@@ -347,7 +396,7 @@ export class BlastVariants {
       r1: 0.88, g1: 0.86, b1: 0.82, r2: 0.45, g2: 0.44, b2: 0.42,
       kind: 'smoke', stagger: 0.08, spin: 1,
     });
-    this.h.spawnBurst(pos, { // charcoal core smoke — darker breath inside the white
+    this.h.spawnBurst(pos, { // charcoal core smoke — darker breath inside
       count: 6, countMult: mult,
       elvBase: 0.3, elvSpan: Math.PI,
       spdMin: 3, spdMax: 9, spdBoost: 1, vy: 3,

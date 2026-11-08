@@ -429,6 +429,14 @@ export class TrailDriver {
   }
   release(): void { drivers.delete(this); }
 
+  /** Late-acquired ribbon joins the managed list - same follow bind and
+   *  same worldpos push/jump-clear the ctor ribbons get. */
+  add(r: DriveRibbon): void {
+    r.follow = this.host.pos;
+    r.followManaged = true;
+    this.ribbons.push(r);
+  }
+
   tick(dt: number): void {
     if (dt <= 0) {return;} // paused fx clock - pos is frozen, don't misread a seek as travel
     const { pos, vel } = this.host;

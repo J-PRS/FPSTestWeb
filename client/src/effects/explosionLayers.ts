@@ -46,6 +46,9 @@ const _c2 = new THREE.Color();
 
 export class ExplosionLayers implements VariantHost {
   private shockwaves: Shockwave[] = [];
+  /** Hot-blast point lights - intensity decays to zero inside update(),
+   *  removed with the mesh. One per big blast, cheap. */
+  private lights: { l: THREE.PointLight; start: number }[] = [];
   private rings: TerrainRing[] = [];
   private variants = new BlastVariants(this);
 
@@ -59,15 +62,15 @@ export class ExplosionLayers implements VariantHost {
   /** Lay the whole blast recipe - variant dispatch first, shared powder
    *  blast as the fallback. Caller finalizes the spark batch after. */
   spawn(vfx: string | undefined, pos: THREE.Vector3, mult: number,
-        directHit: boolean, timeScale: number, terrain?: Terrain): void {
-    if (!this.variants.spawn(vfx, pos, mult, directHit, timeScale, terrain)) {
+        directHit: boolean, timeScale: number, terrain?: Terrain, staticRing = false): void {
+    if (!this.variants.spawn(vfx, pos, mult, directHit, timeScale, terrain, staticRing)) {
       this.spawnFlash(pos, mult);
       this.spawnSpikes(pos, mult);
       this.spawnBaseLayers(pos, mult, directHit, vfx === 'concussion');
       this.spawnShockDome(pos, mult);   // every blast, not just direct hits
       this.spawnDebrisSparks(pos, mult); // ground impacts get sparks too
       if (directHit) {this.variants.directHitLayers(pos, timeScale);}
-      this.spawnGroundRing(pos, mult, terrain);
+      this.spawnGroundRing(pos, mult, terrain, staticRing);
     }
     // Any blast at the waterline throws a column - additive to the blast's
     // own recipe (a rocket at sea still booms AND splashes). 'splash'
@@ -288,8 +291,17 @@ else if (l.kind === 'solid') {sMul = 2;}
     }
   }
 
-  spawnGroundRing(pos: THREE.Vector3, mult: number, terrain?: Terrain): void {
-    this.rings.push(new TerrainRing(this.scene, pos, this.hasTint ? this.tint.getHex() : 0xFF_AA_33, 0.45, 9 * mult, terrain));
+  spawnGroundRing(pos: THREE.Vector3, mult: number, terrain?: Terrain, staticRing = false): void {
+    // Static mode must sit ON the damage edge, not the expanding ring's
+    // 9x reach - 7.5x mult lands it at aoeRadius (explosionRadius/0.8).
+    this.rings.push(new TerrainRing(this.scene, pos, this.hasTint ? this.tint.getHex() : 0xFF_AA_33, 0.45, (staticRing ? 7.5 : 9) * mult, terrain, undefined, staticRing));
+  }
+
+  spawnLight(pos: THREE.Vector3, color: number, intensity: number, dist: number): void {
+    const l = new THREE.PointLight(color, intensity, dist, 2);
+    l.position.copy(pos);
+    this.scene.add(l);
+    this.lights.push({ l, start: intensity });
   }
 
   /** blastBurst with the weapon-energy tint applied to glow colors. */
@@ -309,6 +321,13 @@ else if (l.kind === 'solid') {sMul = 2;}
   update(dt: number): number {
     let alive = this.updateShockwaves(dt);
     for (const r of this.rings) {if (r.update(dt)) {alive += 1;}}
+    for (let i = this.lights.length - 1; i >= 0; i -= 1) {
+      const e = this.lights[i]!;
+      // ~200ms tail: linear fade-out reads as the flash dying, not a pop.
+      e.l.intensity = Math.max(0, e.l.intensity - e.start * dt / 0.2);
+      if (e.l.intensity <= 0) {this.scene.remove(e.l); this.lights.splice(i, 1); continue;}
+      alive += 1;
+    }
     return alive;
   }
 

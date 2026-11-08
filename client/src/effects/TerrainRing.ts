@@ -104,6 +104,7 @@ export class TerrainRing {
 
   private terrain?: Terrain;
   private baseOpacity: number;
+  private staticRing = false;
 
   constructor(
     scene: THREE.Scene,
@@ -111,10 +112,11 @@ export class TerrainRing {
     color: number,
     private life: number,
     private maxRadius: number,
-    ...opts: [terrain?: Terrain, baseOpacity?: number]) {
-    const [terrain, baseOpacity = 0.8] = opts;
+    ...opts: [terrain?: Terrain, baseOpacity?: number, staticRing?: boolean]) {
+    const [terrain, baseOpacity = 0.8, staticRing = false] = opts;
     this.terrain = terrain;
     this.baseOpacity = baseOpacity;
+    this.staticRing = staticRing;
     const a = acquireRingSlot(scene);
     this.pool = a.pool;
     this.slot = a.slot;
@@ -129,15 +131,27 @@ export class TerrainRing {
       return false;
     }
     const t = this.elapsed / this.life;
+    if (this.staticRing) {
+      // Spawns AT the AOE edge and fades: alpha drops AND the band thins
+      // (inner radius closes on the outer) so the ring evaporates at the
+      // true damage line instead of expanding past it.
+      const r = this.maxRadius;
+      const inner = r * (0.85 + 0.15 * t);
+      this.drapeBand(r, inner, (1 - t) * this.baseOpacity);
+      return true;
+    }
     this.drape(this.maxRadius * t, (1 - t) * this.baseOpacity);
     return true;
   }
 
   private drape(radius: number, opacity: number): void {
+    this.drapeBand(radius, radius * 0.85, opacity);
+  }
+
+  private drapeBand(radius: number, inner: number, opacity: number): void {
     const pos = this.pool.pos.array as Float32Array;
     const col = this.pool.col.array as Float32Array;
     const [r, g, b] = this.rgb;
-    const inner = radius * 0.85;
     const { x: cx, y: cy, z: cz } = this.center;
     const base = this.slot * VERTS;
     for (let i = 0; i <= SEGS; i += 1) {

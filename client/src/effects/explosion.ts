@@ -25,7 +25,7 @@ export class Explosion {
 
   // sizeScale normalizes blast size to weapon radius (rocket = 1.0):
   // a mortar's 14m blast shouldn't render like a 6m rocket.
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit = false, age = 0, ...opts: [terrain?: Terrain, sizeScale?: number, tint?: string | number, vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak' | 'emp' | 'shellburst']) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit = false, age = 0, ...opts: [terrain?: Terrain, sizeScale?: number, tint?: string | number, vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak' | 'emp' | 'shellburst', staticRing?: boolean]) {
     const [terrain, sizeScale = 1, tint, vfx] = opts;
     // pos/scene must always bind — bot senses read .pos for blast
     // hearing even on a dead-at-birth shell.
@@ -47,7 +47,7 @@ export class Explosion {
 
     this.sparks = new ExplosionSparks(scene);
     this.layers = new ExplosionLayers(scene, this.sparks, this.tint, this.hasTint);
-    this.layers.spawn(vfx, pos, mult, directHit, timeScale, terrain);
+    this.layers.spawn(vfx, pos, mult, directHit, timeScale, terrain, opts[4]);
     this.sparks.finalize();
   }
 

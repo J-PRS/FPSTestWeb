@@ -64,7 +64,8 @@ function blastFx(c: CombatCtx, a: ExplosionArgs): void {
   // Impact VFX variant - config-driven (sprinkler splashes, doesn't burn)
   const vfxKind = a.vfx ?? (a.weaponType === undefined ? undefined : getProjectileConfig(a.weaponType)?.vfx);
   if (forceMode === 'push') {
-    deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / EXPLOSION_VFX_RADIUS, a.explosionTint, vfxKind));
+    deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / EXPLOSION_VFX_RADIUS, a.explosionTint, vfxKind,
+      getProjectileConfig(a.weaponType ?? -1)?.staticRing));
     sfx.explosionAt(pos, directHit, a.weaponType);
     screenShake.blast(pos, vfx, deps.lazyPlayer().pos);
   } else {
@@ -314,6 +315,10 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
   const obstacles = deps.turretBolts?.() ?? [];
   const shields = deps.shieldObstacles?.();
   if (shields?.length) {obstacles.push(...shields);}
+  // Solo conquest crystal hulls - direct fire stops on nodes instead of
+  // phasing through; damage still flows through the frontier gate.
+  const nodeHull = deps.world.soloConquest?.obstacles();
+  if (nodeHull?.length) {obstacles.push(...nodeHull);}
 
   // Billboard ribbons re-side against this each frame - without it the
   // strip stays locked to its spawn-plane and level shots read edge-on.
