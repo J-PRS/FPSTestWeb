@@ -326,7 +326,10 @@ export class RemoteInterp {
     this.convergeTimer = 0;
     this.targetPosition.copy(pos);
     this.lastServerPosition.copy(pos);
-    this.lastServerUpdateMs = Date.now();
+    // Wall clock here poisons the stamp gate: serverMs arrives as
+    // tickSeq×50 (~1e8), always "older" than Date.now() (~1e12), so every
+    // update drops as out-of-order and the remote freezes at this seat.
+    this.lastServerUpdateMs = 0;
     this.lastUpdateTime = Date.now();
     this.prevDrawValid = false; // legit re-seat - not impossible motion
   }
