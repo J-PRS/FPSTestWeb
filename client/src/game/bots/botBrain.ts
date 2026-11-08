@@ -89,6 +89,116 @@ const sharedGroundYCache = new Map<number, number>();
 
 
 
+interface BotThinkCtx {
+
+  terrain: Terrain;
+
+  enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
+
+  nugget: Nugget | null;
+
+  /** CTF: overrides nugget/roam - the flag or the home base. */
+
+  objective?: THREE.Vector3 | null;
+
+  /** Nearby bodies for the steering separation sense. */
+
+  others?: THREE.Vector3[];
+
+  /** Teammates only - the rally/fold sense (retreat never folds
+
+   *  onto an enemy). */
+
+  allies?: THREE.Vector3[];
+
+  /** Long-arm reach for mortar heavies - extends acquisition past
+
+   *  the duel band. */
+
+  engageRange?: number;
+
+  /** Fresh blasts in earshot - the hearing sense. */
+
+  sounds?: { x: number; y: number; z: number }[];
+
+  /** Inbound shells - the dodge sense. */
+
+  threats?: { x: number; y: number; z: number }[];
+
+  /** Carrying the objective - the route rules the feet. */
+
+  running?: boolean;
+
+  /** Flag-seeker commitment (rabbit hunters, CTF recoverers) - the
+
+   *  objective outranks the hunt/dodge senses, same as server-side. */
+
+  runner?: boolean;
+
+  /** Named wave member - feet committed to a push/escort flood. */
+
+  wave?: boolean;
+
+  /** Escort-officer wave - holds position ahead of a moving carrier. */
+
+  marshal?: boolean;
+
+  /** Posted radius around the objective - 0/omitted hunts freely. */
+
+  posted?: number;
+
+  /** Rushing the enemy stand - cloak candidates cloak up. */
+
+  infiltrating?: boolean;
+
+  /** Enemy carrying OUR flag - beacon-marked, engages without LOS. */
+
+  thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } | null;
+
+  /** Both CTF flags on stands - route roles discount mid-field duels. */
+
+  flagsHome?: boolean;
+
+  /** Sweatlord reset: the objective layer wants this bot to press K -
+   *  the manager executes it, the brain never sees it. */
+
+  kout?: boolean;
+
+  /** Economy modes prefer creature targets (nuggets farming). */
+
+  huntCreatures?: boolean;
+
+  /** Damaged friendly deployable a builder could weld (host-opaque
+
+   *  key - mirrors the server senses' dep id). */
+
+  repair?: { key: string; pos: THREE.Vector3; frac: number } | null;
+
+  /** Room event this bot noticed - the server senses' notice ping. */
+
+  notice?: { kind: ChatterKind; actor?: string } | null;
+
+  /** The bot's nerve input (score margin + K/D) - mirrors
+
+   *  ServerBotSenses.confidenceOf. Team modes only. */
+
+  confidence?: number;
+
+  /** The objective flag's real position - altitude vetoes measure
+   *  this, not the offset aim point (shared brain contract). */
+  flagPos?: { x: number; y: number; z: number } | null;
+  /** skill.movement - times the hop-descent jet. */
+  moveSkill?: number;
+  /** Chased pickup's denomination (headhunt 1/3/9/27). */
+  pickupVal?: number;
+  /** Score deficit x endgame pressure, ~0..2 - team modes only. */
+  desperate?: number;
+  /** Richest friendly headhunt hoard worth escorting. */
+  convoy?: { x: number; y: number; z: number } | null;
+  /** Rich ally visibly dying - camp the spill before it lands. */
+  spillSoon?: { x: number; y: number; z: number } | null;
+}
+
 export class GameBot extends RemotePlayer {
 
   /** 'alpha'/'bravo' in team modes; the bot's own playerId in FFA. */
@@ -412,130 +522,13 @@ export class GameBot extends RemotePlayer {
 
    *  shoot this frame - the manager resolves the hit. */
 
-  think(dt: number, ctx: {
 
-    terrain: Terrain;
-
-    enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
-
-    nugget: Nugget | null;
-
-    /** CTF: overrides nugget/roam - the flag or the home base. */
-
-    objective?: THREE.Vector3 | null;
-
-    /** Nearby bodies for the steering separation sense. */
-
-    others?: THREE.Vector3[];
-
-    /** Teammates only - the rally/fold sense (retreat never folds
-
-     *  onto an enemy). */
-
-    allies?: THREE.Vector3[];
-
-    /** Long-arm reach for mortar heavies - extends acquisition past
-
-     *  the duel band. */
-
-    engageRange?: number;
-
-    /** Fresh blasts in earshot - the hearing sense. */
-
-    sounds?: { x: number; y: number; z: number }[];
-
-    /** Inbound shells - the dodge sense. */
-
-    threats?: { x: number; y: number; z: number }[];
-
-    /** Carrying the objective - the route rules the feet. */
-
-    running?: boolean;
-
-    /** Flag-seeker commitment (rabbit hunters, CTF recoverers) - the
-
-     *  objective outranks the hunt/dodge senses, same as server-side. */
-
-    runner?: boolean;
-
-    /** Named wave member - feet committed to a push/escort flood. */
-
-    wave?: boolean;
-
-    /** Escort-officer wave - holds position ahead of a moving carrier. */
-
-    marshal?: boolean;
-
-    /** Posted radius around the objective - 0/omitted hunts freely. */
-
-    posted?: number;
-
-    /** Rushing the enemy stand - cloak candidates cloak up. */
-
-    infiltrating?: boolean;
-
-    /** Enemy carrying OUR flag - beacon-marked, engages without LOS. */
-
-    thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } | null;
-
-    /** Both CTF flags on stands - route roles discount mid-field duels. */
-
-    flagsHome?: boolean;
-
-    /** Sweatlord reset: the objective layer wants this bot to press K -
-     *  the manager executes it, the brain never sees it. */
-
-    kout?: boolean;
-
-    /** Economy modes prefer creature targets (nuggets farming). */
-
-    huntCreatures?: boolean;
-
-    /** Damaged friendly deployable a builder could weld (host-opaque
-
-     *  key - mirrors the server senses' dep id). */
-
-    repair?: { key: string; pos: THREE.Vector3; frac: number } | null;
-
-    /** Room event this bot noticed - the server senses' notice ping. */
-
-    notice?: { kind: ChatterKind; actor?: string } | null;
-
-    /** The bot's nerve input (score margin + K/D) - mirrors
-
-     *  ServerBotSenses.confidenceOf. Team modes only. */
-
-    confidence?: number;
-
-    /** The objective flag's real position - altitude vetoes measure
-     *  this, not the offset aim point (shared brain contract). */
-    flagPos?: { x: number; y: number; z: number } | null;
-    /** skill.movement - times the hop-descent jet. */
-    moveSkill?: number;
-    /** Chased pickup's denomination (headhunt 1/3/9/27). */
-    pickupVal?: number;
-    /** Score deficit x endgame pressure, ~0..2 - team modes only. */
-    desperate?: number;
-    /** Richest friendly headhunt hoard worth escorting. */
-    convoy?: { x: number; y: number; z: number } | null;
-    /** Rich ally visibly dying - camp the spill before it lands. */
-    spillSoon?: { x: number; y: number; z: number } | null;
-
-  }): { targetId: string; aim: THREE.Vector3 } | null {
-
+  // The shared-brain ctx literal - one memoized groundY probe serves
+  // every sense; NaN floors memoize as flat-zero so a bad cell can't
+  // poison later trajectories crossing it.
+  private thinkCtx(ctx: BotThinkCtx, gyc: Map<number, number>) {
     const pos = this.position;
-
-    // Heights are static for a match's lifetime - every bot probes the
-
-    // same terrain, so ONE shared memo beats a per-bot copy of the same
-
-    // cells: teammates re-query each other's cached LOS marches and steer
-
-    // probes instead of recomputing them.
-
-    const gyc = sharedGroundYCache;
-
-    const out = this.brain.think(dt, Object.assign({}, {pos,team: this.team === 'ffa' ? undefined : this.team,vel: this.velocity,enemies: ctx.enemies,objective: ctx.objective ?? undefined,pickup: ctx.nugget?.pos,groundY: (x: number, z: number): number => {
+    return {pos,team: this.team === 'ffa' ? undefined : this.team,vel: this.velocity,enemies: ctx.enemies,objective: ctx.objective ?? undefined,pickup: ctx.nugget?.pos,groundY: (x: number, z: number): number => {
 
         // ~2m cells, not 4cm: getHeight is a smooth bilinear heightmap
 
@@ -571,7 +564,22 @@ export class GameBot extends RemotePlayer {
 
         return v;
 
-      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,flagsHome: ctx.flagsHome,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,flagPos: ctx.flagPos ?? null,moveSkill: ctx.moveSkill,pickupVal: ctx.pickupVal,desperate: ctx.desperate,convoy: ctx.convoy ?? null,spillSoon: ctx.spillSoon ?? null,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp,held: this.heldTokens}, botWeaponHooks(
+      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,flagsHome: ctx.flagsHome,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,flagPos: ctx.flagPos ?? null,moveSkill: ctx.moveSkill,pickupVal: ctx.pickupVal,desperate: ctx.desperate,convoy: ctx.convoy ?? null,spillSoon: ctx.spillSoon ?? null,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp,held: this.heldTokens};
+  }
+
+  think(dt: number, ctx: BotThinkCtx): { targetId: string; aim: THREE.Vector3 } | null {
+
+    // Heights are static for a match's lifetime - every bot probes the
+
+    // same terrain, so ONE shared memo beats a per-bot copy of the same
+
+    // cells: teammates re-query each other's cached LOS marches and steer
+
+    // probes instead of recomputing them.
+
+    const gyc = sharedGroundYCache;
+
+    const out = this.brain.think(dt, Object.assign({}, this.thinkCtx(ctx, gyc), botWeaponHooks(
 
         (d): WeaponType => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t): number => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage) as WeaponType,
 

@@ -937,29 +937,29 @@ function paintAnimRail(): void {
   if (hook.team) {animRail.append(mkTeamSel(hook));}
   if (hook.mark) {animRail.append(mkMarkSel(hook));}
   if (hook.side) {animRail.append(mkSideSel(hook));}
-  if (hook.gib) {
-    for (const [label, s] of [['pulverize', 1], ['pulverize 0.1x', 0.1]] as const) {
-      const b = document.createElement('button');
-      b.textContent = label;
-      b.addEventListener('click', (): void => hook.gib!(s));
-      animRail.append(b);
-    }
-  }
-  if (hook.gibJuicy) {
-    for (const [label, s] of [['pulv juicy', 1], ['pulv juicy 0.1x', 0.1]] as const) {
-      const b = document.createElement('button');
-      b.textContent = label;
-      b.addEventListener('click', (): void => hook.gibJuicy!(s));
-      animRail.append(b);
-    }
-  }
+  appendScaleBtns(hook.gib, 'pulverize');
+  appendScaleBtns(hook.gibJuicy, 'pulv juicy');
   if (hook.ragdoll) {
     const b = document.createElement('button');
     b.textContent = 'ragdoll';
     b.addEventListener('click', (): void => hook.ragdoll!());
     animRail.append(b);
   }
-  if (!hook.dir) {return;}
+  if (hook.dir) {appendDirRow(hook);}
+}
+
+// Full-scale + 0.1x preview buttons for a scale-taking hook.
+function appendScaleBtns(fn: ((s: number) => void) | undefined, base: string): void {
+  if (!fn) {return;}
+  for (const [label, s] of [[base, 1], [`${base} 0.1x`, 0.1]] as const) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', (): void => fn(s));
+    animRail.append(b);
+  }
+}
+
+function appendDirRow(hook: AnimHook): void {
   const drow = document.createElement('div');
   drow.className = 'dirrow';
   for (const [label, [f, s]] of DIR_BTNS) {

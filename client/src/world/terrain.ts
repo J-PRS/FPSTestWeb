@@ -771,16 +771,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     this.dbgPx = px; this.dbgPz = pz;
     if (on !== this.debugWireOn) {
       this.debugWireOn = on;
-      // The fill goes wireframe (palette lines, occluded by the depth-only
-      // clones) - that IS the drawn-surface wire now, so both x-ray
-      // overlays are noise on top: the cyan clipmap wire AND the yellow
-      // collider patch (its depthTest:false read-through is the whole
-      // point of divergence work). Both still build live and come back
-      // with ?xray.
-      for (const w of this.wireMeshes) { w.visible = on && urlParams.has('xray'); }
-      for (const l of this.levels) { l.material.wireframe = on; }
-      for (const m of this.occlMeshes) { m.visible = on; }
-      if (this.colliderWire) { this.colliderWire.visible = on && urlParams.has('xray'); }
+      this.setDebugWireVisibility(on);
       if (on) { this.colliderWireCx = Number.NaN; } // force rebuild on enable
     }
     if (!on) { return; }
@@ -801,6 +792,19 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     this.colliderWireCx = Math.round(px / step) * step;
     this.colliderWireCz = Math.round(pz / step) * step;
     this.buildColliderWire(this.colliderWireCx, this.colliderWireCz, step);
+  }
+
+  // The fill goes wireframe (palette lines, occluded by the depth-only
+  // clones) - that IS the drawn-surface wire now, so both x-ray
+  // overlays are noise on top: the cyan clipmap wire AND the yellow
+  // collider patch (its depthTest:false read-through is the whole
+  // point of divergence work). Both still build live and come back
+  // with ?xray.
+  private setDebugWireVisibility(on: boolean): void {
+    for (const w of this.wireMeshes) { w.visible = on && urlParams.has('xray'); }
+    for (const l of this.levels) { l.material.wireframe = on; }
+    for (const m of this.occlMeshes) { m.visible = on; }
+    if (this.colliderWire) { this.colliderWire.visible = on && urlParams.has('xray'); }
   }
 
   private buildColliderWire(cx: number, cz: number, step: number): void {

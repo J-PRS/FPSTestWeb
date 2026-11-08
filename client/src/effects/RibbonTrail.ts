@@ -453,31 +453,38 @@ RibbonTrail.nanPushes += 1;
     //   d >= BREAK_M  - teleport/resnap: break the strip, no connector.
     // There is no "medium" case left to smear - a segment can only be
     // ~spacing long or a break.
-    if (this.count > 0 && Number.isFinite(this._lx)) {
-      const jx = pos.x + ox - this._lx;
-      const jy = pos.y + oy - this._ly;
-      const jz = pos.z + oz - this._lz;
-      const d = Math.hypot(jx, jy, jz);
-      recordGap(this.tag, this.slot, d);
-      if (d >= BREAK_M || performance.now() - prevPushMs > PUSH_GAP_MS) {
-        const spatial = d >= BREAK_M;
-        this.jumpcuts += spatial ? 1 : 0;
-        if (spatial && (this.jumpcuts <= 3 || this.jumpcuts % 64 === 0)) {
-          // Throttled - a mis-wired owner can otherwise flood console.error
-          // thousands/sec (observed: 9800 msgs in 2s), starving the frame.
-          glitch('trail-jumpcut', { tag: this.tag, gapM: Math.round(d) });
-        }
-        this.clear();
-      } else if (d < SAMPLE_SPACING) {
-        return; // sub-spacing: weld-only, no commit - uniform density
-      }
-      // d >= spacing, d < BREAK: fall through to a single commit at pos.
-      // Unity semantics - NO backfill: filling the gap with same-stamp
-      // lerped points paints a fat untapered rope between net stamps.
-    }
+    if (!this.commitGap(pos, ox, oy, oz, wScale, prevPushMs)) {return;}
     // First commit (or post-break restart) - single sample at pos.
     this.commit(pos.x + ox, pos.y + oy, pos.z + oz, wScale);
     this._lx = pos.x + ox; this._ly = pos.y + oy; this._lz = pos.z + oz;
+  }
+
+  // Distance-quantized commit gate. There is no "medium" case left to
+  // smear - a segment can only be ~spacing long or a break. Returns
+  // false for sub-spacing weld-only samples (no commit).
+  private commitGap(pos: THREE.Vector3, ox: number, oy: number, oz: number, wScale: number, prevPushMs: number): boolean {
+    if (!(this.count > 0 && Number.isFinite(this._lx))) {return true;}
+    const jx = pos.x + ox - this._lx;
+    const jy = pos.y + oy - this._ly;
+    const jz = pos.z + oz - this._lz;
+    const d = Math.hypot(jx, jy, jz);
+    recordGap(this.tag, this.slot, d);
+    if (d >= BREAK_M || performance.now() - prevPushMs > PUSH_GAP_MS) {
+      const spatial = d >= BREAK_M;
+      this.jumpcuts += spatial ? 1 : 0;
+      if (spatial && (this.jumpcuts <= 3 || this.jumpcuts % 64 === 0)) {
+        // Throttled - a mis-wired owner can otherwise flood console.error
+        // thousands/sec (observed: 9800 msgs in 2s), starving the frame.
+        glitch('trail-jumpcut', { tag: this.tag, gapM: Math.round(d) });
+      }
+      this.clear();
+    } else if (d < SAMPLE_SPACING) {
+      return false; // sub-spacing: weld-only, no commit - uniform density
+    }
+    // d >= spacing, d < BREAK: fall through to a single commit at pos.
+    // Unity semantics - NO backfill: filling the gap with same-stamp
+    // lerped points paints a fat untapered rope between net stamps.
+    return true;
   }
 
   /** Append one ring sample - the only place head/count advance. */
