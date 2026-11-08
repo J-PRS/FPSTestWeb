@@ -209,10 +209,6 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
   };
 
-  networkManager.onRemoteInput = (playerId: string, seq: number, ageMs: number, input: { forward: number; right: number; jump?: number; ski?: number; jet?: number }): void => {
-    deps.world.remotePlayers.get(playerId)?.onInputEdge(seq, ageMs, input);
-  };
-
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, srvAge?: number, srvT?: number): void => {
     if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
     noteWeapon(ownerId, weaponType);

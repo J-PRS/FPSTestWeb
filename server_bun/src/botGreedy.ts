@@ -38,14 +38,13 @@ export class BotGreedy {
   constructor(
     private readonly moveSim: RoomMoveSim,
     private readonly field: Heightfield | null,
-    private readonly botInput?: (id: string, i: { forward: number; right: number; jump: number; ski: number; jet: number }, status: number) => void,
   ) {}
 
   release(id: string): void { this.held.delete(id); }
 
   /** `modelYaw` = the wire-facing yaw (see botMpc.drive) - the shadow
    *  faces it and the picked travel yaw rides as strafe keys, so the
-   *  edge replay reproduces the identical world input. */
+   *  shadow's world input matches what observers see on the wire. */
   drive(id: string, tgt: BotVec, modelYaw: number): boolean {
     if (!this.field) {return false;}
     const sim = this.moveSim.simOf(id);
@@ -66,7 +65,6 @@ export class BotGreedy {
     const fwd = Math.round(nx * fx + nz * fz);
     const rgt = Math.round(nx * -fz + nz * fx);
     this.moveSim.setInput(id, { forward: fwd, right: rgt, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: h.jet });
-    this.botInput?.(id, { forward: fwd, right: rgt, jump: 0, ski: 1, jet: h.jet ? 1 : 0 }, 0);
     return true;
   }
 

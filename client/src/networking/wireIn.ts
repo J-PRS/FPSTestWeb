@@ -14,7 +14,7 @@ import {
   isWireFrame, decodeTickFrame, decodeBallAny, decodeProjSpawn, decodeProjGone,
   WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, WIRE_BATCH, WIRE_JSON, WIRE_HIT,
   WIRE_E_JUMP, WIRE_E_JET, WIRE_E_LANDED, WIRE_E_SHOT, WIRE_E_KNOCK, WIRE_KILL,
-  decodeWireJson, decodeHit, decodeWidPos, decodeShotEv, decodeKnock, decodeKill, decodeRemoteInput, WIRE_E_INPUT, iterBatch, SERVER_TICK_MS,
+  decodeWireJson, decodeHit, decodeWidPos, decodeShotEv, decodeKnock, decodeKill, iterBatch, SERVER_TICK_MS,
   type TickDecodePool,
 } from '../../../shared/wire.js';
 import {type ServerMessage, type TickUpdatePlayer, PROTOCOL_VERSION} from '../../../shared/protocol.js';
@@ -294,15 +294,6 @@ this.handlerThrows += 1;
       if (k && targetId && shooterId) {
         try { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal }); }
         catch (error) {this.handlerThrows += 1; logger.warn(`wire-kill failed: ${error instanceof Error ? error.message : String(error)}`);}
-      }
-      return;
-    }
-    if (data[1] === WIRE_E_INPUT) {
-      const e = decodeRemoteInput(data);
-      const id = e ? this.wireIds.get(e.wid) : undefined;
-      if (e && id) {
-        try { this.h.onRemoteInput?.(id, e.seq, e.ageMs ?? 0, e.input); }
-        catch (error) {this.handlerThrows += 1; logger.warn(`wire-input failed: ${error instanceof Error ? error.message : String(error)}`);}
       }
       return;
     }

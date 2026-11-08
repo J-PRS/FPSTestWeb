@@ -93,9 +93,9 @@ export class ServerBots {
     // FPS_GREEDY: swap the committed-run driver to the path-free
     // rollout pilot - same drive/release contract, same arm map.
     this.mpc = process.env.FPS_GREEDY
-      ? new BotGreedy(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s))
-      : new BotMpc(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s));
-    this.greedy = new BotGreedy(room.moveSim, field, (id, i, s): void => room.botInput(id, i, s));
+      ? new BotGreedy(room.moveSim, field)
+      : new BotMpc(room.moveSim, field);
+    this.greedy = new BotGreedy(room.moveSim, field);
   }
 
   /** The committed-run option: while a capper is outbound on the enemy
@@ -762,8 +762,8 @@ hurtCount += 1;
       const mpcTgt = this.mpcArm.get(id);
       // The yaw the wire will show (aim while a trigger lives, else the
       // sim's travel yaw) - the drivers face the shadow to it and carry
-      // the plan's travel dir as strafe keys, so remote edge replay
-      // reproduces the shadow's world input instead of walking the
+      // the plan's travel dir as strafe keys, so the shadow's world
+      // input matches the yaw the wire shows instead of walking the
       // crosshair.
       const mpcAim = this.arsenal.aimPoint(id);
       const modelYaw = mpcAim

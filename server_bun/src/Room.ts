@@ -20,7 +20,7 @@ import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
-import { NOISE_TTL_MS , type V4Last, encodeHit, encodeWidPos, encodeShotEv, encodeRemoteInput, WIRE_E_LANDED } from '../../shared/wire.ts';
+import { NOISE_TTL_MS , type V4Last, encodeHit, encodeWidPos, encodeShotEv, WIRE_E_LANDED } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -176,47 +176,6 @@ export class Room {
    *  past even the aim-cone. Bumped on every wireHit; lazily pruned. */
   readonly engagedBy = new Map<string, Map<string, number>>();
   private static readonly ENGAGE_MS = 4000;
-  /** C4 edge relay radius (XZ)  -  replay fidelity pays inside ~400m;
-   *  far specks keep interpolating. Squared for the hot check. */
-  private static readonly RELAY_EDGE_R2 = 400 * 400;
-  /** Dev-only WAN-loss repro for the edge relay (FPS_EDGE_DROP_PCT)  - 
-   *  mirrors tickRecords' FPS_DROP_PCT: dropped relay packets surface as
-   *  input seq gaps, replay drifts on stale input, records snap it back. */
-  private static edgeDrop(): boolean {
-    const pct = Number(process.env.FPS_EDGE_DROP_PCT ?? 0) || 0;
-    return pct > 0 && Math.random() * 100 < pct;
-  }
-  /** Bot edge bookkeeping  -  see handlerDeps.botInput. */
-  private readonly botEdgeLast = new Map<string, string>();
-  private readonly botEdgeSeq = new Map<string, number>();
-  /** Server bots bypass inputMove (botDrive feeds the shadow directly) so
-   *  they minted no edges  -  their remotes could never replay. Bots commit
-   *  every tick, so dedupe on the pressed-key shape and mint a seq:
-   *  observers see the same change-only stream a human emits. */
-  botInput(pid: string, i: { forward: number; right: number; jump: number; ski: number; jet: number }, status: number): void {
-    const key = `${i.forward},${i.right},${i.jump},${i.ski},${i.jet}`;
-    if (this.botEdgeLast.get(pid) === key) {return;}
-    this.botEdgeLast.set(pid, key);
-    const seq = (this.botEdgeSeq.get(pid) ?? 0) + 1;
-    this.botEdgeSeq.set(pid, seq);
-    this.relayInputEdge(pid, seq, 0, { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: i.jet }, status);
-  }
-  /** C4 relay fanout: one consumed/minted edge to every human observer
-   *  inside the gate. Distance-gated; volatile lane. */
-  private relayInputEdge(pid: string, seq: number, ageMs: number, input: { forward: number; right: number; jump: number | undefined; ski: number | undefined; jet: number | undefined }, status: number): void {
-    const wid = this.wireIds.get(pid);
-    const shooter = this.players.getPlayer(pid);
-    if (wid === undefined || !shooter) {return;}
-    const data = encodeRemoteInput(wid, seq, ageMs, input, status);
-    const sp = shooter.position;
-    for (const [qid, q] of this.players.getAllPlayers()) {
-      if (qid === pid || q.isBot) {continue;}
-      const dx = q.position.x - sp.x, dz = q.position.z - sp.z;
-      if (dx * dx + dz * dz < Room.RELAY_EDGE_R2 && !Room.edgeDrop()) {
-        this.connections.sendBinToPlayerReliable(qid, data, 'volatile');
-      }
-    }
-  }
   noteEngagement(shooterId: string, victimId: string): void {
     if (shooterId === victimId) {return;}
     let m = this.engagedBy.get(victimId);
@@ -1228,13 +1187,6 @@ export class Room {
           jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
           jetHeld: Boolean(i.jet),
         }, status, seq, ageMs);
-        // C4 remote replay: the consumed edge forwards to observers so
-        // their per-remote MoveSim tracks the shadow's input timeline.
-        // Volatile lane - a lost edge degrades to interp, same as a
-        // silence window does today.
-        if (ok && seq !== undefined) {
-          this.relayInputEdge(pid, seq, ageMs ?? 0, { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: i.jet }, status ?? 0);
-        }
         return ok;
       },
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
@@ -1754,8 +1706,6 @@ excess -= 1;
     const wid = this.wireIds.get(playerId);
     if (wid !== undefined) {
       this.wireIds.delete(playerId);
-      this.botEdgeLast.delete(playerId);
-      this.botEdgeSeq.delete(playerId);
       this.wireIdRetired.set(wid, wallNow());
       this.v4Last.delete(wid);
       this.connections.broadcast({ type: 'wireIds', add: {}, remove: [wid] });

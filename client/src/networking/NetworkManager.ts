@@ -102,9 +102,6 @@ export class NetworkManager {
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, age?: number, t?: number) => void) | null = null;
-  /** Relayed remote input edges (C4 replay) - fired per consumed
-   *  inputMove the server forwards on the volatile lane. */
-  public onRemoteInput: ((playerId: string, seq: number, ageMs: number, input: { forward: number; right: number; jump?: number; ski?: number; jet?: number }) => void) | null = null;
   /** Server refused a claim - `health` is the authoritative resync value
    *  (rejected predicted self-splash leaves client health divergent). */
   public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined, shotId?: string) => void) | null = null;

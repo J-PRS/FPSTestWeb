@@ -239,12 +239,6 @@ export class RemotePlayer {
     });
   }
 
-  /** Relayed input edge - the server's consumed inputMove forwarded so
-   *  the interp's replay sim can track the shadow's timeline. */
-  onInputEdge(seq: number, ageMs: number, input: { forward: number; right: number; jump?: number; ski?: number; jet?: number }): void {
-    this.interp.onInputEdge(seq, ageMs, input);
-  }
-
   update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping = 0, serverVelocity?: { x: number; y: number; z: number }, serverMs?: number): void {
     this.interp.onUpdate(targetPosition, targetRotation, ping, serverVelocity, serverMs);
     // NOTE: death physics (gravity, bounce, tumble, shrink) are handled in tick()

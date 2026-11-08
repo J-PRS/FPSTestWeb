@@ -23,7 +23,7 @@ pin(room, 'ref', { x: 800, y: 300, z: 800 });
 
 const sb = room.bots as unknown as { mpc: unknown; mpcArm: Map<string, unknown>; held?: Map<string, unknown> };
 if (DRIVER === 'greedy') {
-  sb.mpc = new BotGreedy(room.moveSim, field, (id, i, s) => (room as unknown as { botInput: (a: string, b: unknown, c: number) => void }).botInput(id, i, s));
+  sb.mpc = new BotGreedy(room.moveSim, field);
 }
 
 let grabs = 0, caps = 0;

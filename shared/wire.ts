@@ -256,34 +256,6 @@ function readInputEdge(d: DataView, o: number, stamped: boolean): InputEdge | nu
   return e;
 }
 
-// ---- S→C remote input edge relay (binary) ----
-// The C4 remote-replay lane: the server forwards a consumed inputMove
-// edge to interested observers so clients replay the same MoveSim as the
-// shadow - remote bodies animate at render framerate on a 20Hz wire.
-// Same edge shape as inputMove (10B), wid-keyed like the event family.
-export const WIRE_E_INPUT = 0x1A;
-
-export function encodeRemoteInput(wid: number, seq: number, ageMs: number, input: { forward: number; right: number; jump?: number; ski?: number; jet?: number }, status: number): Uint8Array {
-  const buf = new ArrayBuffer(14);
-  const d = new DataView(buf);
-  d.setUint8(0, MAGIC);
-  d.setUint8(1, WIRE_E_INPUT);
-  d.setUint16(2, wid, true);
-  writeInputEdge(d, 4, { seq, ageMs, input: { forward: input.forward, right: input.right, jump: input.jump ?? 0, ski: input.ski ?? 0, jet: input.jet ?? 0, status }, rotation: { yaw: 0, pitch: 0 } });
-  return new Uint8Array(buf);
-}
-
-export interface RemoteInputMsg { wid: number; seq: number; ageMs?: number; input: { forward: number; right: number; jump: number; ski: number; jet: number; status: number } }
-
-export function decodeRemoteInput(u8: Uint8Array): RemoteInputMsg | null {
-  if (u8.length < 14 || u8[0] !== MAGIC || u8[1] !== WIRE_E_INPUT) {return null;}
-  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-  const wid = d.getUint16(2, true);
-  const e = readInputEdge(d, 4, true);
-  if (!e || e.seq === undefined || !Number.isFinite(e.input.forward + e.input.right)) {return null;}
-  return { wid, seq: e.seq, ageMs: e.ageMs, input: { forward: e.input.forward, right: e.input.right, jump: e.input.jump ?? 0, ski: e.input.ski ?? 0, jet: e.input.jet ?? 0, status: e.input.status ?? 0 } };
-}
-
 export function decodeInputMove(u8: Uint8Array): WireInputMove | null {
   if (u8.length < 11 || u8[0] !== MAGIC || u8[1] !== WIRE_INPUTMOVE) {return null;}
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);

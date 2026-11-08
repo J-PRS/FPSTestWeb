@@ -62,13 +62,6 @@ function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: B
     // state+input+energy snapshot plus a Map evict) would be pure churn
     // every tick for every bot  -  the journal exists for wire replay.
   }, p.status);
-  // C4 replay: mint the observer edge stream (change-only dedupe inside
-  // botInput)  -  without it a bot remote can never run edge replay.
-  h.room.botInput(id, moving ? {
-    forward: move.forward, right: move.right,
-    jump: out.move?.jump ? 1 : 0, ski: out.move?.ski ? 1 : 0,
-    jet: (out.move?.jet || h.arsenal.jetPinUntil(id) > now) ? 1 : 0,
-  } : { forward: 0, right: 0, jump: 0, ski: 0, jet: 0 }, p.status);
 }
 
 
