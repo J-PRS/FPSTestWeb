@@ -87,16 +87,39 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
   const { field, fullRes } = fieldFor(demo.heightmap);
   const EPS = fullRes ? EPS_TIGHT : EPS_COARSE;
 
-  // ---- trajectory gate -------------------------------------------------
+  const traj = trajGate(demo, field, EPS);
+  if (traj.reason !== undefined) {
+    return Object.assign({ ok: false, reason: traj.reason }, base, { trajWorst: traj.worst, trajFrame: traj.frame });
+  }
+
+  const dice = diceGate(demo, field, EPS);
+  if (dice.spawnBad > 0) {
+    return Object.assign({ ok: false, reason: `spawn dice diverged at ball ${dice.spawnWorstId} (${dice.spawnWorst.toFixed(2)}m)` }, base,
+      { trajWorst: traj.worst, trajFrame: traj.frame, spawnN: dice.spawnN, spawnBad: dice.spawnBad, spawnWorst: dice.spawnWorst, spawnWorstId: dice.spawnWorstId, legN: dice.legN, legOver: dice.legOver, legWorst: dice.legWorst });
+  }
+
+  const proj = projLegs(demo, EPS);
+  const unbacked = unbackedKills(demo);
+
+  return Object.assign({ ok: true }, base, { trajWorst: traj.worst, trajFrame: traj.frame, spawnN: dice.spawnN, spawnBad: dice.spawnBad, spawnWorst: dice.spawnWorst, spawnWorstId: dice.spawnWorstId, legN: dice.legN, legOver: dice.legOver, legWorst: dice.legWorst, projN: proj.projN, projOver: proj.projOver, projWorst: proj.projWorst, unbacked });
+}
+
+// ---- trajectory gate -------------------------------------------------
+// HARD GATE: replay recorded inputs through the same MoveSim the run ran
+// on over the embedded hmap. First divergence past eps fails the
+// submission - a challenge seed binds the spawn dice, but nothing stops
+// a forged frame stream except this replay. Frame 0 IS the anchor -
+// clips keep absolute timestamps.
+function trajGate(demo: DemoFile, field: Heightfield, EPS: number): { worst: number; frame: number; reason?: string } {
+  const h = demo.header;
   const surface = hmSurface(field);
   const sim = new MoveSim(surface, {
     pos: { x: h.startPosX, y: h.startPosY, z: h.startPosZ },
     vel: { x: h.startVelX, y: h.startVelY, z: h.startVelZ },
     yaw: h.startYaw, pitch: h.startPitch, onGround: false,
   });
-  // Frame 0 IS the anchor — clips keep absolute timestamps.
   let prevT = demo.frames[0]!.timestamp;
-  let trajWorst = 0, trajFrame = -1;
+  let worst = 0, frame = -1;
   let firstBad: DemoFrame | null = null;
 
   for (const f of demo.frames) {
@@ -110,22 +133,35 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
       skiHeld: Boolean(f.inputFlags & InputFlags.Ski),
       jetHeld: Boolean(f.jetpackFlags & JetpackFlags.Active),
     });
-    // Aim is an input, not a sim output — feed recorded angles.
+    // Aim is an input, not a sim output - feed recorded angles.
     sim.state.yaw = f.yaw;
     sim.state.pitch = f.pitch;
     sim.update(dt);
     const err = Math.hypot(sim.state.pos.x - f.posX, sim.state.pos.y - f.posY, sim.state.pos.z - f.posZ);
-    if (err > trajWorst) { trajWorst = err; trajFrame = f.frameNumber; }
+    if (err > worst) { worst = err; frame = f.frameNumber; }
     if (err > EPS && !firstBad) { firstBad = f; }
   }
-  if (firstBad) {
-    return Object.assign({ ok: false, reason: `impossible-trajectory — frame ${firstBad.frameNumber} t=${firstBad.timestamp.toFixed(2)} (${trajWorst.toFixed(2)}m)` }, base, { trajWorst, trajFrame });
-  }
+  const reason = firstBad ? `impossible-trajectory — frame ${firstBad.frameNumber} t=${firstBad.timestamp.toFixed(2)} (${worst.toFixed(2)}m)` : undefined;
+  return { worst, frame, reason };
+}
 
-  // ---- spawn-dice gate -------------------------------------------------
+// ---- spawn-dice gate + ball legs -------------------------------------
+// One event walk serves both tiers: the runSeed-keyed stream must land
+// every recorded Spawned event on its expected draw (HARD GATE), and the
+// same pass drives evidence-leg ballistic re-sims. Draw contract mirrors
+// client entities.ts/balls.ts:
+//   field init      : one timer draw
+//   boot fill x4    : [variant?] + ctor draws        (no timer)
+//   ambient trickle : [timer] + [variant?] + ctor draws
+//   split child     : ctor draws + split-vel draw     (pos inherits parent)
+// Variant draws only exist when the pool saw a non-0 variant - the mode
+// string lies, the data doesn't.
+function diceGate(demo: DemoFile, field: Heightfield, EPS: number): { spawnN: number; spawnBad: number; spawnWorst: number; spawnWorstId: number; legN: number; legOver: number; legWorst: number } {
+  const h = demo.header;
   const ambientSpawns = demo.targetEvents.filter(e => e.targetType < 64 && e.eventType === TargetEventType.Spawned);
   const hasVariants = ambientSpawns.some(e => e.targetType !== 0);
-  const stream = lcg32((h.runSeed ^ SPAWN_SEED_XOR) >>> 0);
+  // oxlint-disable-next-line prefer-math-trunc - >>> 0 is uint32 wrap, not truncation
+  const stream = lcg32((h.runSeed! ^ SPAWN_SEED_XOR) >>> 0);
   stream(); // field-init timer draw
 
   const playerPosAt = (t: number): { x: number; y: number; z: number } => {
@@ -153,45 +189,23 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
     if (e.targetType >= 64) { continue; }
     if (e.eventType === TargetEventType.Destroyed) { livePos.delete(e.targetId); balls.delete(e.targetId); continue; }
     if (e.eventType === TargetEventType.Spawned) {
-      let isSplit = false;
-      for (const p of livePos.values()) {
-        if (Math.hypot(p.x - e.posX, p.y - e.posY, p.z - e.posZ) < 2) { isSplit = true; break; }
-      }
-      const variant = e.targetType as 0 | 1 | 2 | 3;
-      if (!isSplit) {
-        if (ambientIdx >= 4) { stream(); } // trickle timer
-        if (hasVariants) { drawVariant(stream); }
-        ambientIdx += 1;
-      }
-      const draw = drawBallSpawn(stream, variant, BALL_COLOR_COUNT);
-      let ex: number, ez: number;
-      let evx: number, evy: number, evz: number;
-      if (isSplit) {
-        const sv = drawSplitVel(stream);
-        ex = e.posX; ez = e.posZ;
-        evx = sv.x; evy = sv.y; evz = sv.z;
-      } else {
-        const p = playerPosAt(e.timestamp);
-        ex = p.x + draw.offX; ez = p.z + draw.offZ;
-        // Y is terrain-derived (coarse hmap quantization) — X/Z + vel
-        // are the dice outputs the stream actually decides.
-        evx = draw.vel.x; evy = draw.vel.y; evz = draw.vel.z;
-      }
+      const draw = spawnDraw(stream, e, livePos, hasVariants, ambientIdx, playerPosAt);
+      ambientIdx += draw.ambient ? 1 : 0;
       const err = Math.max(
-        Math.hypot(ex - e.posX, ez - e.posZ),
-        Math.hypot(evx - e.velX, evy - e.velY, evz - e.velZ));
+        Math.hypot(draw.ex - e.posX, draw.ez - e.posZ),
+        Math.hypot(draw.evx - e.velX, draw.evy - e.velY, draw.evz - e.velZ));
       spawnN += 1;
       if (err > EPS) { spawnBad += 1; }
       if (err > spawnWorst) { spawnWorst = err; spawnWorstId = e.targetId; }
       balls.set(e.targetId, {
-        b: makeSimBall(e.targetId, variant, 0,
+        b: makeSimBall(e.targetId, e.targetType as 0 | 1 | 2 | 3, 0,
           { x: e.posX, y: e.posY, z: e.posZ }, { x: e.velX, y: e.velY, z: e.velZ }),
         lastT: e.timestamp,
       });
       livePos.set(e.targetId, { x: e.posX, y: e.posY, z: e.posZ });
       continue;
     }
-    // evidence leg — step from last recorded truth to this event
+    // evidence leg - step from last recorded truth to this event
     const rec = balls.get(e.targetId);
     if (!rec) { continue; }
     let rem = e.timestamp - rec.lastT;
@@ -208,13 +222,36 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
     rec.b.vx = e.velX; rec.b.vy = e.velY; rec.b.vz = e.velZ;
     livePos.set(e.targetId, { x: e.posX, y: e.posY, z: e.posZ });
   }
+  return { spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst };
+}
 
-  if (spawnBad > 0) {
-    return Object.assign({ ok: false, reason: `spawn dice diverged at ball ${spawnWorstId} (${spawnWorst.toFixed(2)}m)` }, base,
-      { trajWorst, trajFrame, spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst });
+// One Spawned event's expected draw: isSplit probe, trickle/variant
+// stream order, then the expected pos/vel the event must match.
+// Y is terrain-derived (coarse hmap quantization) - X/Z + vel are the
+// dice outputs the stream actually decides.
+function spawnDraw(stream: () => number, e: DemoFile['targetEvents'][number], livePos: Map<number, { x: number; y: number; z: number }>, hasVariants: boolean, ambientIdx: number, playerPosAt: (t: number) => { x: number; y: number; z: number }): { ambient: boolean; ex: number; ez: number; evx: number; evy: number; evz: number } {
+  let isSplit = false;
+  for (const p of livePos.values()) {
+    if (Math.hypot(p.x - e.posX, p.y - e.posY, p.z - e.posZ) < 2) { isSplit = true; break; }
   }
+  const variant = e.targetType as 0 | 1 | 2 | 3;
+  if (!isSplit) {
+    if (ambientIdx >= 4) { stream(); } // trickle timer
+    if (hasVariants) { drawVariant(stream); }
+  }
+  const draw = drawBallSpawn(stream, variant, BALL_COLOR_COUNT);
+  if (isSplit) {
+    const sv = drawSplitVel(stream);
+    return { ambient: false, ex: e.posX, ez: e.posZ, evx: sv.x, evy: sv.y, evz: sv.z };
+  }
+  const p = playerPosAt(e.timestamp);
+  return { ambient: true, ex: p.x + draw.offX, ez: p.z + draw.offZ, evx: draw.vel.x, evy: draw.vel.y, evz: draw.vel.z };
+}
 
-  // ---- projectile legs (evidence only) ---------------------------------
+// ---- projectile legs (evidence only) ---------------------------------
+// Event-to-event ballistic re-sim: unrecorded splash knocks legitimately
+// diverge, so legs report a distribution, never a verdict.
+function projLegs(demo: DemoFile, EPS: number): { projN: number; projOver: number; projWorst: number } {
   const projs = new Map<number, { x: number; y: number; z: number; vx: number; vy: number; vz: number; lastT: number; grav: boolean }>();
   let projN = 0, projOver = 0, projWorst = 0;
   for (const e of demo.projectileEvents) {
@@ -239,9 +276,12 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
     rec.lastT = e.timestamp;
     rec.x = e.posX; rec.y = e.posY; rec.z = e.posZ;
   }
+  return { projN, projOver, projWorst };
+}
 
-  // Hit↔shot linkage (evidence): ball dmg/kill events without a
-  // projectile event in the blast window indicate fabricated kills.
+// Hit<->shot linkage (evidence): ball dmg/kill events without a
+// projectile event in the blast window indicate fabricated kills.
+function unbackedKills(demo: DemoFile): number {
   let unbacked = 0;
   for (const e of demo.targetEvents) {
     if (e.targetType >= 64) { continue; }
@@ -251,6 +291,5 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
       Math.hypot(p.posX - e.posX, p.posY - e.posY, p.posZ - e.posZ) < 12);
     if (!near) { unbacked += 1; }
   }
-
-  return Object.assign({ ok: true }, base, { trajWorst, trajFrame, spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst, projN, projOver, projWorst, unbacked });
+  return unbacked;
 }
