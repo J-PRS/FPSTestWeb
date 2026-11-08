@@ -51,8 +51,10 @@ export class WebTransportGameTransport implements GameTransport {
       try { this.dgWriter = wt.datagrams.writable?.getWriter() ?? null; } catch { this.dgWriter = null; }
       this.rr = stream.readable.getReader();
       this.dr = wt.datagrams.readable.getReader();
-      this.pumpReliable(this.rr);
-      this.pumpDatagrams(this.dr);
+      // oxlint-disable-next-line promise/no-nesting -- fire-and-forget pumps, self-catching
+      this.pumpReliable(this.rr).catch((): void => { /* belt for the suspenders */ });
+      // oxlint-disable-next-line promise/no-nesting -- ditto
+      this.pumpDatagrams(this.dr).catch((): void => { /* ditto */ });
       for (const d of this.preOpen) {this.flushDatagram(d);}
       this.preOpen.length = 0;
       this.config.onConnect?.();
@@ -116,7 +118,7 @@ export class WebTransportGameTransport implements GameTransport {
     try { m = JSON.parse(line); } catch { return; /* malformed */ }
     if (m.type === 'gameState' && (m as { caps?: { binLane?: number } }).caps?.binLane && !this.binStream) {
       this.wantBinLane = true;
-      this.openBinLane();
+      this.openBinLane().catch((): void => { /* openBinLane catches internally */ });
     }
     if (m.type === 'bin' && typeof (m as { d?: string }).d === 'string') {
       this.config.onBinaryMessage?.(Uint8Array.from(atob((m as { d: string }).d), (c): number => c.charCodeAt(0)));
@@ -165,8 +167,18 @@ export class WebTransportGameTransport implements GameTransport {
     this.binWriter = null;
     if (wasUp || this.wantBinLane) {
       logger.warn('wt bin lane ended — reopening');
-      setTimeout((): void => { if (this.open && this.wantBinLane && !this.binStream) { this.openBinLane(); } }, 500);
+      this.retryBinLane(500);
     }
+  }
+
+  /** Delayed bin-lane reopen - openBinLane self-catches, the .catch is
+   *  lint-honesty for the floating promise. */
+  private retryBinLane(delayMs: number): void {
+    setTimeout((): void => {
+      if (this.open && this.wantBinLane && !this.binStream) {
+        this.openBinLane().catch((): void => { /* internally caught */ });
+      }
+    }, delayMs);
   }
 
   private wantBinLane = false;
@@ -218,7 +230,7 @@ export class WebTransportGameTransport implements GameTransport {
         this.binWriter.write(frame).catch((): void => {
           this.binWriter = null;
           this.binStream = null;
-          if (this.open && this.wantBinLane) {setTimeout((): void => { if (this.open && this.wantBinLane && !this.binStream) {this.openBinLane();} }, 300);}
+          if (this.open && this.wantBinLane) {this.retryBinLane(300);}
         });
         return true;
       }
