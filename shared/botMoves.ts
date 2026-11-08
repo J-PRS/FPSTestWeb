@@ -68,6 +68,12 @@ export class BotMoves {
   /** Short latch letting an apex-extension burn survive the diveRun
    *  veto - same role reconHoldT plays for recon climbs. */
   private apexHoldT = 0;
+  /** Burn-glide cycle: enforced no-discretionary-jet window after a
+   *  committed burn ends on a free roamer. Chaos soak (_tools/_chaos3.ts)
+   *  showed pulse-burn-then-glide beat scattered taps - the descent
+   *  converts bought altitude to speed for free while the tank refills.
+   *  Combat/mission burns (prey/block/runIn/tail/escape) bypass it. */
+  private glideT = 0;
   /** Crawl latch — armed after a parked stop inside the grab ring;
    *  keeps the walk key but forbids ski/jet so a downhill stand can't
    *  re-spin the orbit the brake just killed. */
@@ -277,12 +283,12 @@ export class BotMoves {
     const mount = this.stepMount(ctx, { rise, speed, airborne, dyAbove, odTap, tanked,
       mountCommit: (ctx.runner === true || ctx.running === true) && dyAbove < -6 && odTap < T.moves.destHighNear * 1.5 && (ctx.energy ?? -1) >= T.moves.breathHold });
     if (mount) {return mount;}
-    this.jetHold = Math.max(0, this.jetHold - dt); this.glideTapT = Math.max(0, this.glideTapT - dt);
+    this.glideLatch(dt, ctx);
     // Tribes energy play: ski DOWNHILL for free speed, JET UPHILL so the
     // face doesn't eat momentum. A modest rise ahead while moving gets a
     // short tap - the mission gates above only arm on real climbs, this
     // covers the constant small-hill hopping humans never stop doing.
-    if (!airborne && !ctx.posted && !ctx.runner && rise > 1.5 && rise < 8 && speed > 12 && this.glideTapT <= 0
+    if (!airborne && !ctx.posted && !ctx.runner && rise > 1.5 && rise < 8 && speed > 12 && this.glideTapT <= 0 && this.glideT <= 0
         && (ctx.energy === undefined || ctx.energy > T.moves.climbTapMinE)) {
       this.glideTapT = 2.5;
       this.jetHold = Math.max(this.jetHold, 0.35);
@@ -290,7 +296,8 @@ export class BotMoves {
     }
     // Re-arm while the reason holds (a long climb = one long burn),
     // plus a minimum pulse so a gate flicker can't chop the burn.
-    if (this.wantJet(ctx, pos, dest, { rise, speed, gd, airborne }) && tanked) {
+    // glideT banks the post-burn rest; prey/block/runIn still arm.
+    if (this.wantJet(ctx, pos, dest, { rise, speed, gd, airborne }) && tanked && (this.glideT <= 0 || this.jetWhy === 'prey' || this.jetWhy === 'block' || this.jetWhy === 'runIn')) {
       this.jetHold = Math.max(this.jetHold, T.moves.jetHoldBase + botRand() * T.moves.jetHoldRand);
     }
     this.reconTick(dt, ctx, pos, { g0, rise, airborne, tanked });
@@ -465,6 +472,20 @@ export class BotMoves {
     return { ski: false, jet: s.rise > T.moves.stepJetRise && s.tanked, jump: true };
   }
 
+  /** Burn-glide bookkeeping: decay the holds, and when a free roamer's
+   *  committed burn ends, bank the glide before any economy reason can
+   *  re-arm on the same tick. Combat/mission burns never trigger it. */
+  private glideLatch(dt: number, ctx: BrainCtx): void {
+    const freeRoam = !ctx.posted && ctx.runner !== true && ctx.wave !== true && ctx.running !== true;
+    const hadHold = this.jetHold > 0;
+    this.jetHold = Math.max(0, this.jetHold - dt); this.glideTapT = Math.max(0, this.glideTapT - dt);
+    this.glideT = Math.max(0, this.glideT - dt);
+    if (hadHold && this.jetHold <= 0 && freeRoam
+        && this.jetWhy !== 'prey' && this.jetWhy !== 'block' && this.jetWhy !== 'runIn' && this.jetWhy !== 'tail') {
+      this.glideT = T.moves.glideTime;
+    }
+  }
+
   /** Recon climb: a free-roaming bot with a healthy tank periodically
    *  buys altitude - the human "pop up and look" that doubles as the
    *  AGL the HA column measures. Posted anchors and route-committed
@@ -478,7 +499,7 @@ export class BotMoves {
    *  is the same "terrain ahead drops" read canDive uses. */
   private reconTick(dt: number, ctx: BrainCtx, pos: BotVec, s: { g0: number; rise: number; airborne: boolean; tanked: boolean }): void {
     this.reconT = Math.max(0, this.reconT - dt);
-    if (this.reconT <= 0 && this.jetHold <= 0 && !ctx.posted && ctx.runner !== true && ctx.wave !== true
+    if (this.reconT <= 0 && this.jetHold <= 0 && this.glideT <= 0 && !ctx.posted && ctx.runner !== true && ctx.wave !== true
         && ctx.running !== true && !s.airborne && !this.perched && s.tanked && s.rise > -T.moves.boostRise
         && (ctx.energy === undefined || ctx.energy > T.moves.reconMinE)
         && pos.y - s.g0 < T.moves.reconAglMax) {

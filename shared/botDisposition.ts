@@ -8,6 +8,14 @@ import { dist3, dirXZ } from './botVec.ts';
 
 const CLOSE_PRESS_M = 6; // inside this the orbit breaks — press to fist range
 const FLINCH_DIST = 8;
+// Shield only while effectively planted: ground caps are 8/11/14 m/s
+// (heavy/medium/light), so 10 lets heavies shield at their run pace but
+// sheds the bubble the moment a medium or light commits to a ski line.
+const SHIELD_PLANTED_SPEED = 10;
+/** Effectively stationary read for the shield gate - missing vel reads
+ *  as planted (old ctx shapes predating velocity). */
+const isPlanted = (vel: { x: number; z: number } | undefined): boolean =>
+  !vel || Math.hypot(vel.x, vel.z) < SHIELD_PLANTED_SPEED;
 
 // Disposition family — step destination (flinch knock > hunt
 // press/retreat/orbit > goal), the fortification pick, and the
@@ -360,13 +368,19 @@ export function statusIntent(b: BotBrain, ctx: BrainCtx, fearing: boolean): numb
     if (b.mountWait) {return 0;}
     const fighting = b.h.hunt !== null;
     const hurt = (ctx.healthFrac ?? 1) < 0.6;
+    // Shield is the hold-the-fight bubble - it eats the same tank jets
+    // burn AND zeroes the recharge while held. A bot above jog speed is
+    // moving with intent (ski line, chase, escape); shedding the bubble
+    // there is what a player does before a jet. Below it, the bot is
+    // planted in the exchange and the DR is worth the tank.
+    const planted = isPlanted(ctx.vel);
     let status = 0;
     if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10) {status |= STATUS.MEND;}
     // REVERTED: SHIELD for committed runners inside 200m of the objective —
     // same-seed soak identical (5g/2c, eHp 44->42). The ring kill window is
     // crossfire volume, not a tank problem; shields already fire once the
     // hunt flags 'fighting' inside the ring anyway.
-    else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) {status |= STATUS.SHIELD;}
+    else if (fighting && planted && ctx.energy >= ENERGY.shieldCost + 15) {status |= STATUS.SHIELD;}
     // Infiltration cloak: pressing an enemy stand unseen beats shielding
     // through it. A WOUNDED infiltrator slips the veil back on while
     // retreating — the pest survives by breaking contact, not trading.

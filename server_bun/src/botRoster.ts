@@ -9,7 +9,7 @@ import { BotBrain } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { CLASS_STATS, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
-import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, adaptLoadout, type BotLoadout, type LoadoutSlot } from '../../shared/botLoadouts.ts';
+import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, rollBotPerk, adaptLoadout, type BotLoadout, type LoadoutSlot } from '../../shared/botLoadouts.ts';
 import { aimSkillFor , type BotSkillSpec } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
@@ -75,7 +75,12 @@ export class BotRoster {
       const wildcard = botRand() < 0.125;
       let loadout;
       if (process.env.FPS_SOAK_RANDLO === '1') {loadout = { perk: 'lifesteal' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) };}
-      else {loadout = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;}
+      else {
+        loadout = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;
+        // Perk is a spawn roll, not kit identity - the authored table
+        // fields the weapons, the perk table fields the person.
+        loadout = Object.assign({}, loadout, {perk: rollBotPerk(loadout, botRand)});
+      }
       this.alts.set(id, wildcard ? WILDCARD_SLOTS : (BOT_ALT_SLOTS[kitIdx] ?? {}));
       // Kit picks the body, then the squad's weighted fill picks the
       // job — plated/mortar kits anchor heavy, featherjets flies light,

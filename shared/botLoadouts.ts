@@ -1,6 +1,6 @@
 import { WeaponType, getWeaponStats, SIDEARM_WEAPONS, BELT_THROW_WEAPONS } from './weapons.ts';
 import { SELF_SPLASH_MAX } from './combat.ts';
-import type { PerkId } from './perks.ts';
+import { PERK_ORDER, type PerkId } from './perks.ts';
 import { HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, classCanFire, type ArmorClass } from './botClasses.ts';
 
 const beltOut = (w: WeaponType, fb: WeaponType): WeaponType =>
@@ -138,7 +138,7 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   // same honest-ray path Lightning already takes, no projectile needed.
   side: [...SIDEARM_WEAPONS],
 };
-const WILDCARD_PERKS: PerkId[] = ['lifesteal', 'overcharge', 'armored', 'bombardier', 'featherjets'];
+const WILDCARD_PERKS: PerkId[] = PERK_ORDER;
 
 /** Kit consistency gate: every slot must be fireable under the kit's
  *  own derived class - an MRV belt can land on a heavy kit, never on a
@@ -189,6 +189,16 @@ export function rollWildcard(rng: () => number): BotLoadout {
   };
   const perks = WILDCARD_PERKS.filter((p): boolean => kitConsistent(Object.assign({}, kit, {perk: p})));
   return Object.assign({}, kit, {perk: perks[Math.floor(rng() * perks.length)] ?? 'lifesteal'});
+}
+
+/** Spawn perk draw for ANY kit (authored or wildcard): the full perk
+ *  table filtered by the same kitConsistent gate - armored on a
+ *  light-locked kit would derail the body, so it never gets picked.
+ *  Returns the kit's own perk when nothing legal rolls (can't happen
+ *  today - 'none' always passes - but keeps the signature total). */
+export function rollBotPerk(lo: BotLoadout, rng: () => number): PerkId {
+  const perks = WILDCARD_PERKS.filter((p): boolean => kitConsistent(Object.assign({}, lo, {perk: p})));
+  return perks[Math.floor(rng() * perks.length)] ?? lo.perk;
 }
 
 /** Respawn adaptation: for each slot the bot can reroll, keep whichever
