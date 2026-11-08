@@ -41,6 +41,9 @@ export class BotGoals {
     /** Seeded per-bot angle — escort/vulture goals ring the carrier
      *  here instead of stacking his exact spot (see the offer below). */
     private escortA: () => number = (): number => 0,
+    /** Hero resolve — a pressured bot's curiosity sharpens into
+     *  predation: heardGoal's investigate roll climbs toward certain. */
+    private resolve: () => number = (): number => 0,
   ) {}
 
   /** The bot's nerve - where on the solo↔social dial it sits right now.
@@ -323,6 +326,6 @@ export class BotGoals {
     }
     // Duty tempers wanderlust: the professional hears the fight, the
     // tourist hears the call of the mountain.
-    return loudest && botRand() < (0.15 + this.duty() * 0.5) ? ((((((Object.assign({}, loudest))))))) : null;
+    return loudest && botRand() < (0.15 + this.duty() * 0.5 + this.resolve() * 0.4) ? ((((((Object.assign({}, loudest))))))) : null;
   }
 }

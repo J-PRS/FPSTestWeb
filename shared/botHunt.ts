@@ -539,7 +539,16 @@ st.burstLeft -= 1;
   // The skill matrix: hosts that know which weapon will actually fire
   // report it via aimSkill - a snap phenom threads rails, a mortar
   // artist plants the stand, a potato sprays and prays.
-  if (ctx.aimSkill) {err /= ctx.aimSkill(d, Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z));}
+  const vSpd = Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z);
+  const aimK = ctx.aimSkill?.(d, vSpd) ?? 1;
+  err /= aimK;
+  // TRACK CONVERGENCE - the lever that was missing. A human's error on a
+  // target isn't per-shot scatter: it collapses the longer they stay
+  // on him, because tracking is a solved problem, not a fresh guess.
+  // Better trackers (higher axis) converge faster AND further - caps
+  // at 3x off the per-shot budget so sustained aim never goes noiseless.
+  const onTarget = st.huntTick - (acq ?? st.huntTick);
+  err /= Math.min(3, 1 + onTarget * 0.04 * aimK);
   // The shooter's own motion: projectile velocity inheritance makes
   // shots ACROSS your line of travel the hardest (the impact point
   // drags sideways with you), while firing along your velocity is

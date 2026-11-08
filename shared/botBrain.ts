@@ -417,6 +417,7 @@ export class BotBrain {
     (): number => this.social,
     (): number => this.greed,
     (): number => this.orbitA,
+    (): number => this.h.skill?.resolve ?? 0,
   );
   // Ski/jet/jump hint intents live in botMoves.ts - host closures read
   // the escape burst latch and the live hunt target.
@@ -769,18 +770,22 @@ export class BotBrain {
     ctx.radio = this.radioGoal;
     // Brain-owned trait injected into ctx - pickHunt's ectx clone then
     // carries it to scanVisible without another parameter thread.
-    ctx.sweat = this.sweat;
+    // Resolve acts like sweat: a pressured bot plays like the rolled
+    // tryhard - fight-seeking climbs with escalation, same legal dial.
+    ctx.sweat = Math.max(this.sweat, this.h.skill?.resolve ?? 0);
 
     // Hero mode: pressure -> resolve -> the skill dials lerp toward
     // impossible. menacePos rides the hearing sense at high resolve -
     // the bot investigates the dominant player, no lock-on.
     if (HERO_ON && ctx.hero && this.h.skill) {
       heroTick(this.h.skill, ctx.hero, dt);
-      // Earshot only - pushing a distant menace's live pos would be a
-      // wallhack, not a heard fight. 50m matches the server noisesNear
-      // radius the real hearing sense samples.
+      // Predator earshot: the investigation radius scales WITH resolve -
+      // a mild bot hears a brawl 50m out, a full hero hears the lobby's
+      // problem across the map. Still the hearing sense, not a wallhack:
+      // he walks there and fights fair.
+      const earshot = 50 + this.h.skill.resolve * 250;
       if (this.h.skill.resolve > 0.5 && ctx.hero.menacePos
-          && distSqXZ(ctx.hero.menacePos, pos) < 50 * 50) {
+          && distSqXZ(ctx.hero.menacePos, pos) < earshot * earshot) {
         (ctx.sounds ??= []).push(ctx.hero.menacePos);
       }
     }
