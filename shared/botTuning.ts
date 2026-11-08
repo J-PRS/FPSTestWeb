@@ -91,7 +91,7 @@ export const BOT_TUNING = {
                          // _chaos3: 5s burns top ridges the 2.8s ones
                          // can't - altitude is what the glide spends)
     reconAglMax: 18,     // m AGL - skip the burn when already high
-    reconMinE: 16,       // energy - client tanks live at 2-21E (jetprobe:
+    reconMinE: 26,       // energy - client tanks live at 2-21E (jetprobe:
                          // 100% of samples <35), so comfyEnergy would
                          // gate the climb off entirely; ~16E buys the
                          // ~1.2s burn that actually clears 5m AGL
@@ -101,7 +101,7 @@ export const BOT_TUNING = {
                          // a committed burn ends (chaos soak _chaos3:
                          // pulse-burn/glide beat scattered taps - the
                          // descent converts altitude to speed for free)
-    climbTapMinE: 22,    // energy - the small-rise tap had NO floor and
+    climbTapMinE: 30,    // energy - the small-rise tap had NO floor and
                          // spent every regen trickle to the 2.4E sputter
                          // floor (jetprobe: enAvg 4-9 across the roster),
                          // which is also why recon climbs never had fuel
