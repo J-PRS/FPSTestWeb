@@ -273,9 +273,22 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       return Object.assign({}, ctx.objective);
     }
     if (d < CLOSE_PRESS_M || d > b.h.orbitFar * (hero ? 0.7 : 1)) {
-      // Point-blank or outranged: press straight in either way — inside
-      // fist reach the press converts to the punch, outside it to the
-      // approach. Holding the orbit at 2m would stare down a barrel.
+      // Point-blank or outranged: press in — but a squad converging on
+      // one target must not queue single-file into the same chokepoint.
+      // Pick the bearing around the target the fewest allies already
+      // hold and approach down that line: deterministic flank fan.
+      if (d > CLOSE_PRESS_M && ctx.allies && ctx.allies.length) {
+        const sectors = new Array<number>(8).fill(0);
+        for (const a of ctx.allies) {
+          const ba = Math.atan2(a.z - t.pos.z, a.x - t.pos.x);
+          sectors[Math.floor(((ba + Math.PI) / (Math.PI * 2)) * 8) % 8]! += 1;
+        }
+        let best = 0;
+        for (let k = 1; k < 8; k += 1) {if (sectors[k]! < sectors[best]!) {best = k;}}
+        const a = best * (Math.PI * 2 / 8) - Math.PI + Math.PI / 8;
+        const r = (b.h.orbitFar + b.h.orbitClose) * 0.5;
+        return { x: t.pos.x + Math.cos(a) * r, y: ctx.groundY(t.pos.x + Math.cos(a) * r, t.pos.z + Math.sin(a) * r), z: t.pos.z + Math.sin(a) * r };
+      }
       return Object.assign({}, t.pos);
     }
     // fightPos comes from the last replan tick — "hold" used to mean
