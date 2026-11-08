@@ -97,10 +97,18 @@ export class BotGoals {
     const wander = this.wanderCandidate(ctx, pos);
     const heard = this.heardGoal(ctx, pos);
     const cands: Array<{ goal: BotVec; score: number }> = [];
+    // Crowding discount: a goal that already has allies on it loses
+    // pull fast - Tribes players spread, they don't stack in a bowl.
+    // Each ally within 18m of the CANDIDATE quarters the score.
+    const crowd = (g: BotVec): number => {
+      let n = 0;
+      for (const a of ctx.allies ?? []) {if (distSq(g, a) < 18 * 18) {n += 1;}}
+      return n;
+    };
     const offer = (goal: BotVec | null | undefined, weight: number, ignoreScent = false): void => {
       if (!goal) {return;}
       const d = Math.sqrt(distSq(pos, goal));
-      const reach = 1 / (1 + d / 140);
+      const reach = 1 / (1 + d / 140) / (1 + crowd(goal));
       // Experience memory on top of the shared scent: a spot where THIS
       // bot already died reads extra dangerous to it personally - the
       // map's graveyard is everyone else's history, this one is mine.
@@ -252,7 +260,11 @@ export class BotGoals {
     if (n > 1) {
       cx /= n; cz /= n;
       const dcx = cx - pos.x, dcz = cz - pos.z;
-      pull = Math.min(1, Math.hypot(dcx, dcz) / 180); // full crowd-aim past ~180m
+      // Bowl-lock fix: the centroid pull fades INSIDE ~60m - drifting
+      // toward a crowd is a compass, not a parking spot. Arriving bots
+      // stop being pulled into the pile they already joined.
+      pull = Math.min(1, Math.hypot(dcx, dcz) / 180)
+        * Math.min(1, Math.hypot(dcx, dcz) / 60);
       hv = { x: h0.x * (1 - pull) + dcx * pull, z: h0.z * (1 - pull) + dcz * pull };
     }
     // Leg style per roll: pure-downhill picking ratcheted every bot into
