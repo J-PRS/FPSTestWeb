@@ -52,14 +52,14 @@ for (; Date.now() - start < WALL * 1000; t += 1) {
     const a = ps.filter((p) => p.team === 'alpha'), b = ps.filter((p) => p.team === 'bravo');
     const ka = a.reduce((s, p) => s + p.kills, 0), kb = b.reduce((s, p) => s + p.kills, 0);
     const da = a.reduce((s, p) => s + p.deaths, 0), db = b.reduce((s, p) => s + p.deaths, 0);
-    console.log(`  t=${t + 1}s ${OFF ? 'deploy=' + DEPLOY_TEAM : 'loose=' + LOOSE} alpha ${ka}/${da} bravo ${kb}/${db}`);
+    console.log(`  t=${((t + 1) * 0.05).toFixed(0)}s(sim) ${OFF ? 'deploy=' + DEPLOY_TEAM : 'loose=' + LOOSE} alpha ${ka}/${da} bravo ${kb}/${db}`);
   }
 }
 const ps = [...room.players.getAllPlayers().values()];
 for (const p of ps) {
   console.log(`  ${p.id.padEnd(16)} ${p.team} k=${p.kills} d=${p.deaths} held=${Math.round(p.heldTokens ?? 0)}`);
 }
-console.log(`DEPLOY_TEAM=${DEPLOY_TEAM} sim=${t}s wall=${((Date.now() - start) / 1000).toFixed(0)}s (belt side's kill advantage = the lever's real value)`);
+console.log(`DEPLOY_TEAM=${DEPLOY_TEAM} sim=${(t * 0.05).toFixed(0)}s wall=${((Date.now() - start) / 1000).toFixed(0)}s (belt side's kill advantage = the lever's real value)`);
 if (kindOf.size) {
   const tally = new Map<string, { k: number; d: number }>();
   for (const p of ps) {const it = kindOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += p.kills; e.d += p.deaths; tally.set(it, e);}

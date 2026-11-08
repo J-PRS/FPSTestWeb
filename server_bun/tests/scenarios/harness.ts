@@ -7,7 +7,7 @@ import { botRng, botRngRelease, tauntRng } from '../../../shared/botRand.ts';
 // purpose; an import-time arm would trip them instead).
 import { losMemoReset } from '../../../shared/botLos.ts';
 import { resetTauntCooldowns } from '../../../shared/botTaunts.ts';
-import { simNowAdvance, simNowReset , simMs} from '../../src/simClock.ts';
+import { simNow, simNowAdvance, simNowReset , simMs} from '../../src/simClock.ts';
 import { resolveMapSpec, type MapSpec } from '../../../shared/mapSpec.ts';
 import { computeStateHash } from '../../../shared/stateHash.ts';
 import { decodeTickFrame, decodeProjSpawn, decodeProjGone, type WireTickPlayer } from '../../../shared/wire.ts';
@@ -138,6 +138,10 @@ export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string,
       }
     }
     simNowAdvance(dt * 1000);
+    // Respawns are the known wall-clock edge: live rooms fire them off
+    // real setTimeout, so without this a dead seat stays dead for the
+    // whole sim - every soak's "combat freeze" was this, not a lull.
+    (room as { messages?: { respawnTick?: (n: number) => void } }).messages?.respawnTick?.(simNow());
   }
   } finally {
     if (stream) {botRngRelease();}

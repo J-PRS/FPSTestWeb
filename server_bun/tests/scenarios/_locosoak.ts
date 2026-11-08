@@ -52,14 +52,14 @@ for (let t = 0; t < TOTAL; t += 1) {
       if (d < 80) {contacts += 1;}
     }}
     const dmg = ps.reduce((a, p): number => a + (p.maxHealth - p.health), 0);
-    console.log(`  t=${clock}s contacts<80m=${contacts} minD=${minD.toFixed(0)} hunts=${hunts}[${huntIds.join(',')}] liveProj=${shots} dmg=${dmg.toFixed(0)} kd=[${kd}] held=${held}`);
+    console.log(`  t=${(clock * 0.05).toFixed(0)}s(sim) contacts<80m=${contacts} minD=${minD.toFixed(0)} hunts=${hunts}[${huntIds.join(',')}] liveProj=${shots} dmg=${dmg.toFixed(0)} kd=[${kd}] held=${held}`);
   }
   for (const p of room.players.getAllPlayers().values()) {
     const r = ring.get(p.id) ?? [];
     const prev = r[r.length - 1]!;
     if (prev) {pathLen.set(p.id, (pathLen.get(p.id) ?? 0) + Math.hypot(p.position.x - prev.x, p.position.z - prev.z));}
     r.push({ x: p.position.x, z: p.position.z, t: clock });
-    while (r.length > 1 && clock - r[0]!.t > 16) {r.shift();}
+    while (r.length > 1 && clock - r[0]!.t > 16 * 20) {r.shift();} // 16 sim-seconds of trail
     ring.set(p.id, r);
   }
 }
@@ -69,9 +69,12 @@ const rates = (id: string): number[] => {
   const cur = r[r.length - 1]!;
   if (!cur) {return WINS.map(() => 0);}
   return WINS.map((w): number => {
+    // clock ticks at step cadence (dt=0.05s each): the window `w` in
+    // seconds is w*20 steps; net speed = meters / sim-seconds.
+    const ws = w * 20;
     let a: { x: number; z: number; t: number } | undefined;
-    for (let i = r.length - 1; i >= 0; i -= 1) {if (r[i]!.t <= cur.t - w) {a = r[i]!; break;}}
-    return a ? Math.hypot(cur.x - a.x, cur.z - a.z) / (cur.t - a.t) : 0;
+    for (let i = r.length - 1; i >= 0; i -= 1) {if (r[i]!.t <= cur.t - ws) {a = r[i]!; break;}}
+    return a ? Math.hypot(cur.x - a.x, cur.z - a.z) / ((cur.t - a.t) * 0.05) : 0;
   });
 };
 
