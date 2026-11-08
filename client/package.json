@@ -1,6 +1,6 @@
 {
   "name": "client-three-fps",
-  "version": "0.1.185",
+  "version": "0.1.187",
   "type": "module",
   "scripts": {
     "dev": "vite",
