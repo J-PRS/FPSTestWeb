@@ -116,7 +116,12 @@ export class BotGoals {
     const offer = (goal: BotVec | null | undefined, weight: number, ignoreScent = false): void => {
       if (!goal) {return;}
       const d = Math.sqrt(distSq(pos, goal));
-      const reach = 1 / (1 + d / 140) / (1 + crowd(goal));
+      // Quadratic crowding: the linear 1/(1+crowd) let a dominant offer
+      // (objective w=3.5) still argmax at 1/3 pull - five bots stacking
+      // the same bowl was each brain's correct pick. At n extra allies
+      // the offer falls off quadratically, so the third head in a bowl
+      // finds a different stand unless nothing else exists at all.
+      const reach = 1 / (1 + d / 140) / (1 + crowd(goal) * crowd(goal));
       // Experience memory on top of the shared scent: a spot where THIS
       // bot already died reads extra dangerous to it personally - the
       // map's graveyard is everyone else's history, this one is mine.
@@ -249,7 +254,9 @@ export class BotGoals {
       // instantly to the next best thing.
       const incScore = incumbent ? incumbent.score : s.goalScore;
       const incGoal = incumbent ? incumbent.goal : s.goal;
-      if (process.env.BOTGOALS_DEBUG) {console.log('PICK', JSON.stringify({cands: cands.map((c): { g: BotVec; s: number } => ({g: c.goal, s: +c.score.toFixed(2)})), inc: incumbent?.goal, incScore, cost: +cost(incGoal).toFixed(2), best: best.goal, bestScore: +best.score.toFixed(2)}));}
+      // shared/ runs in the browser too - bare process.env throws there
+      // (and killed the whole bot tick mid-loop, freezing corpses).
+      if (typeof process !== 'undefined' && process.env?.BOTGOALS_DEBUG) {console.log('PICK', JSON.stringify({cands: cands.map((c): { g: BotVec; s: number } => ({g: c.goal, s: +c.score.toFixed(2)})), inc: incumbent?.goal, incScore, cost: +cost(incGoal).toFixed(2), best: best.goal, bestScore: +best.score.toFixed(2)}));}
       if (incScore * (1 + cost(incGoal)) > best.score) {
         s.goal = incGoal;
         s.goalScore = incScore;

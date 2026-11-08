@@ -349,6 +349,15 @@ export class GameBot extends RemotePlayer {
 
   readonly lastDest = new THREE.Vector3();
 
+  /** Debug snapshot for the Alt+Shift+Q dump - what the brain is doing
+   *  right now: steered dest, hunt target, equipped skill, pending
+   *  intents. Compact enough to paste in a bug report. */
+  get aiDump(): string {
+    const hunt = this.brain.h.hunt;
+    const intents = [this.wantSkill, this.wantBelt ? 'belt' : '', this.wantDeploy ? 'deploy' : '', this.wantHook ? 'hook' : ''].filter(Boolean).join(',') || '-';
+    return `ai[dest=${this.lastDest.x.toFixed(0)},${this.lastDest.z.toFixed(0)} hunt=${hunt ? hunt.id.slice(0, 8) : '-'} skill=${this.skillId ?? '-'} intents=${intents}]`;
+  }
+
   /** Propel cooldown (performance.now deadline) - one jump per launch. */
 
   propelUntil = 0;

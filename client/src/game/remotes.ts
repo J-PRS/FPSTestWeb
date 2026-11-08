@@ -462,7 +462,8 @@ function gameDumpRow(w: WorldState, id: string, rp: RemotePlayer, now: number): 
   // straight, no inference from fight outcomes. Offline bots expose
   // brain.skill through GameBot's getter; wire remotes don't carry it.
   const rsv = (rp as { skill?: { resolve?: number } }).skill?.resolve;
-  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${locoStr(id).padEnd(13)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
+  const ai = (rp as { aiDump?: string }).aiDump;
+  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${locoStr(id).padEnd(13)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}${ai ? ` ${ai}` : ''}`;
 }
 if (typeof window !== 'undefined') {
   (window as { __aswDump?: () => string[] }).__aswDump = (): string[] => {
@@ -755,7 +756,9 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
         const friendly = (rp as { team?: string }).team === deps.world.localTeam
           && (rp as { team?: string }).team !== undefined;
         _markPos.copy(rp.position); _markPos.y += rp.renderLift;
-        hud.updatePlayerIndicator(id, _markPos, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass, hp: (rp as { botHp?: number }).botHp });
+        const held = (rp as { heldTokens?: number }).heldTokens ?? 0;
+        rp.setHeld(held);
+        hud.updatePlayerIndicator(id, _markPos, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass, hp: (rp as { botHp?: number }).botHp, held });
       }
       aswAccrue(id, rp.isDead, aswAltFor(id, rp.position.x, rp.position.z, rp.feetY, deps.lazyTerrain(), dt), gb.wireSki ?? false, dt, rp.vel.length());
       locoNote(id, rp.isDead, rp.position.x, rp.position.z);
