@@ -588,6 +588,18 @@ function warnOnce(key: string, text: string): void {
 
 /** Shape check for a declared wire type - presence alone can't catch a
  *  field that arrives as the wrong kind of value. */
+function isVec3(v: unknown): boolean {
+  const o = v as { x?: unknown; y?: unknown; z?: unknown } | null;
+  return typeof o === 'object' && o !== null &&
+    typeof o.x === 'number' && typeof o.y === 'number' && typeof o.z === 'number';
+}
+
+function isRot(v: unknown): boolean {
+  const o = v as { yaw?: unknown; pitch?: unknown } | null;
+  return typeof o === 'object' && o !== null &&
+    typeof o.yaw === 'number' && typeof o.pitch === 'number';
+}
+
 function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
   switch (wire) {
     case 'num': { return typeof v === 'number' && Number.isFinite(v);
@@ -600,15 +612,9 @@ function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
     }
     case 'obj': { return typeof v === 'object' && v !== null;
     }
-    case 'vec3': {
-      const o = v as { x?: unknown; y?: unknown; z?: unknown } | null;
-      return typeof o === 'object' && o !== null &&
-        typeof o.x === 'number' && typeof o.y === 'number' && typeof o.z === 'number';
+    case 'vec3': { return isVec3(v);
     }
-    case 'rot': {
-      const o = v as { yaw?: unknown; pitch?: unknown } | null;
-      return typeof o === 'object' && o !== null &&
-        typeof o.yaw === 'number' && typeof o.pitch === 'number';
+    case 'rot': { return isRot(v);
     }
     default: { const _exhaustive: never = wire; return _exhaustive; }
 }

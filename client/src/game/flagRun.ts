@@ -298,22 +298,7 @@ export class FlagRunBridge {
     // otherwise the "grab" shows a copy flying and the original seated.
     if (this.tasSrc) {this.tasSrc.mesh.visible = t < HOLD || atEnd;}
     // Live speed label over the marker (sample-spacing / step duration).
-    const spd = this.tasPts[i + 1]!.distanceTo(this.tasPts[i]!) / this.tasStep;
-    let spdTxt = `${spd.toFixed(0)} m/s`;
-    if (atEnd) {spdTxt = 'CAP';}
-    else if (t < HOLD) {spdTxt = 'GRAB';}
-    if (spdTxt !== this.tasSpeedTxt && this.tasSpeedCtx && this.tasSpeedTex) {
-      this.tasSpeedTxt = spdTxt;
-      const c = this.tasSpeedCtx;
-      c.clearRect(0, 0, 256, 72);
-      c.font = 'bold 44px monospace';
-      c.textAlign = 'center';
-      c.fillStyle = 'rgba(0,0,0,0.55)';
-      c.fillRect(0, 0, 256, 72);
-      c.fillStyle = '#ffe27a';
-      c.fillText(spdTxt, 128, 52);
-      this.tasSpeedTex.needsUpdate = true;
-    }
+    this.tasSpeedLabel(i, atEnd, t < HOLD);
     // ?film=1 — chase cam: park the local player on the dot's tail so the
     // ordinary camera pipeline frames the flight (recording aid only).
     if (urlParams.has('film')) {
@@ -330,6 +315,24 @@ export class FlagRunBridge {
         }
       }
     }
+  }
+
+  private tasSpeedLabel(i: number, atEnd: boolean, atStart: boolean): void {
+    const spd = this.tasPts[i + 1]!.distanceTo(this.tasPts[i]!) / this.tasStep;
+    let spdTxt = `${spd.toFixed(0)} m/s`;
+    if (atEnd) {spdTxt = 'CAP';}
+    else if (atStart) {spdTxt = 'GRAB';}
+    if (spdTxt === this.tasSpeedTxt || !this.tasSpeedCtx || !this.tasSpeedTex) {return;}
+    this.tasSpeedTxt = spdTxt;
+    const c = this.tasSpeedCtx;
+    c.clearRect(0, 0, 256, 72);
+    c.font = 'bold 44px monospace';
+    c.textAlign = 'center';
+    c.fillStyle = 'rgba(0,0,0,0.55)';
+    c.fillRect(0, 0, 256, 72);
+    c.fillStyle = '#ffe27a';
+    c.fillText(spdTxt, 128, 52);
+    this.tasSpeedTex.needsUpdate = true;
   }
 
   /** Spawn/respawn anchor — beside the nearest live enemy flag. */

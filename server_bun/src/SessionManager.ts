@@ -2,7 +2,7 @@ import type { ServerWebSocket } from 'bun';
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
 import { validatePlayerId } from './validation.ts';
-import type { WebSocketData } from './types.ts';
+import type { PlayerState, WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { isPerkId } from '../../shared/perks.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
@@ -331,26 +331,7 @@ export class SessionManager {
       try { oldSock.close(1000, 'replaced by reconnect'); } catch { /* gone */ }
     }
     room.markIntro(playerId); // reclaimer's decode baseline reset  -  fulls go to them only
-    // The rejoiner's declared class must reconcile with the seat's  -  a
-    // restart-restore blob only knows the dying session's class, so a
-    // client whose kit banked a different tier reconnects holding weapons
-    // the seat's class can't fire (class-locked rejects until death).
-    // The reconnect is itself the declared discontinuity: apply now.
-    const claim = typeof handshake?.armorClass === 'string' ? handshake.armorClass : undefined;
-    if (claim) {room.applyClaimedClass(playerId, claim);}
-    // Perk same shape: the seat's blob perk vs the rejoiner's picked one.
-    const perk = typeof handshake?.perk === 'string' ? handshake.perk : undefined;
-    if (perk) {room.applyClaimedPerk(playerId, perk);}
-    // Reconnect shield: the client warms its pipeline behind the session
-    // veil before dropping the player in  -  the restored body must not be
-    // killable during that window (visible mechanic, not hidden-gfx).
-    // Capped per seat: a deliberate flap would otherwise chain free
-    // invulnerability windows mid-fight.
-    const shields = (room.reclaimShields.get(playerId) ?? 0) + 1;
-    room.reclaimShields.set(playerId, shields);
-    if (shields <= SessionManager.MAX_RECLAIM_SHIELDS) {
-      existingPlayer.protectedUntil = simMs(simNow() + SessionManager.RECONNECT_PROTECT_MS);
-    }
+    this.applyReclaimClaims(room, playerId, existingPlayer, handshake);
     room.messages.handleHandshake(playerId, undefined, true);
     // Disconnect cancelled any pending respawn  -  if they come back dead,
     // re-arm it or the restored corpse stays dead forever
@@ -366,6 +347,29 @@ export class SessionManager {
 
     logger.info('Player reconnected within grace period, state restored', { playerId, room: room.name, health: existingPlayer.health, pos: existingPlayer.position });
     return true;
+  }
+
+  // The rejoiner's declared class must reconcile with the seat's  -  a
+  // restart-restore blob only knows the dying session's class, so a
+  // client whose kit banked a different tier reconnects holding weapons
+  // the seat's class can't fire (class-locked rejects until death).
+  // The reconnect is itself the declared discontinuity: apply now.
+  // Perk same shape: the seat's blob perk vs the rejoiner's picked one.
+  // Reconnect shield: the client warms its pipeline behind the session
+  // veil before dropping the player in  -  the restored body must not be
+  // killable during that window (visible mechanic, not hidden-gfx).
+  // Capped per seat: a deliberate flap would otherwise chain free
+  // invulnerability windows mid-fight.
+  private applyReclaimClaims(room: Room, playerId: string, existingPlayer: PlayerState, handshake?: Record<string, unknown>): void {
+    const claim = typeof handshake?.armorClass === 'string' ? handshake.armorClass : undefined;
+    if (claim) {room.applyClaimedClass(playerId, claim);}
+    const perk = typeof handshake?.perk === 'string' ? handshake.perk : undefined;
+    if (perk) {room.applyClaimedPerk(playerId, perk);}
+    const shields = (room.reclaimShields.get(playerId) ?? 0) + 1;
+    room.reclaimShields.set(playerId, shields);
+    if (shields <= SessionManager.MAX_RECLAIM_SHIELDS) {
+      existingPlayer.protectedUntil = simMs(simNow() + SessionManager.RECONNECT_PROTECT_MS);
+    }
   }
 
   /** Identity rejections (bad token, claimed id, malformed id): tell the

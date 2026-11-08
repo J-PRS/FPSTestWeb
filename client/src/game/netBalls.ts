@@ -500,23 +500,24 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       lead: age, timers: { et: m.et, slowT: m.slowT, damp: m.damp },
       tp: m.tp, simT: m.t, hard: m.kind === 'teleport' || m.kind === 'spawn',
     });
-    // Only real discontinuities are worth a demo keyframe — 'segment'
-    // heartbeats would drown the event stream (dozens/sec fleet-wide).
+    noteSegmentDemo(m, b);
+  }
+
+  // Only real discontinuities are worth a demo keyframe — 'segment'
+  // heartbeats would drown the event stream (dozens/sec fleet-wide).
+  // …but a heartbeat decimated to ~1Hz is the anchor floor for balls
+  // the StateChanged sweep can't see (its source enumerates local
+  // entities; wire-only balls got zero edges and drifted 150m+ in
+  // replay). Wire presence = recorded presence, unconditionally.
+  function noteSegmentDemo(m: { id: number; kind?: string; t?: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number } },
+    b: Ball): void {
+    const dm = deps.lazyDemoManager();
+    if (!dm?.isRecording) {return;}
     if (m.kind && m.kind !== 'segment') {
-      const dm = deps.lazyDemoManager();
-      if (dm?.isRecording) {
-        dm.recordTargetBounce(m.id, m.position, m.velocity, b.variant);
-      }
-    } else if (m.kind === 'segment') {
-      // …but a heartbeat decimated to ~1Hz is the anchor floor for balls
-      // the StateChanged sweep can't see (its source enumerates local
-      // entities; wire-only balls got zero edges and drifted 150m+ in
-      // replay). Wire presence = recorded presence, unconditionally.
-      const dm = deps.lazyDemoManager();
-      if (dm?.isRecording && (m.t ?? 0) - (segRecordT.get(m.id) ?? -Infinity) > 1) {
-        segRecordT.set(m.id, m.t ?? 0);
-        dm.recordTargetBounce(m.id, m.position, m.velocity, b.variant);
-      }
+      dm.recordTargetBounce(m.id, m.position, m.velocity, b.variant);
+    } else if (m.kind === 'segment' && (m.t ?? 0) - (segRecordT.get(m.id) ?? -Infinity) > 1) {
+      segRecordT.set(m.id, m.t ?? 0);
+      dm.recordTargetBounce(m.id, m.position, m.velocity, b.variant);
     }
   }
 

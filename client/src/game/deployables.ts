@@ -329,6 +329,20 @@ export class Deployables {
     sfx.dash();
   }
 
+  /** Pods fly, unfold, expire — sweep backwards so splices stay cheap. */
+  private tickPods(dt: number): void {
+    for (let i = this.pods.length - 1; i >= 0; i -= 1) {
+      const pod = this.pods[i]!;
+      this.updatePod(pod, dt);
+      if (pod.ttl <= 0) {
+        pod.item?.dispose(this.deps.scene);
+        pod.mine?.dispose();
+        if (pod.nugget) {this.disposeNuggetPod(pod.nugget);}
+        this.pods.splice(i, 1);
+      }
+    }
+  }
+
   /** Pod flight: gravity arc, the item unfolds mid-air, cliffs deflect it. */
   private updatePod(pod: Pod, dt: number): void {
     const terrain = this.deps.lazyTerrain();
@@ -862,16 +876,7 @@ export class Deployables {
     this.tickBotSnares();
     this.updateLash(dt);
 
-    for (let i = this.pods.length - 1; i >= 0; i -= 1) {
-      const pod = this.pods[i]!;
-      this.updatePod(pod, dt);
-      if (pod.ttl <= 0) {
-        pod.item?.dispose(this.deps.scene);
-        pod.mine?.dispose();
-        if (pod.nugget) {this.disposeNuggetPod(pod.nugget);}
-        this.pods.splice(i, 1);
-      }
-    }
+    this.tickPods(dt);
     this.reapDeadItems();
     this.remotes.update(dt);
     this.rockets.update(dt);
