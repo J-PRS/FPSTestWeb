@@ -15,6 +15,12 @@ export function hideRemote(p: RemotePlayer): void {
 }
 
 export function showRemote(p: RemotePlayer): void {
+  // Dead bodies never come back through the vis paths — a stale-socket
+  // resume, decloak, or frustum re-add firing after the kill funnel's
+  // hide is how a corpse stays posed standing for the whole dead
+  // window. Respawn clears isDead before it shows, so this can't eat
+  // a legal restore.
+  if (p.isDead) {return;}
   p.model.setVisible(true);
   // Only add collider if model is loaded (colliderGizmo exists)
   if (p.loaded) {p.model.addColliderGizmo();}

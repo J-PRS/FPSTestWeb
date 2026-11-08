@@ -240,6 +240,11 @@ export class RemotePlayer {
   }
 
   update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping = 0, serverVelocity?: { x: number; y: number; z: number }, serverMs?: number): void {
+    // Dead-but-updating = the respawn echo dropped. The authority emits
+    // positions only for live sims, so updates here mean this remote is
+    // alive - revive off the first update past the kill, don't hold a
+    // standing corpse while the live body shoots elsewhere.
+    if (this._isDead) {this.respawn(targetPosition);}
     this.interp.onUpdate(targetPosition, targetRotation, ping, serverVelocity, serverMs);
     // NOTE: death physics (gravity, bounce, tumble, shrink) are handled in tick()
     // so they run every frame at the real dt - running them here at 20Hz with a
