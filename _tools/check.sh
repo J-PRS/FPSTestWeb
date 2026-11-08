@@ -19,10 +19,21 @@ node _tools/procs.mjs --kill 'check\.sh'
 # quick "did I break the build" probe; NOT the definition of done.
 FAST=0
 FASTEST=0
+JSON=0
 for _a in "${@:-}"; do
   [ "$_a" = "--fast" ] && FAST=1
   [ "$_a" = "--fastest" ] && FASTEST=1
+  [ "$_a" = "--json" ] && JSON=1
 done
+
+# --json: machine-readable verdict for agent self-repair. Every stage
+# tags GATE; the EXIT trap writes _tools/health/verdict.json (gitignored)
+# with {gate, exitCode, mode, ts} no matter how the run ends.
+GATE=scan
+if [ "$JSON" -eq 1 ]; then
+  MODE=full; [ "$FAST" -eq 1 ] && MODE=fast; [ "$FASTEST" -eq 1 ] && MODE=fastest
+  trap "rc=\$?; mkdir -p _tools/health; printf '{\"gate\":\"%s\",\"exitCode\":%d,\"mode\":\"$MODE\",\"ts\":\"%s\"}\n' \"\$GATE\" \"\$rc\" \"\$(date -u +%FT%TZ)\" > _tools/health/verdict.json" EXIT
+fi
 
 CHANGED=$(git diff --name-only HEAD -- '*.ts' '*.tsx' | sort -u)
 if [ -z "$CHANGED" ]; then
@@ -34,6 +45,7 @@ echo "check: $(echo "$CHANGED" | wc -l) changed files"
 # Sanity abort: a real change touches tens of files, never hundreds.
 # A 936-file list once let oxlint --fix rewrite ~190 unrelated files —
 # refuse wholesale churn so a foreign diff can't launder through the gate.
+GATE=sanity
 N=$(echo "$CHANGED" | wc -l)
 if [ "$N" -gt 100 ]; then
   echo "check: ABORT — $N changed ts/tsx files exceeds the 100-file sanity cap."
@@ -44,6 +56,7 @@ fi
 # Root cleanliness gates — each first-party root has its own committed
 # index_root.txt. Generated/gitignored entries are excluded; unignored new
 # entries fail until intentionally indexed or moved. Cheap; every check mode.
+GATE=rootcheck
 node utils/_rootcheck.mjs
 node utils/_rootcheck.mjs --scope client
 node utils/_rootcheck.mjs --scope server_bun
@@ -51,10 +64,12 @@ node utils/_rootcheck.mjs --scope server_bun
 
 # Moat ratchet — no client->server_bun imports outside the gated P2P
 # host + tests. Cheap; every check mode.
+GATE=moat
 node utils/_moatcheck.mjs || exit 1
 
 # _docs filename convention (YYYY-MM-DD_UPPER_SNAKE.md; KEEP list in the
 # tool covers living trackers). Cheap; fails on off-spec names.
+GATE=docnames
 node _tools/docnames.mjs --check || {
   echo "check: _docs filenames off-spec — run 'node _tools/docnames.mjs --fix' or name it correctly."
   exit 1
@@ -71,13 +86,16 @@ fi
 
 # Lint first — the fixer may rewrite files, so it runs before tests.
 # (The fixer leaves edits UNSTAGED; staging is the caller's business.)
+GATE=lint
 echo "$CHANGED" | xargs -r -n 50 npx -y oxlint --fix
 
 # Debt ratchet: fail when the diff touches code carrying lint warnings
 # (function-scoped rules blame the whole function). Same gate pre-commit runs.
+GATE=lintratchet
 node _tools/lintratchet.mjs --worktree || exit 1
 
 # tsgo (native tsc) is ~3x faster for the same tsconfig; tsc is the fallback.
+GATE=typecheck
 (cd client && npx -y -p @typescript/native-preview tsgo --noEmit) \
   || (cd client && ./node_modules/.bin/tsc --noEmit)
 
@@ -85,6 +103,7 @@ node _tools/lintratchet.mjs --worktree || exit 1
 # stub missing interface members runs green while breaking tsc. Server
 # tests have hit this hole twice; typecheck when server/shared changed.
 if echo "$CHANGED" | grep -qE '^(shared|server_bun)/'; then
+  GATE=typecheck-server
   (cd server_bun && bunx tsc --noEmit)
 fi
 
@@ -94,6 +113,7 @@ if [ "$FASTEST" -eq 1 ]; then
 elif [ -n "$CLIENT_FILES" ]; then
   # related runs only tests covering the touched files; fall back to
   # the full suite when nothing relates (new files, dead ends).
+  GATE=vitest
   (cd client && echo "$CLIENT_FILES" | xargs ./node_modules/.bin/vitest related --run) \
     || (cd client && ./node_modules/.bin/vitest run)
 fi
@@ -101,6 +121,7 @@ fi
 if [ "$FASTEST" -eq 1 ]; then
   echo "check: --fastest — skipping all server tests (compile+lint only)"
 elif echo "$CHANGED" | grep -qE '^(shared|server_bun)/'; then
+  GATE=server-tests
   # Two parallel shards — the netbot tests are ~85% of wall time (real
   # sockets, wall-clock bound); everything else is seconds. ~207s → ~125s.
   if [ "$FAST" -eq 1 ]; then
@@ -126,6 +147,7 @@ elif echo "$CHANGED" | grep -qE '^client/src/(world|effects|structures|projectil
   # screens and the checkpoint would verify nothing (2026-11-07 autopsy).
   # The size guard fails loudly when a shot lands under ~8KB — real
   # frames are 24KB+; a black overlay compresses to ~4KB.
+  GATE=visual
   E2E_GPU=1 bun _tools/e2e/mapshot.ts && shot=$(ls -t _tools/e2e/shots/*.png | head -1) && \
     [ "$(wc -c < "$shot")" -ge 8000 ] || { echo "check: mapshot looks blind — $shot is under 8KB"; exit 1; }
   echo "check: READ THE SHOT — $shot — render code changed; green tests do not see the screen"
@@ -134,9 +156,11 @@ fi
 # Circular-dependency ratchet: madge counts cycles in client+server; fail
 # if either exceeds _tools/cycle-baseline.json (prevents NEW cycles).
 if [ "$FASTEST" -eq 0 ]; then
+  GATE=cycles
   node _tools/check-cycles.mjs || { echo "check: circular-dependency ratchet failed"; exit 1; }
 fi
 
+GATE=done
 if [ "$FASTEST" -eq 1 ]; then
   echo "check: --fastest DONE (compile+lint only — NOT the definition of done; run full check.sh before handing back)"
 else

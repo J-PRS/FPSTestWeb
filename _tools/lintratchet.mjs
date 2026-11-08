@@ -24,7 +24,8 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 
 const WORKTREE = process.argv.includes('--worktree');
-if (process.env.LINTRATCHET === 'off') {process.exit(0);}
+const SELFTEST = process.argv.includes('--selftest');
+if (process.env.LINTRATCHET === 'off' && !SELFTEST) {process.exit(0);}
 
 const req = createRequire(new URL('../client/package.json', import.meta.url));
 const ts = req('typescript');
@@ -32,30 +33,33 @@ const ts = req('typescript');
 const git = (args) => execFileSync('git', args, { encoding: 'utf8' });
 const diffArgs = WORKTREE ? ['diff', 'HEAD'] : ['diff', '--cached'];
 
-const files = git([...diffArgs, '--name-only', '--diff-filter=ACM', '--', '*.ts', '*.tsx'])
-  .split('\n').map((s) => s.trim()).filter(Boolean)
-  .filter((f) => /^(client\/src|server_bun\/src|shared)\//.test(f) && !f.endsWith('.d.ts'));
-if (files.length === 0) {process.exit(0);}
+let files = [];
+let changedRanges = new Map();
+let report = { diagnostics: [] };
+if (!SELFTEST) {
+  files = git([...diffArgs, '--name-only', '--diff-filter=ACM', '--', '*.ts', '*.tsx'])
+    .split('\n').map((s) => s.trim()).filter(Boolean)
+    .filter((f) => /^(client\/src|server_bun\/src|shared)\//.test(f) && !f.endsWith('.d.ts'));
+  if (files.length === 0) {process.exit(0);}
 
-// Changed line ranges on the post-image side, per file.
-const changedRanges = new Map();
-for (const f of files) {
-  const d = git([...diffArgs, '-U0', '--', f]);
-  const ranges = [];
-  for (const m of d.matchAll(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g)) {
-    const start = +m[1], count = m[2] === undefined ? 1 : +m[2];
-    ranges.push(count === 0 ? [start, start] : [start, start + count - 1]);
+  // Changed line ranges on the post-image side, per file.
+  for (const f of files) {
+    const d = git([...diffArgs, '-U0', '--', f]);
+    const ranges = [];
+    for (const m of d.matchAll(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g)) {
+      const start = +m[1], count = m[2] === undefined ? 1 : +m[2];
+      ranges.push(count === 0 ? [start, start] : [start, start + count - 1]);
+    }
+    changedRanges.set(f, ranges);
   }
-  changedRanges.set(f, ranges);
-}
 
-const oxlint = spawnSync(process.execPath,
-  ['client/node_modules/oxlint/bin/oxlint', '--format', 'json', ...files],
-  { encoding: 'utf8', maxBuffer: 64 << 20 });
-let report;
-try { report = JSON.parse(oxlint.stdout); } catch {
-  console.error('lintratchet: oxlint produced no JSON — skipping ratchet (lint itself still gates).');
-  process.exit(0);
+  const oxlint = spawnSync(process.execPath,
+    ['client/node_modules/oxlint/bin/oxlint', '--format', 'json', ...files],
+    { encoding: 'utf8', maxBuffer: 64 << 20 });
+  try { report = JSON.parse(oxlint.stdout); } catch {
+    console.error('lintratchet: oxlint produced no JSON — skipping ratchet (lint itself still gates).');
+    process.exit(0);
+  }
 }
 
 const FUNCTION_RULES = new Set([
@@ -73,9 +77,10 @@ const NONLOCAL_RULES = new Set([
 ]);
 
 const sfCache = new Map();
+const sourceOverride = new Map(); // --selftest fixtures only
 const sourceFile = (f) => {
   if (!sfCache.has(f)) {
-    const text = readFileSync(f, 'utf8');
+    const text = sourceOverride.get(f) ?? readFileSync(f, 'utf8');
     sfCache.set(f, ts.createSourceFile(f, text,
       ts.ScriptTarget.Latest, true,
       f.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS));
@@ -92,8 +97,9 @@ function enclosingFunction(sf, pos) {
   return null;
 }
 
-const hits = [];
-for (const d of report.diagnostics ?? []) {
+function collectHits(report, changedRanges) {
+  const hits = [];
+  for (const d of report.diagnostics ?? []) {
   if (SKIP_RULES.has(d.code)) {continue;}
   const f = d.filename.replaceAll('\\', '/');
   const ranges = changedRanges.get(f);
@@ -119,7 +125,47 @@ for (const d of report.diagnostics ?? []) {
   }
   const touch = ranges.some(([a, b]) => blame.some(([c, d2]) => a <= d2 && c <= b));
   if (touch) {hits.push({ f, code: d.code, line, fnName, message: d.message });}
+  }
+  return hits;
 }
+
+if (process.argv.includes('--selftest')) {
+  const f = 'selftest.ts';
+  const src = 'function warned() {\n  const a = 1;\n  if (a) { return 1; }\n  return 0;\n}\nconst after = 2;\n';
+  sourceOverride.set(f, src);
+  const off = (needle) => src.indexOf(needle);
+  const diag = (code, needle, line) => ({
+    code, severity: 'warning', filename: f, message: `${code} fixture`,
+    labels: [{ span: { offset: off(needle), length: 1, line, column: 1 } }],
+  });
+  const run = (diagnostics, ranges) =>
+    collectHits({ diagnostics }, new Map([[f, ranges]])).length;
+  const cases = [
+    ['complexity inside touched function -> hit',
+      run([diag('eslint(complexity)', 'const a', 2)], [[2, 2]]), 1],
+    ['complexity, diff outside function -> clean',
+      run([diag('eslint(complexity)', 'const a', 2)], [[6, 6]]), 0],
+    ['unused-vars anywhere in touched file -> hit (non-local)',
+      run([diag('eslint(no-unused-vars)', 'const after', 6)], [[1, 1]]), 1],
+    ['max-lines skipped -> clean',
+      run([diag('eslint(max-lines)', 'const after', 6)], [[1, 6]]), 0],
+    ['diagnostic in untouched file -> clean',
+      collectHits({ diagnostics: [diag('eslint(complexity)', 'const a', 2)] },
+        new Map([['other.ts', [[1, 9]]]])).length, 0],
+    ['line rule on untouched warned line -> clean',
+      run([diag('eslint(no-restricted-globals)', 'const a', 2)], [[3, 3]]), 0],
+  ];
+  let bad = 0;
+  for (const [name, got, want] of cases) {
+    const ok = got === want;
+    if (!ok) {bad += 1;}
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}  (got ${got}, want ${want})`);
+  }
+  console.log(bad === 0 ? 'lintratchet selftest: all cases pass' : `lintratchet selftest: ${bad} FAILED`);
+  process.exit(bad === 0 ? 0 : 1);
+}
+
+const hits = collectHits(report, changedRanges);
 
 if (hits.length === 0) {process.exit(0);}
 
