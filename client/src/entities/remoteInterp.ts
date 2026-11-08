@@ -658,6 +658,22 @@ export class RemoteInterp {
    *  physical accel cap, so the rejoin reads as the remote steering, not
    *  sliding. Ends early once close; a real teleport never comes through
    *  here (onUpdate's plausibility gate wipes instead). */
+  // Path-speed baseline: delta between this converge's sample and the
+  // last gives the buffered path's true speed (sparse far-seat records
+  // strip VEL, so serverVelocity can read ~0). Advances the prev-sample
+  // anchor - call exactly once per convergeStep.
+  private samplePathVel(target: THREE.Vector3): { x: number; y: number; z: number } {
+    const pvDt = Date.now() - this.prevSampleAt;
+    const v = {
+      x: pvDt > 0 ? (target.x - this.prevSample.x) / (pvDt / 1000) : 0,
+      y: pvDt > 0 ? (target.y - this.prevSample.y) / (pvDt / 1000) : 0,
+      z: pvDt > 0 ? (target.z - this.prevSample.z) / (pvDt / 1000) : 0,
+    };
+    this.prevSample.copy(target);
+    this.prevSampleAt = Date.now();
+    return v;
+  }
+
   private convergeStep(dt: number): void {
     const p = this.h.position;
     const target = _extrapolated;
@@ -683,16 +699,11 @@ export class RemoteInterp {
     // the chase baseline then collapses to dist/horizon ≈ walking speed
     // and the ghost trails the path forever. The delta between this
     // converge's sample and the last gives the path's true speed.
-    const pvDt = Date.now() - this.prevSampleAt;
-    const pvx = pvDt > 0 ? (target.x - this.prevSample.x) / (pvDt / 1000) : 0;
-    const pvy = pvDt > 0 ? (target.y - this.prevSample.y) / (pvDt / 1000) : 0;
-    const pvz = pvDt > 0 ? (target.z - this.prevSample.z) / (pvDt / 1000) : 0;
-    this.prevSample.copy(target);
-    this.prevSampleAt = Date.now();
+    const pathVel = this.samplePathVel(target);
     const wireVel = this.h.serverVelocity.lengthSq() > 1;
-    const baseX = wireVel ? this.h.serverVelocity.x : pvx;
-    const baseY = wireVel ? this.h.serverVelocity.y : pvy;
-    const baseZ = wireVel ? this.h.serverVelocity.z : pvz;
+    const baseX = wireVel ? this.h.serverVelocity.x : pathVel.x;
+    const baseY = wireVel ? this.h.serverVelocity.y : pathVel.y;
+    const baseZ = wireVel ? this.h.serverVelocity.z : pathVel.z;
     const dvx = (target.x - p.x) / horizon + baseX;
     const dvy = (target.y - p.y) / horizon + baseY;
     const dvz = (target.z - p.z) / horizon + baseZ;

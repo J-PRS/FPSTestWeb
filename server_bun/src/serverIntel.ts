@@ -130,26 +130,32 @@ export class RoomIntel {
     const sight2 = SIGHT_M * SIGHT_M;
     for (const v of players) {
       if (v.isDead || v.isBot) {continue;}
-      (this.ctx as { team?: string }).team = v.team;
-      let mates: Row[] | null = null;
-      for (const t of players) {
-        if (t.id === v.id || t.isDead) {continue;}
-        // Cloaked hosts stay dark to pulse sight too - only his own
-        // gunfire (shootRevealed) re-opens him, same rule bots use.
-        if ((t.status & STATUS.CLOAK) !== 0 && !shootRevealed(t.lastFireSim, now)) {continue;}
-        if (teams ? t.team === v.team : false) {continue;}
-        const dx = t.position.x - v.position.x, dy = t.position.y - v.position.y, dz = t.position.z - v.position.z;
-        if (dx * dx + dy * dy + dz * dz > sight2) {continue;}
-        if (!losClear(this.ctx as BrainCtx, v.position, t.position)) {continue;}
-        if (!mates) {mates = this.matesOf(v, players, teams);}
-        const base = now + BASE_LINGER_MS;
-        for (const m of mates) {this.touch(m.id, t.id, t.position, base, now);}
-        // The observer's own eyes get the perk-scaled window - the only
-        // place intelLinger applies; teammates keep base memory of it.
-        this.touch(v.id, t.id, t.position, now + BASE_LINGER_MS * perkMods(v.perk).intelLinger, now);
-      }
+      this.sweepObserver(v, players, teams, sight2, now);
     }
     this.emit(now, players);
+  }
+
+  // One observer's contact sweep: every visible hostile feeds the
+  // mates' shared memory plus the observer's own perk-scaled window.
+  private sweepObserver(v: Row, players: Row[], teams: boolean, sight2: number, now: number): void {
+    (this.ctx as { team?: string }).team = v.team;
+    let mates: Row[] | null = null;
+    for (const t of players) {
+      if (t.id === v.id || t.isDead) {continue;}
+      // Cloaked hosts stay dark to pulse sight too - only his own
+      // gunfire (shootRevealed) re-opens him, same rule bots use.
+      if ((t.status & STATUS.CLOAK) !== 0 && !shootRevealed(t.lastFireSim, now)) {continue;}
+      if (teams ? t.team === v.team : false) {continue;}
+      const dx = t.position.x - v.position.x, dy = t.position.y - v.position.y, dz = t.position.z - v.position.z;
+      if (dx * dx + dy * dy + dz * dz > sight2) {continue;}
+      if (!losClear(this.ctx as BrainCtx, v.position, t.position)) {continue;}
+      if (!mates) {mates = this.matesOf(v, players, teams);}
+      const base = now + BASE_LINGER_MS;
+      for (const m of mates) {this.touch(m.id, t.id, t.position, base, now);}
+      // The observer's own eyes get the perk-scaled window - the only
+      // place intelLinger applies; teammates keep base memory of it.
+      this.touch(v.id, t.id, t.position, now + BASE_LINGER_MS * perkMods(v.perk).intelLinger, now);
+    }
   }
 
   /** The per-player wire feed - seen = fresh this sweep (live marker),

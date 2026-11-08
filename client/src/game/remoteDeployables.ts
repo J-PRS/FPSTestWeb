@@ -281,69 +281,7 @@ export class RemoteDeployables {
     // Sentry's rotating head - declared up here so update() can idle-scan
     // it; stays a child of group so wreck slump still tilts the whole rig.
     const head = new THREE.Group();
-    if (kind === 'generator') {
-      const hull = new THREE.Mesh(new THREE.BoxGeometry(4.6, 3.4, 4.6), hullMat);
-      hull.position.y = 1.7;
-      group.add(hull);
-      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 2.6, 10), glowMat);
-      core.position.y = 1.8;
-      group.add(core);
-      for (const sx of [-1, 1]) {for (const sz of [-1, 1]) {
-        const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.7, 4.4, 0.7), darkMat);
-        pylon.position.set(sx * 2.1, 2.2, sz * 2.1);
-        group.add(pylon);
-      }}
-    } else if (kind === 'baseturret') {
-      // Base defense gun - must read at 200m atop its pillar: tapered
-      // armored collar, slab mantlet with a hood brow, twin heavy
-      // barrels with muzzle sleeves, rear ammo drum. ~2x the thrown
-      // pod-sentry's mass so "emplaced base gun" and "field turret"
-      // never blur in silhouette.
-      const collar = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.5, 1.2, 8), darkMat);
-      collar.position.y = 0.95;
-      group.add(collar);
-      // Team-lit socket ring where the mount meets the plinth - reads
-      // "this is powered" before the gun itself resolves.
-      const collarRing = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.12, 6, 24), glowMat);
-      collarRing.rotation.x = Math.PI / 2;
-      collarRing.position.y = 1.55;
-      group.add(collarRing);
-      head.position.y = 2.4;
-      const mantlet = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.7, 2.4), hullMat);
-      head.add(mantlet);
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.45, 2.6), darkMat);
-      brow.position.y = 1.05;
-      head.add(brow);
-      for (const sx of [-0.6, 0.6]) {
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 3.6, 8), darkMat);
-        barrel.rotation.x = Math.PI / 2;
-        barrel.position.set(sx, 0.15, 2.4);
-        head.add(barrel);
-        const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.7, 8), hullMat);
-        sleeve.rotation.x = Math.PI / 2;
-        sleeve.position.set(sx, 0.15, 3.9);
-        head.add(sleeve);
-      }
-      const optic = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), glowMat);
-      optic.position.set(0, 0.6, 1.3);
-      head.add(optic);
-      const ammo = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1.5), darkMat);
-      ammo.position.set(0, 0.1, -1.6);
-      head.add(ammo);
-      group.add(head);
-    } else {
-      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 9, 8), darkMat);
-      mast.position.y = 4.5;
-      group.add(mast);
-      const dish = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.25, 12), hullMat);
-      dish.rotation.z = Math.PI / 2;
-      dish.position.y = 8.4;
-      group.add(dish);
-      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 6), glowMat);
-      tip.position.y = 9.6;
-      group.add(tip);
-      spinMesh = dish;
-    }
+    spinMesh = this.buildAssetHull(kind, group, head, glowMat, darkMat, hullMat);
     group.position.copy(at);
     // Tower-mounted assets author a real y - terrain is a floor for the
     // buried-y convention, not a ceiling on rooftops.
@@ -416,6 +354,78 @@ export class RemoteDeployables {
   /** No server, no wire - solo mode is the authority for map-seeded
    *  assets, so their hurt/down/respawn mirror RoomDeployables here.
    *  Connected, this whole layer stays render-only (hurt is a no-op). */
+  // Kind hulls: generator block+pylons, baseturret collar/mantlet/
+  // barrels (head slews - stays a group child so wreck slump tilts it),
+  // sensor mast+dish. Returns the spin mesh (sensor dish) or null.
+  private buildAssetHull(kind: 'generator' | 'sensor' | 'baseturret', group: THREE.Group, head: THREE.Group, glowMat: THREE.Material, darkMat: THREE.Material, hullMat: THREE.Material): THREE.Mesh | null {
+    if (kind === 'generator') {
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(4.6, 3.4, 4.6), hullMat);
+      hull.position.y = 1.7;
+      group.add(hull);
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 2.6, 10), glowMat);
+      core.position.y = 1.8;
+      group.add(core);
+      for (const sx of [-1, 1]) {for (const sz of [-1, 1]) {
+        const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.7, 4.4, 0.7), darkMat);
+        pylon.position.set(sx * 2.1, 2.2, sz * 2.1);
+        group.add(pylon);
+      }}
+      return null;
+    }
+    if (kind === 'baseturret') {
+      // Base defense gun - must read at 200m atop its pillar: tapered
+      // armored collar, slab mantlet with a hood brow, twin heavy
+      // barrels with muzzle sleeves, rear ammo drum. ~2x the thrown
+      // pod-sentry's mass so "emplaced base gun" and "field turret"
+      // never blur in silhouette.
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.5, 1.2, 8), darkMat);
+      collar.position.y = 0.95;
+      group.add(collar);
+      // Team-lit socket ring where the mount meets the plinth - reads
+      // "this is powered" before the gun itself resolves.
+      const collarRing = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.12, 6, 24), glowMat);
+      collarRing.rotation.x = Math.PI / 2;
+      collarRing.position.y = 1.55;
+      group.add(collarRing);
+      head.position.y = 2.4;
+      const mantlet = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.7, 2.4), hullMat);
+      head.add(mantlet);
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.45, 2.6), darkMat);
+      brow.position.y = 1.05;
+      head.add(brow);
+      for (const sx of [-0.6, 0.6]) {
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 3.6, 8), darkMat);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(sx, 0.15, 2.4);
+        head.add(barrel);
+        const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.7, 8), hullMat);
+        sleeve.rotation.x = Math.PI / 2;
+        sleeve.position.set(sx, 0.15, 3.9);
+        head.add(sleeve);
+      }
+      const optic = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), glowMat);
+      optic.position.set(0, 0.6, 1.3);
+      head.add(optic);
+      const ammo = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1.5), darkMat);
+      ammo.position.set(0, 0.1, -1.6);
+      head.add(ammo);
+      group.add(head);
+      return null;
+    }
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 9, 8), darkMat);
+    mast.position.y = 4.5;
+    group.add(mast);
+    const dish = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.25, 12), hullMat);
+    dish.rotation.z = Math.PI / 2;
+    dish.position.y = 8.4;
+    group.add(dish);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 6), glowMat);
+    tip.position.y = 9.6;
+    group.add(tip);
+    return dish;
+  }
+
+
   private offline(): boolean { return !this.deps.lazyNetworkManager().isConnected(); }
 
   /** Offline damage funnel for a base asset - armor soaks, hp drains,
