@@ -797,7 +797,7 @@ seated += 1;
       }
     }
     if (this.bunServer) {
-      this.bunServer.stop(true);
+      this.bunServer.stop(true).catch((): void => { /* shutdown path - exit owns the outcome */ });
       logger.info('Server stopped');
     }
   }

@@ -39,7 +39,7 @@ export class DemoStorage {
 
   constructor(demosDir: string) {
     this.demosDir = demosDir;
-    this.ensureDir();
+    this.ensureDir().catch((): void => { /* ensureDir logs its own failure */ });
     this.loadIndex().then((): Promise<void> => this.reconcileIndex()).catch((error): void => {
       logger.warn('DemoStorage index failed to load — starting empty', error);
     });

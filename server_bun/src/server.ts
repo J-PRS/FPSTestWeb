@@ -391,7 +391,7 @@ if (CONFIG.tlsCertPath || CONFIG.tlsKeyPath) {
         try { m = statSync(certPath).mtimeMs; } catch { return; } // mid-rotation file gap
         if (m !== certMtime) {
           certMtime = m;
-          tlsServer?.stop(true);
+          tlsServer?.stop(true).catch((): void => { /* cert-rotation retry owns the outcome */ });
           tlsServer = null;
         }
         if (!tlsServer) {
@@ -458,10 +458,10 @@ process.on('uncaughtException', (e): void => {
 
 process.on('SIGINT', (): void => {
   logger.info('SIGINT received, shutting down...');
-  shutdown();
+  shutdown().catch((): void => { /* finally exits regardless */ });
 });
 
 process.on('SIGTERM', (): void => {
   logger.info('SIGTERM received, shutting down...');
-  shutdown();
+  shutdown().catch((): void => { /* finally exits regardless */ });
 });

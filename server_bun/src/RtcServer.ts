@@ -169,7 +169,7 @@ export class RtcServer {
     if (m.type !== 'offer' || typeof m.sdp !== 'string') {return;}
     // Each offer spawns a native PeerConnection — cap in-flight ones.
     if (this.peers.size >= 64) { ws.close(1013, 'rtc busy'); return; }
-    this.answerOffer(ws, m.sdp);
+    this.answerOffer(ws, m.sdp).catch((error): void => { logger.warn('rtc answerOffer failed', error); });
   }
 
   private async answerOffer(ws: ServerWebSocket<WebSocketData>, sdp: string): Promise<void> {
