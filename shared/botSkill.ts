@@ -192,7 +192,9 @@ export function heroTick(s: BotSkill, pressure: { deficit: number; ownPerf: numb
       s.prevMenaceHp = pressure.menaceHp;  // re-anchor at the wound
     } else {
       if (s.resolve > 0.7 && s.odHold <= 0) {
-        s.resolve = Math.min(10, s.resolve * (1 + 0.12 * dt)); // ~12%/s compounding, cap 10
+        // No ceiling: resolve compounds until the menace takes a real
+        // wound or dies. Rise to whatever level meets the threat.
+        s.resolve *= 1 + 0.12 * dt; // ~12%/s compounding, uncapped
       }
       // Anchor = PEAK hp: a slow chip bleed must drop 15% off his best
       // to count as a wound, not 15% since last think (heals lift it).
