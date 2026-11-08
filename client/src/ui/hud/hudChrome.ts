@@ -15,13 +15,23 @@ else if (st === 'carried') {el.textContent = '⚑ TAKEN';}
   el.classList.toggle('taken', st !== 'home');
 };
 
-export function feedKill(h: HUD, shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, meta?: { shooter?: string; target?: string; weapon?: number; air?: number; sName?: string; tName?: string }): void {
+// Enum-name reverse lookup: `WeaponType[7]` → 'PlasmaCannon'. Unknown/absent → nothing shown.
+// Projectile airtime rides after the weapon: `[PlasmaCannon] [1.3s]` —
+// long-lob kills earn the visible flight time. Sub-100ms hits are
+// effectively point-blank; the bracket would just be noise.
+function weaponTag(weapon: number | undefined, air: number | undefined): string {
+    const wName = weapon !== undefined && WeaponType[weapon] ? `[${WeaponType[weapon]}]` : '';
+    const airTag = air !== undefined && air >= 0.1 ? ` [${air.toFixed(1)}s]` : '';
+    return wName || airTag ? ` ${wName}${airTag} ` : '';
+}
+
+// Self-inflicted kill (own splash): "X cratered" — "X ▸ X" reads as a
+// normal frag in the feed.
+function killRow(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, meta?: { shooter?: string; target?: string; weapon?: number; air?: number; sName?: string; tName?: string }): HTMLDivElement {
     const { shooter: sTeam, target: tTeam, weapon, air, sName, tName } = meta ?? {};
     const row = document.createElement('div');
     row.className = 'kf-row';
     if (localIsShooter) {row.classList.add('me');}
-    // Self-inflicted kill (own splash): "X cratered" — "X ▸ X" reads as a
-    // normal frag in the feed.
     const suicide = shooter === target;
     const s = document.createElement('span');
     // Team tint like the TAB board — alpha/bravo first letter keys the class.
@@ -29,20 +39,19 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     s.textContent = shooter === 'environment' ? '☠' : (sName ?? botDisplayName(shooter));
     const w = document.createElement('span');
     w.className = 'kf-w';
-    // Enum-name reverse lookup: `WeaponType[7]` → 'PlasmaCannon'. Unknown/absent → nothing shown.
-    // Projectile airtime rides after the weapon: `[PlasmaCannon] [1.3s]` —
-    // long-lob kills earn the visible flight time. Sub-100ms hits are
-    // effectively point-blank; the bracket would just be noise.
-    const wName = weapon !== undefined && WeaponType[weapon] ? `[${WeaponType[weapon]}]` : '';
-    const airTag = air !== undefined && air >= 0.1 ? ` [${air.toFixed(1)}s]` : '';
-    w.textContent = wName || airTag ? ` ${wName}${airTag} ` : '';
+    w.textContent = weaponTag(weapon, air);
     const t = document.createElement('span');
     let deadCls = '';
-if (localIsTarget) {deadCls = ' dead';}
-else if (tTeam) {deadCls = ` tm-${tTeam[0]}`;}
-t.className = `kf-t${deadCls}`;
+    if (localIsTarget) {deadCls = ' dead';}
+    else if (tTeam) {deadCls = ` tm-${tTeam[0]}`;}
+    t.className = `kf-t${deadCls}`;
     t.textContent = suicide ? 'self' : (tName ?? botDisplayName(target));
     row.append(s, w, t);
+    return row;
+}
+
+export function feedKill(h: HUD, shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, meta?: { shooter?: string; target?: string; weapon?: number; air?: number; sName?: string; tName?: string }): void {
+    const row = killRow(shooter, target, localIsShooter, localIsTarget, meta);
     h.killFeed.append(row);
     while (h.killFeed.childElementCount > 6) {h.killFeed.firstElementChild!.remove();}
     // Hard expiry — a fading ghost row reads as a smear while the stack

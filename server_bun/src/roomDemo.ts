@@ -210,28 +210,32 @@ export class RoomDemo {
       const s = this.room.moveSim.simState(pid);
       if (!s) {continue;}
       const dead = this.room.players.getPlayer(pid)?.isDead ?? false;
-      const prev = this.lastPos.get(pid);
-      const dtp = prev ? this.t - prev.t : 0;
-      const jumped = prev !== undefined
-        && Math.hypot(s.pos.x - prev.x, s.pos.y - prev.y, s.pos.z - prev.z) > RoomDemo.TELEPORT_M;
-      this.lastPos.set(pid, { x: s.pos.x, y: s.pos.y, z: s.pos.z, t: this.t });
-      // Recorded vel is REALIZED displacement — what the body did, which
-      // is what clients see. The sim's internal vel is intent (a bot
-      // pinned on a wall holds 44m/s while moving 2m/s); writing intent
-      // would have playback show a parked body skating. Teleport frames
-      // keep sim vel — the resync's outgoing state is the truth there.
-      const dtv = dtp > 0 && !jumped ? dtp : 0;
-      this.remoteFrames.push({
-        timestamp: this.t, rosterIdx: idx,
-        posX: s.pos.x, posY: s.pos.y, posZ: s.pos.z,
-        velX: dtv ? (s.pos.x - prev!.x) / dtv : s.vel.x,
-        velY: dtv ? (s.pos.y - prev!.y) / dtv : s.vel.y,
-        velZ: dtv ? (s.pos.z - prev!.z) / dtv : s.vel.z,
-        yaw: s.yaw, pitch: 0,
-        flags: (dead ? RemoteFrameFlags.Dead : RemoteFrameFlags.None)
-          | (jumped ? RemoteFrameFlags.Teleport : 0),
-      });
+      this.pushFrame(pid, idx, s, dead);
     }
+  }
+
+  // Recorded vel is REALIZED displacement — what the body did, which
+  // is what clients see. The sim's internal vel is intent (a bot
+  // pinned on a wall holds 44m/s while moving 2m/s); writing intent
+  // would have playback show a parked body skating. Teleport frames
+  // keep sim vel — the resync's outgoing state is the truth there.
+  private pushFrame(pid: string, idx: number, s: { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; yaw: number }, dead: boolean): void {
+    const prev = this.lastPos.get(pid);
+    const dtp = prev ? this.t - prev.t : 0;
+    const jumped = prev !== undefined
+      && Math.hypot(s.pos.x - prev.x, s.pos.y - prev.y, s.pos.z - prev.z) > RoomDemo.TELEPORT_M;
+    this.lastPos.set(pid, { x: s.pos.x, y: s.pos.y, z: s.pos.z, t: this.t });
+    const dtv = dtp > 0 && !jumped ? dtp : 0;
+    this.remoteFrames.push({
+      timestamp: this.t, rosterIdx: idx,
+      posX: s.pos.x, posY: s.pos.y, posZ: s.pos.z,
+      velX: dtv ? (s.pos.x - prev!.x) / dtv : s.vel.x,
+      velY: dtv ? (s.pos.y - prev!.y) / dtv : s.vel.y,
+      velZ: dtv ? (s.pos.z - prev!.z) / dtv : s.vel.z,
+      yaw: s.yaw, pitch: 0,
+      flags: (dead ? RemoteFrameFlags.Dead : RemoteFrameFlags.None)
+        | (jumped ? RemoteFrameFlags.Teleport : 0),
+    });
   }
 
   /** One line in Room.broadcast — this sees every wire event verbatim. */
@@ -410,27 +414,31 @@ export class RoomDemo {
 
   /** Assemble the DemoFile — same shape the client buildDemoFile emits. */
   buildFile(description = ''): DemoFile {
-    const first = this.remoteFrames[0];
     return {
-      header: {
-        magic: DEMO_MAGIC, formatVersion: DEMO_FORMAT_VERSION,
-        gameVersion: '1.0.0', timestamp: Date.now(),
-        duration: this.t, totalFrames: 0,
-        projectileEventCount: this.projectileEvents.length,
-        targetEventCount: this.targetEvents.length,
-        checksum: 0, description,
-        startPosX: first?.posX ?? 0, startPosY: first?.posY ?? 0, startPosZ: first?.posZ ?? 0,
-        startYaw: first?.yaw ?? 0, startPitch: 0,
-        startVelX: first?.velX ?? 0, startVelY: first?.velY ?? 0, startVelZ: first?.velZ ?? 0,
-        projectileLifetime: 0,
-        room: this.room.name, mode: this.room.mode, playerName: 'server',
-        tableHash: 0, runSeed: this.room.rngSeed ?? 0,
-      },
+      header: this.demoHeader(description),
       frames: [], // no first-person lane on the authority side
       projectileEvents: [...this.projectileEvents],
       targetEvents: [...this.targetEvents],
       roster: this.roster.map((e): DemoRosterEntry => ({ name: e.name })),
       remoteFrames: [...this.remoteFrames],
+    };
+  }
+
+  private demoHeader(description: string): DemoFile['header'] {
+    const { posX = 0, posY = 0, posZ = 0, yaw = 0, velX = 0, velY = 0, velZ = 0 } = this.remoteFrames[0] ?? {};
+    return {
+      magic: DEMO_MAGIC, formatVersion: DEMO_FORMAT_VERSION,
+      gameVersion: '1.0.0', timestamp: Date.now(),
+      duration: this.t, totalFrames: 0,
+      projectileEventCount: this.projectileEvents.length,
+      targetEventCount: this.targetEvents.length,
+      checksum: 0, description,
+      startPosX: posX, startPosY: posY, startPosZ: posZ,
+      startYaw: yaw, startPitch: 0,
+      startVelX: velX, startVelY: velY, startVelZ: velZ,
+      projectileLifetime: 0,
+      room: this.room.name, mode: this.room.mode, playerName: 'server',
+      tableHash: 0, runSeed: this.room.rngSeed ?? 0,
     };
   }
 }

@@ -21,6 +21,13 @@ export interface OverlayInputDeps {
   lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void; sendPerkUpdate(perk: string): void } | null;
 }
 
+// While a demo plays, gameplay keys belong to the player — only the
+// transport controls (Escape/F6/arrows) still reach the overlay.
+function demoOwnsKey(dm: DemoManager | null, code: string): boolean {
+  return Boolean(dm?.isPlaying) && code !== 'Escape' && code !== 'F6' &&
+    code !== 'ArrowUp' && code !== 'ArrowDown' && code !== 'ArrowLeft' && code !== 'ArrowRight';
+}
+
 // Overlay / pointer-lock / global key handling: ESC menu flow (Krunker-style —
 // any lock exit opens the menu), scoreboard Tab, demo playback arrow keys,
 // F4 pixel toggle, F6 demo UI, Space pause.
@@ -136,10 +143,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
       return;
     }
     const dm = deps.lazyDemoManager();
-    if (dm?.isPlaying && e.code !== 'Escape' && e.code !== 'F6' &&
-        e.code !== 'ArrowUp' && e.code !== 'ArrowDown' && e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') {
-      return;
-    }
+    if (demoOwnsKey(dm, e.code)) {return;}
     if (handleDemoKey(e)) {return;}
     if (e.code === 'Escape' && deps.isGameStarted()) {handleEscapeKey();}
     if (e.code === 'F4') {
