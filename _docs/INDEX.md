@@ -112,6 +112,8 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-08_TECH_DEBT_AUDIT.md` | Full-tree debt audit via repo tooling (knip etc.) — every number names its command; warnings are candidates, verify before deleting |
 | `_docs/2026-11-01_20261101084019_UNWRAP.md` | UV-unwrap SOTA for bake maps — xatlas/xatlas-three, uvunwrap (Rust→wasm, texels-per-unit density), and the in-repo precedent: `vertexAO.ts` wear-mask atlas already does detached per-tri cells |
 | `_docs/2026-11-08_AGENT_GATE_SOTA.md` | Agent-gate tooling survey — machine-readable verdicts (verdict.json + hint, strict exit codes), affected-test scoping, latency-layered gate stack vs our check.sh/pre-commit/sweep |
+| `_docs/2026-11-08_WEAPON_MODEL_REVIEW.md` | All 27 weapon viewmodels ranked best→worst from gunsheet 4-up sheets — Revolver/Railgun/Chaingun top, Pistol/Mortar/Disc bottom; fast-disc groove+liner fixes, gunlab Implodisc filter, mkWeaponSel `.keys()` bug, rework shortlist |
+| `_docs/2026-11-08_VIEWMODEL_AND_MARKER_FIXES.md` | Session changelog for the viewmodel batch + runtime bugs — Blaster/Pistol reworks (pistol_v1 archived), 512² sheets + bounding-box cell fit, IFF marker flicker (duplicate headhuntBadges writer), frozen-corpse `process.env` crash in shared/botGoals |
 
 ## Agent memory (append-only, one line each)
 

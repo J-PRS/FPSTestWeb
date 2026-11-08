@@ -312,7 +312,9 @@ function paintRail(): void {
     paintTools();
     return;
   }
-  const wts = [...vm.weapons.keys()].toSorted((a, b): number => a - b);
+  // MODEL_BUILDERS + Chaingun - the weapons map also carries the Implodisc
+  // alias (same Disc group, pull muzzle node), which needs no rail pick.
+  const wts = [...MODEL_BUILDERS.map(([wt]) => wt), WeaponType.Chaingun].toSorted((a, b): number => a - b);
   for (const wt of wts) {
     const b = document.createElement('button');
     b.textContent = `${wt} ${WeaponType[wt] ?? '?'}`;
@@ -1129,7 +1131,7 @@ async function copyBuilderSrc(): Promise<void> {
 function shotSheet(): void {
   (window as unknown as { __sheetPNG?: string }).__sheetPNG = undefined;
   const wasInspect = state.inspect;
-  const cell = 512;
+  const cell = 256; // 512² sheet total - vision tokens scale with pixels
   const comp = document.createElement('canvas');
   comp.width = cell * 2; comp.height = cell * 2;
   const g2 = comp.getContext('2d')!;
@@ -1172,16 +1174,38 @@ function shotSheet(): void {
   // External cells - park the weapon centered at origin like inspect does.
   setInspect(true);
   const box = new THREE.Box3().setFromObject(inspectAnchor!);
-  // Fit the bounding sphere inside the frustum: half-diagonal is the
-  // radius, then back off until r / sin(fov/2) clears the cell edge.
+  // Fit the BOX (not its bounding sphere) inside the frustum: project the
+  // 8 corners into camera space and pull back only until the widest
+  // extent clears the cell - the sphere wastes ~40% of every cell on a
+  // long thin gun. FPS cell is untouched (it mirrors the real view).
   const r = box.getSize(new THREE.Vector3()).length() / 2;
   const halfFov = THREE.MathUtils.degToRad(camera.fov) / 2;
-  const dist = Math.max((r / Math.sin(halfFov)) * 1.08, 0.3);
+  const tanHalf = Math.tan(halfFov);
+  const corners: THREE.Vector3[] = [];
+  for (const x of [box.min.x, box.max.x]) {
+    for (const y of [box.min.y, box.max.y]) {
+      for (const z of [box.min.z, box.max.z]) {
+        corners.push(new THREE.Vector3(x, y, z));
+      }
+    }
+  }
   const tgt = new THREE.Vector3();
   const keepUp = camera.up.clone();
+  const corner = new THREE.Vector3();
   for (const [i, [label, v]] of Object.entries(shotDir).entries()) {
     if (v.up) {camera.up.copy(v.up);}
-    camera.position.copy(tgt).addScaledVector(v.d, dist);
+    camera.position.copy(tgt).addScaledVector(v.d, Math.max(r * 3, 0.3));
+    camera.lookAt(tgt);
+    camera.updateMatrixWorld();
+    // Pull back until every corner's |x|,|y| <= depth * tan(fov/2) * 0.92
+    // (the 8% margin keeps edges off the cell boundary).
+    let pull = 0;
+    for (const c of corners) {
+      corner.copy(c).applyMatrix4(camera.matrixWorldInverse);
+      const need = Math.max(Math.abs(corner.x), Math.abs(corner.y)) / (tanHalf * 0.92) + corner.z;
+      if (need > pull) {pull = need;}
+    }
+    camera.position.copy(tgt).addScaledVector(v.d, Math.max(r * 3 + pull, 0.3));
     camera.lookAt(tgt);
     camera.up.copy(keepUp);
     shot(i % 2, Math.trunc((i / 2)), label);
@@ -1284,7 +1308,7 @@ addEventListener('keydown', (e: KeyboardEvent): void => {
       selectArchive(next[0], next[1]);
       return;
     }
-    const wts = [...vm.weapons.keys()].toSorted((a, b): number => a - b);
+    const wts = [...MODEL_BUILDERS.map(([wt]) => wt), WeaponType.Chaingun].toSorted((a, b): number => a - b);
     if (wts.length > 0) {
       const i = wts.indexOf(state.wt);
       select(wts[(i + step + wts.length) % wts.length]);

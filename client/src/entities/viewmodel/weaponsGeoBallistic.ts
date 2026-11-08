@@ -310,21 +310,12 @@ rim.rotation.x = Math.PI / 2;
 rim.position.set(0, 0, -0.15);
 ammo.add(rim);
 disc.add(ammo);
-// Spindle cap through the disc's core - the "held in a launcher" tell
-const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.07, 8), darkMat);
-spindle.position.set(0, 0, -0.15);
-disc.add(spindle);
-// Forend under the slit section + raked grip under the breech
+// (No spindle - an interior cylinder nobody sees; the disc carries the
+// "chambered" read on its own.)
+// Forend under the slit section - grip/trigger dropped like the fast disc's
 const forend = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.24), darkMat);
 forend.position.set(0, -0.13, -0.13);
 disc.add(forend);
-const discGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.13, 0.06), darkMat);
-discGrip.position.set(0, -0.18, 0.16);
-discGrip.rotation.x = 0.35;
-disc.add(discGrip);
-const guard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.1), darkMat);
-guard.position.set(0, -0.15, 0.09);
-disc.add(guard);
 disc.visible = false;
 return disc;
 }
@@ -347,7 +338,7 @@ const hexHalfGrooved = (side: 1 | -1): THREE.Shape => {
     out.push(cur);
     // Notch only real roof edges (both ends above slit height and a
     // real hex edge length) - the clip baseline isn't a face.
-    if (cur.y > 0 && nxt.y > 0 && Math.abs(cur.x - nxt.x) > DISC_HEX_R * 0.5) {
+    if (cur.y > DISC_SLIT_HALF && nxt.y > DISC_SLIT_HALF && Math.abs(cur.x - nxt.x) > DISC_HEX_R * 0.5) {
       // Narrow U-channel recessed along the FACE NORMAL - the groove
       // cuts perpendicular into the slope, not inward horizontally.
       const lerp = (t: number): THREE.Vector2 => new THREE.Vector2(cur.x + (nxt.x - cur.x) * t, cur.y + (nxt.y - cur.y) * t);
@@ -356,7 +347,7 @@ const hexHalfGrooved = (side: 1 | -1): THREE.Shape => {
       let nx = ey / el, ny = -ex / el;                    // edge's right normal
       const mx = (cur.x + nxt.x) / 2, my = (cur.y + nxt.y) / 2;
       if (mx * nx + my * ny > 0) {nx = -nx; ny = -ny;}    // flip to point inward
-      const depth = DISC_HEX_R * 0.09;
+      const depth = DISC_HEX_R * 0.18;                 // doubled - the black liner reclaims half of it
       out.push(a);
       out.push(new THREE.Vector2(a.x + nx * depth, a.y + ny * depth));
       out.push(new THREE.Vector2(b.x + nx * depth, b.y + ny * depth));
@@ -367,6 +358,34 @@ const hexHalfGrooved = (side: 1 | -1): THREE.Shape => {
 };
 fd.add(extrudeAt(hexHalfGrooved(1), zFront, slitLen, bodyMat));
 fd.add(extrudeAt(hexHalfGrooved(-1), zFront, slitLen, bodyMat));
+// Groove shadow liners - each speed channel gets a dark insert sunk to
+// the bottom HALF of the (now double-deep) cut, so the remaining visible
+// channel depth matches the pre-liner groove. boreMat is unlit black -
+// the groove keeps its depth and reads black inside from every angle.
+const grooveLiners = (side: 1 | -1): void => {
+  const base = (hexHalf(side) as THREE.Shape).getPoints();
+  for (let i = 0; i < base.length; i += 1) {
+    const cur = base[i]!; const nxt = base[(i + 1) % base.length]!;
+    if (!(cur.y > DISC_SLIT_HALF && nxt.y > DISC_SLIT_HALF && Math.abs(cur.x - nxt.x) > DISC_HEX_R * 0.5)) {continue;}
+    const lerp = (t: number): THREE.Vector2 => new THREE.Vector2(cur.x + (nxt.x - cur.x) * t, cur.y + (nxt.y - cur.y) * t);
+    const a = lerp(0.42), b = lerp(0.58);
+    const ex = nxt.x - cur.x, ey = nxt.y - cur.y, el = Math.hypot(ex, ey) || 1;
+    let nx = ey / el, ny = -ex / el;
+    const mx = (cur.x + nxt.x) / 2, my = (cur.y + nxt.y) / 2;
+    if (mx * nx + my * ny > 0) {nx = -nx; ny = -ny;}
+    const top = DISC_HEX_R * 0.09;                     // liner mouth sunk to old groove depth
+    const depth = DISC_HEX_R * 0.18 * 0.96;            // floor just off the new double-deep floor
+    const liner = new THREE.Shape([
+      new THREE.Vector2(a.x + nx * top, a.y + ny * top),
+      new THREE.Vector2(a.x + nx * depth, a.y + ny * depth),
+      new THREE.Vector2(b.x + nx * depth, b.y + ny * depth),
+      new THREE.Vector2(b.x + nx * top, b.y + ny * top),
+    ]);
+    fd.add(extrudeAt(liner, zFront, slitLen, boreMat));
+  }
+};
+grooveLiners(1);
+grooveLiners(-1);
 const fullHex2 = new THREE.Shape();
 for (let k = 0; k <= 6; k += 1) {
   const a = (k * Math.PI) / 3 + Math.PI / 6;
@@ -389,26 +408,18 @@ const loaded = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.028, 24
   new THREE.MeshLambertMaterial({ color: 0x3A_3F_45, emissive: 0x14_16_1A }));
 loaded.position.set(0, 0, -0.2);
 ammo.add(loaded);
+// HDR push past the 1.3 bloom gate - the rim reads as a charged cell.
 const rim = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.011, 6, 32),
-  new THREE.MeshBasicMaterial({ color: 0xC8_F4_FF }));
+  new THREE.MeshBasicMaterial({ color: new THREE.Color(0xC8_F4_FF).multiplyScalar(1.6) }));
 rim.rotation.x = Math.PI / 2;
 rim.position.set(0, 0, -0.2);
 ammo.add(rim);
 fd.add(ammo);
-const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.07, 8), darkMat);
-spindle.position.set(0, 0, -0.2);
-fd.add(spindle);
-// Forend + grip - same stance, the silhouette is what sells it.
-const forend = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.28), darkMat);
-forend.position.set(0, -0.13, -0.2);
+// Forend as a hex bar - grippable machined stock, not a sharp slab.
+const forend = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.28, 6), darkMat);
+forend.rotation.x = Math.PI / 2;
+forend.position.set(0, -0.11, -0.2);
 fd.add(forend);
-const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.13, 0.06), darkMat);
-grip.position.set(0, -0.18, 0.16);
-grip.rotation.x = 0.35;
-fd.add(grip);
-const guard2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.1), darkMat);
-guard2.position.set(0, -0.15, 0.09);
-fd.add(guard2);
 fd.visible = false;
 return fd;
 }

@@ -5,83 +5,90 @@ import { bodyMat, darkMat, mkTube } from './weaponKit.js';
 // reads instantly. Split from weaponsGeo.ts; builders return invisible
 // groups keyed into MODEL_BUILDERS there.
 
-// Pistol: chunky combat autopistol — squarish slide over a railed dust
-// cover, beavertail grip, light rail under the muzzle. The read is a
-// USP/M&P silhouette: slide slab on top, everything else low.
+// Pistol: chunky combat autopistol — the silhouette is the whole read:
+// a chamfered slide slab on top, frame continuing the under-slide line
+// into a beavertail, chunky raked grip. Extruded profiles, not stacked
+// boxes — machined edges are what separates it from the v1 slabs.
 export function mkPistol(): THREE.Group {
 const pistol = new THREE.Group();
-const BORE_Y = 0.045;
-// Barrel — only a hint past the slide's muzzle face.
-const pBarrel = mkTube(0.022, 0.022, 0.06, -0.16, darkMat);
+const gripMat = new THREE.MeshLambertMaterial({ color: 0x33_36_2F, emissive: 0x0B_0C_0A });
+const BORE_Y = 0.06;
+// Slide — trapezoid profile extruded: the chamfered top corners are the
+// machined-pistol read at viewmodel distance.
+const slideShape = new THREE.Shape();
+slideShape.moveTo(-0.038, 0);
+slideShape.lineTo(0.038, 0);
+slideShape.lineTo(0.03, 0.02);
+slideShape.lineTo(0.028, 0.052);
+slideShape.lineTo(-0.028, 0.052);
+slideShape.lineTo(-0.03, 0.02);
+slideShape.lineTo(-0.038, 0);
+const slideGeo = new THREE.ExtrudeGeometry(slideShape, { depth: 0.3, bevelEnabled: false });
+const slide = new THREE.Mesh(slideGeo, bodyMat);
+slide.rotation.y = Math.PI; // extrude +Z → barrel forward (-Z)
+slide.position.set(0, 0.032, -0.02);
+pistol.add(slide);
+// Rear serrations — a band of thin ribs at the slide's back end, the
+// autopistol's grip-the-slide tell.
+for (let i = 0; i < 4; i += 1) {
+  const serr = new THREE.Mesh(new THREE.BoxGeometry(0.079, 0.04, 0.008), darkMat);
+  serr.position.set(0, 0.058, -0.03 - i * 0.014); // slide rear (-0.02..-0.32)
+  pistol.add(serr);
+}
+// Frame — extruded side profile: dust cover forward, trigger bow dip,
+// beavertail rear. Shape-x = forward (+π/2 maps +x → -Z), y = up.
+const fs = new THREE.Shape();
+fs.moveTo(0.16, 0);                              // dust cover tip
+fs.lineTo(0.16, -0.03);                          // under-muzzle face
+fs.lineTo(0.1, -0.03);                           // dust cover underside
+fs.lineTo(0.06, -0.055);                         // trigger-guard front
+fs.lineTo(-0.01, -0.055);                        // trigger-guard floor
+fs.lineTo(-0.04, -0.03);                         // guard rear → grip tang
+// Grip is IN the frame silhouette - a separate mesh floated off the
+// tail no matter the offset, so the profile just continues down into
+// the raked handle and back up the beavertail.
+fs.lineTo(-0.05, -0.045);                        // tang
+fs.lineTo(-0.075, -0.12);                        // front strap — slight rake back
+fs.lineTo(-0.07, -0.142);                        // butt front corner
+fs.lineTo(-0.135, -0.145);                       // butt flat
+fs.lineTo(-0.16, -0.115);                        // butt rear corner
+fs.lineTo(-0.19, -0.02);                         // backstrap up to the tail
+fs.lineTo(-0.2, 0);                              // tail face to the top line
+fs.lineTo(0.16, 0);
+const frameGeo = new THREE.ExtrudeGeometry(fs, { depth: 0.052, bevelEnabled: false });
+const frame = new THREE.Mesh(frameGeo, darkMat);
+frame.rotation.y = Math.PI / 2;
+frame.position.set(-0.026, 0.032, -0.14);
+pistol.add(frame);
+// Barrel hint at the muzzle — dark ring + bore dot, like the revolver's.
+const pBarrel = mkTube(0.02, 0.02, 0.05, -0.325, darkMat);
 pBarrel.position.y = BORE_Y;
 pistol.add(pBarrel);
-const pBore = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.008, 8), darkMat);
+const pBore = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.008, 8), darkMat);
 pBore.rotation.x = Math.PI / 2;
-pBore.position.set(0, BORE_Y, -0.192);
+pBore.position.set(0, BORE_Y, -0.352);
 pistol.add(pBore);
-// Slide — the big slab. Chamfered edges so it reads machined; detail
-// parts stay sharp — chamfered serrations/rails just look melted.
-const slide = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.055, 0.26), bodyMat);
-slide.position.set(0, 0.055, -0.06);
-pistol.add(slide);
-const spine = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.012, 0.24), darkMat);
-spine.position.set(0, 0.088, -0.06);
-pistol.add(spine);
-// Front + rear slide serrations.
-for (const base of [-0.16, 0.05]) {
-  for (let i = 0; i < 4; i += 1) {
-    const serr = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.04, 0.01), darkMat);
-    serr.position.set(0, 0.055, base + i * 0.016);
-    pistol.add(serr);
-  }
-}
-// Frame — lower body under the slide; chamfered like the slide.
-const pFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.22), darkMat);
-pFrame.position.set(0, 0, -0.03);
-pistol.add(pFrame);
-// Accessory rail under the muzzle — the two-slot Picatinny stub.
-const railP = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.02, 0.09), darkMat);
-railP.position.set(0, -0.033, -0.12);
-pistol.add(railP);
-for (let i = 0; i < 2; i += 1) {
-  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.022, 0.008), darkMat);
-  slot.position.set(0, -0.033, -0.14 + i * 0.035);
-  pistol.add(slot);
-}
-// Trigger guard — real bow: front strap + bottom rail + rear corner.
-const gFront = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.012), darkMat);
-gFront.position.set(0, -0.06, -0.05);
-pistol.add(gFront);
-const gBottom = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.08), darkMat);
-gBottom.position.set(0, -0.085, -0.01);
-pistol.add(gBottom);
-const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.03, 0.012), darkMat);
-trigger.position.set(0, -0.055, 0);
+// Trigger — short blade inside the bow.
+const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.035, 0.012), darkMat);
+trigger.position.set(0, -0.02, -0.075);
 trigger.rotation.x = 0.25;
 pistol.add(trigger);
-// Grip — autopistol rake: straighter than a revolver, ~15° back.
-// Extruded profile again: flat front strap, convex backstrap, squared butt.
-const gripMat = new THREE.MeshLambertMaterial({ color: 0x33_36_2F, emissive: 0x0B_0C_0A });
-const gs = new THREE.Shape();
-gs.moveTo(0, 0);
-gs.lineTo(-0.005, -0.11);                        // front strap — near vertical
-gs.quadraticCurveTo(0.005, -0.135, 0.03, -0.14); // front butt corner
-gs.lineTo(0.065, -0.14);                         // butt flat
-gs.quadraticCurveTo(0.075, -0.13, 0.07, -0.09);  // rear butt corner
-gs.lineTo(0.05, -0.005);                         // backstrap — the raked edge
-gs.lineTo(0, 0);
-const gripGeo = new THREE.ExtrudeGeometry(gs, { depth: 0.055, steps: 3, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 2 });
-const pGrip = new THREE.Mesh(gripGeo, gripMat);
-pGrip.rotation.y = -Math.PI / 2;
-pGrip.position.set(0.028, -0.02, 0.08);
-pistol.add(pGrip);
-// Sights — front blade + rear notch block.
-const pSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.014), darkMat);
-pSight.position.set(0, 0.1, -0.165);
-pistol.add(pSight);
-const pRear = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.022, 0.02), darkMat);
-pRear.position.set(0, 0.098, 0.055);
+// Grip color band — the handle is part of the frame extrude; this thin
+// overlay just paints its sides grip-green like the v1/rv handles.
+const gBand = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.1, 0.09), gripMat);
+gBand.position.set(0, -0.07, -0.02); // handle region, not past the tail
+gBand.rotation.x = 0.12;
+pistol.add(gBand);
+// Sights — rear notch + front blade, the autopistol top-line silhouette.
+const pRear = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.024, 0.018), darkMat);
+pRear.position.set(0, 0.096, -0.02); // on the slide's rear face, not over the tail
 pistol.add(pRear);
+const pSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.024, 0.012), darkMat);
+pSight.position.set(0, 0.094, -0.29);
+pistol.add(pSight);
+// Hold-out sidearm — bulk up + push forward so it reads at FPS distance.
+pistol.scale.setScalar(1.2);
+pistol.position.z = -0.06;
 pistol.visible = false;
 return pistol;
 }
@@ -283,45 +290,69 @@ rep.visible = false;
 return rep;
 }
 
-// Blaster — the T1 energy sidearm. Not a firearm: an octagonal emitter
-// housing where the bolt condenses, over a pistol frame — reads as a
-// charged cell, not a barrel gun.
+// Blaster — the T1 energy sidearm. The read is a charge CELL you can
+// see: a glowing canister cradled on top of the emitter housing, twin
+// prong contacts at the muzzle (energy guns don't have bores), faceted
+// octagonal body so it reads machined, not boxy.
 export function mkBlaster(): THREE.Group {
 const bl = new THREE.Group();
 const glow = new THREE.MeshBasicMaterial({ color: 0x7D_FF_9E });
-// Emitter housing — octagonal barrel, faceted like the repair tool's
-// housings so it reads machined, not boxy.
-const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 0.2, 8), bodyMat);
+const gripMat = new THREE.MeshLambertMaterial({ color: 0x33_36_2F, emissive: 0x0B_0C_0A });
+// Emitter housing — tapered octagon, widest at the breech.
+const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.046, 0.17, 8), bodyMat);
 housing.rotation.x = Math.PI / 2;
-housing.position.set(0, 0.05, -0.06);
+housing.position.set(0, 0.05, -0.045);
 bl.add(housing);
-// Collar — the wider octagonal ring framing the emitter face.
-const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.025, 8), darkMat);
-collar.rotation.x = Math.PI / 2;
-collar.position.set(0, 0.05, -0.155);
-bl.add(collar);
-// Emitter face — glowing pad where the bolt forms; small stud out front.
-const face = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.012, 8), glow);
+// Twin collar rings stepping to the muzzle — machined emitter hardware.
+for (const [r, z] of [[0.046, -0.125], [0.042, -0.155]] as const) {
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.016, 8), darkMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, 0.05, z);
+  bl.add(ring);
+}
+// Breech/receiver — continues the housing's diameter rearward so the
+// barrel seats into a body instead of floating over the grip.
+const recv = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.09, 8), bodyMat);
+recv.rotation.x = Math.PI / 2;
+recv.position.set(0, 0.05, 0.085);
+bl.add(recv);
+// Emitter face — a glowing pad where the bolt forms. No prongs: those
+// read as a beam weapon.
+const face = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.012, 8), glow);
 face.rotation.x = Math.PI / 2;
-face.position.set(0, 0.05, -0.168);
+face.position.set(0, 0.05, -0.166);
 bl.add(face);
-const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 8), glow);
-tip.rotation.x = Math.PI / 2;
-tip.position.set(0, 0.05, -0.18);
-bl.add(tip);
-// Frame + grip — compact autopistol rake.
-const frame = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.05, 0.2), darkMat);
-frame.position.set(0, 0, -0.02);
+// Charge cell on top — glowing canister seated in a dark cradle along
+// the spine. THE energy-sidearm tell; ammo you can see.
+const cradle = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.022, 0.15), darkMat);
+cradle.position.set(0, 0.094, -0.02);
+bl.add(cradle);
+const cellCan = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.12, 8), glow);
+cellCan.rotation.x = Math.PI / 2;
+cellCan.position.set(0, 0.102, -0.02);
+bl.add(cellCan);
+for (const z of [-0.084, 0.044]) {
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.012, 8), darkMat);
+  cap.rotation.x = Math.PI / 2;
+  cap.position.set(0, 0.102, z);
+  bl.add(cap);
+}
+// Frame + raked hex grip — same idiom as the plasmaGun/flak handles.
+const frame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.045, 0.19), darkMat);
+frame.position.set(0, 0.008, -0.015);
 bl.add(frame);
-const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.06),
-  new THREE.MeshLambertMaterial({ color: 0x33_36_2F, emissive: 0x0B_0C_0A }));
-grip.position.set(0, -0.06, 0.05);
+const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.029, 0.11, 6), gripMat);
+grip.position.set(0, -0.052, 0.055);
 grip.rotation.x = 0.28;
 bl.add(grip);
-// Cell window — a green sliver in the frame so the energy cell reads.
-const cell = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.018, 0.07), glow);
-cell.position.set(0, 0.005, -0.02);
-bl.add(cell);
+const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.027, 8, 6), darkMat);
+pommel.scale.y = 0.55;
+pommel.position.y = -0.06;
+grip.add(pommel);
+// Hold-out pistols sit deep in the viewmodel frame - push forward and
+// bulk up so it reads at FPS distance instead of hiding off-frame.
+bl.scale.setScalar(1.17);
+bl.position.z = -0.08;
 bl.visible = false;
 return bl;
 }

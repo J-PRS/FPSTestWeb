@@ -365,19 +365,11 @@ function wireNetworkLocal(): void {
 
 // Player→HUD/viewmodel status hooks + the wildlife truce table.
 function wirePlayerStatusHooks(): void {
-  // Buzzards join the shootable world — they fly through the shared targets
-  // surface so projectiles/blasts hit them. One shot aggros the WHOLE flock
-  // into a dive-bomb: 200hp each, a peck that takes half a health bar.
-  // Don't shoot the wildlife.
-  entities.targets.push(...ambientBirds.targets);
-  ambientBirds.onPeck = (pos): void => {
-    if (player.isDead) {return;}
-    player.lastDamageSource = 'pecked to death by a buzzard';
-    player.applyKnockback(pos, 18 * player.mods.knockbackTaken);
-    networkManager?.sendEnvironmentDamage(45, 'bird:flock');
-    hud?.showDamage(pos, 45);
-    sfx.playerHurt();
-  };
+  // Ambient buzzards are decor only — the REAL buzzards are server-owned
+  // creatures (species 'buzzard', map `creatures` pops) that hunt whoever
+  // shot them. This kettle stays out of entities.targets on purpose: two
+  // shootable flocks would double the population and resurrect the
+  // self-only aggro bug the creature sim fixes.
 
   wirePlayerHooks({ player, combat, effects, viewModel, speedLines, world, scene, terrain });
   // Arm the viewmodel to the persisted kit's active slot — resetLifeState
@@ -566,6 +558,7 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
   // built around your spawn pos, so the first grab is one hop away.
   const spot = teamBots.flagrun?.spawnPoint();
   if (spot) {
+    player.resetLifeState(); // banked class + HP pool — was default-100 bug
     player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
     noteLocalSnap();
     player.syncMovement();
@@ -594,6 +587,7 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
     world.soloConquest = soloConquest;
     teamBots.reseatAll();
     const p = soloConquest.spawnSpot('alpha', _conqSpawn);
+    player.resetLifeState();
     player.pos.set(p.x, terrain.getHeight(p.x, p.z) + 2, p.z);
     noteLocalSnap();
     player.syncMovement();
@@ -704,6 +698,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     const s = soloSpec.spec;
     const anchor = s.teamSpawns?.alpha?.[0] ?? s.spawns?.[0] ?? s.bases?.alpha;
     if (anchor) {
+      player.resetLifeState();
       player.pos.set(anchor.x, Math.max(anchor.y, terrain.getHeight(anchor.x, anchor.z) + 2), anchor.z);
       player.yaw = Math.atan2(-anchor.x, -anchor.z);
       noteLocalSnap();
@@ -1000,6 +995,7 @@ async function init(): Promise<void> {
   if (!onlineBoot && soloSpec) {
     const a0 = soloSpec.spec.teamSpawns?.alpha?.[0] ?? soloSpec.spec.spawns?.[0] ?? soloSpec.spec.bases?.alpha;
     if (a0) {
+      player.resetLifeState();
       player.pos.set(a0.x, Math.max(a0.y, terrain.getHeight(a0.x, a0.z) + 2), a0.z);
       noteLocalSnap();
       player.syncMovement();
@@ -1176,6 +1172,7 @@ function makeDemoLifecycle(): ReturnType<typeof createDemoLifecycle> {
     mines: entities.mines,
     totems: entities.totems,
     rakks: entities.rakks,
+    buzzards: entities.buzzards,
     world,
     overlay,
     rendererCanvas: renderer.domElement,

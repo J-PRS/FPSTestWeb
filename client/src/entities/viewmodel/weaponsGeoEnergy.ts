@@ -408,7 +408,9 @@ const lnHotMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xB0_80_FF
 const lnAmberMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xFF_C0_50).multiplyScalar(EMIT_GAIN) });
 
 // Haft — slimmer than a gun body, it reads as a spear shaft, not a bore.
-ln.add(mkTube(0.045, 0.055, 0.55, 0.1, bodyMat));
+// Reaches back under the socket collar — the short 0.55 shaft left the
+// whole head assembly (collar/rods/blade) floating ~10cm off the grip.
+ln.add(mkTube(0.045, 0.055, 0.75, 0, bodyMat));
 // Charge coils — brass wraps stacked along the grip half: the "stored
 // energy" tell shared with the LG's tesla stack.
 for (let i = 0; i < 5; i += 1) {
@@ -449,9 +451,9 @@ for (const s of [-1, 1]) {
 // Central spearblade — a flattened diamond section lofted to a true
 // point: the actual metal tip between the two rods — a vertical fork,
 // blade flanked by electrodes.
-const blade = profOct(0.034, 0.09, 0.01);
+const blade = profOct(0.1, 0.09, 0.01); // 3x the X width - the "thicker" read won on review
 ln.add(mkLoft([
-  { z: -0.31, ring: blade },
+  { z: -0.38, ring: blade }, // seats past the haft end (-0.375) - the wide blade clipped into the shaft
   { z: -0.6, ring: scaleRing(blade, 0.85) },
   { z: -0.95, point: [0, 0] },
 ], bodyMat));
@@ -476,6 +478,10 @@ const corona = new THREE.Mesh(
 corona.position.z = EMITTER_Z;
 corona.layers.enable(BLOOM_LAYER);
 ln.add(corona);
+// Pull-out melee reads bigger + closer — same FPS treatment as the
+// blaster/pistol so the head isn't out of frame.
+ln.scale.setScalar(1.15);
+ln.position.z = -0.08;
 ln.visible = false;
 return ln;
 }

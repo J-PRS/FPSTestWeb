@@ -266,6 +266,77 @@ mortar.visible = false;
 return mortar;
 }
 
+// mkPistol v1 (2026-11): stacked-box autopistol - slide/frame/grip all
+// raw BoxGeometry slabs; readable but the crudest model in the kit.
+// Replaced by the chamfered-slide + extruded-frame version.
+export function mkPistol_v1(): THREE.Group {
+const pistol = new THREE.Group();
+const BORE_Y = 0.045;
+const pBarrel = mkTube(0.022, 0.022, 0.06, -0.16, darkMat);
+pBarrel.position.y = BORE_Y;
+pistol.add(pBarrel);
+const pBore = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.008, 8), darkMat);
+pBore.rotation.x = Math.PI / 2;
+pBore.position.set(0, BORE_Y, -0.192);
+pistol.add(pBore);
+const slide = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.055, 0.26), bodyMat);
+slide.position.set(0, 0.055, -0.06);
+pistol.add(slide);
+const spine = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.012, 0.24), darkMat);
+spine.position.set(0, 0.088, -0.06);
+pistol.add(spine);
+for (const base of [-0.16, 0.05]) {
+  for (let i = 0; i < 4; i += 1) {
+    const serr = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.04, 0.01), darkMat);
+    serr.position.set(0, 0.055, base + i * 0.016);
+    pistol.add(serr);
+  }
+}
+const pFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.22), darkMat);
+pFrame.position.set(0, 0, -0.03);
+pistol.add(pFrame);
+const railP = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.02, 0.09), darkMat);
+railP.position.set(0, -0.033, -0.12);
+pistol.add(railP);
+for (let i = 0; i < 2; i += 1) {
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.022, 0.008), darkMat);
+  slot.position.set(0, -0.033, -0.14 + i * 0.035);
+  pistol.add(slot);
+}
+const gFront = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.012), darkMat);
+gFront.position.set(0, -0.06, -0.05);
+pistol.add(gFront);
+const gBottom = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.08), darkMat);
+gBottom.position.set(0, -0.085, -0.01);
+pistol.add(gBottom);
+const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.03, 0.012), darkMat);
+trigger.position.set(0, -0.055, 0);
+trigger.rotation.x = 0.25;
+pistol.add(trigger);
+const gripMat = new THREE.MeshLambertMaterial({ color: 0x33_36_2F, emissive: 0x0B_0C_0A });
+const gs = new THREE.Shape();
+gs.moveTo(0, 0);
+gs.lineTo(-0.005, -0.11);
+gs.quadraticCurveTo(0.005, -0.135, 0.03, -0.14);
+gs.lineTo(0.065, -0.14);
+gs.quadraticCurveTo(0.075, -0.13, 0.07, -0.09);
+gs.lineTo(0.05, -0.005);
+gs.lineTo(0, 0);
+const gripGeo = new THREE.ExtrudeGeometry(gs, { depth: 0.055, steps: 3, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 2 });
+const pGrip = new THREE.Mesh(gripGeo, gripMat);
+pGrip.rotation.y = -Math.PI / 2;
+pGrip.position.set(0.028, -0.02, 0.08);
+pistol.add(pGrip);
+const pSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.014), darkMat);
+pSight.position.set(0, 0.1, -0.165);
+pistol.add(pSight);
+const pRear = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.022, 0.02), darkMat);
+pRear.position.set(0, 0.098, 0.055);
+pistol.add(pRear);
+pistol.visible = false;
+return pistol;
+}
+
 // Registry for the Gun Lab — key is a display label.
 export const ARCHIVE_BUILDERS: [string, () => THREE.Group][] = [
   ['cannon_v1', mkCannon_v1],
@@ -274,4 +345,5 @@ export const ARCHIVE_BUILDERS: [string, () => THREE.Group][] = [
   ['rakk_v1', mkRakk_v1],
   ['bolt_v1', mkBolt_v1],
   ['mortar_v1', mkMortar_v1],
+  ['pistol_v1', mkPistol_v1],
 ];

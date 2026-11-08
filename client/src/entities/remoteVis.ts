@@ -64,7 +64,9 @@ export function setFrustumVis(p: RemotePlayer, hidden: boolean): void {
   if (hidden === p.frustumHidden) {return;}
   p.frustumHidden = hidden;
   if (hidden) { p.model.setSceneDetached(true); p.auras.hide(); }
-  else if (!p.staleHidden && !p.cloakHidden) { p.model.setSceneDetached(false); p.model.setVisible(true); p.auras.show(); }
+  // isDead gate like showRemote: a corpse frustum-re-add must not
+  // resurrect the body the kill funnel hid - the standing-dead bug.
+  else if (!p.staleHidden && !p.cloakHidden && !p.isDead) { p.model.setSceneDetached(false); p.model.setVisible(true); p.auras.show(); }
   else {p.model.setSceneDetached(false);}
 }
 
@@ -85,5 +87,5 @@ export function tickGhostF(p: RemotePlayer, dt: number): void {
   p.ghostT -= dt;
   if (p.ghostT > 0) {return;}
   p._model.setGhost(false);
-  if (p.cloakHidden || p.staleHidden) {p.model.setVisible(false);}
+  if (p.cloakHidden || p.staleHidden || p.isDead) {p.model.setVisible(false);}
 }
