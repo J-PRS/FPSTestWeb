@@ -41,6 +41,7 @@ import { simNow } from './simClock.ts';
 import { wallNow } from './wallClock.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { WeaponType, HEALBEAM_ENERGY, HEALBEAM_RANGE, BELT_MAX, BELT_THROW_COST, idSeed } from '../../shared/weapons.ts';
+import { ENERGY } from '../../shared/movement.ts';
 
 /** Tribes-flavored squad roles - the type and the objective rules live in
  *  shared/flagGoals.ts so offline CTF plays by the identical table. */
@@ -314,6 +315,44 @@ export class ServerBots {
    *  brain may raise it again (cloak/mend/shield share the window). */
   private skillOffAt = new Map<string, Map<number, number>>();
   private static readonly SKILL_REARM_MS = 1500;
+  /** Instant Q-skill press: the bot's own declared skill only — the
+   *  ante + cooldown floor are the same terms onSkillUse enforces for
+   *  a wire claim. Effects: dash/bounce ride applyImpulse, slam dives
+   *  + lands a blast, blink/warp teleport toward the current goal with
+   *  a ground snap. */
+  private applySkill(id: string, p: { position: BotVec; rotation: { yaw: number }; skill?: string; lastSkillUse?: number }, out: BrainOut): void {
+    const skill = p.skill;
+    if (!skill || out.skill !== skill) {return;}
+    const now = wallNow();
+    if (p.lastSkillUse !== undefined && now - p.lastSkillUse < 850) {return;}
+    if (!this.room.moveSim.drainEnergy(id, ENERGY.skillCost)) {return;}
+    p.lastSkillUse = now;
+    const dir = out.dest
+      ? { x: out.dest.x - p.position.x, z: out.dest.z - p.position.z }
+      : { x: Math.sin(p.rotation.yaw), z: -Math.cos(p.rotation.yaw) };
+    const dl = Math.hypot(dir.x, dir.z) || 1;
+    dir.x /= dl; dir.z /= dl;
+    switch (skill) {
+      case 'dash':
+        this.room.moveSim.applyImpulse(id, { x: dir.x * 16, y: 2, z: dir.z * 16 });
+        break;
+      case 'bounce':
+        this.room.moveSim.applyImpulse(id, { x: 0, y: 10, z: 0 });
+        break;
+      case 'slam':
+        this.room.moveSim.applyImpulse(id, { x: 0, y: -16, z: 0 });
+        this.room.deployables.applyBlast({ x: p.position.x, y: p.position.y, z: p.position.z }, 70, 8, id);
+        break;
+      case 'blink':
+      case 'warp': {
+        const nx = p.position.x + dir.x * 14, nz = p.position.z + dir.z * 14;
+        this.room.moveSim.resync(id, { x: nx, y: (this.field ? hmHeight(this.field, nx, nz) : p.position.y) + 0.5, z: nz }, p.rotation.yaw);
+        break;
+      }
+    }
+    logger.debug('Bot skill press', { id, skill });
+  }
+
   private applyStatus(id: string, p: { status: number }, out: BrainOut, now: number): void {
     if (out.status === undefined) {return;}
     let claim = out.status & CLIENT_STATUS_MASK;
@@ -388,6 +427,7 @@ export class ServerBots {
     }
     // The generic hunt lob is the definition of a low-value toss.
     if (out.belt && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) {this.arsenal.throwBelt(p);}
+    if (out.skill) {this.applySkill(id, p, out);}
     this.arsenal.tryPropel(id, p, out, goal, sh, now);
     // Sentry-clearing lob: hostile gear watching the objective gets a
     // grenade on its own slow cadence - the same legal path humans use

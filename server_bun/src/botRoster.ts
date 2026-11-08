@@ -95,6 +95,12 @@ export class BotRoster {
       p.weapon = loadout.near; // best guess until a real shell spawns — the roster carries it
       this.applyClass(p, cls);
       p.isBot = true;
+      // Q-skill: a per-class pool so lights favor mobility teleports,
+      // heavies favor the dive/endurance - a seat without a declared
+      // skill has nothing legal to press at all.
+      p.skill = cls === 'light' ? (botRand() < 0.6 ? 'blink' : 'dash')
+        : cls === 'heavy' ? (botRand() < 0.5 ? 'slam' : 'medkit')
+        : (['dash', 'bounce', 'warp', 'shield'] as const)[Math.floor(botRand() * 4)]!;
       if (isSuper(id)) {p.health = 400;} // superbot tanks a beating
       p.lastSeen = wallNow();
       this.room.assignTeam(p);

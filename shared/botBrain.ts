@@ -189,6 +189,10 @@ export interface BrainCtx {
   /** Modeled energy tank (server shadow truth) - skills/jet gate on it.
    *  Omitted on hosts without an energy model; hints assume a full tank. */
   energy?: number;
+  /** The bot's equipped Q-skill id ('dash'|'blink'|'slam'|'warp'|
+   *  'bounce'|'cloak'|'shield'|'medkit') - the host shadows its
+   *  cooldown, so a press is legal whenever the brain picks it. */
+  skill?: string;
   /** Own health as a 0..1 fraction - mend decision input. */
   healthFrac?: number;
   /** Own held tokens (headhunt) - the hoard-protection read: carriers
@@ -289,6 +293,9 @@ export interface BrainOut {
   status?: number;
   /** Belt throw this step (grenade arc at the hunt target). */
   belt?: boolean;
+  /** Instant Q-skill press this step - the host validates energy +
+   *  cooldown via onSkillUse, then applies the effect locally. */
+  skill?: string;
   /** Flag pass to a teammate (standoff pass or pre-death handoff) -
    *  the host resolves the toss through the same throwFor a human's
    *  throwFlag intent reaches. Carries the receiver's position so the
@@ -372,6 +379,7 @@ export class BotBrain {
   flinchT = 0;
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
   private beltT = 8; // staggered in the constructor along with thinkT
+  private skillT = 5; // same stagger cadence - presses, not channels
   /** Belt trigger window/cooldown - tunable for A/B trigger soaks. */
   beltMin = 5;
   beltMax = 45;
@@ -733,6 +741,47 @@ export class BotBrain {
     return true;
   }
 
+  /** Instant Q-skill pick: the brain presses its own equipped skill on
+   *  its own terms, never a scripted moment - the host validates the
+   *  energy ante + cooldown so the press is only ever legal. Each
+   *  skill's trigger is a human-shaped reason, not doctrine: dash is a
+   *  gap-closer on a chase, slam is a dive on a fight you're landing
+   *  on, blink/warp are the get-there/escape teleports, bounce is a
+   *  hop. Channel skills (cloak/shield/medkit) live in statusIntent. */
+  private pickSkill(dt: number, pos: BotVec, ctx: BrainCtx, fearing: boolean): string | undefined {
+    this.skillT -= dt;
+    const id = ctx.skill;
+    if (!id || this.skillT > 0 || (ctx.energy ?? 99) < 40) {return undefined;}
+    if (id === 'cloak' || id === 'shield' || id === 'medkit') {return undefined;} // channel skills ride statusIntent
+    const hunting = this.h.hunt !== null;
+    const d = hunting ? dist3(pos, this.h.lastSeen) : Infinity;
+    const hurt = (ctx.healthFrac ?? 1) < 0.4;
+    const press = (): string => { this.skillT = 4; return id; };
+    switch (id) {
+      case 'dash':
+        // Gap-closer: a committed chase at reach, or a scared bot
+        // breaking contact - both are the human "Q to move faster".
+        if ((hunting && d > 10 && d < 70) || (fearing && hurt)) {return press();}
+        break;
+      case 'slam':
+        // Dive on the fight you're landing on: a close hunt with the
+        // drop to make the dive pay.
+        if (hunting && d < 18) {return press();}
+        break;
+      case 'blink':
+      case 'warp':
+        // Get-there or get-out: infiltrating toward the objective from
+        // reach, or a hurt bot escaping - the beacon answers both.
+        if ((ctx.infiltrating && ctx.objective && dist3(pos, ctx.objective) > 50) || (fearing && hurt)) {return press();}
+        break;
+      case 'bounce':
+        // Hop: the mobility habit on any approach or scramble.
+        if (hunting || fearing) {return press();}
+        break;
+    }
+    return undefined;
+  }
+
   /** Fear/hero state rides the health fraction - a rare hero roll on the
    *  rising edge of getting hurt decides whether low HP means retreat or
    *  a desperate last stand. Latch resets once healed so the next wound
@@ -1045,6 +1094,9 @@ export class BotBrain {
     // --- belt: lob a grenade into a mid-range fight on a slow cooldown ---
     const belt = this.pickBelt(dt, pos, now, ctx);
 
+    // --- Q-skill: press the equipped instant skill on its own terms ---
+    const skillPress = this.pickSkill(dt, pos, ctx, fearing);
+
     // --- deploy: a quiet defender with hands free fortifies the stand ---
     const deploy = pickDeploy(this, dt, ctx, pos, fearing);
 
@@ -1089,7 +1141,7 @@ export class BotBrain {
         && dist3(mate, ctx.objective) < dist3(pos, ctx.objective) - 10
         && botRand() < (hp < 0.4 ? 0.7 : 0.3)) { passFlag = { x: mate.x, y: mate.y, z: mate.z }; this.passT = 4; }
     }
-    return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say, passFlag };
+    return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, skill: skillPress, deploy, repair, say, passFlag };
   }
 
   /** Stall verdict for a goal the bot can't walk to: climbable face →

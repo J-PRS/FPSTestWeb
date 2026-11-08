@@ -6,6 +6,7 @@ import { SheepMeter } from './botSheep.js';
 import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, rollBotPerk } from '../../../../shared/botLoadouts.js';
 import { botRand } from '../../../../shared/botRand.js';
 import { WeaponType } from '../../../../shared/weapons.js';
+import { ENERGY } from '../../../../shared/movement.js';
 import type { Nugget } from '../../entities/Nugget.js';
 import type { Targetable } from '../../entities/balls.js';
 import type { GameContext } from '../context.js';
@@ -189,9 +190,14 @@ export class TeamBots {
         // Same perk roll the server roster makes - kit fields weapons,
         // perk table fields the person; class derives after the roll.
         const lo = Object.assign({}, base, {perk: rollBotPerk(base, botRand)});
-        const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain,
-          botClassForLoadout(lo));
+        const cls = botClassForLoadout(lo);
+        const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain, cls);
         bot.setLoadout(lo);
+        // Q-skill: same per-class pool the server roster rolls - lights
+        // favor mobility teleports, heavies the dive/endurance.
+        bot.skillId = cls === 'light' ? (botRand() < 0.6 ? 'blink' : 'dash')
+          : cls === 'heavy' ? (botRand() < 0.5 ? 'slam' : 'medkit')
+          : (['dash', 'bounce', 'warp', 'shield'] as const)[Math.floor(botRand() * 4)]!;
         bot.loadoutAlts = wildcard ? WILDCARD_SLOTS : BOT_ALT_SLOTS[kitIdx];
         // The spawn pick is skill-weighted, not flat — the brain's own
         // matrix rerolls every open slot toward what it hits with.
@@ -505,6 +511,7 @@ bn += 1;
   private offlineActs(bot: GameBot, hasShot: boolean): void {
     if (bot.wantBelt) {this.fire.throwBelt(bot);}
     if (bot.wantDeploy) {this.tryDeploy(bot);}
+    if (bot.wantSkill) {this.applySkill(bot);}
     // Flag pass: the carrier's intent carries the receiver's pos -
     // same arc a human G-press resolves, aimed at the teammate.
     if (bot.wantPass) {this.ctf?.throwBot(bot, bot.wantPass); bot.wantPass = null;}
@@ -570,6 +577,7 @@ bn += 1;
       : null;
     ctx.flagPos = flagTeam ? this.ctf!.flagPos(flagTeam, false) ?? null : null;
     ctx.moveSkill = bot.skill?.movement;
+    ctx.skill = bot.skillId;
     ctx.pickupVal = ctx.nugget?.val;
     this.fillSenses(ctx, bot, others);
     return ctx;
@@ -850,6 +858,38 @@ bn += 1;
 
   /** Builder bots plant — the brain picked kind+spot, the deployables
    *  pipeline owns the pod+item (mirrors the server's handleDeploy). */
+  /** Instant Q-skill press on a local bot — same ante + effect terms as
+   *  the server actuation: dash/bounce ride the velocity, slam dives +
+   *  lands a blast, blink/warp teleport toward the current goal. */
+  private applySkill(bot: GameBot): void {
+    const id = bot.wantSkill;
+    bot.wantSkill = null;
+    if (!id || id !== bot.skillId || bot.energy < ENERGY.skillCost) {return;}
+    bot.energy -= ENERGY.skillCost;
+    const dx = bot.lastDest.x - bot.position.x, dz = bot.lastDest.z - bot.position.z;
+    const dl = Math.hypot(dx, dz) || 1;
+    switch (id) {
+      case 'dash':
+        bot.velocity.x += (dx / dl) * 16; bot.velocity.y += 2; bot.velocity.z += (dz / dl) * 16;
+        break;
+      case 'bounce':
+        bot.velocity.y += 10;
+        break;
+      case 'slam':
+        bot.velocity.y -= 16;
+        for (const foe of this.senses.enemyList(bot)) {
+          if (foe.pos.distanceTo(bot.position) < 8) {this.hit(foe.id, 70, bot.position, bot.playerId);}
+        }
+        break;
+      case 'blink':
+      case 'warp':
+        bot.position.x += (dx / dl) * 14;
+        bot.position.z += (dz / dl) * 14;
+        bot.position.y = (bot.terrain ? bot.terrain.getHeight(bot.position.x, bot.position.z) : bot.position.y) + 0.5;
+        break;
+    }
+  }
+
   private tryDeploy(bot: GameBot): void {
     const want = bot.wantDeploy;
     if (!want) {return;}

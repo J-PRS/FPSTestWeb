@@ -93,6 +93,8 @@ interface BotThinkCtx {
 
   terrain: Terrain;
 
+  skill?: string;
+
   enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
 
   nugget: Nugget | null;
@@ -311,6 +313,10 @@ export class GameBot extends RemotePlayer {
   /** Brain's belt intent from the last think - TeamBots resolves the arc. */
 
   wantBelt = false;
+
+  /** Equipped Q-skill id + the brain's press intent from the last think. */
+  skillId: string | undefined;
+  wantSkill: string | null = null;
 
   /** Builder intent from the shared brain - TeamBots plants it. */
 
@@ -606,6 +612,7 @@ export class GameBot extends RemotePlayer {
     }
 
     this.wantBelt = Boolean(out.belt);
+    this.wantSkill = out.skill ?? null;
 
     this.wantDeploy = out.deploy ?? null;
 
