@@ -21,7 +21,7 @@ const buf = readFileSync('C:/TEMP/_WEB/FPSWebTest/maps/rimrock.bin');
 const spec = JSON.parse(readFileSync('C:/TEMP/_WEB/FPSWebTest/maps/rimrock.json', 'utf8'));
 const field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale ?? 1);
 
-const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: "hard" }, 'headhunt', 4242, false, field);
+const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: "hard" }, 'headhunt', arg('seed', 4242), false, field);
 
 // Two modes: --off = control (belt-on vs belt-blind), default = trigger
 // A/B (both belt, one team runs a WIDE 5-45m/6s window vs stock 10-35m/9s).

@@ -25,7 +25,7 @@ const buf = readFileSync('C:/TEMP/_WEB/FPSWebTest/maps/rimrock.bin');
 const spec = JSON.parse(readFileSync('C:/TEMP/_WEB/FPSWebTest/maps/rimrock.json', 'utf8'));
 const field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale ?? 1);
 
-const room = mkRoom({ mode: 'headhunt', bots: PER, botSkill: 'medium' }, 'headhunt', 4242, false, field);
+const room = mkRoom({ mode: 'headhunt', bots: PER, botSkill: 'medium' }, 'headhunt', arg('seed', 4242), false, field);
 // Standard headhunt - gems come from the real kill economy. K/D and
 // held tokens print per 30s so we see whether the economy exists at all.
 

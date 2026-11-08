@@ -16,7 +16,7 @@ const buf = readFileSync('C:/TEMP/_WEB/FPSWebTest/maps/rimrock.bin');
 const spec = JSON.parse(readFileSync('C:/TEMP/_WEB/FPSWebTest/maps/rimrock.json', 'utf8'));
 const field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale ?? 1);
 
-const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: 'hard' }, 'headhunt', 4242, false, field);
+const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: 'hard' }, 'headhunt', arg('seed', 4242), false, field);
 
 // --pool=dash,slam,... gives each bot a different skill; kills tally
 // PER SKILL - one room answers "which Q earns" for the whole set.
