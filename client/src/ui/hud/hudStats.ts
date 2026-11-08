@@ -156,20 +156,23 @@ export class HudStats {
       this.setText(h.wammoReadout, 'wammo', n < 0 ? '' : String(n));
       if (this.lastWammoCol !== col) {this.lastWammoCol = col; h.wammoReadout.style.color = col;}
     }
-    // Regen sliver: fractional accrue is the progress to the next round -
-    // hidden on unlimited pools (no counter shown) and full drums.
-    const regen = h.wammoRegenFill;
-    if (regen) {
-      // Show only while a round is actually accruing - unlimited pools
-      // and full drums get no track at all (an empty sliver parked under
-      // every weapon reads as UI cruft).
-      const cap = wid === undefined ? 0 : (getWeaponStats(weaponDef(wid).weaponType).ammoCap ?? 0);
-      const accruing = banked !== undefined && banked < cap;
-      (regen.parentElement as HTMLElement).style.display = accruing ? '' : 'none';
-      const frac = accruing ? banked! % 1 : 0;
-      const pct = `${(frac * 100).toFixed(0)}%`;
-      if (this.lastWammoRegen !== pct) {this.lastWammoRegen = pct; regen.style.width = pct;}
-    }
+    this.tickAmmoRegen(wid, banked);
+  }
+
+  // Regen sliver: fractional accrue is the progress to the next round -
+  // hidden on unlimited pools (no counter shown) and full drums.
+  private tickAmmoRegen(wid: number | undefined, banked: number | undefined): void {
+    const regen = this.h.wammoRegenFill;
+    if (!regen) {return;}
+    // Show only while a round is actually accruing - unlimited pools
+    // and full drums get no track at all (an empty sliver parked under
+    // every weapon reads as UI cruft).
+    const cap = wid === undefined ? 0 : (getWeaponStats(weaponDef(wid).weaponType).ammoCap ?? 0);
+    const accruing = banked !== undefined && banked < cap;
+    (regen.parentElement as HTMLElement).style.display = accruing ? '' : 'none';
+    const frac = accruing ? banked! % 1 : 0;
+    const pct = `${(frac * 100).toFixed(0)}%`;
+    if (this.lastWammoRegen !== pct) {this.lastWammoRegen = pct; regen.style.width = pct;}
   }
 
   // Deploy weapons telegraph a dead pull: groundedOnly and off the
