@@ -40,6 +40,17 @@ test('mods approach the impossible tier at full resolve', (): void => {
   expect(s.mods.react).toBeCloseTo(BOT_TIERS.impossible.react, 1);
 });
 
+test('overdrive: unhurt menace ramps resolve past 1, damage snaps it', (): void => {
+  const s = rollSkill({ x: 4, y: 2, z: 6 }, 'medium');
+  tick(s, { deficit: 0.8, ownPerf: 0.9, menace: 0.9, menaceHp: 100 }, 6);
+  expect(s.resolve).toBeGreaterThan(0.7);
+  const before = s.resolve;
+  tick(s, { deficit: 0.8, ownPerf: 0.9, menace: 0.9, menaceHp: 100 }, 10);
+  expect(s.resolve).toBeGreaterThan(Math.max(before, 1)); // still climbing
+  tick(s, { deficit: 0.8, ownPerf: 0.9, menace: 0.9, menaceHp: 40 }, 1);
+  expect(s.resolve).toBeLessThanOrEqual(1); // bled him - snapped back
+});
+
 test('toggle flag exists and is on', (): void => {
   expect(HERO_ON).toBe(true);
 });

@@ -673,7 +673,7 @@ bn += 1;
 
   /** Mirrors ServerBotSenses.heroOf — the shared brain's resolve feed
    *  must read the same scoreboard offline that it reads on the wire. */
-  private heroOf(bot: GameBot): { deficit: number; ownPerf: number; menace: number; menacePos?: { x: number; y: number; z: number } } | undefined {
+  private heroOf(bot: GameBot): { deficit: number; ownPerf: number; menace: number; menacePos?: { x: number; y: number; z: number }; menaceHp?: number } | undefined {
     const teams = this.spec.teams === true && (bot.team === 'alpha' || bot.team === 'bravo');
     const other = bot.team === 'alpha' ? 'bravo' : 'alpha';
     const w = this.deps.world;
@@ -690,19 +690,19 @@ bn += 1;
     const teamKillGap = teams ? (scan.foeTeamKills - scan.myTeamKills) / Math.max(4, this.spec.winAt) : 0;
     const killGap = teams ? 0 : (topKills - (w.killCounts.get(bot.playerId) ?? 0)) / Math.max(4, this.spec.winAt ?? 10);
     const deficit = Math.min(1, Math.max(0, Math.max(-scoreDeficit, teamKillGap, killGap) * 0.7 + Math.max(0, -ownKd) * 0.5));
-    return { deficit, ownPerf, menace, menacePos };
+    return { deficit, ownPerf, menace, menacePos, menaceHp: scan.hp };
   }
 
   /** Lobby scan behind heroOf: strongest enemy K/D + pos + the top
    *  kill count (the FFA leader mark the kill-gap measures). */
-  private menaceScan(bot: GameBot, teams: boolean, other: string): { menace: number; pos?: { x: number; y: number; z: number }; topKills: number; foeTeamKills: number; myTeamKills: number } {
+  private menaceScan(bot: GameBot, teams: boolean, other: string): { menace: number; pos?: { x: number; y: number; z: number }; topKills: number; foeTeamKills: number; myTeamKills: number; hp?: number } {
     const w = this.deps.world;
     const kdOf = (id: string): number => Math.tanh(((w.killCounts.get(id) ?? 0) - (w.deathCounts.get(id) ?? 0)) / 4);
     let menace = 0, pos: { x: number; y: number; z: number } | undefined;
-    let topKills = 0, foeTeamKills = 0, myTeamKills = 0;
+    let topKills = 0, foeTeamKills = 0, myTeamKills = 0, hp: number | undefined;
     const player = this.deps.lazyPlayer();
     if (!player.isDead && (teams ? this.playerTeam === other : true)) {
-      menace = Math.max(0, kdOf('local')); ({ pos } = player);
+      menace = Math.max(0, kdOf('local')); ({ pos } = player); hp = player.health;
       topKills = w.killCounts.get('local') ?? 0;
     } else if (teams && this.playerTeam === bot.team) {myTeamKills += w.killCounts.get('local') ?? 0;}
     for (const b of this.bots) {
@@ -711,9 +711,9 @@ bn += 1;
       foeTeamKills += w.killCounts.get(b.playerId) ?? 0;
       topKills = Math.max(topKills, w.killCounts.get(b.playerId) ?? 0);
       const m = kdOf(b.playerId);
-      if (m > menace) {menace = m; pos = b.position;}
+      if (m > menace) {menace = m; pos = b.position; hp = b.botHp;}
     }
-    return { menace, pos, topKills, foeTeamKills, myTeamKills };
+    return { menace, pos, topKills, foeTeamKills, myTeamKills, hp };
   }
 
   /** Rally channel = live teammates (incl. the local player). Team

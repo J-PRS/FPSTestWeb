@@ -73,11 +73,16 @@ export interface BotSkill {
   baseAxes: Record<AimAxis, AxisPair>;
   baseMove: number;
   baseMods: BotTierMods;
-  /** Hero mode resolve 0-1 - sustained escalation from team deficit,
+  /** Hero mode resolve 0-1+ - sustained escalation from team deficit,
    *  menace pressure, and personal performance. Distinct from the
    *  brain's heroT last-stand roll: this one changes WHO the bot is,
-   *  not how loud it fights. */
+   *  not how loud it fights. >1 = results overdrive. */
   resolve: number;
+  /** Menace HP at the last think - the damage ledger overdrive reads. */
+  prevMenaceHp: number;
+  /** Damage bought breathing room: hurting the menace pauses overdrive
+   *  for odHold seconds - a one-tick snap would re-arm instantly. */
+  odHold: number;
   /** Ski/jet competence — how well it holds speed and picks lines. */
   movement: number;
   /** Form multiplier: >1 in the zone, <1 tilted. Random-walked each
@@ -132,6 +137,8 @@ export function rollSkill(spawn: BotVec, spec: BotSkillSpec = 'medium'): BotSkil
     baseMove: movement,
     baseMods: mods,
     resolve: 0,
+    prevMenaceHp: -1,
+    odHold: 0,
     movement,
     form: 1,
     beltPull: rng() < 0.45,
@@ -154,7 +161,7 @@ const IMPOSSIBLE = BOT_TIERS.impossible;
  *  deficit 0..1 (how badly the bot's side is losing),
  *  ownPerf 0..1 (this bot's personal form vs the lobby - the hero seed),
  *  menace 0..1 (a dominant enemy exists - their pull on this bot). */
-export function heroTick(s: BotSkill, pressure: { deficit: number; ownPerf: number; menace: number }, dt: number): void {
+export function heroTick(s: BotSkill, pressure: { deficit: number; ownPerf: number; menace: number; menaceHp?: number }, dt: number): void {
   // Resolve target: team deficit is the floor pressure, personal form
   // amplifies it (surprising hero = the seed who's already rolling),
   // a menace adds its own pull, and a slow random walk keeps spikes
@@ -167,13 +174,28 @@ export function heroTick(s: BotSkill, pressure: { deficit: number; ownPerf: numb
   // comeback shouldn't instantly deflate the moment the score evens.
   const rate = target > s.resolve ? 0.25 : 0.05;
   s.resolve = Math.max(0, Math.min(1, s.resolve + (target - s.resolve) * Math.min(1, rate * dt)));
+  // RESULTS-based overdrive: a menace the lobby isn't hurting isn't
+  // pressure, it's a problem - resolve keeps climbing past 1 on the
+  // same legal dials, multiplicative (the rise accelerates). Any damage
+  // the menace takes snaps the bot back to the honest tier: the ramp
+  // answers survival, not skill.
+  s.odHold = Math.max(0, s.odHold - dt);
+  if (pressure.menaceHp !== undefined) {
+    if (s.prevMenaceHp >= 0 && pressure.menaceHp < s.prevMenaceHp - 1) {
+      s.resolve = Math.min(s.resolve, 1); // bled him - back to legal
+      s.odHold = 5;                        // damage buys 5s of honest tier
+    } else if (s.resolve > 0.7 && s.odHold <= 0) {
+      s.resolve = Math.min(4, s.resolve * (1 + 0.12 * dt)); // ~12%/s compounding
+    }
+  }
+  s.prevMenaceHp = pressure.menaceHp ?? -1;
   // Apply: every dial a roll could have drawn, lerped toward impossible.
   const r = s.resolve;
   const lerp = (a: number, b: number): number => a + (b - a) * r;
   s.mods.aim = lerp(s.baseMods.aim, IMPOSSIBLE.aim);
   s.mods.move = lerp(s.baseMods.move, IMPOSSIBLE.move);
-  s.mods.react = lerp(s.baseMods.react, IMPOSSIBLE.react);
-  s.mods.jitter = lerp(s.baseMods.jitter, IMPOSSIBLE.jitter);
+  s.mods.react = Math.max(0.05, lerp(s.baseMods.react, IMPOSSIBLE.react));
+  s.mods.jitter = Math.max(0.05, lerp(s.baseMods.jitter, IMPOSSIBLE.jitter));
   s.mods.temper = lerp(s.baseMods.temper, IMPOSSIBLE.temper);
   // Axis/movement targets scale with the roll, not an absolute - a
   // hard-spec axis drawn at 1.8 lerping toward 1.45 would be resolve
