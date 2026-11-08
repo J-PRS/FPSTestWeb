@@ -249,6 +249,10 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
     lines.push(`lab: ${ld[0]}`);
     for (const [k, v] of ld[1]) {lines.push(`  ${k}: ${v}`);}
   }
+  // Locomotion split per remote (HA/A/S/W/ST/I) - registered by
+  // game/remotes.ts; absent until the first remote accrues a bucket.
+  const ad = (window as { __aswDump?: () => string[] }).__aswDump?.();
+  if (ad?.length) {lines.push('asw (HA/A/S/W/ST/I % of life):', ...ad);}
   return lines;
 }
 

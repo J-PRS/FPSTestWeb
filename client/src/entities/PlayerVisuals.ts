@@ -75,7 +75,10 @@ export class PlayerVisuals {
 
     // Feet marker — soft glowing ring flat on the terrain (reads nicer than a wireframe sphere)
     const gizmoGeo = new THREE.RingGeometry(0.28, 0.36, 32);
-    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x66_FF_CC, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
+    // depthTest off - the ring hugs the heightfield but the rendered
+    // terrain chord rides ~0.1-0.3m above it on slopes, which clipped the
+    // marker into the hillside. It's a debug decal; draw it on top.
+    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x66_FF_CC, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, depthTest: false });
     this.groundGizmo = new THREE.Mesh(gizmoGeo, gizmoMat);
     this.groundGizmo.rotation.x = -Math.PI / 2;
     this.groundGizmo.renderOrder = 999;
@@ -99,7 +102,7 @@ export class PlayerVisuals {
     pvCam.updateCamera(this, camera, terrain, Object.assign({}, {thirdPerson: false}, cam));
   }
 
-  updateFeetMarker(terrain: Terrain, pos: THREE.Vector3): void { pvCam.updateFeetMarker(this, terrain, pos); }
+  updateFeetMarker(terrain: Terrain, pos: THREE.Vector3, ...rest: [feetY?: number, speed?: number, skiing?: boolean]): void { pvCam.updateFeetMarker(this, terrain, pos, ...rest); }
 
   updateFrozenCamera(camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, yaw: number, pitch: number): void {
     pvCam.updateFrozenCamera(this, camera, terrain, pos, yaw, pitch);

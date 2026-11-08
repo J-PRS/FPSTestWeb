@@ -60,6 +60,34 @@ export function scoreboardTitle(mode?: string, mapName?: string): string {
 
 
 
+/** Locomotion split for the current life - each field is a percent of
+ *  total accrued time; keys map to the colored column segments
+ *  (HA/A/S/W/ST/I). */
+export type AswSplit = { ha: number; a: number; s: number; w: number; st: number; i: number };
+
+/** Render order + css class per asw segment - keep in sync with the
+ *  column header in dom.ts and the .asw-* colors in hud.css. */
+const ASW_KEYS = ['ha', 'a', 's', 'w', 'st', 'i'] as const;
+
+export type AswBucket = (typeof ASW_KEYS)[number];
+
+/** Single source for the locomotion buckets - remotes.ts accrues time
+ *  with this and pvCam colors the feet gizmo with the same answer, so
+ *  the ring can never disagree with the scoreboard column. */
+export function aswBucket(alt: number, speed: number, skiing: boolean): AswBucket {
+  if (alt > 5) {return 'ha';}
+  if (alt >= 0.8) {return 'a';}
+  if (speed < 1) {return 'i';}
+  if (speed < 5) {return 'st';}
+  return skiing ? 's' : 'w';
+}
+
+/** Same hues as hud.css .asw-* - the feet gizmo is a THREE material and
+ *  can't read css. */
+export const ASW_HEX: Record<AswBucket, number> = {
+  ha: 0xB0_6E_E8, a: 0x6E_A8_FF, s: 0x6E_E8_7F, w: 0xFF_E0_66, st: 0xFF_9A_3C, i: 0xFF_5A_5A,
+};
+
 export type SbRow = {
 
   name: string; frags: number; deaths: number; score: number | null; ping: number | string | null;
@@ -76,9 +104,9 @@ export type SbRow = {
 
   alive?: number | null;
 
-  /** "A/S/W" — % of this life spent airborne / skiing / walking. */
+  /** HA/A/S/W/ST/I — % of this life spent in each locomotion bucket. */
 
-  asw?: string | null;
+  asw?: AswSplit | null;
 
 };
 
@@ -145,7 +173,7 @@ function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
 
   tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
 
-  const cells = [String(r.frags), String(r.deaths), r.score === null ? '—' : String(r.score), r.net ?? '—', scoreboardPing(r.ping), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`, r.asw ?? '—'];
+  const cells = [String(r.frags), String(r.deaths), r.score === null ? '—' : String(r.score), r.net ?? '—', scoreboardPing(r.ping), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`];
 
   const numTd = document.createElement('td');
 
@@ -184,6 +212,20 @@ function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
     tr.append(td);
 
   }
+
+  // Locomotion split - one colored segment per bucket so the column reads
+  // at a glance (colors live in hud.css .asw-*).
+  const aswTd = document.createElement('td');
+  if (r.asw) {
+    ASW_KEYS.forEach((k, i): void => {
+      if (i > 0) {aswTd.append(document.createTextNode('/'));}
+      const span = document.createElement('span');
+      span.className = `asw-${k}`;
+      span.textContent = String(r.asw![k]);
+      aswTd.append(span);
+    });
+  } else {aswTd.textContent = '—';}
+  tr.append(aswTd);
 
   return tr;
 

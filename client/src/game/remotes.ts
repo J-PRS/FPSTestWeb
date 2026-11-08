@@ -11,9 +11,10 @@ import { emitLocomotionFx, isCarvingSki } from '../effects/locomotionFx.js';
 import type { NetworkManager , RemotePlayerState } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
-import { rankRows, scoreboardTitle } from '../ui/hud/scoreboard.js';
+import { rankRows, scoreboardTitle, aswBucket, type AswSplit } from '../ui/hud/scoreboard.js';
 import type { WorldState } from './worldState.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
+import { CLASS_STATS } from '../../../shared/botClasses.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
 import { settings } from '../core/settings.js';
 import { isBotId, botRosterName } from '../../../shared/botNames.js';
@@ -198,11 +199,30 @@ function tickOnScreen(deps: RemotesDeps, cam: THREE.PerspectiveCamera): void {
     setFrustumVis(rp, !rp.onScreen);
   }
 }
-function aswAccrue(id: string, dead: boolean, grounded: boolean, skiing: boolean, dt: number): void {
+/** feetY - terrain height, cached ~5Hz per id. Shared by wire remotes,
+ *  local bots, and the local player - one sampler, one truth. The maps
+ *  live next to aswStr below; safe - this only runs at tick time. */
+function aswAltFor(id: string, x: number, z: number, feetY: number, terrain: Terrain, dt: number): number {
+  const gt = (aswAltT.get(id) ?? 0) - dt;
+  if (gt <= 0) {
+    aswAltT.set(id, 0.2);
+    const tY = Math.max(terrain.getHeight(x, z), terrain.getRenderedHeight(x, z));
+    const alt = feetY - tY;
+    aswAlt.set(id, alt);
+    return alt;
+  }
+  aswAltT.set(id, gt);
+  return aswAlt.get(id) ?? 0;
+}
+function aswAccrue(id: string, dead: boolean, alt: number, skiing: boolean, dt: number, speed = 0): void {
   if (dead) { asw.delete(id); return; }
   let e = asw.get(id);
-  if (!e) { e = { a: 0, s: 0, w: 0 }; asw.set(id, e); }
-  if (!grounded) { e.a += dt; } else if (skiing) { e.s += dt; } else { e.w += dt; }
+  if (!e) { e = { ha: 0, a: 0, s: 0, w: 0, st: 0, i: 0 }; asw.set(id, e); }
+  // alt = feetY - terrain height. >5m reads as high air (jet climb, big
+  // drop); 0.8-5m is ordinary air (ski crest, hop, jump arc). Bucket
+  // order/thresholds live in scoreboard.aswBucket - the feet gizmo reads
+  // the same function, so ring color and column can never drift.
+  e[aswBucket(alt, speed, skiing)] += dt;
 }
 
 
@@ -231,6 +251,8 @@ export function applyTeamTint(localTeam: string | undefined, lastTintOf: Map<str
 // Per-remote-player frame work: create if new, hide if stale, tick, then cosmetics
 function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
     playerId: string, playerState: WirePlayerState, dt: number): void {
+  noteDeps(deps);
+  wireRoster.set(playerId, playerState);
   const nm = deps.lazyNetworkManager();
   if (playerId === nm.getLocalPlayerId()) {return;}
 
@@ -266,15 +288,10 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // Same grounded heuristic the ski dust uses - wire has no onGround bit.
   // It feeds the scoreboard's asw column, so a ~5Hz cache is plenty:
   // 32 unconditional height samples/frame was ~2.3% of a throttled CPU.
-  let grounded = aswGround.get(playerId) ?? true;
-  const gt = (aswGroundT.get(playerId) ?? 0) - dt;
-  if (gt <= 0) {
-    aswGroundT.set(playerId, 0.2);
-    const tY = Math.max(deps.lazyTerrain().getHeight(remotePlayer.position.x, remotePlayer.position.z), deps.lazyTerrain().getRenderedHeight(remotePlayer.position.x, remotePlayer.position.z));
-    grounded = remotePlayer.feetY - tY < 0.8;
-    aswGround.set(playerId, grounded);
-  } else {aswGroundT.set(playerId, gt);}
-  aswAccrue(playerId, playerState.isDead, grounded, Boolean(playerState.ski), dt);
+  // The cache stores clearance (feetY - terrain), not a boolean - the
+  // asw sampler splits ordinary air (<5m) from high air (>5m).
+  const alt = aswAltFor(playerId, remotePlayer.position.x, remotePlayer.position.z, remotePlayer.feetY, deps.lazyTerrain(), dt);
+  aswAccrue(playerId, playerState.isDead, alt, Boolean(playerState.ski), dt, remotePlayer.vel.length());
   // Class rides every tick record because strict-tier role re-fits
   // (hof→heavy, capper→light) land mid-life on the server - the
   // silhouette must follow the sim's body, not the create-time class.
@@ -368,27 +385,85 @@ function scoreboardScores(deps: RemotesDeps, nm: NetworkManager, localId: string
 // source (wire events, tick isDead flips, offline bot respawns) reset it.
 const aliveSince = new Map<string, number>();
 
-/** A/S/W split of the CURRENT life - ms buckets, wiped on death exactly
- *  like aliveSince. Ski reads as grounded-and-skiing; airborne ski time
- *  counts as air (you can't ski without a surface). */
-const asw = new Map<string, { a: number; s: number; w: number }>();
-// Grounded-verdict cache for the asw sampler - refreshed ~5Hz per remote.
-const aswGround = new Map<string, boolean>();
-const aswGroundT = new Map<string, number>();
-function aswStr(id: string): string | null {
+/** HA/A/S/W/ST/I split of the CURRENT life - ms buckets, wiped on death
+ *  exactly like aliveSince. Ski reads as grounded-and-skiing; airborne
+ *  ski time counts as air (you can't ski without a surface). "high air"
+ *  is >5m above terrain - jet climbs and big drops, not crest hops.
+ *  "idle" is grounded under 1 m/s; "still" is grounded under 5. */
+const asw = new Map<string, { ha: number; a: number; s: number; w: number; st: number; i: number }>();
+// Clearance cache for the asw sampler - refreshed ~5Hz per remote.
+const aswAlt = new Map<string, number>();
+const aswAltT = new Map<string, number>();
+function aswStr(id: string): AswSplit | null {
   const e = asw.get(id);
   if (!e) {return null;}
-  const t = e.a + e.s + e.w;
+  const t = e.ha + e.a + e.s + e.w + e.st + e.i;
   if (t <= 0) {return null;}
   const pct = (v: number): number => Math.round((v / t) * 100);
-  return `${pct(e.a)}/${pct(e.s)}/${pct(e.w)}`;
+  return { ha: pct(e.ha), a: pct(e.a), s: pct(e.s), w: pct(e.w), st: pct(e.st), i: pct(e.i) };
 }
+// Alt+Q hook - diagDump can't import this module (core->game edge), so
+// the dump reads the split through a window provider like __labDump.
+function dumpSheep(rp: RemotePlayer): number | string {
+  const v = (rp as { sheepShown?: number }).sheepShown ?? (rp as { sheep?: number }).sheep;
+  return v === undefined ? '-' : Number(v.toFixed(2));
+}
+function dumpPingNet(id: string, wr: { ping?: number | null; transport?: string | null; team?: string } | undefined): [string, string] {
+  if (isBotId(id)) {return ['bot', 'bot'];}
+  return [String(wr?.ping ?? '-'), String(wr?.transport ?? '-')];
+}
+function gameDumpRow(w: WorldState, id: string, rp: RemotePlayer, now: number): string {
+  const s = aswStr(id);
+  const wr = wireRoster.get(id);
+  const team = wr?.team ?? (rp as { team?: string }).team ?? '-';
+  const [ping, net] = dumpPingNet(id, wr);
+  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
+}
+if (typeof window !== 'undefined') {
+  (window as { __aswDump?: () => string[] }).__aswDump = (): string[] => {
+    const lines: string[] = [];
+    for (const id of asw.keys()) {
+      const s = aswStr(id); // percentages of life, same numbers the column shows
+      if (s) {lines.push(`  asw ${id.slice(0, 20)} ${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}`);}
+    }
+    return lines;
+  };
+  // Shift+Alt+Q: game-STATE dump for balancing/testing - scoreboard rows
+  // (name/team/frags/deaths/score) + team tally + ASW split. Not logs.
+  (window as { __gameDump?: () => string[] }).__gameDump = (): string[] => {
+    const d = depsRef;
+    if (!d) {return ['  no world yet'];}
+    const w = d.world;
+    const now = performance.now();
+    const lines: string[] = [`  mode=${w.mode} map=${w.mapName ?? '-'} teams=${JSON.stringify(w.teamScores ?? {})}`];
+    lines.push('  name                 team      cls      F  D  score sheep alive ping net   asw(HA/A/S/W/ST/I)');
+    const nm = d.lazyNetworkManager();
+    const localId = nm.getLocalPlayerId();
+    const { scores, localScoreId } = scoreboardScores(d, nm, localId);
+    const self = d.lazyPlayer();
+    const selfF = (w.killCounts.get('local') ?? 0) + (localScoreId === 'local' ? 0 : w.killCounts.get(localScoreId) ?? 0);
+    const selfD = (w.deathCounts.get('local') ?? 0) + (localScoreId === 'local' ? 0 : w.deathCounts.get(localScoreId) ?? 0);
+    const ss = aswStr(localId);
+    lines.push(`  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(d.lazyPlayerSheep?.().shown === undefined ? '-' : Number(d.lazyPlayerSheep!().shown!.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`);
+    for (const [id, rp] of w.remotePlayers) {lines.push(gameDumpRow(w, id, rp, now));}
+    return lines;
+  };
+}
+// Module ref - the dump hooks are module-scope; deps flows in on tick.
+let depsRef: RemotesDeps | undefined;
+function noteDeps(d: RemotesDeps): void { if (!depsRef) {depsRef = d;} }
+// Wire-roster snapshot for the game dump's ping/net columns - written
+// per remote per tick, so it's the same data the scoreboard sees.
+const wireRoster = new Map<string, { ping?: number | null; transport?: string | null; team?: string }>();
 function pruneAsw(live: Set<string>): void {
   for (const id of asw.keys()) {
     if (!live.has(id)) {asw.delete(id);}
   }
-  for (const id of aswGroundT.keys()) {
-    if (!live.has(id)) {aswGroundT.delete(id); aswGround.delete(id);}
+  for (const id of aswAltT.keys()) {
+    if (!live.has(id)) {aswAltT.delete(id); aswAlt.delete(id);}
+  }
+  for (const id of wireRoster.keys()) {
+    if (!live.has(id)) {wireRoster.delete(id);}
   }
 }
 
@@ -443,7 +518,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   const rows = [{ name: settings.get('fps-name') || localId, frags: selfFrags, deaths: selfDeaths, score: ffa.get(localScoreId) ?? null, ping: nm.serverPingMs == null ? nm.getPing() : `${nm.getPing()}/${Math.round(nm.serverPingMs)}`, net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass, asw: aswStr(localId) }];
   // net is string|null - 'bot' rows carry a label, not a transport tier.
   const queriedIds = new Set<string>([localId]);
-  const remoteRows: { name: string; frags: number; deaths: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string; asw?: string | null }[] = [...nm.getPlayers().keys()]
+  const remoteRows: { name: string; frags: number; deaths: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string; asw?: AswSplit | null }[] = [...nm.getPlayers().keys()]
     .filter((id): boolean => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
       queriedIds.add(id);
@@ -474,6 +549,7 @@ function updateScoreboard(deps: RemotesDeps): void {
 }
 
 export function createRemotes(deps: RemotesDeps) {
+  noteDeps(deps); // the game-dump hook needs deps even offline
   const lastSentPos = { x: 0, y: 0, z: 0 };
   let lastRemotePosLog = '';
   const lastTintOf = new Map<string, string>();
@@ -543,7 +619,11 @@ export function createRemotes(deps: RemotesDeps) {
     const previousRemoteCount = deps.world.remotePlayers.size;
 
     const localPlayerId = nm.getLocalPlayerId();
-    aswAccrue(localPlayerId, player.isDead, player.onGround, player.skiing, dt);
+    // pos.y is the eye - feet sit eyeHeight below (same convention the
+    // remote feetY getter uses). onGround stays the sim's word for the
+    // locomotion FX; the asw column wants clearance, not the flag.
+    const selfAlt = aswAltFor(localPlayerId, player.pos.x, player.pos.z, player.pos.y - CLASS_STATS[player.appliedClass].eyeHeight, deps.lazyTerrain(), dt);
+    aswAccrue(localPlayerId, player.isDead, selfAlt, player.skiing, dt, player.vel.length());
 
     // Roster work - player list UI + join/leave log - is polled at 2Hz.
     // Per-position logging at 60Hz was a console flood, and building the
@@ -584,7 +664,7 @@ export function createRemotes(deps: RemotesDeps) {
         _markPos.copy(rp.position); _markPos.y += rp.renderLift;
         hud.updatePlayerIndicator(id, _markPos, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass, hp: (rp as { botHp?: number }).botHp });
       }
-      aswAccrue(id, rp.isDead, gb.grounded ?? true, gb.wireSki ?? false, dt);
+      aswAccrue(id, rp.isDead, aswAltFor(id, rp.position.x, rp.position.z, rp.feetY, deps.lazyTerrain(), dt), gb.wireSki ?? false, dt, rp.vel.length());
     }
     tickFlagMarkers(deps, localPlayerId, player.pos, hud, cam);
     tickNodeMarkers(deps, hud, cam);

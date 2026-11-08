@@ -45,7 +45,7 @@ export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp'
 // Belt loadout slot — one throwable on the belt key; fire.ts maps each id
 // to its projectile config. Order is the loadout-menu order.
 // 'remoterailgun' = capacitor slug that discharges a hitscan rail mid-flight.
-export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'conc', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal', 'hook', 'emp'] as const;
+export const BELT_ITEMS = ['disc', 'pushdisc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'conc', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal', 'hook', 'emp'] as const;
 
 /** Per-item throw-anim stretch — the satchel plant is a deliberate
  *  two-beat reach, not a flick; multiplies THROW_RELEASE/THROW_TOTAL. */
@@ -679,7 +679,8 @@ export class Player {
     } else if (this.crown) {this.crown.set(0);}
     this.model?.setWireframe(dbg);
     this.model?.setColliderVisible(true);
-    this.visuals.updateFeetMarker(this.terrain, this.renderPos);
+    this.visuals.updateFeetMarker(this.terrain, this.renderPos,
+      this.renderPos.y - CLASS_STATS[this.appliedClass].eyeHeight, this.getSpeed(), this.skiing);
     this.fireWeapons();
     this.emitFx.moveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
     this.visuals.updateShadowBlob(this.terrain, this.renderPos);

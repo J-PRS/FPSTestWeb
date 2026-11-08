@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { PlayerVisuals } from './PlayerVisuals.js';
+import { aswBucket, ASW_HEX } from '../ui/hud/scoreboard.js';
 
 // Camera boom constants live here (not on PlayerVisuals) so pvCam doesn't
 // depend on PlayerVisuals at runtime - PlayerVisuals imports pvCam for
@@ -79,9 +80,15 @@ export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, 
     camera.lookAt(tx, ty, tz);
   }
 
-  // Feet marker — pinned to the terrain surface below the player
-export function updateFeetMarker(v: PlayerVisuals, terrain: Terrain, pos: THREE.Vector3): void {
-    v.groundGizmo.position.set(pos.x, terrain.getHeight(pos.x, pos.z) + 0.05, pos.z);
+  // Feet marker — pinned to the terrain surface below the player, tinted
+  // by the live ASW bucket (same classifier the scoreboard accrues with).
+  // Rides getRenderedHeight too: the mesh chord sits above the heightfield
+  // on slopes, and a heightfield-only pin dug the ring into the visuals.
+export function updateFeetMarker(v: PlayerVisuals, terrain: Terrain, pos: THREE.Vector3, feetY = pos.y, speed = 0, skiing = false): void {
+    const groundY = Math.max(terrain.getHeight(pos.x, pos.z), terrain.getRenderedHeight(pos.x, pos.z));
+    v.groundGizmo.position.set(pos.x, groundY + 0.05, pos.z);
+    (v.groundGizmo.material as THREE.MeshBasicMaterial).color.setHex(
+      ASW_HEX[aswBucket(feetY - groundY, speed, skiing)]);
   }
 
   // Demo playback path: camera follows pos without input/physics
