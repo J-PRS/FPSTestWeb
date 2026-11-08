@@ -48,6 +48,7 @@ export interface BeamContact {
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
+type ShotMsg = Extract<ClientMessage, { type: 'shotFired' }>;
 
 /** Optional room wiring - mirrors the subset of RoomInfo combat needs. */
 export interface CombatDeps {
@@ -402,178 +403,24 @@ w.n += 1;
    *  Origin is server-stamped (rewound to fire time, like spawn sanity
    *  checks) so a forged claim can't paint shots from arbitrary points;
    *  dir stays cosmetic - observers only use it to aim a beam flash. */
-  handleShotFired(playerId: string, msg: Extract<ClientMessage, { type: 'shotFired' }>): void {
-    const player = this.playerManager.getPlayer(playerId);
-    // A dead-shooter claim is a client dead-gate breach - counted on the
-    // handler ledger (inv stays out: handler-level tests legitimately
-    // exercise this path, the breach signal is the reject verdict).
-    if (!player || player.isDead) {
-      this.hb('drop.deadShot');
-      this.reject(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId);
-      return;
-    }
-    const now = wallNow();
-    if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) {this.deps.uplinkNote?.(playerId, msg.fireAt);}
-    const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
-    // Reclaim replays resend recent fire intents - a pull already spawned
-    // under this nonce is a no-op, not a second shell. Dropping silently
-    // (not rejecting) is correct: the first intent's verdict already flew.
-    if (msg.shotId) {
-      const seen = this.seenShots.get(playerId);
-      const seenAt = seen?.get(msg.shotId);
-      if (seenAt !== undefined && now - seenAt < CombatHandler.SHOT_DEDUPE_MS) {return;}
-    }
-    const fireProjectile = dir && serverSimmed(msg.weaponType) && !CombatHandler.BEAM_INTENT_WEAPONS.has(msg.weaponType!) ? this.deps.fireProjectile : undefined;
-    // Class lock applies to every fire intent - beams and melee skip the
-    // projectile branch but must not dodge it.
-    if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
-      this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
-      return;
-    }
-    // Melee intent: the swing point is server-derived (rewound origin +
-    // aim offset), so a forged position can't widen the arc - the old
-    // aoeShot claim carried a client position for exactly this math.
+  handleShotFired(playerId: string, msg: ShotMsg): void {
+    const admit = this.shotAdmit(playerId, msg);
+    if (admit === null) {return;}
+    const { player, now, dir, fireProjectile } = admit;
     if (msg.weaponType === WeaponType.Melee && dir) {
-      const meleeStats = getWeaponStats(WeaponType.Melee);
-      const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
-      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
-      // The creature half of the swing pays here too - same derived
-      // origin, same dir - so the client's predicted contact never
-      // needs a creatureHit claim.
-      this.deps.emit?.({ type: 'meleeSweep', playerId, pos: mpos, dir: { x: dir.x / l, y: dir.y / l, z: dir.z / l } });
-      this.aoe.handleAOEShot(playerId, {
-        type: 'aoeShot',
-        position: { x: mpos.x + (dir.x / l) * reach, y: mpos.y + 1.2 + (dir.y / l) * reach, z: mpos.z + (dir.z / l) * reach },
-        weaponType: WeaponType.Melee, excludeTargetId: null,
-      });
-      const meleeWid = this.deps.widOf?.(playerId);
-      const muzzle = { x: mpos.x, y: mpos.y, z: mpos.z };
-      if (this.deps.earlyRelayed?.(playerId, msg.shotId)) { /* flashed at arrival */ }
-      else if (meleeWid !== undefined && this.deps.wireCast) {
-        this.deps.wireCast(encodeShotEv(meleeWid, msg.weaponType, muzzle, msg.dir), 'volatile', playerId);
-      } else {
-        this.broadcast({
-          type: 'playerShot', id: playerId, weaponType: msg.weaponType,
-          pos: muzzle, dir: msg.dir,
-        }, playerId);
-      }
+      this.meleeIntent(playerId, player, msg, dir);
       return;
     }
-    // Beam intent (Lightning): each tick IS the intent - the room's
-    // honest ray decides the contact and the ramp/bank economy pays
-    // here, so neither a creatureHit claim nor a per-tick aoeShot is
-    // needed. Falls through to the cosmetic playerShot relay below.
-    if (msg.weaponType === WeaponType.Lightning && dir && this.deps.beamSweep) {
-      const recent = (this.beamFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
-      if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
-      recent.push(now);
-      this.beamFireTimes.set(playerId, recent);
-      player.protectedUntil = simMs(0);
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
-      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-      this.beamPay(playerId, player, this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y, z: mpos.z },
-        { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
-    }
-    // Beam intent (Shocklance): one zap per pull-out cycle - the intent
-    // IS the shot; the honest ray resolves the contact and pays the flat
-    // lance damage. No ramp/bank economy - that's the LG's business.
-    if (msg.weaponType === WeaponType.Shocklance && dir && this.deps.beamSweep) {
-      const lastL = this.lastLance.get(playerId) ?? 0;
-      // The gate sits 150ms UNDER the client's cadence (the old pair was
-      // 1.0s client / 850ms server) - arrival jitter must never refuse a
-      // shot the honest trigger just released.
-      if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return; }
-      this.lastLance.set(playerId, now);
-      player.protectedUntil = simMs(0);
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
-      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-      this.lancePay(playerId, player, this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y, z: mpos.z },
-        { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LANCE_RANGE));
-    }
-    // Beam intent (Repair): same shape - the tick is the intent and the
-    // server names the weld target off the honest ray, so the per-tick
-    // `repair` claim isn't needed. Falls through to the cosmetic relay.
-    if (msg.weaponType === WeaponType.Repair && dir && this.deps.repairTarget) {
-      const recent = (this.beamFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
-      if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
-      recent.push(now);
-      this.beamFireTimes.set(playerId, recent);
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
-      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-      const id = this.deps.repairTarget(playerId,
-        { x: mpos.x, y: mpos.y, z: mpos.z },
-        { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
-      if (id !== null) {this.deps.repair?.(playerId, id);}
-    }
-    // Beam intent (HealBeam): same tick-is-intent shape, but the honest
-    // ray's first contact must be a TEAMMATE - anything earlier (enemy,
-    // creature, wall) shadows the patient and the tick pays nothing.
-    // The ammo is the shooter's own jet tank: pocket-healing a push
-    // costs the medic their climb out. healTicks paces per shooter|
-    // patient pair - the same rate law the repair beam enforces.
-    if (msg.weaponType === WeaponType.HealBeam && dir && this.deps.beamSweep) {
-      const recent = (this.beamFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
-      if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
-      recent.push(now);
-      this.beamFireTimes.set(playerId, recent);
-      const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
-      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-      const c = this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y, z: mpos.z },
-        { x: dir.x / l, y: dir.y / l, z: dir.z / l }, HEALBEAM_RANGE);
-      if (c?.playerId && this.friendly(playerId, c.playerId)) {
-        const key = `${playerId}|${c.playerId}`;
-        if (now - (this.healTicks.get(key) ?? -1) < HEALBEAM_MIN_TICK_S * 1000) { this.hb('drop.healPace'); }
-        else {
-          this.healTicks.set(key, now);
-          if ((this.deps.energyOf?.(playerId) ?? 0) < HEALBEAM_ENERGY) { this.hb('drop.tankDry'); }
-          else {
-            this.deps.drainEnergy?.(playerId, HEALBEAM_ENERGY);
-            const target = this.playerManager.getPlayer(c.playerId);
-            if (target && !target.isDead) {
-              healPool(target, HEALBEAM_PER_TICK);
-              target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
-              this.hb('heal.beam');
-            }
-          }
-        }
-      }
-    }
+    if (this.beamIntents(playerId, player, msg, dir, now)) {return;}
     if (fireProjectile) {
       // Intents spawn real sims + broadcasts, so they need a real flood
       // gate - the fastest legit simmed weapon is ~13/s; 20/s is spam.
-      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
-      if (recent.length >= 20) { this.reject(playerId, 'Shot', 'fire rate (flood)', undefined, msg.weaponType, msg.shotId); return; }
-      recent.push(now);
-      this.simmedFireTimes.set(playerId, recent);
-      // Per-weapon cadence law - revived from the retired shotClaims: the
-      // flat 20/s flood gate alone lets a mortar (2.0s interval) claim
-      // ~13 simmed shells/sec. Rolling-second arrival bound per
-      // `${playerId}:${weaponType}`; 0.85× interval slack absorbs input
-      // bunching under loss, so legit burst catch-up passes.
-      const interval = msg.weaponType === undefined ? undefined : WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType];
-      if (interval !== undefined) {
-        const key = `${playerId}:${msg.weaponType}`;
-        const win = this.fireWindows.get(key) ?? { start: now, count: 0, lastTs: undefined, arr: [] as number[], violations: 0 };
-        this.fireWindows.set(key, win);
-        win.arr = win.arr.filter((t): boolean => now - t < 1000);
-        win.arr.push(now);
-        if (win.arr.length >= Math.ceil(1000 / (interval * 850)) + 2) {
-win.violations += 1;
-          this.reject(playerId, 'Shot', `fire rate (cadence: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
-          return;
-        }
-      }
-    } else {
-      // Cosmetic relay only - throttled: a dropped relay costs a muzzle
-      // flash, but a dropped intent would orphan a predicted shell.
-      // The stamp lands at the relay emit below so the intent
-      // fall-through shares ONE throttle per player.
-      if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
-    }
+      if (!this.simmedFireGate(playerId, msg, now)) {return;}
+    // Cosmetic relay only - throttled: a dropped relay costs a muzzle
+    // flash, but a dropped intent would orphan a predicted shell.
+    // The stamp lands at the relay emit below so the intent
+    // fall-through shares ONE throttle per player.
+    } else if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
     this.deps.emit?.({ type: 'fire', playerId });
     // Spawn epoch from the CLAIM, not a transit heuristic: the shooter
     // reports the muzzle pos it drew from + a fireAt stamp; uplinkMs is
@@ -584,110 +431,360 @@ win.violations += 1;
     // shell - the intent IS the whole claim; contact/blast outcomes
     // arrive as broadcasts, never as client claims. projectileCreated
     // covers observers' visuals, so the playerShot relay is skipped.
-    if (fireProjectile) {
-      // Belt throws pay the same charge the spawn claim would deduct -
-      // skipping it would make free ordnance a forged intent away.
-      if (msg.weaponType !== undefined && BELT_THROW_WEAPONS.has(msg.weaponType)) {
-        const cost = beltThrowCost(msg.weaponType);
-        // Silent drops orphan the shooter's predicted shell - it binds
-        // nothing and reads as a ghost hit. Verdict back so the ledger
-        // closes instead of waiting out the bind grace.
-        if (player.beltCharges < cost) { this.hb('drop.beltDry'); this.reject(playerId, 'Shot', 'belt charges dry', undefined, msg.weaponType, msg.shotId); return; }
-        player.beltCharges -= cost;
-      }
-      // Energy-paid weapons (Blaster): the jet tank IS the magazine -
-      // one shared cost formula (payShotCost) so bots, clients and the
-      // server never disagree on the bill. Verdict back so the shooter's
-      // predicted bolt doesn't ghost.
-      if (!payShotCost(msg.weaponType, playerId,
-        (id): number | null => this.deps.energyOf?.(id) ?? 0,
-        (id, n): void => this.deps.drainEnergy?.(id, n))) {
-        this.hb('drop.tankDry'); this.reject(playerId, 'Shot', 'energy dry', undefined, msg.weaponType, msg.shotId); return;
-      }
-      // Pool ammo (PlasmaGun pilot): lazy fractional regen on the claim's
-      // own arrival clock - a dry pool rejects the intent and the verdict
-      // closes the shooter's predicted ledger instead of ghosting a bolt.
-      if (msg.weaponType !== undefined && !spendAmmo(player.ammoPool, msg.weaponType, now / 1000)) {
-        this.hb('drop.ammoDry'); this.reject(playerId, 'Shot', 'ammo dry', undefined, msg.weaponType, msg.shotId); return;
-      }
-      // Deploy weapons (howitzer): grounded and not skiing, or the pull
-      // is dead - the predicted gate is on the same row, so a refused
-      // intent never costs ammo either way.
-      const st = msg.weaponType !== undefined ? getWeaponStats(msg.weaponType) : undefined;
-      if (st?.groundedOnly && (!(this.deps.groundedOf?.(playerId) ?? false) || player.skiing !== 0)) {
-        this.hb('drop.notGrounded'); this.reject(playerId, 'Shot', 'needs ground', undefined, msg.weaponType, msg.shotId); return;
-      }
-      player.protectedUntil = simMs(0); // firing breaks your own spawn shield
-      const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;
-      let ndir = { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l };
-      // Launcher recoil (howitzer): authority applies the same kick the
-      // client predicted - aimed up off dirt it's the shooter's own
-      // fall damage. Rides the impulse event so the moveSim shadow AND
-      // the sim journal see the delta, not just the wire position.
-      const recoil = msg.weaponType !== undefined ? (getWeaponStats(msg.weaponType).recoilImpulse ?? 0) : 0;
-      if (recoil > 0) {
-        this.deps.emit?.({ type: 'impulse', playerId,
-          dv: { x: -ndir.x * recoil, y: -ndir.y * recoil, z: -ndir.z * recoil }, fallBoost: 3 });
-      }
-      // Server-owned bloom cone (chaingun): the client claims a RAW aim
-      // dir - we draw the seeded cone its predicted shell used, so a
-      // forged "center" claim still lands inside the same scatter.
-      // No shotId = no shared seed = no cone (old clients, relays).
-      const bs = bloomRadius(player.bloom, player.bloomAt, msg.weaponType ?? -1, now / 1000);
-      if (bs.radius > 0) {
-        // Server-side sequence seed, NOT the claimed shotId - a client
-        // that brute-forces favorable seeds gains nothing (the CSGO
-        // random_seed hole). It predicts the same counter per pull.
-        const [u1, u2] = jitter01(idSeed(playerId) ^ player.bloomSeq++);
-        ndir = coneDir(ndir, u1 * Math.PI * 2, Math.sqrt(u2) * bs.radius);
-      }
-      player.bloom = bloomGrow(bs.bloom, msg.weaponType ?? -1);
-      player.bloomAt = now / 1000;
-      // Velocity inherit: the predicted shell draws playerVel*0.5 - using
-      // the shadow velocity here diverges the echo by uplink-of-accel and
-      // shows as a mid-air reanchor jink. Adopt the claim's vel verbatim
-      // within an honest window (accel×lag can't legit exceed ~20m/s);
-      // a forged vel beyond that clamps to shadow - worst cheat is a
-      // half-weighted 20m/s nudge, not a free speedline.
-      const ownerVel = msg.vel && finiteVec(msg.vel)
-          && dhypot3(msg.vel.x - player.velocity.x, msg.vel.y - player.velocity.y, msg.vel.z - player.velocity.z) <= 20
-        ? msg.vel : player.velocity;
-      // Back-date the shell's age by the MEASURED uplink transit - the
-      // EMA fed by pongs + bounded claim samples, not this claim's stamp
-      // (a stale/forged fireAt only re-anchors the ORIGIN above; it may
-      // not buy seconds of shell age). Without a measurement the honest
-      // age is arrival-time - transitOf returns 0 in join grace.
-      const lagS = (this.deps.transitOf?.(playerId) ?? 0) / 1000;
-      const id = fireProjectile(playerId, msg.weaponType!,
-        { x: at.x, y: at.y, z: at.z },
-        ndir,
-        ownerVel, msg.shotId, lagS);
-      if (id) {
-        if (msg.shotId) {
-          let seen = this.seenShots.get(playerId);
-          if (!seen) {seen = new Map(); this.seenShots.set(playerId, seen);}
-          for (const [k, t] of seen) {if (now - t >= CombatHandler.SHOT_DEDUPE_MS) {seen.delete(k);}}
-          seen.set(msg.shotId, now);
-          if (seen.size > 64) {seen.delete(seen.keys().next().value!);}
-        }
-        this.hb('shot.serverSim');
-        if (msg.weaponType !== undefined) {weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);}
-        return;
-      }
-      // spawn() declined - a silent no-spawn leaves a predicted shell
-      // waiting forever. Hitscan-class (speed<=0) never owns a shell:
-      // its damage settled in the beam intent above, and the reject
-      // would misreport a refused shot, so it falls through to relay.
-      const hs = msg.weaponType === undefined ? undefined : getWeaponStats(msg.weaponType);
-      if (hs === undefined || hs.speed > 0) {this.reject(playerId, 'Shot', 'spawn refused', undefined, msg.weaponType, msg.shotId);}
+    if (fireProjectile && this.simmedShot(playerId, player, msg, { dir: dir!, at }, now, fireProjectile) === 'stop') {return;}
+    this.relayShot(playerId, msg, at, now);
+  }
+
+  /** Admission gates, in order: dead shooter, uplink stamp, dir
+   *  sanitize, shotId dedupe, the simmed-weapon predicate, and the
+   *  class lock that beams/melee can't dodge. Null = the intent is
+   *  dead (verdict or silent drop already emitted). */
+  private shotAdmit(playerId: string, msg: ShotMsg): { player: PlayerState; now: number; dir: Vec3 | undefined; fireProjectile: NonNullable<CombatDeps['fireProjectile']> | undefined } | null {
+    const player = this.playerManager.getPlayer(playerId);
+    // A dead-shooter claim is a client dead-gate breach - counted on the
+    // handler ledger (inv stays out: handler-level tests legitimately
+    // exercise this path, the breach signal is the reject verdict).
+    if (!player || player.isDead) {
+      this.hb('drop.deadShot');
+      this.reject(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId);
+      return null;
     }
+    const now = wallNow();
+    if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) {this.deps.uplinkNote?.(playerId, msg.fireAt);}
+    const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
+    // Reclaim replays resend recent fire intents - a pull already spawned
+    // under this nonce is a no-op, not a second shell. Dropping silently
+    // (not rejecting) is correct: the first intent's verdict already flew.
+    if (this.shotDup(playerId, msg.shotId, now)) {return null;}
+    const fireProjectile = dir && serverSimmed(msg.weaponType) && !CombatHandler.BEAM_INTENT_WEAPONS.has(msg.weaponType!) ? this.deps.fireProjectile : undefined;
+    // Class lock applies to every fire intent - beams and melee skip the
+    // projectile branch but must not dodge it.
+    if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
+      this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
+      return null;
+    }
+    return { player, now, dir, fireProjectile };
+  }
+
+  /** shotId replay gate: true when this nonce already spawned inside
+   *  the dedupe window (reclaim resend = no-op, not a second shell). */
+  private shotDup(playerId: string, shotId: string | undefined, now: number): boolean {
+    if (!shotId) {return false;}
+    const seenAt = this.seenShots.get(playerId)?.get(shotId);
+    return seenAt !== undefined && now - seenAt < CombatHandler.SHOT_DEDUPE_MS;
+  }
+
+  /** Melee intent: the swing point is server-derived (rewound origin +
+   *  aim offset), so a forged position can't widen the arc - the old
+   *  aoeShot claim carried a client position for exactly this math. */
+  private meleeIntent(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3): void {
+    const meleeStats = getWeaponStats(WeaponType.Melee);
+    const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
+    const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    // The creature half of the swing pays here too - same derived
+    // origin, same dir - so the client's predicted contact never
+    // needs a creatureHit claim.
+    this.deps.emit?.({ type: 'meleeSweep', playerId, pos: mpos, dir: { x: dir.x / l, y: dir.y / l, z: dir.z / l } });
+    this.aoe.handleAOEShot(playerId, {
+      type: 'aoeShot',
+      position: { x: mpos.x + (dir.x / l) * reach, y: mpos.y + 1.2 + (dir.y / l) * reach, z: mpos.z + (dir.z / l) * reach },
+      weaponType: WeaponType.Melee, excludeTargetId: null,
+    });
+    const meleeWid = this.deps.widOf?.(playerId);
+    const muzzle = { x: mpos.x, y: mpos.y, z: mpos.z };
+    if (this.deps.earlyRelayed?.(playerId, msg.shotId)) { /* flashed at arrival */ }
+    else if (meleeWid !== undefined && this.deps.wireCast) {
+      this.deps.wireCast(encodeShotEv(meleeWid, msg.weaponType, muzzle, msg.dir), 'volatile', playerId);
+    } else {
+      this.broadcast({
+        type: 'playerShot', id: playerId, weaponType: msg.weaponType,
+        pos: muzzle, dir: msg.dir,
+      }, playerId);
+    }
+  }
+
+  /** The four beam intents - each tick IS the shot for these weapons:
+   *  the room's honest ray decides the contact and the economy pays
+   *  here, so neither a creatureHit claim nor a per-tick aoeShot is
+   *  needed. Returns true when a flood/cadence gate ate the intent
+   *  (the handler must not relay it); false lets the cosmetic tail
+   *  run. weaponType is single-valued, so at most one block fires. */
+  private beamIntents(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined, now: number): boolean {
+    if (this.lightningIntent(playerId, player, msg, dir, now)) {return true;}
+    if (this.shocklanceIntent(playerId, player, msg, dir, now)) {return true;}
+    if (this.repairIntent(playerId, player, msg, dir, now)) {return true;}
+    if (this.healBeamIntent(playerId, player, msg, dir, now)) {return true;}
+    return false;
+  }
+
+  /** Shared 30/s flood gate for the beam intents - a burst of beam
+   *  ticks is a flood, not a stream of shots. True = intent refused. */
+  private beamFloodGate(playerId: string, now: number): boolean {
+    const recent = (this.beamFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
+    if (recent.length >= 30) { this.hb('drop.beamFlood'); return true; }
+    recent.push(now);
+    this.beamFireTimes.set(playerId, recent);
+    return false;
+  }
+
+  /** Beam intent (Lightning): each tick IS the intent - the room's
+   *  honest ray decides the contact and the ramp/bank economy pays
+   *  here, so neither a creatureHit claim nor a per-tick aoeShot is
+   *  needed. Falls through to the cosmetic playerShot relay below. */
+  private lightningIntent(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined, now: number): boolean {
+    const sweep = this.deps.beamSweep;
+    if (msg.weaponType !== WeaponType.Lightning || !dir || !sweep) {return false;}
+    if (this.beamFloodGate(playerId, now)) {return true;}
+    player.protectedUntil = simMs(0);
+    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+    this.beamPay(playerId, player, sweep(playerId,
+      { x: mpos.x, y: mpos.y, z: mpos.z },
+      { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
+    return false;
+  }
+
+  /** Beam intent (Shocklance): one zap per pull-out cycle - the intent
+   *  IS the shot; the honest ray resolves the contact and pays the flat
+   *  lance damage. No ramp/bank economy - that's the LG's business. */
+  private shocklanceIntent(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined, now: number): boolean {
+    const sweep = this.deps.beamSweep;
+    if (msg.weaponType !== WeaponType.Shocklance || !dir || !sweep) {return false;}
+    const lastL = this.lastLance.get(playerId) ?? 0;
+    // The gate sits 150ms UNDER the client's cadence (the old pair was
+    // 1.0s client / 850ms server) - arrival jitter must never refuse a
+    // shot the honest trigger just released.
+    if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return true; }
+    this.lastLance.set(playerId, now);
+    player.protectedUntil = simMs(0);
+    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+    this.lancePay(playerId, player, sweep(playerId,
+      { x: mpos.x, y: mpos.y, z: mpos.z },
+      { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LANCE_RANGE));
+    return false;
+  }
+
+  /** Beam intent (Repair): same shape - the tick is the intent and the
+   *  server names the weld target off the honest ray, so the per-tick
+   *  `repair` claim isn't needed. Falls through to the cosmetic relay. */
+  private repairIntent(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined, now: number): boolean {
+    const { repairTarget } = this.deps;
+    if (msg.weaponType !== WeaponType.Repair || !dir || !repairTarget) {return false;}
+    if (this.beamFloodGate(playerId, now)) {return true;}
+    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+    const id = repairTarget(playerId,
+      { x: mpos.x, y: mpos.y, z: mpos.z },
+      { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
+    if (id !== null) {this.deps.repair?.(playerId, id);}
+    return false;
+  }
+
+  /** Beam intent (HealBeam): same tick-is-intent shape, but the honest
+   *  ray's first contact must be a TEAMMATE - anything earlier (enemy,
+   *  creature, wall) shadows the patient and the tick pays nothing.
+   *  The ammo is the shooter's own jet tank: pocket-healing a push
+   *  costs the medic their climb out. healTicks paces per shooter|
+   *  patient pair - the same rate law the repair beam enforces. */
+  private healBeamIntent(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined, now: number): boolean {
+    const sweep = this.deps.beamSweep;
+    if (msg.weaponType !== WeaponType.HealBeam || !dir || !sweep) {return false;}
+    if (this.beamFloodGate(playerId, now)) {return true;}
+    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+    const c = sweep(playerId,
+      { x: mpos.x, y: mpos.y, z: mpos.z },
+      { x: dir.x / l, y: dir.y / l, z: dir.z / l }, HEALBEAM_RANGE);
+    if (c?.playerId && this.friendly(playerId, c.playerId)) {
+      this.healBeamTick(playerId, c.playerId, now);
+    }
+    return false;
+  }
+
+  /** One heal tick on a resolved teammate contact: pair-paced, tank-
+   *  paid, and only lands on a living patient. */
+  private healBeamTick(playerId: string, patientId: string, now: number): void {
+    const key = `${playerId}|${patientId}`;
+    if (now - (this.healTicks.get(key) ?? -1) < HEALBEAM_MIN_TICK_S * 1000) { this.hb('drop.healPace'); return; }
+    this.healTicks.set(key, now);
+    if ((this.deps.energyOf?.(playerId) ?? 0) < HEALBEAM_ENERGY) { this.hb('drop.tankDry'); return; }
+    this.deps.drainEnergy?.(playerId, HEALBEAM_ENERGY);
+    const target = this.playerManager.getPlayer(patientId);
+    if (target && !target.isDead) {
+      healPool(target, HEALBEAM_PER_TICK);
+      target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
+      this.hb('heal.beam');
+    }
+  }
+
+  /** Simmed-intent flood + cadence gates. Returns false when a reject
+   *  already went out (the handler must not relay the shot). */
+  private simmedFireGate(playerId: string, msg: ShotMsg, now: number): boolean {
+    const recent = (this.simmedFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
+    if (recent.length >= 20) { this.reject(playerId, 'Shot', 'fire rate (flood)', undefined, msg.weaponType, msg.shotId); return false; }
+    recent.push(now);
+    this.simmedFireTimes.set(playerId, recent);
+    // Per-weapon cadence law - revived from the retired shotClaims: the
+    // flat 20/s flood gate alone lets a mortar (2.0s interval) claim
+    // ~13 simmed shells/sec. Rolling-second arrival bound per
+    // `${playerId}:${weaponType}`; 0.85× interval slack absorbs input
+    // bunching under loss, so legit burst catch-up passes.
+    const interval = msg.weaponType === undefined ? undefined : WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType];
+    if (interval !== undefined) {
+      const key = `${playerId}:${msg.weaponType}`;
+      const win = this.fireWindows.get(key) ?? { start: now, count: 0, lastTs: undefined, arr: [] as number[], violations: 0 };
+      this.fireWindows.set(key, win);
+      win.arr = win.arr.filter((t): boolean => now - t < 1000);
+      win.arr.push(now);
+      if (win.arr.length >= Math.ceil(1000 / (interval * 850)) + 2) {
+win.violations += 1;
+        this.reject(playerId, 'Shot', `fire rate (cadence: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** The simmed spawn path: cost gates then shell shaping + the
+   *  authoritative fireProjectile call. 'stop' = spawned or hard-
+   *  rejected (handler ends); 'relay' = spawn declined, fall through
+   *  to the cosmetic playerShot tail. */
+  private simmedShot(playerId: string, player: PlayerState, msg: ShotMsg, aim: { dir: Vec3; at: Vec3 }, now: number, fireProjectile: NonNullable<CombatDeps['fireProjectile']>): 'relay' | 'stop' {
+    if (!this.shotCosts(playerId, player, msg, now)) {return 'stop';}
+    player.protectedUntil = simMs(0); // firing breaks your own spawn shield
+    const l = dhypot3(aim.dir.x, aim.dir.y, aim.dir.z) || 1;
+    const base = { x: aim.dir.x / l, y: aim.dir.y / l, z: aim.dir.z / l };
+    // Launcher recoil (howitzer): authority applies the same kick the
+    // client predicted - aimed up off dirt it's the shooter's own
+    // fall damage. Rides the impulse event so the moveSim shadow AND
+    // the sim journal see the delta, not just the wire position.
+    const recoil = msg.weaponType === undefined ? 0 : (getWeaponStats(msg.weaponType).recoilImpulse ?? 0);
+    if (recoil > 0) {
+      this.deps.emit?.({ type: 'impulse', playerId,
+        dv: { x: -base.x * recoil, y: -base.y * recoil, z: -base.z * recoil }, fallBoost: 3 });
+    }
+    const ndir = this.bloomAim(playerId, player, msg, base, now);
+    const ownerVel = this.ownerVelOf(player, msg);
+    // Back-date the shell's age by the MEASURED uplink transit - the
+    // EMA fed by pongs + bounded claim samples, not this claim's stamp
+    // (a stale/forged fireAt only re-anchors the ORIGIN above; it may
+    // not buy seconds of shell age). Without a measurement the honest
+    // age is arrival-time - transitOf returns 0 in join grace.
+    const lagS = (this.deps.transitOf?.(playerId) ?? 0) / 1000;
+    const id = fireProjectile(playerId, msg.weaponType!,
+      { x: aim.at.x, y: aim.at.y, z: aim.at.z },
+      ndir,
+      ownerVel, msg.shotId, lagS);
+    if (id) {
+      this.noteShot(playerId, msg.shotId, now);
+      this.hb('shot.serverSim');
+      if (msg.weaponType !== undefined) {weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);}
+      return 'stop';
+    }
+    // spawn() declined - a silent no-spawn leaves a predicted shell
+    // waiting forever. Hitscan-class (speed<=0) never owns a shell:
+    // its damage settled in the beam intent above, and the reject
+    // would misreport a refused shot, so it falls through to relay.
+    const hs = msg.weaponType === undefined ? undefined : getWeaponStats(msg.weaponType);
+    if (hs === undefined || hs.speed > 0) {this.reject(playerId, 'Shot', 'spawn refused', undefined, msg.weaponType, msg.shotId);}
+    return 'relay';
+  }
+
+  /** Cost gates for a simmed intent - belt charges, jet-tank energy,
+   *  pool ammo, grounded-only. False = a reject already went out. */
+  private shotCosts(playerId: string, player: PlayerState, msg: ShotMsg, now: number): boolean {
+    // Belt throws pay the same charge the spawn claim would deduct -
+    // skipping it would make free ordnance a forged intent away.
+    if (msg.weaponType !== undefined && BELT_THROW_WEAPONS.has(msg.weaponType)) {
+      const cost = beltThrowCost(msg.weaponType);
+      // Silent drops orphan the shooter's predicted shell - it binds
+      // nothing and reads as a ghost hit. Verdict back so the ledger
+      // closes instead of waiting out the bind grace.
+      if (player.beltCharges < cost) { this.hb('drop.beltDry'); this.reject(playerId, 'Shot', 'belt charges dry', undefined, msg.weaponType, msg.shotId); return false; }
+      player.beltCharges -= cost;
+    }
+    // Energy-paid weapons (Blaster): the jet tank IS the magazine -
+    // one shared cost formula (payShotCost) so bots, clients and the
+    // server never disagree on the bill. Verdict back so the shooter's
+    // predicted bolt doesn't ghost.
+    if (!payShotCost(msg.weaponType, playerId,
+      (id): number | null => this.deps.energyOf?.(id) ?? 0,
+      (id, n): void => this.deps.drainEnergy?.(id, n))) {
+      this.hb('drop.tankDry'); this.reject(playerId, 'Shot', 'energy dry', undefined, msg.weaponType, msg.shotId); return false;
+    }
+    // Pool ammo (PlasmaGun pilot): lazy fractional regen on the claim's
+    // own arrival clock - a dry pool rejects the intent and the verdict
+    // closes the shooter's predicted ledger instead of ghosting a bolt.
+    if (msg.weaponType !== undefined && !spendAmmo(player.ammoPool, msg.weaponType, now / 1000)) {
+      this.hb('drop.ammoDry'); this.reject(playerId, 'Shot', 'ammo dry', undefined, msg.weaponType, msg.shotId); return false;
+    }
+    // Deploy weapons (howitzer): grounded and not skiing, or the pull
+    // is dead - the predicted gate is on the same row, so a refused
+    // intent never costs ammo either way.
+    const st = msg.weaponType === undefined ? undefined : getWeaponStats(msg.weaponType);
+    if (st?.groundedOnly && (!(this.deps.groundedOf?.(playerId) ?? false) || player.skiing !== 0)) {
+      this.hb('drop.notGrounded'); this.reject(playerId, 'Shot', 'needs ground', undefined, msg.weaponType, msg.shotId); return false;
+    }
+    return true;
+  }
+
+  /** Server-owned bloom cone (chaingun): the client claims a RAW aim
+   *  dir - we draw the seeded cone its predicted shell used, so a
+   *  forged "center" claim still lands inside the same scatter.
+   *  No shotId = no shared seed = no cone (old clients, relays). */
+  private bloomAim(playerId: string, player: PlayerState, msg: ShotMsg, base: Vec3, now: number): Vec3 {
+    const bs = bloomRadius(player.bloom, player.bloomAt, msg.weaponType ?? -1, now / 1000);
+    let ndir = base;
+    if (bs.radius > 0) {
+      // Server-side sequence seed, NOT the claimed shotId - a client
+      // that brute-forces favorable seeds gains nothing (the CSGO
+      // random_seed hole). It predicts the same counter per pull.
+      const seq = player.bloomSeq;
+      player.bloomSeq += 1;
+      const [u1, u2] = jitter01(idSeed(playerId) ^ seq);
+      ndir = coneDir(base, u1 * Math.PI * 2, Math.sqrt(u2) * bs.radius);
+    }
+    player.bloom = bloomGrow(bs.bloom, msg.weaponType ?? -1);
+    player.bloomAt = now / 1000;
+    return ndir;
+  }
+
+  /** Velocity inherit: the predicted shell draws playerVel*0.5 - using
+   *  the shadow velocity here diverges the echo by uplink-of-accel and
+   *  shows as a mid-air reanchor jink. Adopt the claim's vel verbatim
+   *  within an honest window (accel×lag can't legit exceed ~20m/s);
+   *  a forged vel beyond that clamps to shadow - worst cheat is a
+   *  half-weighted 20m/s nudge, not a free speedline. */
+  private ownerVelOf(player: PlayerState, msg: ShotMsg): Vec3 {
+    return msg.vel && finiteVec(msg.vel)
+        && dhypot3(msg.vel.x - player.velocity.x, msg.vel.y - player.velocity.y, msg.vel.z - player.velocity.z) <= 20
+      ? msg.vel : player.velocity;
+  }
+
+  /** shotId → spawn bookkeeping: dedupe record, stale-entry trim,
+   *  64-entry cap. */
+  private noteShot(playerId: string, shotId: string | undefined, now: number): void {
+    if (!shotId) {return;}
+    let seen = this.seenShots.get(playerId);
+    if (!seen) {seen = new Map(); this.seenShots.set(playerId, seen);}
+    for (const [k, t] of seen) {if (now - t >= CombatHandler.SHOT_DEDUPE_MS) {seen.delete(k);}}
+    seen.set(shotId, now);
+    if (seen.size > 64) {seen.delete(seen.keys().next().value!);}
+  }
+
+  /** The cosmetic relay tail: one 50ms throttle per player shared by
+   *  the intent fall-through and refused spawns, then wireCast when a
+   *  wireId exists else the playerShot broadcast. pos.y IS the eye
+   *  (screen center) - the muzzle relays right off it, Quake-style,
+   *  no bump (a +1.6 would double-offset over the crosshair). */
+  private relayShot(playerId: string, msg: ShotMsg, at: Vec3, now: number): void {
     // Same 50ms cosmetic gate for the intent fall-through: a refused
     // spawn relaying every claim would spam the room (claimless combat
     // moved simmed weapons off the else-branch throttle).
     if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
     this.lastFireNotify.set(playerId, now);
-    // pos.y IS the eye (screen center) - the muzzle relays right off it,
-    // Quake-style, no bump (a +1.6 would double-offset over the crosshair).
     const shotWid = this.deps.widOf?.(playerId);
     if (this.deps.earlyRelayed?.(playerId, msg.shotId)) {return;} // flashed at arrival
     if (shotWid !== undefined && this.deps.wireCast) {
