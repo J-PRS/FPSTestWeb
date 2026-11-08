@@ -18,6 +18,7 @@ import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/wo
 import { armLoafDiag } from './loafDiag.js';
 import { recWireOut } from '../core/telemetry.js';
 import type { SpawnPoint,StructureSpec,InteriorSpec,WeatherSpec,AtmosphereSpec,WaterSpec } from '../../../shared/mapSpec.js';
+import type { ResultToken } from '../../../shared/resultToken.js';
 import { UdpLane } from './udpLane.js';
 
 const logger = new ChildLogger('NetworkManager');
@@ -122,7 +123,7 @@ export class NetworkManager {
   public onMatchEnd: ((winner: TeamId | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
   /** Signed match receipt - pairs with a demo for leaderboard submissions. */
-  public onMatchToken: ((token: import('../../../shared/resultToken.js').ResultToken) => void) | null = null;
+  public onMatchToken: ((token: ResultToken) => void) | null = null;
   /** Server-owned flag state (CTF rooms) - pos/state/carrier per team. */
   public onFlagUpdate: ((flags: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
   /** Conquest lattice roster - owner/build/hp/core per node, whole grid. */
@@ -418,31 +419,7 @@ export class NetworkManager {
     // attempt): a live transport re-seating itself must never race a
     // fresh outer connect (the parallel-join flood).
     if (!this.isConnected() && this.onlineExpected && this.lastUrl) {
-      // A worker that never reports 'up' means the page's backend is
-      // gone - no transport retry can fix an unfetchable module; stop
-      // spawning doomed workers and say so once.
-      if (this.workerCrashStreak >= 3) {
-        if (!this.crashWarned) {
-          this.crashWarned = true;
-          logger.error('net worker failed to spawn 3× - the page backend (vite) is unreachable; reload the tab to retry');
-        }
-        return;
-      }
-      this.deadSince ??= Date.now();
-      const now = Date.now();
-      if (now - this.deadSince >= 10_000 && now >= this.retryAt) {
-        this.retryAt = now + Math.min(1000 * 2 ** this.retryStreak, 15_000);
-        this.retryStreak += 1;
-        logger.info(`outer reconnect (transport dead ${Math.round((now - this.deadSince) / 1000)}s) - attempt ${this.retryStreak}`);
-        const url = this.lastUrl;
-        // Kill the old transport before replacing it - an abandoned lane
-        // keeps auto-reconnecting with these callbacks still bound: its
-        // joins fight the live session for the seat and its close events
-        // tear down roster/ledger state (the join-timeout flap loop).
-        this.ws?.disconnect();
-        this.ws = null;
-        this.connect(url, this.lastFactory, this.lastResolveUrl).catch((): void => { /* the stall loop owns retries */ });
-      }
+      this.outerReconnect();
       return;
     }
     this.deadSince = null;
@@ -452,59 +429,104 @@ export class NetworkManager {
     // still trips wt.closed/the pumps, and the visibility resync covers
     // whatever's left on regain.
     if (document.hidden) {
-      // The position pump carries our liveness ping and stops with rAF,
-      // so a hidden tab reads as 60s of silence and gets idle-reaped.
-      // Timers still fire (≥1Hz throttled) - keep the app-level ping
-      // alive from here instead. If intensive throttling suspends timers
-      // entirely the silence is real and the reap is right.
-      const now = Date.now();
-      if (this.isConnected() && !this.ws?.ownsPing && now - this.lastPingSendTime >= this.PING_INTERVAL) {
-        this.lastPingSendTime = now;
-        this.send({ type: 'ping', timestamp: now });
+      this.hiddenKeepalive();
+      return;
+    }
+    const stall = this.laneStall();
+    if (!stall.laneDead && (stall.lastRx === 0 || stall.silent < NetworkManager.STALL_MS)) {
+      this.noteHealthyTier();
+      return;
+    }
+    this.escalateLane(stall);
+  }
+
+  /** Transport-level reconnect for a session whose connect() never
+   *  produced a live lane. Backoff is exponential to 15s; a worker that
+   *  never reports 'up' means the page backend is gone - stop spawning
+   *  doomed workers and say so once. */
+  private outerReconnect(): void {
+    if (this.workerCrashStreak >= 3) {
+      if (!this.crashWarned) {
+        this.crashWarned = true;
+        logger.error('net worker failed to spawn 3× - the page backend (vite) is unreachable; reload the tab to retry');
       }
       return;
     }
-    // Worker transports stamp liveness at the receive edge - a main-loop
-    // stall delays DRAIN, not arrival, and must not read as socket silence.
+    this.deadSince ??= Date.now();
+    const now = Date.now();
+    if (now - this.deadSince < 10_000 || now < this.retryAt) {return;}
+    this.retryAt = now + Math.min(1000 * 2 ** this.retryStreak, 15_000);
+    this.retryStreak += 1;
+    logger.info(`outer reconnect (transport dead ${Math.round((now - this.deadSince) / 1000)}s) - attempt ${this.retryStreak}`);
+    const url = this.lastUrl!;
+    // Kill the old transport before replacing it - an abandoned lane
+    // keeps auto-reconnecting with these callbacks still bound: its
+    // joins fight the live session for the seat and its close events
+    // tear down roster/ledger state (the join-timeout flap loop).
+    this.ws?.disconnect();
+    this.ws = null;
+    this.connect(url, this.lastFactory, this.lastResolveUrl).catch((): void => { /* the stall loop owns retries */ });
+  }
+
+  /** Hidden-tab liveness: the position pump carries our ping and stops
+   *  with rAF, so a hidden tab reads as 60s of silence and gets
+   *  idle-reaped. Timers still fire (≥1Hz throttled) - keep the
+   *  app-level ping alive from here instead. If intensive throttling
+   *  suspends timers entirely the silence is real and the reap is right. */
+  private hiddenKeepalive(): void {
+    if (!this.isConnected() || this.ws?.ownsPing) {return;}
+    const now = Date.now();
+    if (now - this.lastPingSendTime >= this.PING_INTERVAL) {
+      this.lastPingSendTime = now;
+      this.send({ type: 'ping', timestamp: now });
+    }
+  }
+
+  /** Silence + lane-dead measurement. Worker transports stamp liveness
+   *  at the receive edge - a main-loop stall delays DRAIN, not arrival,
+   *  and must not read as socket silence.
+   *
+   *  Zombie-seat death: inbound reduced to a trickle of inputSync - the
+   *  server's starvation signal, not proof of life. A seat that only
+   *  ever sees inputSync is blind (no ticks, events, or keepalives) and
+   *  its shotFired intents died too - yet it kept the plain-silence
+   *  watchdog quiet. lastLiveRxAt excludes inputSync precisely so this
+   *  symptom trips instead of masking the dead lane.
+   *  Two cases: (a) lastLiveRxAt > 0 but stale > JSON_STALL_MS (lane
+   *  went dark after initially working), (b) lastLiveRxAt === 0 but
+   *  ticks are flowing (JSON lane never opened after join - the
+   *  reconnect/reseat edge). Both force a clean full reconnect. */
+  private laneStall(): { laneDead: boolean; liveSilent: number; silent: number; lastRx: number } {
     const lastRx = Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0);
-    const now2 = Date.now();
-    const silent = now2 - lastRx;
-    // Zombie-seat death: inbound reduced to a trickle of inputSync - the
-    // server's starvation signal, not proof of life. A seat that only
-    // ever sees inputSync is blind (no ticks, events, or keepalives) and
-    // its shotFired intents died too - yet it kept the plain-silence
-    // watchdog quiet. lastLiveRxAt excludes inputSync precisely so this
-    // symptom trips instead of masking the dead lane.
-    // Two cases: (a) lastLiveRxAt > 0 but stale > JSON_STALL_MS (lane
-    // went dark after initially working), (b) lastLiveRxAt === 0 but
-    // ticks are flowing (JSON lane never opened after join - the
-    // reconnect/reseat edge). Both force a clean full reconnect.
-    const liveSilent = this.wireIn.lastLiveRxAt > 0 ? now2 - this.wireIn.lastLiveRxAt : 0;
-    const ticksFlowing = (now2 - Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0)) < NetworkManager.STALL_MS;
-    const laneNeverOpened = this.wireIn.lastLiveRxAt === 0 && ticksFlowing && this.connectedAtMs > 0 && (now2 - this.connectedAtMs) > NetworkManager.JSON_STALL_MS;
-    const laneDead = liveSilent > NetworkManager.JSON_STALL_MS || laneNeverOpened;
-    if (!laneDead && (lastRx === 0 || silent < NetworkManager.STALL_MS)) {
-      // Healthy session proved itself past the warmup - decay the tier's
-      // bench streak once per connect so a later spurious flap doesn't
-      // inherit punishment for sessions that were fine.
-      const t = this.ws?.tier;
-      if (!this.tierRewarded && (t === 'wt' || t === 'rtc') && this.msSinceConnect() > 30_000) {
-        this.tierRewarded = true;
-        rewardTier(t);
-      }
-      return;
+    const now = Date.now();
+    const silent = now - lastRx;
+    const liveSilent = this.wireIn.lastLiveRxAt > 0 ? now - this.wireIn.lastLiveRxAt : 0;
+    const ticksFlowing = (now - lastRx) < NetworkManager.STALL_MS;
+    const laneNeverOpened = this.wireIn.lastLiveRxAt === 0 && ticksFlowing && this.connectedAtMs > 0 && (now - this.connectedAtMs) > NetworkManager.JSON_STALL_MS;
+    return { laneDead: liveSilent > NetworkManager.JSON_STALL_MS || laneNeverOpened, liveSilent, silent, lastRx };
+  }
+
+  /** Healthy session proved itself past the warmup - decay the tier's
+   *  bench streak once per connect so a later spurious flap doesn't
+   *  inherit punishment for sessions that were fine. */
+  private noteHealthyTier(): void {
+    const t = this.ws?.tier;
+    if (!this.tierRewarded && (t === 'wt' || t === 'rtc') && this.msSinceConnect() > 30_000) {
+      this.tierRewarded = true;
+      rewardTier(t);
     }
-    logger.warn(laneDead
-      ? `inbound lane dead ${Math.round(liveSilent)}ms - only inputSync trickles, reprobing`
-      : `no server traffic in ${Math.round(silent)}ms - socket silent, reprobing`, { tier: this.ws?.tier });
-    // Escalation: if the JSON lane has been dark through multiple
-    // reconnects, force a full page reload - the transport is stuck in
-    // a state no reconnect can fix.
-    if (laneDead) {
-      // A zombie WT session never fires onDisconnect - the QUIC teardown
-      // lands server-side (E_SESSION_CLOSED) while the client session
-      // still reads open, so the tier flap breaker can't see it. Bench
-      // the tier or every forced re-probe re-picks the same dying lane.
+  }
+
+  /** Stall escalation: warn with the right symptom, bench a dead wt/rtc
+   *  lane (a zombie WT session never fires onDisconnect, so the tier
+   *  flap breaker can't see it), count JSON-lane reconnects toward a
+   *  full reload, then rebuild the transport through connect() -
+   *  TieredTransport is one-shot after disconnect() (closed flag). */
+  private escalateLane(stall: { laneDead: boolean; liveSilent: number; silent: number; lastRx: number }): void {
+    logger.warn(stall.laneDead
+      ? `inbound lane dead ${Math.round(stall.liveSilent)}ms - only inputSync trickles, reprobing`
+      : `no server traffic in ${Math.round(stall.silent)}ms - socket silent, reprobing`, { tier: this.ws?.tier });
+    if (stall.laneDead) {
       if (this.ws?.tier === 'wt' || this.ws?.tier === 'rtc') {benchTier(this.ws.tier);}
       this.jsonLaneReconnects += 1;
       if (this.jsonLaneReconnects >= 3) {
@@ -513,9 +535,7 @@ export class NetworkManager {
         return;
       }
     }
-    const url = this.lastUrl;
-    // TieredTransport is one-shot after disconnect() (closed flag), so
-    // go through connect() which builds a fresh transport and re-probes.
+    const url = this.lastUrl!;
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
@@ -982,12 +1002,7 @@ this.sendDrops += 1;
     // a 4Hz heartbeat instead of 20Hz - identical truth, ~5x less server
     // reconcile/rewind work per idle player. Any wiggle (incl. aim -
     // standing snipers still aim) returns to full rate instantly.
-    const still = this.lastSentState !== undefined
-      && Math.hypot(position.x - this.lastSentState.px, position.y - this.lastSentState.py, position.z - this.lastSentState.pz) < 0.05
-      && Math.hypot(velocity.x, velocity.y, velocity.z) < 0.5
-      && Math.abs(rotation.yaw - this.lastSentState.yaw) < 0.01
-      && Math.abs(rotation.pitch - this.lastSentState.pitch) < 0.01;
-    if (now - this.lastPositionSendTime < (still ? this.STILL_SEND_INTERVAL : this.POSITION_SEND_INTERVAL)) {
+    if (now - this.lastPositionSendTime < (this.isStill(position, rotation, velocity) ? this.STILL_SEND_INTERVAL : this.POSITION_SEND_INTERVAL)) {
       return;
     }
 
@@ -1013,8 +1028,23 @@ this.sendDrops += 1;
     this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping, this.inputs.seq,
       held ? { forward: held.forward, right: held.right, jump: held.jump, ski: held.ski, jet: held.jet ?? 0 } : undefined));
 
-    // Send ping if interval elapsed - worker transports own their own
-    // probe (measured off the main thread, so stall can't inflate it).
+    this.sendSideChannels(now);
+  }
+
+  /** Parked-player test for the still-throttle: pos drift <5cm, speed
+   *  <0.5, aim drift <0.01 rad on both axes vs the last SENT state. */
+  private isStill(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }): boolean {
+    const s = this.lastSentState;
+    return s !== undefined
+      && Math.hypot(position.x - s.px, position.y - s.py, position.z - s.pz) < 0.05
+      && Math.hypot(velocity.x, velocity.y, velocity.z) < 0.5
+      && Math.abs(rotation.yaw - s.yaw) < 0.01
+      && Math.abs(rotation.pitch - s.pitch) < 0.01;
+  }
+
+  /** Interval side-channels that ride the position cadence: ping probe
+   *  (worker transports own their own) and the ~0.1Hz client ops uplink. */
+  private sendSideChannels(now: number): void {
     if (!this.ws?.ownsPing && now - this.lastPingSendTime >= this.PING_INTERVAL) {
       this.lastPingSendTime = now;
       this.send({ type: 'ping', timestamp: now });
