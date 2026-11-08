@@ -3,6 +3,7 @@
 // Same map, same seed, same roster: the K/D delta is the belt's value.
 //   bun tests/scenarios/_beltab.ts [--mins M] [--swap]  (--swap flips which side has belts)
 import { mkRoom, step } from './harness.ts';
+import { WeaponType } from '../../../shared/weapons.ts';
 import { hmParseBin, hmScaled } from '../../../shared/heightfield.ts';
 import { readFileSync } from 'node:fs';
 
@@ -94,5 +95,9 @@ console.log(`BELT_TEAM=${BELT_TEAM} sim=${(t * 0.05).toFixed(0)}s wall=${((Date.
 if (itemOf.size) {
   const tally = new Map<string, { k: number; d: number }>();
   for (const p of ps) {const it = itemOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += (bankK.get(p.id) ?? 0) + p.kills; e.d += (bankDeaths.get(p.id) ?? 0) + p.deaths; tally.set(it, e);}
-  console.log('ITEM TALLY:', [...tally.entries()].sort((a, b) => b[1].k - a[1].k).map(([it, e]) => `${it}=${e.k}k/${e.d}d`).join(' '));
+  console.log('CARRY TALLY:', [...tally.entries()].sort((a, b) => b[1].k - a[1].k).map(([it, e]) => `${it}=${e.k}k/${e.d}d`).join(' '));
+  // Weapon-attributed kills: kills where the projectile's weaponType
+  // WAS the item - "the item earned it", not "the carrier earned it".
+  const wt = (room as unknown as { killsByWeapon: Map<number, number> }).killsByWeapon;
+  console.log('ATTRIBUTED:', [...tally.keys()].map((it): string => `${it}=${wt.get((WeaponType as unknown as Record<string, number>)[it] ?? -1) ?? 0}`).join(' '));
 }

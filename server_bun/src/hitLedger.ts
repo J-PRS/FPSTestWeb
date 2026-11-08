@@ -196,7 +196,7 @@ export class HitLedger {
       c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }) as ServerMessage);
     }
     c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air, endedStreak, simNow());
-    c.deps.emit?.({ type: 'kill', targetId, shooterId });
+    c.deps.emit?.({ type: 'kill', targetId, shooterId, weapon: opts.weapon });
     c.respawner.schedule(targetId);
   }
 

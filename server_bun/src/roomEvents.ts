@@ -13,7 +13,7 @@
 import type { Vec3 } from './types.ts';
 
 export type RoomEvent =
-  | { type: 'kill'; targetId: string; shooterId: string }
+  | { type: 'kill'; targetId: string; shooterId: string; weapon?: number }
   | { type: 'hit'; targetId: string; shooterId: string; damage: number }
   | { type: 'fire'; playerId: string }
   | { type: 'botSpoke'; id: string; vgs?: string }
