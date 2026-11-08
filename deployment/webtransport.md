@@ -58,24 +58,34 @@ openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 13 \
 
 The first cert expires **2026-11-06**. Renew before then:
 
-1. Re-run the command above. Keep the file names so the env paths still match.
-2. Restart the server (see `readme.md`, Server).
+1. Re-run the command above — **cert AND key together**. Regenerating
+   only cert.pem leaves a KeyMismatch and WT silently stays off
+   (happened 2026-11-07: renewed cert didn't pair with old key).
+   Sanity: `openssl x509 -in cert.pem -pubkey -noout | diff - <(openssl pkey -in key.pem -pubout)`.
+2. Restart the fleet: `sudo systemctl restart kribes-fleet.service`.
 3. Confirm `/wthash` shows a new `sha256`. The client picks it up on the next load.
 
 `FPS_WT_CERT` and `FPS_WT_KEY` in `~/kribes/server.env` point at these two files.
 
 ## Ports
 
-- The WT listener is UDP `9443` (`FPS_WT_PORT`, default FPS_PORT+1443).
+- The WT listener is UDP `9444` on fleet w0 (`FPS_PORT 8001 + 1443`;
+  pre-fleet docs said 9443 — the fleet spawn computes BASE+1443).
+  w1/w2 get `FPS_WT_PORT=0` (QUIC can't cross workers).
 - Clients dial the port in `/wthash`, which is `FPS_WT_ADVERTISE_PORT` when set,
   otherwise the listener port. On the A1 it is `443`, because the HTTPS origin
   `https://play.jprice.app` only accepts WT on 443.
 - Public UDP 443 reaches the listener through a firewalld forward:
-  `sudo firewall-cmd --permanent --add-forward-port=port=443:proto=udp:toport=9443`
+  `sudo firewall-cmd --zone=public --permanent --add-forward-port=port=443:proto=udp:toport=9444`
+  (retargeted 9443→9444 2026-11-07 when fleet moved the listener).
   then `sudo firewall-cmd --reload`. Confirm with `firewall-cmd --list-forward-ports`.
 - Open only UDP 443 on the OCI security list. Do not open 9443 publicly; the forward
   redirects 443 to the local listener. Verified 2026-10-24 with 9443 closed.
 - Caddy must not use UDP 443 (HTTP/3 off, see `readme.md`).
+- Kernel-level per-source DDoS limits live in `/etc/kribes-ddos.nft`
+  (reflection-port drops + 300pps/src on UDP 443/9444/9898,
+  30 new-conns/s on TCP 443/8443-8445), loaded by `kribes-ddos.service`.
+  Edit the .nft, then `sudo nft -f /etc/kribes-ddos.nft`.
 - Verify from a browser on an https page at the same origin:
   `new WebTransport('https://play.jprice.app:443', {serverCertificateHashes:[{algorithm:'sha-256', value: <hash from /wthash>}]}).ready`
   resolves when the path works.

@@ -35,9 +35,11 @@ Last updated: 2026-10-24.
 
 ## Deadlines
 
-- **WebTransport cert expires 2026-11-06.** Renewal is manual and needs a server restart
-  (see `webtransport.md`). Do it in a quiet window before that date, and check
-  `openssl x509 -in ~/kribes/certs/cert.pem -noout -enddate` on the box.
+- **WebTransport cert expires 2026-11-20** (renewed 2026-11-07). Renewal is
+  manual and needs a fleet restart (see `webtransport.md` — regenerate
+  cert+key *together*, a lone cert renewal KeyMismatches and WT silently
+  stays off). Check `openssl x509 -in ~/kribes/certs/cert.pem -noout -enddate`
+  on the box.
 - Let's Encrypt cert for `play.jprice.app` auto-renews by Caddy; current expiry 2027-01-22.
 
 ## Audit 2026-10-24 (latest)
