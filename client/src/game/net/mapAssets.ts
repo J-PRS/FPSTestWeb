@@ -1287,19 +1287,14 @@ const INTERIOR_FOG_GLSL = `
 
 
 
-function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Material } {
-
-  const std = mat as THREE.MeshStandardMaterial;
-
-  const key = [
+// Interior-material dedup key - texture identity comes from the map's
+// own name: two materials differing only in .name (the exporter's
+// per-file .NNN suffixes already stripped) render identically and can
+// share one draw call.
+function interiorMatKey(std: THREE.MeshStandardMaterial): string {
+  return [
 
     std.color ? std.color.getHexString() : '-',
-
-    // Texture identity comes from the map's own name - two materials that
-
-    // differ only in .name (the exporter's per-file .NNN suffixes already
-
-    // stripped) render identically and can share one draw call.
 
     std.map ? std.map.name || 'tex' : '-',
 
@@ -1316,6 +1311,13 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
     std.transparent ? 't' : 'o',
 
   ].join('|');
+}
+
+function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Material } {
+
+  const std = mat as THREE.MeshStandardMaterial;
+
+  const key = interiorMatKey(std);
 
   const hit = _canonMats.get(key);
 

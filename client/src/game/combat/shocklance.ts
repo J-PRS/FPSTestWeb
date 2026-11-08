@@ -39,6 +39,27 @@ const STRANDS = [
 ] as const;
 const LANCE_BURN = 0.34; // discharge crackles ~1/3s — the LG's 90ms tick-fade reads as a flick
 
+// Strand tips fan around the contact — the storm converges on the
+// hitpoint, not a laser-straight line. On an air miss the bolts
+// instead die RAGGED — each strand bleeds out at a different depth
+// on the same tight line.
+function fireLanceStrands(strs: LightningBeam[], cam: THREE.Camera, landed: boolean, biting: boolean, hitT: number): void {
+  cam.updateMatrixWorld();
+  _r.setFromMatrixColumn(cam.matrixWorld, 0);
+  _u.setFromMatrixColumn(cam.matrixWorld, 1);
+  for (let i = 0; i < strs.length; i += 1) {
+    const s = STRANDS[i]!;
+    if (landed) {
+      _tip.copy(_lgHit).addScaledVector(_r, s.tipR).addScaledVector(_u, s.tipU);
+    } else {
+      _tip.copy(_lanceMuzzle).addScaledVector(cam.getWorldDirection(_lgD), hitT * (0.62 + i * 0.16))
+        .addScaledVector(_r, s.tipR * 0.6).addScaledVector(_u, s.tipU * 0.6);
+    }
+    strs[i]!.fire(_lanceMuzzle, _tip, cam.position, landed, biting, null);
+  }
+}
+
+
 export function createShocklance(deps: CombatDeps, hooks: LightningHooks): { lance: (e: FireArgs) => void; tickBeam: (dt: number) => void } {
   let strands: LightningBeam[] | null = null;
 
@@ -72,26 +93,6 @@ export function createShocklance(deps: CombatDeps, hooks: LightningHooks): { lan
       return b;
     });
     return strands;
-  }
-
-  // Strand tips fan around the contact — the storm converges on the
-  // hitpoint, not a laser-straight line. On an air miss the bolts
-  // instead die RAGGED — each strand bleeds out at a different depth
-  // on the same tight line.
-  function fireLanceStrands(strs: LightningBeam[], cam: THREE.Camera, landed: boolean, biting: boolean, hitT: number): void {
-    cam.updateMatrixWorld();
-    _r.setFromMatrixColumn(cam.matrixWorld, 0);
-    _u.setFromMatrixColumn(cam.matrixWorld, 1);
-    for (let i = 0; i < strs.length; i += 1) {
-      const s = STRANDS[i]!;
-      if (landed) {
-        _tip.copy(_lgHit).addScaledVector(_r, s.tipR).addScaledVector(_u, s.tipU);
-      } else {
-        _tip.copy(_lanceMuzzle).addScaledVector(cam.getWorldDirection(_lgD), hitT * (0.62 + i * 0.16))
-          .addScaledVector(_r, s.tipR * 0.6).addScaledVector(_u, s.tipU * 0.6);
-      }
-      strs[i]!.fire(_lanceMuzzle, _tip, cam.position, landed, biting, null);
-    }
   }
 
   function lance(_e: FireArgs): void {

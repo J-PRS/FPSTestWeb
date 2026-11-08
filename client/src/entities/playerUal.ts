@@ -338,10 +338,9 @@ async function bakeSource(
  *  suppression rule (oneshotOwnsArms) hands them the arms either way.
  *  Skeleton is at authored rest when this runs (post-restoreRest), so
  *  bone.quaternion IS the bind local. Returns whether it baked. */
-function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.SkinnedMesh, variant: string): boolean {
-  if (CLASS_BODY_SPEC[variant]?.anims) {return false;}
-  const chains = holdChains();
-  const quats = HOLD_QUATS[variant] ?? HOLD_QUATS['cybersoldier']!;
+// Bone name → hold-chain role index; first chain containing the
+// normalized name wins (multi-skin rigs duplicate bone names).
+function armHoldRoles(target: THREE.SkinnedMesh, chains: Set<string>[]): Map<string, number> {
   const roleOf = new Map<string, number>();
   for (const b of target.skeleton.bones) {
     const nb = normBone(b.name);
@@ -349,6 +348,14 @@ function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.Skin
       if (chains[r]!.has(nb)) { roleOf.set(b.name, r); break; }
     }
   }
+  return roleOf;
+}
+
+function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.SkinnedMesh, variant: string): boolean {
+  if (CLASS_BODY_SPEC[variant]?.anims) {return false;}
+  const chains = holdChains();
+  const quats = HOLD_QUATS[variant] ?? HOLD_QUATS['cybersoldier']!;
+  const roleOf = armHoldRoles(target, chains);
   if (roleOf.size === 0) {return false;}
   const _hold = new THREE.Quaternion();
   const _off = new THREE.Quaternion();

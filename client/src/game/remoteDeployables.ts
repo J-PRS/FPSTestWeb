@@ -263,7 +263,6 @@ export class RemoteDeployables {
     const glowMat = new THREE.MeshBasicMaterial({ color: teamColor });
     const darkMat = new THREE.MeshLambertMaterial({ color: 0x39_42_4E });
     const hullMat = new THREE.MeshLambertMaterial({ color: 0x55_60_6E });
-    let spinMesh: THREE.Mesh | null = null;
     // Mounting plinth - a low deck plate with team-lit trim that stays
     // intact when the asset dies, so the site reads as a socket even
     // while its hulk is dark. Sits below the slumped wreck.
@@ -281,7 +280,7 @@ export class RemoteDeployables {
     // Sentry's rotating head - declared up here so update() can idle-scan
     // it; stays a child of group so wreck slump still tilts the whole rig.
     const head = new THREE.Group();
-    spinMesh = this.buildAssetHull(kind, group, head, glowMat, darkMat, hullMat);
+    const spinMesh = this.buildAssetHull(kind, group, head, glowMat, darkMat, hullMat);
     group.position.copy(at);
     // Tower-mounted assets author a real y - terrain is a floor for the
     // buried-y convention, not a ceiling on rooftops.
