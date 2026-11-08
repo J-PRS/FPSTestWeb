@@ -664,7 +664,6 @@ export function pitPass(h: Float32Array, N: number, thresh = 0.06, R = 10): void
       sat[(z + 1) * (N + 1) + x + 1] = sat[z * (N + 1) + x + 1]! + run;
     }
   }
-  const area = (2 * R + 1) * (2 * R + 1);
   for (let z = 0; z < N; z += 1) {
     for (let x = 0; x < N; x += 1) {
       // Clamped box — edge cells get a smaller window, which only blurs
@@ -690,22 +689,28 @@ export function sandPass(h: Float32Array, N: number, dose = 0.02, repose = 0.06,
     let moved = 0;
     for (let z = 0; z < N; z += 1) {
       for (let x = 0; x < N; x += 1) {
-        const i = z * N + x;
-        // Flow toward the steepest sub-repose neighbor — same avalanche
-        // rule scree uses, just fed by a sky-dose instead of a cliff.
-        const c = src[i]!;
-        const nb = [src[z * N + (x + 1) % N]!, src[z * N + (x - 1 + N) % N]!,
-          src[((z + 1) % N) * N + x]!, src[((z - 1 + N) % N) * N + x]!];
-        let k = -1, lo = c;
-        for (let j = 0; j < 4; j += 1) { if (nb[j]! < lo) { lo = nb[j]!; k = j; } }
-        if (k < 0 || c - lo <= repose) {continue;}
-        const j = z * N + (k === 0 ? (x + 1) % N : k === 1 ? (x - 1 + N) % N : x) + (k > 1 ? ((k === 2 ? (z + 1) % N : (z - 1 + N) % N) * N - z * N) : 0);
-        const d = (c - lo - repose) * 0.4;
-        src[i] = c - d; src[j] = src[j]! + d; moved += d;
+        moved += sandCell(src, N, z, x, repose);
       }
     }
     if (moved < 1e-6) {break;}
   }
+}
+
+// Flow toward the steepest sub-repose neighbor — same avalanche
+// rule scree uses, just fed by a sky-dose instead of a cliff.
+// Returns the amount moved this cell.
+function sandCell(src: Float32Array, N: number, z: number, x: number, repose: number): number {
+  const i = z * N + x;
+  const c = src[i]!;
+  // Wrapped neighbor indices first — values and targets share one table.
+  const nbs = [z * N + (x + 1) % N, z * N + (x - 1 + N) % N,
+    ((z + 1) % N) * N + x, ((z - 1 + N) % N) * N + x];
+  let k = -1, lo = c;
+  for (let j = 0; j < 4; j += 1) { if (src[nbs[j]!]! < lo) { lo = src[nbs[j]!]!; k = j; } }
+  if (k < 0 || c - lo <= repose) {return 0;}
+  const d = (c - lo - repose) * 0.4;
+  src[i] = c - d; src[nbs[k]!] = src[nbs[k]!]! + d;
+  return d;
 }
 
 /** Slump - collapse steep cells toward their neighborhood mean. Hillside

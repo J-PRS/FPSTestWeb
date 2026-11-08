@@ -9,7 +9,7 @@ import {
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
-import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
+import type { SwarmPart, SwarmSlotOwner, SpeciesSwarm } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 
 const _dir = new THREE.Vector3();
@@ -351,40 +351,42 @@ export class Grub implements Targetable, SwarmSlotOwner {
       }
     }
 
-    // Three pairs of stub legs under the thorax — interpolated along the
-    // two lobes behind the head capsule so they ride the same wave the
-    // body does. Base stays buried inside the lobe, the rolled cone tip
-    // is the only part that clears the silhouette. Side = the spine's
-    // left normal here, so legs stay under the body through a bend.
-    const HOST_A = 3, HOST_B = 4;             // thorax lobes
-    const LEG_U = [1.2, 0.5, -0.2];           // pair offsets along A→B
-    {
-      const ax = segX[HOST_A]!, az = segZ[HOST_A]!;
-      const bx = segX[HOST_B]!, bz = segZ[HOST_B]!;
-      const bt = Math.hypot(bx - ax, bz - az) || 1;
-      const lnx = -(bz - az) / bt, lnz = (bx - ax) / bt; // spine left normal
-      for (let i = 0; i < LEGS_PER; i += 1) {
-        const pair = Math.floor(i / 2);
-        const side = i % 2 === 0 ? -1 : 1;
-        const u = LEG_U[pair]!;
-        const hx = ax + (bx - ax) * u;
-        const hy = segY[HOST_A]! + (segY[HOST_B]! - segY[HOST_A]!) * u;
-        const hz = az + (bz - az) * u;
-        const hr = segR[HOST_A]! + (segR[HOST_B]! - segR[HOST_A]!) * u;
-        const phase = this.animT * 5 * crawl - (SEGS_PER - 2 - pair) * 1.05;
-        const paddle = Math.sin(phase) * 0.06 * crawl * r;
-        _e.set(0, Math.atan2(bx - ax, bz - az), side * 0.55, 'YXZ');
-        _q.setFromEuler(_e);
-        _local.compose(
-          _p.set(hx + lnx * side * hr * 0.55, hy - hr * 0.72 + paddle, hz + lnz * side * hr * 0.55),
-          _q,
-          _s.setScalar(0.85 * r),
-        );
-        swarm.setMatrix(PART_LEG, slot * LEGS_PER + i, _local);
-      }
-    }
+    this.writeLegs(swarm, slot, { x: segX, y: segY, z: segZ, r: segR }, crawl, r);
 
     getShadows()?.set(this, this.pos, r * 1.2, 0.3);
+  }
+
+  // Three pairs of stub legs under the thorax — interpolated along the
+  // two lobes behind the head capsule so they ride the same wave the
+  // body does. Base stays buried inside the lobe, the rolled cone tip
+  // is the only part that clears the silhouette. Side = the spine's
+  // left normal here, so legs stay under the body through a bend.
+  private writeLegs(swarm: SpeciesSwarm, slot: number, seg: { x: number[]; y: number[]; z: number[]; r: number[] }, crawl: number, r: number): void {
+    const HOST_A = 3, HOST_B = 4;             // thorax lobes
+    const LEG_U = [1.2, 0.5, -0.2];           // pair offsets along A→B
+    const ax = seg.x[HOST_A]!, az = seg.z[HOST_A]!;
+    const bx = seg.x[HOST_B]!, bz = seg.z[HOST_B]!;
+    const bt = Math.hypot(bx - ax, bz - az) || 1;
+    const lnx = -(bz - az) / bt, lnz = (bx - ax) / bt; // spine left normal
+    for (let i = 0; i < LEGS_PER; i += 1) {
+      const pair = Math.floor(i / 2);
+      const side = i % 2 === 0 ? -1 : 1;
+      const u = LEG_U[pair]!;
+      const hx = ax + (bx - ax) * u;
+      const hy = seg.y[HOST_A]! + (seg.y[HOST_B]! - seg.y[HOST_A]!) * u;
+      const hz = az + (bz - az) * u;
+      const hr = seg.r[HOST_A]! + (seg.r[HOST_B]! - seg.r[HOST_A]!) * u;
+      const phase = this.animT * 5 * crawl - (SEGS_PER - 2 - pair) * 1.05;
+      const paddle = Math.sin(phase) * 0.06 * crawl * r;
+      _e.set(0, Math.atan2(bx - ax, bz - az), side * 0.55, 'YXZ');
+      _q.setFromEuler(_e);
+      _local.compose(
+        _p.set(hx + lnx * side * hr * 0.55, hy - hr * 0.72 + paddle, hz + lnz * side * hr * 0.55),
+        _q,
+        _s.setScalar(0.85 * r),
+      );
+      swarm.setMatrix(PART_LEG, slot * LEGS_PER + i, _local);
+    }
   }
 
   takeDamage(damage: number): boolean {

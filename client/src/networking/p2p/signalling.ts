@@ -55,14 +55,7 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
     ws.addEventListener('error', (): void => fail(new Error('signalling socket failed')));
     ws.addEventListener('close', (e): void => { if (e.code === 1008) {fail(new Error(`room rejected: ${e.reason}`));} });
 
-    ws.addEventListener('message', async (ev): Promise<void> => {
-      // A malformed signal frame must not kill the handshake — an exception
-      // inside this async listener surfaces as an unhandled rejection and
-      // silently aborts ICE relay.
-      // oxlint-disable-next-line init-declarations -- assigned later
-      let msg!: SignalMsg | null;
-      try { msg = JSON.parse(ev.data as string) as SignalMsg; } catch { return; }
-      if (msg === null || typeof msg !== 'object') {return;}
+    const dispatchSignal = async (msg: SignalMsg): Promise<void> => {
       try {
         switch (msg.t) {
           case 'role': {
@@ -107,12 +100,23 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
             fail(new Error('peer left during handshake'));
             break;
           }
-                  default: { break; }
-}
+          default: { break; }
+        }
       } catch (error) {
         logger.error('signalling error', error);
         fail(error as Error);
       }
+    };
+
+    ws.addEventListener('message', async (ev): Promise<void> => {
+      // A malformed signal frame must not kill the handshake — an exception
+      // inside this async listener surfaces as an unhandled rejection and
+      // silently aborts ICE relay.
+      // oxlint-disable-next-line init-declarations -- assigned later
+      let msg!: SignalMsg | null;
+      try { msg = JSON.parse(ev.data as string) as SignalMsg; } catch { return; }
+      if (msg === null || typeof msg !== 'object') {return;}
+      await dispatchSignal(msg);
     });
 
     ws.addEventListener('open', (): void => logger.info(`signalling connected (host=${isHost})`));

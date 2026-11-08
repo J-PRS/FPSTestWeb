@@ -66,49 +66,53 @@ export class VmBaked {
     const loader = mkGltfLoader();
     const texLoader = new THREE.TextureLoader();
     const done = new Set<THREE.Group>();
-    // bakeVertexAO is ~100ms of raycasts per weapon — an async fn's body
-    // still runs synchronously until a real await, so the old loop froze
-    // boot for ~2.3s before this function's first fetch ever fired.
-    // Yield per weapon: the bake streams in over the first seconds of
-    // menu/play instead of blocking TTI.
     for (const [wt, g] of this.h.weapons) {
-      await yieldFrame();
-      if (!bakeAll && !ALWAYS_BAKE.has(wt)) {
-        bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
-        continue;
-      }
-      // Forced bakes: hide the procedural placeholder NOW so the async
-      // GLB fetch doesn't flash the old model for a frame. Restored on
-      // failure below.
-      const forced = !bakeAll;
-      if (forced) {g.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {o.visible = false;} });}
-      if (done.has(g)) {continue;}
-      done.add(g);
-      try {
-        // HEAD-probe first: a missing GLB makes the dev server serve the
-        // 404 HTML page, which then fails PARSING — the miss arrives as a
-        // real Error, indistinguishable from a corrupt bake. Probing keeps
-        // expected misses from ever becoming fetch/parse noise.
-        const probe = await fetch(`/weapons/w${wt}_baked.glb`, { method: 'HEAD' });
-        // Vite's SPA fallback can 200 a HEAD for a missing file — only a
-        // non-HTML body is a real bake.
-        const ct = probe.headers.get('content-type') ?? '';
-        if (!probe.ok || ct.includes('html')) {
-          if (forced) {g.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
-          bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
-          continue;
-        }
-        await this.swapBaked(wt, g, loader, texLoader);
-      } catch (error) {
+      await this.loadWeaponBake(wt, g, loader, texLoader, bakeAll, done);
+    }
+  }
+
+  // bakeVertexAO is ~100ms of raycasts per weapon — an async fn's body
+  // still runs synchronously until a real await, so the old loop froze
+  // boot for ~2.3s before this function's first fetch ever fired.
+  // Yield per weapon: the bake streams in over the first seconds of
+  // menu/play instead of blocking TTI.
+  private async loadWeaponBake(wt: number, g: THREE.Group, loader: GLTFLoader, texLoader: THREE.TextureLoader, bakeAll: boolean, done: Set<THREE.Group>): Promise<void> {
+    await yieldFrame();
+    if (!bakeAll && !ALWAYS_BAKE.has(wt)) {
+      bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
+      return;
+    }
+    // Forced bakes: hide the procedural placeholder NOW so the async
+    // GLB fetch doesn't flash the old model for a frame. Restored on
+    // failure below.
+    const forced = !bakeAll;
+    if (forced) {g.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {o.visible = false;} });}
+    if (done.has(g)) {return;}
+    done.add(g);
+    try {
+      // HEAD-probe first: a missing GLB makes the dev server serve the
+      // 404 HTML page, which then fails PARSING — the miss arrives as a
+      // real Error, indistinguishable from a corrupt bake. Probing keeps
+      // expected misses from ever becoming fetch/parse noise.
+      const probe = await fetch(`/weapons/w${wt}_baked.glb`, { method: 'HEAD' });
+      // Vite's SPA fallback can 200 a HEAD for a missing file — only a
+      // non-HTML body is a real bake.
+      const ct = probe.headers.get('content-type') ?? '';
+      if (!probe.ok || ct.includes('html')) {
         if (forced) {g.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
         bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
-        // A missing bake is the normal case — 404s surface as
-        // Event/ProgressEvent (ImageLoader) or "Not Found"/404 Errors —
-        // neither is worth a log line. Only a real parse/decode failure is.
-        const is404 = !(error instanceof Error) ||
-          /404|not found|fetch/i.test(error.message);
-        if (!is404) {Logger.warn(`[vm] w${wt} bake load failed`, error);}
+        return;
       }
+      await this.swapBaked(wt, g, loader, texLoader);
+    } catch (error) {
+      if (forced) {g.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
+      bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
+      // A missing bake is the normal case — 404s surface as
+      // Event/ProgressEvent (ImageLoader) or "Not Found"/404 Errors —
+      // neither is worth a log line. Only a real parse/decode failure is.
+      const is404 = !(error instanceof Error) ||
+        /404|not found|fetch/i.test(error.message);
+      if (!is404) {Logger.warn(`[vm] w${wt} bake load failed`, error);}
     }
   }
 

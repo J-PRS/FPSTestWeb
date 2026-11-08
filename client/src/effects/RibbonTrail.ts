@@ -553,40 +553,7 @@ RibbonTrail.nanPushes += 1;
       if (this.farCull) {this.emitScale *= Math.max(0, Math.min(1, (150 - d) / 25));}
       else {this.emitScale *= Math.max(0, Math.min(1, (200 - d) / 50));}
     }
-    if (this.follow && this.count > 0) {
-      // Same discontinuity budget push() uses: a re-pin past it means the
-      // host (or its recycled pos vector) jumped - stretching the head to
-      // it paints a chord across the map, so cut instead.
-      // Measure vs the last EMITTED sample, not the welded head - weld
-      // creep during push starvation otherwise accumulates unchecked:
-      // px[head] is re-pinned to follow each frame, so follow-vs-head
-      // stays ~0 while the head walks arbitrarily far from the previous
-      // real sample, stretching one segment across the map.
-      const prev = this.count > 1 ? (this.head - 1 + MAX_SAMPLES) % MAX_SAMPLES : this.head;
-      const jx = this.follow.x + this._ox - this.px[prev]!;
-      const jy = this.follow.y + this._oy - this.py[prev]!;
-      const jz = this.follow.z + this._oz - this.pz[prev]!;
-      // Same 60m hard ceiling push() applies - lastSpd can be a resnap
-      // artifact (~1400m/s), inflating the budget to ~115m and letting a
-      // cross-map re-pin paint a streak the push guard would have cut.
-      const gapSq = jx * jx + jy * jy + jz * jz;
-      if (gapSq > BREAK_M * BREAK_M) {
-        // Teleport: break + reseed at the new spot - never a chord.
-        this.clear();
-        RibbonTrail.followJumps += 1;
-        this.commit(this.follow.x + this._ox, this.follow.y + this._oy, this.follow.z + this._oz, 1);
-        this._lx = this.follow.x + this._ox; this._ly = this.follow.y + this._oy; this._lz = this.follow.z + this._oz;
-        if (!this.followManaged) {
-          glitch('follow-jump', Object.assign({ tag: this.tag, slot: this.slot, gapM: Math.round(Math.sqrt(gapSq)) }, this.jumpHint?.()));
-        }
-        return;
-      }
-      // No weld: the strip draws ONLY committed worldpoints — a re-pinned
-      // head follows _rpos through renderOffset decays and paints blend-
-      // direction chords (the "trail pointing the wrong way"). Pushes
-      // commit every 0.5m of travel, so the tip lags at most ~half a
-      // meter of fresh history — invisible next to a moving body.
-    }
+    if (this.follow && this.count > 0 && this.followGap()) {return;}
     if (!this.slotAlive() || this.count < 2) {return;}
     const { camMoved, rebillboard } = this.cameraState(cam);
     const {pos} = this.batch;
@@ -602,6 +569,41 @@ RibbonTrail.nanPushes += 1;
       this.batch.mark(base, base + this.count * 6);
       this.batch.flush();
     }
+  }
+
+  // Same discontinuity budget push() uses: a re-pin past it means the
+  // host (or its recycled pos vector) jumped - stretching the head to
+  // it paints a chord across the map, so cut instead.
+  // Measure vs the last EMITTED sample, not the welded head - weld
+  // creep during push starvation otherwise accumulates unchecked:
+  // px[head] is re-pinned to follow each frame, so follow-vs-head
+  // stays ~0 while the head walks arbitrarily far from the previous
+  // real sample, stretching one segment across the map.
+  // No weld: the strip draws ONLY committed worldpoints — a re-pinned
+  // head follows _rpos through renderOffset decays and paints blend-
+  // direction chords (the "trail pointing the wrong way"). Pushes
+  // commit every 0.5m of travel, so the tip lags at most ~half a
+  // meter of fresh history — invisible next to a moving body.
+  // True when a jump was cut — caller returns early.
+  private followGap(): boolean {
+    const prev = this.count > 1 ? (this.head - 1 + MAX_SAMPLES) % MAX_SAMPLES : this.head;
+    const jx = this.follow!.x + this._ox - this.px[prev]!;
+    const jy = this.follow!.y + this._oy - this.py[prev]!;
+    const jz = this.follow!.z + this._oz - this.pz[prev]!;
+    // Same 60m hard ceiling push() applies - lastSpd can be a resnap
+    // artifact (~1400m/s), inflating the budget to ~115m and letting a
+    // cross-map re-pin paint a streak the push guard would have cut.
+    const gapSq = jx * jx + jy * jy + jz * jz;
+    if (gapSq <= BREAK_M * BREAK_M) {return false;}
+    // Teleport: break + reseed at the new spot - never a chord.
+    this.clear();
+    RibbonTrail.followJumps += 1;
+    this.commit(this.follow!.x + this._ox, this.follow!.y + this._oy, this.follow!.z + this._oz, 1);
+    this._lx = this.follow!.x + this._ox; this._ly = this.follow!.y + this._oy; this._lz = this.follow!.z + this._oz;
+    if (!this.followManaged) {
+      glitch('follow-jump', Object.assign({ tag: this.tag, slot: this.slot, gapM: Math.round(Math.sqrt(gapSq)) }, this.jumpHint?.()));
+    }
+    return true;
   }
 
   /** Billboard bookkeeping: camMoved gates whether OLD samples get

@@ -1593,26 +1593,75 @@ export class PlayerModel {
    *  through occluders (depthTest off = wallhack read), null hides. */
   setOutline(hex: number | null): void {
     if (!this.model) {this.pendingOutline = hex; return;}
-    if (hex !== null && this.hulls.length === 0) {
-      if (!this.hullMat) {
-        // Normal depth test: the inflated shell occludes behind the body
-        // so only the silhouette rim survives - and the rim hides behind
-        // walls with the body, matching the OW enemy rule (through-wall
-        // is an ally privilege; wallhack-red enemies would be broken).
-        this.hullMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, depthWrite: false, toneMapped: false });
-        this.hullMat.onBeforeCompile = (sh): void => {
-          // uHull stays tiny - only enough to un-z-fight the backfaces;
-          // it rides model scale so a small rig's ring vanishes if it
-          // does the visible work. uHullPx is NDC - same pixel rim on
-          // every body at every distance.
-          sh.uniforms.uHull = { value: 0.006 };
-          // Rim width ∝ √distance - constant-px reads fat when bodies
-          // shrink at range, world-constant vanishes; sqrt splits it.
-          // 0.019 → ~2.5px at 10m, ~1px at 60m, ~0.5px past 120m.
-          sh.uniforms.uHullPx = { value: 0.019 };
-          sh.vertexShader = `uniform float uHull;\nuniform float uHullPx;\n${sh.vertexShader}`.replace(
-            '#include <project_vertex>',
-            `// FLIP_SIDED is defined for BackSide materials and negates
+    if (hex !== null && this.hulls.length === 0) {this.buildHulls();}
+    if (this.hullMat && hex !== null) {this.hullMat.color.setHex(hex);}
+    for (const h of this.hulls) {h.visible = hex !== null;}
+    for (const h of this.gunHulls) {h.visible = hex !== null;}
+  }
+
+  // First outline ask builds the whole rim set: shared hull material,
+  // one cloned skinned mesh per body part, gun-prop hulls.
+  private buildHulls(): void {
+    this.ensureHullMat();
+    // Clone nodes, not geometry: each hull shares the source's
+    // geometry + skeleton, only the material differs.
+    for (const sk of this.skinnedMeshes) {
+      // Same split-normal crack as the gun: plate hard edges carry
+      // divergent per-face normals, so the clip push shreds the ring.
+      // Weld a hull-only copy carrying the SKIN attributes (position
+      // alone won't merge uv/normal splits) - verts with different
+      // bone weights stay split, which is correct for animation.
+      let hgeo: THREE.BufferGeometry = sk.geometry;
+      const pos = sk.geometry.attributes.position;
+      if (pos && sk.geometry.attributes.skinIndex && !(pos as THREE.BufferAttribute & { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute) {
+        // Quantized bakes ship normalized u16 positions - weld reads
+        // them fine but computeVertexNormals can't setX floats into a
+        // normalized int array. Dequantize the positions copy first;
+        // missing/odd attr types leave hgeo on the source geometry.
+        try {
+          const skin = new THREE.BufferGeometry();
+          const p = pos as THREE.BufferAttribute;
+          const parr = new Float32Array(p.count * 3);
+          for (let i = 0; i < p.count; i += 1) {parr[i * 3] = p.getX(i); parr[i * 3 + 1] = p.getY(i); parr[i * 3 + 2] = p.getZ(i);}
+          skin.setAttribute('position', new THREE.BufferAttribute(parr, 3));
+          skin.setAttribute('skinIndex', sk.geometry.attributes.skinIndex);
+          skin.setAttribute('skinWeight', sk.geometry.attributes.skinWeight);
+          const w = mergeVertices(skin);
+          if (w.index) {w.computeVertexNormals(); hgeo = w;}
+        } catch { /* hull is cosmetic - a failed weld drops the rim, not the game */ }
+      }
+      const h = new THREE.SkinnedMesh(hgeo, this.hullMat!);
+      h.bind(sk.skeleton, sk.bindMatrix);
+      // Non-identity source node transforms would offset the hull.
+      h.position.copy(sk.position); h.quaternion.copy(sk.quaternion); h.scale.copy(sk.scale);
+      h.renderOrder = 2;
+      h.frustumCulled = false;
+      (sk.parent ?? this.model!).add(h);
+      this.hulls.push(h);
+    }
+    this.rebuildGunHulls(); // the held prop is part of the silhouette
+  }
+
+  private ensureHullMat(): void {
+    if (this.hullMat) {return;}
+    // Normal depth test: the inflated shell occludes behind the body
+    // so only the silhouette rim survives - and the rim hides behind
+    // walls with the body, matching the OW enemy rule (through-wall
+    // is an ally privilege; wallhack-red enemies would be broken).
+    this.hullMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, depthWrite: false, toneMapped: false });
+    this.hullMat.onBeforeCompile = (sh): void => {
+      // uHull stays tiny - only enough to un-z-fight the backfaces;
+      // it rides model scale so a small rig's ring vanishes if it
+      // does the visible work. uHullPx is NDC - same pixel rim on
+      // every body at every distance.
+      sh.uniforms.uHull = { value: 0.006 };
+      // Rim width ∝ √distance - constant-px reads fat when bodies
+      // shrink at range, world-constant vanishes; sqrt splits it.
+      // 0.019 → ~2.5px at 10m, ~1px at 60m, ~0.5px past 120m.
+      sh.uniforms.uHullPx = { value: 0.019 };
+      sh.vertexShader = `uniform float uHull;\nuniform float uHullPx;\n${sh.vertexShader}`.replace(
+        '#include <project_vertex>',
+        `// FLIP_SIDED is defined for BackSide materials and negates
 // transformedNormal - un-negate or the clip push shrinks the shell
 // INTO the body instead of ringing it.
 #if defined(USE_SKINNING) || defined(USE_ENVMAP)
@@ -1626,49 +1675,7 @@ transformed += normalize(hullObjN) * uHull;
 // space along the VIEW-space normal for a constant ~2px rim at range.
 vec4 hullN = projectionMatrix * vec4(hullViewN, 0.0);
 gl_Position.xy += normalize(hullN.xy + vec2(1e-6)) * uHullPx * sqrt(max(gl_Position.w, 0.25));`);
-        };
-      }
-      // Clone nodes, not geometry: each hull shares the source's
-      // geometry + skeleton, only the material differs.
-      for (const sk of this.skinnedMeshes) {
-        // Same split-normal crack as the gun: plate hard edges carry
-        // divergent per-face normals, so the clip push shreds the ring.
-        // Weld a hull-only copy carrying the SKIN attributes (position
-        // alone won't merge uv/normal splits) - verts with different
-        // bone weights stay split, which is correct for animation.
-        let hgeo: THREE.BufferGeometry = sk.geometry;
-        const pos = sk.geometry.attributes.position;
-        if (pos && sk.geometry.attributes.skinIndex && !(pos as THREE.BufferAttribute & { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute) {
-          // Quantized bakes ship normalized u16 positions - weld reads
-          // them fine but computeVertexNormals can't setX floats into a
-          // normalized int array. Dequantize the positions copy first;
-          // missing/odd attr types leave hgeo on the source geometry.
-          try {
-            const skin = new THREE.BufferGeometry();
-            const p = pos as THREE.BufferAttribute;
-            const parr = new Float32Array(p.count * 3);
-            for (let i = 0; i < p.count; i += 1) {parr[i * 3] = p.getX(i); parr[i * 3 + 1] = p.getY(i); parr[i * 3 + 2] = p.getZ(i);}
-            skin.setAttribute('position', new THREE.BufferAttribute(parr, 3));
-            skin.setAttribute('skinIndex', sk.geometry.attributes.skinIndex);
-            skin.setAttribute('skinWeight', sk.geometry.attributes.skinWeight);
-            const w = mergeVertices(skin);
-            if (w.index) {w.computeVertexNormals(); hgeo = w;}
-          } catch { /* hull is cosmetic - a failed weld drops the rim, not the game */ }
-        }
-        const h = new THREE.SkinnedMesh(hgeo, this.hullMat);
-        h.bind(sk.skeleton, sk.bindMatrix);
-        // Non-identity source node transforms would offset the hull.
-        h.position.copy(sk.position); h.quaternion.copy(sk.quaternion); h.scale.copy(sk.scale);
-        h.renderOrder = 2;
-        h.frustumCulled = false;
-        (sk.parent ?? this.model).add(h);
-        this.hulls.push(h);
-      }
-      this.rebuildGunHulls(); // the held prop is part of the silhouette
-    }
-    if (this.hullMat && hex !== null) {this.hullMat.color.setHex(hex);}
-    for (const h of this.hulls) {h.visible = hex !== null;}
-    for (const h of this.gunHulls) {h.visible = hex !== null;}
+    };
   }
 
   setColliderVisible(visible: boolean, force = false): void {
