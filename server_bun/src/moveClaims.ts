@@ -182,7 +182,14 @@ export class MoveClaims {
       player.consecutiveRejects = 0;
       return true;
     }
-player.consecutiveRejects += 1;
+    return this.noteReject(playerId, player, dist, dt, speed, now);
+  }
+
+  // Reject bookkeeping: heartbeat, first-of-streak warn + correction,
+  // then force-accept past 10 so a fighting client resyncs instead of
+  // ping-ponging corrections forever.
+  private noteReject(playerId: string, player: PlayerState, dist: number, dt: number, speed: number, now: number): boolean {
+    player.consecutiveRejects += 1;
     this.h.hb('posrej');
     this.h.hbMax('posrejSpeed', speed);
     // Send correction on the first reject of a streak only — no flood.

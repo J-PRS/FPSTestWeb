@@ -141,21 +141,28 @@ export class AoeClaims {
     // them in the blast, but the beam has no paired `shot` claim. Apply the
     // tick directly (lag-comp'd, occluded, pin shove) — same ramp botAttack
     // uses, so a held beam on one player decays identically either side.
-    if (victim && !victim.isDead) {
-      const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * this.h.ddMult(player);
-      this.h.hb('aoe.beam.hit');
-      this.h.blast.splashOne({
-        shooterId: playerId, ping: player.ping, bot: Boolean(player.isBot), pos: msg.position,
-        lagMs: player.isBot ? 0 : renderLagOf(player, this.h.blast.lagBoundOf(playerId)),
-        lagMap: player.isBot ? undefined : player.clientStats?.renderLag,
-        lagBound: this.h.blast.lagBoundOf(playerId),
-        radius: stats.aoeRadius, baseDamage: dmg,
-        impulse: stats.knockbackForce, pull: stats.forceMode === 'pull',
-        label: 'LG beam hit', weapon: msg.weaponType,
-      }, victim.id, victim, false, dmg);
-    }
+    this.beamTickHit(playerId, player, msg, stats, victim, n);
     const scale = lgTickDamage(n) / LG_TICK_BASE;
     this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, Object.assign({}, stats, {aoeDamage: stats.aoeDamage * scale}), { weapon: msg.weaponType });
+  }
+
+  // The victim sits in excludeTargetId — projectile semantics would skip
+  // them in the blast, but the beam has no paired `shot` claim. Apply the
+  // tick directly (lag-comp'd, occluded, pin shove) — same ramp botAttack
+  // uses, so a held beam on one player decays identically either side.
+  private beamTickHit(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats, victim: PlayerState | null | undefined, n: number): void {
+    if (!victim || victim.isDead) {return;}
+    const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * this.h.ddMult(player);
+    this.h.hb('aoe.beam.hit');
+    this.h.blast.splashOne({
+      shooterId: playerId, ping: player.ping, bot: Boolean(player.isBot), pos: msg.position,
+      lagMs: player.isBot ? 0 : renderLagOf(player, this.h.blast.lagBoundOf(playerId)),
+      lagMap: player.isBot ? undefined : player.clientStats?.renderLag,
+      lagBound: this.h.blast.lagBoundOf(playerId),
+      radius: stats.aoeRadius, baseDamage: dmg,
+      impulse: stats.knockbackForce, pull: stats.forceMode === 'pull',
+      label: 'LG beam hit', weapon: msg.weaponType,
+    }, victim.id, victim, false, dmg);
   }
 
 }

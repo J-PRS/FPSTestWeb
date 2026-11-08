@@ -28,6 +28,10 @@ export class RoomNoticer {
     if (n.actorId === id || (this.seen.get(id) ?? 0) >= n.stamp) {return undefined;}
     this.seen.set(id, n.stamp);
     const mine = n.actorTeam !== undefined && n.actorTeam === team;
+    return this.reaction(n, mine);
+  }
+
+  private reaction(n: NonNullable<RoomNoticer['pending']>, mine: boolean): { kind: ChatterKind; actor: string; goal?: { x: number; y: number; z: number } } {
     // 'same' pins belong to the caller's squad (an enemy's radio isn't
     // your order); 'other' pins are for the OPPOSING side — a flag grab
     // pins the carrier for the defenders, not for the grabber's escort.

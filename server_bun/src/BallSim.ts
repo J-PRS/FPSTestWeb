@@ -379,23 +379,27 @@ export class BallSim {
       if (kind) {
         this.segment(b, kind);
       } else {
-        // No discontinuity this step — but silence itself desyncs a
-        // long flight: forced segments bound client divergence. The
-        // cadence is error-bounded, not fixed: replay drift scales with
-        // speed (enrage aim lead + contact-phase misses), so a fast
-        // ball gets stamped as soon as its worst-case drift could pass
-        // ~DIVERGENCE_BUDGET meters while a resting ball waits out the
-        // full floor. Kind 'segment' labels the heartbeat — the client's
-        // rubberband probe only treats fresh-anchor prediction-vs-truth
-        // as desync signal; labeling it 'bounce' drowned every resync
-        // in edge noise.
-        const rs = (this.resyncAcc.get(b.id) ?? 0) + TICK_DT;
-        const spd = dhypot3(b.vx, b.vy, b.vz);
-        const budget = b.enraged ? ENRAGED_DIVERGENCE_BUDGET_M : DIVERGENCE_BUDGET_M;
-        const interval = Math.min(RESYNC_INTERVAL, budget / Math.max(spd, 1));
-        if (rs >= interval) {this.segment(b, 'segment');}
-        else {this.resyncAcc.set(b.id, rs);}
+        this.resyncTick(b);
       }
     }
+  }
+
+  // No discontinuity this step — but silence itself desyncs a
+  // long flight: forced segments bound client divergence. The
+  // cadence is error-bounded, not fixed: replay drift scales with
+  // speed (enrage aim lead + contact-phase misses), so a fast
+  // ball gets stamped as soon as its worst-case drift could pass
+  // ~DIVERGENCE_BUDGET meters while a resting ball waits out the
+  // full floor. Kind 'segment' labels the heartbeat — the client's
+  // rubberband probe only treats fresh-anchor prediction-vs-truth
+  // as desync signal; labeling it 'bounce' drowned every resync
+  // in edge noise.
+  private resyncTick(b: SimBall): void {
+    const rs = (this.resyncAcc.get(b.id) ?? 0) + TICK_DT;
+    const spd = dhypot3(b.vx, b.vy, b.vz);
+    const budget = b.enraged ? ENRAGED_DIVERGENCE_BUDGET_M : DIVERGENCE_BUDGET_M;
+    const interval = Math.min(RESYNC_INTERVAL, budget / Math.max(spd, 1));
+    if (rs >= interval) {this.segment(b, 'segment');}
+    else {this.resyncAcc.set(b.id, rs);}
   }
 }

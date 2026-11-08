@@ -364,25 +364,7 @@ export class PlayerManager {
       return { killed: false, newHealth: target.health, newArmor: target.armor, endedStreak: 0 };
     }
 
-    // Perk damage resist — the join-declared table owns the modifier,
-    // the server applies it so the number can't be client-inflated.
-    let incoming = damage * (1 - effectiveResist(perkMods(target.perk), target.health, target.maxHealth));
-    // Hoard plating: flat −1 per `platingPer` held tokens PLUS, for the
-    // Plated perk, +1 per `hpPlating` current hp — heavies on a hoard
-    // shrug chip spam by design; the counter is burst. Per damage
-    // INSTANCE. Min 1 keeps hits registering (feedback/killfeed live).
-    const mods = perkMods(target.perk);
-    const plating = Math.floor((target.heldTokens ?? 0) / mods.platingPer)
-      + (mods.hpPlating > 0 ? Math.floor(target.health / mods.hpPlating) : 0);
-    incoming = Math.max(1, incoming - plating);
-    if (simNow() < target.shieldUntil) { incoming = incoming * 0.1; }
-    // Armor pool: absorbs armorAbsorb of the hit while it lasts, overflow
-    // leaks to health (100hp/100armor taking 100 → 80hp/20armor).
-    if (target.armor > 0) {
-      const soaked = Math.min(target.armor, incoming * POWERUP.armorAbsorb);
-      target.armor -= soaked;
-      incoming -= soaked;
-    }
+    const incoming = this.computeIncoming(target, damage);
     target.lastDamageAt = simMs(simNow()); // regenerator ramp resets on any hit that lands
     const preHp = target.health;
     target.health -= incoming;
@@ -412,6 +394,30 @@ target.deaths += 1;
     }
 
     return { killed: false, newHealth: target.health, newArmor: target.armor, endedStreak: 0 };
+  }
+
+  // Perk resist → hoard plating → timed shield → armor soak, in that
+  // order. Armor pool: absorbs armorAbsorb of the hit while it lasts,
+  // overflow leaks to health (100hp/100armor taking 100 → 80hp/20armor).
+  private computeIncoming(target: PlayerState, damage: number): number {
+    // Perk damage resist — the join-declared table owns the modifier,
+    // the server applies it so the number can't be client-inflated.
+    let incoming = damage * (1 - effectiveResist(perkMods(target.perk), target.health, target.maxHealth));
+    // Hoard plating: flat −1 per `platingPer` held tokens PLUS, for the
+    // Plated perk, +1 per `hpPlating` current hp — heavies on a hoard
+    // shrug chip spam by design; the counter is burst. Per damage
+    // INSTANCE. Min 1 keeps hits registering (feedback/killfeed live).
+    const mods = perkMods(target.perk);
+    const plating = Math.floor((target.heldTokens ?? 0) / mods.platingPer)
+      + (mods.hpPlating > 0 ? Math.floor(target.health / mods.hpPlating) : 0);
+    incoming = Math.max(1, incoming - plating);
+    if (simNow() < target.shieldUntil) { incoming = incoming * 0.1; }
+    if (target.armor > 0) {
+      const soaked = Math.min(target.armor, incoming * POWERUP.armorAbsorb);
+      target.armor -= soaked;
+      incoming -= soaked;
+    }
+    return incoming;
   }
 
   respawnPlayer(playerId: string): { position: Vec3; rotation: Rotation; armorClass: string } | null {

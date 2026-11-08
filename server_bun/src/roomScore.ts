@@ -67,29 +67,33 @@ export class RoomScore {
     }
     const spec = this.h.modeSpec;
     if (spec?.teams) {
-      // Pay for the corpse's threat: variant 3 elites and v2 tanks drop a
-      // burst, fodder still drops one (same scale curve the client uses).
-      const drops = [1, 2, 3, 3][variant] ?? 1;
-      // Loot drifts toward the kill shot — corpses fall where balls
-      // roam, so an unbiased spawn decays in dead corners; landing the
-      // gem partway to the shooter puts it on a path someone walks.
-      const killer = this.h.players.getPlayer(by);
-      const k = killer ? 0.45 : 0;
-      const dx = k * (killer!.position.x - pos.x), dz = k * (killer!.position.z - pos.z);
-      for (let i = 0; i < drops; i += 1) {
-        const gx2 = pos.x + dx + (this.h.rng() - 0.5) * 2;
-        const gz2 = pos.z + dz + (this.h.rng() - 0.5) * 2;
-        const gy2 = (this.h.field ? hmHeight(this.h.field, gx2, gz2) : pos.y) + 0.5;
-        // Launch from the corpse with real velocity so the server's tumble
-        // owns the arc — a ground-level zero-vel spawn made clients invent it.
-        const launch = { x: dx * 2 + (this.h.rng() - 0.5) * 3, y: 4 + this.h.rng() * 2, z: dz * 2 + (this.h.rng() - 0.5) * 3 };
-        this.h.pickups?.spawn({ x: pos.x, y: pos.y + 0.5, z: pos.z }, this.h.mode === 'headhunt' ? 'token' : 'gem', 0, 1, undefined, 0, launch);
-        this.h.influence.splat({ x: gx2, y: gy2, z: gz2 }, 'opportunity', 0.5);
-      }
+      this.teamDrops(by, pos, variant);
       return;
     }
     if (!spec?.ffa || spec.ptsCreatureKill <= 0 || !this.h.players.getPlayer(by)) {return;}
     this.awardFfa(by, spec.ptsCreatureKill);
+  }
+
+  // Pay for the corpse's threat: variant 3 elites and v2 tanks drop a
+  // burst, fodder still drops one (same scale curve the client uses).
+  private teamDrops(by: string, pos: Vec3, variant: number): void {
+    const drops = [1, 2, 3, 3][variant] ?? 1;
+    // Loot drifts toward the kill shot — corpses fall where balls
+    // roam, so an unbiased spawn decays in dead corners; landing the
+    // gem partway to the shooter puts it on a path someone walks.
+    const killer = this.h.players.getPlayer(by);
+    const k = killer ? 0.45 : 0;
+    const dx = k * (killer!.position.x - pos.x), dz = k * (killer!.position.z - pos.z);
+    for (let i = 0; i < drops; i += 1) {
+      const gx2 = pos.x + dx + (this.h.rng() - 0.5) * 2;
+      const gz2 = pos.z + dz + (this.h.rng() - 0.5) * 2;
+      const gy2 = (this.h.field ? hmHeight(this.h.field, gx2, gz2) : pos.y) + 0.5;
+      // Launch from the corpse with real velocity so the server's tumble
+      // owns the arc — a ground-level zero-vel spawn made clients invent it.
+      const launch = { x: dx * 2 + (this.h.rng() - 0.5) * 3, y: 4 + this.h.rng() * 2, z: dz * 2 + (this.h.rng() - 0.5) * 3 };
+      this.h.pickups?.spawn({ x: pos.x, y: pos.y + 0.5, z: pos.z }, this.h.mode === 'headhunt' ? 'token' : 'gem', 0, 1, undefined, 0, launch);
+      this.h.influence.splat({ x: gx2, y: gy2, z: gz2 }, 'opportunity', 0.5);
+    }
   }
 
   /** Powerup pickup resolution — buffs are server-owned so a client can
