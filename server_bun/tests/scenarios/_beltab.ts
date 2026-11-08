@@ -54,8 +54,21 @@ for (const p of room.players.getAllPlayers().values()) {
 
 const start = Date.now();
 let t = 0;
+// Kills bank per match: endCleanup() calls resetStats() on each
+// startNext, so a bot's p.kills drops to 0 mid-run. Bank the previous
+// count on any drop so the item tally is cumulative across matches.
+const lastK = new Map<string, number>();
+const bankK = new Map<string, number>();
+const bankDeaths = new Map<string, number>();
+const lastD = new Map<string, number>();
 for (; Date.now() - start < WALL * 1000; t += 1) {
   step(room, 1);
+  for (const p of room.players.getAllPlayers().values()) {
+    const lk = lastK.get(p.id) ?? 0, ld = lastD.get(p.id) ?? 0;
+    if (p.kills < lk) {bankK.set(p.id, (bankK.get(p.id) ?? 0) + lk);}
+    if (p.deaths < ld) {bankDeaths.set(p.id, (bankDeaths.get(p.id) ?? 0) + ld);}
+    lastK.set(p.id, p.kills); lastD.set(p.id, p.deaths);
+  }
   if (t % 60 === 59) {
     const ps = [...room.players.getAllPlayers().values()];
     const a = ps.filter((p) => p.team === 'alpha'), b = ps.filter((p) => p.team === 'bravo');
@@ -80,6 +93,6 @@ for (const p of ps) {
 console.log(`BELT_TEAM=${BELT_TEAM} sim=${(t * 0.05).toFixed(0)}s wall=${((Date.now() - start) / 1000).toFixed(0)}s (belt side's kill advantage = the lever's real value)`);
 if (itemOf.size) {
   const tally = new Map<string, { k: number; d: number }>();
-  for (const p of ps) {const it = itemOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += p.kills; e.d += p.deaths; tally.set(it, e);}
+  for (const p of ps) {const it = itemOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += (bankK.get(p.id) ?? 0) + p.kills; e.d += (bankDeaths.get(p.id) ?? 0) + p.deaths; tally.set(it, e);}
   console.log('ITEM TALLY:', [...tally.entries()].sort((a, b) => b[1].k - a[1].k).map(([it, e]) => `${it}=${e.k}k/${e.d}d`).join(' '));
 }

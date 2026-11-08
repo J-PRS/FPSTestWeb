@@ -31,8 +31,16 @@ for (const p of room.players.getAllPlayers().values()) {
 
 const start = Date.now();
 let t = 0;
+const lastK = new Map<string, number>(), bankK = new Map<string, number>();
+const lastD = new Map<string, number>(), bankD = new Map<string, number>();
 for (; Date.now() - start < WALL * 1000; t += 1) {
   step(room, 1);
+  for (const p of room.players.getAllPlayers().values()) {
+    const lk = lastK.get(p.id) ?? 0, ld = lastD.get(p.id) ?? 0;
+    if (p.kills < lk) {bankK.set(p.id, (bankK.get(p.id) ?? 0) + lk);}
+    if (p.deaths < ld) {bankD.set(p.id, (bankD.get(p.id) ?? 0) + ld);}
+    lastK.set(p.id, p.kills); lastD.set(p.id, p.deaths);
+  }
   if (t % 60 === 59) {
     const ps = [...room.players.getAllPlayers().values()];
     const a = ps.filter((p) => p.team === 'alpha'), b = ps.filter((p) => p.team === 'bravo');
@@ -47,6 +55,6 @@ for (const p of room.players.getAllPlayers().values()) {
 console.log(`SKILL_TEAM=${SKILL_TEAM} sim=${(t * 0.05).toFixed(0)}s wall=${((Date.now() - start) / 1000).toFixed(0)}s`);
 if (skillOf.size) {
   const tally = new Map<string, { k: number; d: number }>();
-  for (const p of room.players.getAllPlayers().values()) {const it = skillOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += p.kills; e.d += p.deaths; tally.set(it, e);}
+  for (const p of room.players.getAllPlayers().values()) {const it = skillOf.get(p.id)!; const e = tally.get(it) ?? { k: 0, d: 0 }; e.k += (bankK.get(p.id) ?? 0) + p.kills; e.d += (bankD.get(p.id) ?? 0) + p.deaths; tally.set(it, e);}
   console.log('SKILL TALLY:', [...tally.entries()].sort((a, b) => b[1].k - a[1].k).map(([it, e]) => `${it}=${e.k}k/${e.d}d`).join(' '));
 }
