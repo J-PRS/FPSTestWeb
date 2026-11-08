@@ -57,28 +57,28 @@ export function botClassForLoadout(lo: BotLoadout): ArmorClass {
 
 export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Railgun], belt: [WeaponType.ImpactGrenade], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Railgun, WeaponType.FastDiscLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.Concussion], side: [WeaponType.Revolver] },
   },  // chaser - light frame, so no medium-locked PlasmaGun
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar, WeaponType.Howitzer, WeaponType.GrenadeLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Basilisk, WeaponType.GrenadeLauncher], far: [WeaponType.Mortar, WeaponType.Howitzer, WeaponType.GrenadeLauncher], belt: [WeaponType.ClusterBomb, WeaponType.EMP], side: [WeaponType.Revolver] },
   },  // siege
   { perk: 'armored',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.Howitzer, WeaponType.MissileLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb], side: [WeaponType.Pistol] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaCannon], far: [WeaponType.Mortar, WeaponType.Howitzer, WeaponType.MissileLauncher, WeaponType.MRVLauncher], belt: [WeaponType.ClusterBomb, WeaponType.EMP], side: [WeaponType.Pistol, WeaponType.Shotgun] },
   },  // anchor - heavies can't shoulder medium-only Cannon either
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc, WeaponType.GrenadeLauncher], belt: [WeaponType.Implodisc, WeaponType.Javelin, WeaponType.Hook], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.PlasmaGun, WeaponType.Cannon, WeaponType.Gonne], far: [WeaponType.Disc, WeaponType.GrenadeLauncher], belt: [WeaponType.Implodisc, WeaponType.Javelin, WeaponType.Hook, WeaponType.ProxyGrenade], side: [WeaponType.Revolver, WeaponType.Shocklance] },
   },  // skirmisher
   { perk: 'lifesteal',    near: WeaponType.Sprinkler, mid: WeaponType.Chaingun, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Flak], mid: [WeaponType.PlasmaGun, WeaponType.GrenadeLauncher], far: [WeaponType.BoltLauncher], belt: [WeaponType.ImpactGrenade, WeaponType.ClusterBomb, WeaponType.SatchelCharge], side: [WeaponType.Revolver] },
   },  // hose - area denial; sprinkler is a <15m weapon, not mid
   { perk: 'armored',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver,
-    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.Howitzer], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol] },
+    alts: { near: [WeaponType.Chaingun], mid: [WeaponType.PlasmaCannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Mortar, WeaponType.Howitzer], belt: [WeaponType.ClusterBomb, WeaponType.MRVLauncher], side: [WeaponType.Pistol, WeaponType.Shotgun] },
   },  // bruiser - big slugs (Railgun is light-frame gear, Cannon medium)
   { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.BoltLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Chaingun, WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.Disc], belt: [WeaponType.Grenade, WeaponType.ClusterBomb], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Chaingun, WeaponType.Shotgun], mid: [WeaponType.PlasmaGun], far: [WeaponType.Disc], belt: [WeaponType.Grenade, WeaponType.ClusterBomb, WeaponType.BeltDisc], side: [WeaponType.Revolver, WeaponType.Shocklance] },
   },  // skirmisher - shove tools; Flak forces medium, so no heavy RL
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol,
-    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Howitzer, WeaponType.MissileLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun], side: [WeaponType.Revolver] },
+    alts: { near: [WeaponType.Shotgun], mid: [WeaponType.Cannon, WeaponType.Bombard, WeaponType.Basilisk], far: [WeaponType.Howitzer, WeaponType.MissileLauncher, WeaponType.BoltLauncher], belt: [WeaponType.MRVLauncher, WeaponType.RemoteRailgun, WeaponType.BeltSticky], side: [WeaponType.Revolver] },
   },  // artillery
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Lightning, far: WeaponType.Railgun,       belt: WeaponType.Implodisc,      side: WeaponType.Pistol,
     alts: { near: [WeaponType.Flak], mid: [WeaponType.Cannon, WeaponType.Gonne, WeaponType.Disc], far: [WeaponType.BoltLauncher], belt: [WeaponType.Javelin], side: [WeaponType.Revolver] },

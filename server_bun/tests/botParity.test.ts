@@ -42,7 +42,7 @@ for (const alts of Object.values(WILDCARD_SLOTS)) {for (const w of alts) {botWea
 for (const alts of BOT_ALT_SLOTS) {for (const list of Object.values(alts)) {for (const w of list) {botWeapons.add(w);}}}
 
 // Deploy kinds the brain's deployKind() table can emit + deployForce A/B.
-const BOT_DEPLOY_KINDS = new Set(['turret', 'mortar', 'cgturret', 'loiter', 'spider', 'jammer', 'motion', 'mine', 'drone', 'station']);
+const BOT_DEPLOY_KINDS = new Set(['turret', 'mortar', 'cgturret', 'loiter', 'spider', 'jammer', 'motion', 'mine', 'drone', 'station', 'beacon', 'tether', 'pad', 'watersphere', 'shield']);
 
 // Skills both rosters assign (per-class pools in botRoster/TeamBots).
 const BOT_SKILLS = new Set(['blink', 'dash', 'slam', 'warp', 'bounce', 'cloak', 'shield', 'medkit']);
@@ -51,11 +51,8 @@ const BOT_SKILLS = new Set(['blink', 'dash', 'slam', 'warp', 'bounce', 'cloak', 
 // Every human-only item, documented. A CI failure on this list means either
 // a new human item shipped bots can't reach (add it) or a gap closed (drop it).
 const KNOWN_GAPS = {
-  weapons: [
-    'Concussion', 'EMP', 'ProxyGrenade', 'SatchelCharge', 'Shocklance',
-    'BeltDisc', 'BeltSticky', 'FastDiscLauncher',
-  ],
-  deployKinds: ['beacon', 'tether', 'pad', 'watersphere', 'nugget', 'generator', 'sensor', 'baseturret', 'shield'],
+  weapons: [],
+  deployKinds: ['nugget', 'generator', 'sensor', 'baseturret'],
   perks: [] as string[],
   skills: [] as string[],
 };

@@ -322,7 +322,12 @@ function deployKind(roll: number, healthFrac: number): string {
   if (roll < 0.83) {return 'spider';} // the ground scuttler - cheap chase, air is the counter
   if (roll < 0.87) {return 'jammer';} // bubble hides its side from the pulse mast
   if (roll < 0.92) {return 'motion';} // ring sensor - reads movement through cloak
-  if (roll < 0.96) {return 'mine';}
+  if (roll < 0.92) {return 'mine';}
+  if (roll < 0.94) {return 'beacon';}
+  if (roll < 0.96) {return 'tether';}
+  if (roll < 0.97) {return 'pad';}
+  if (roll < 0.98) {return 'watersphere';}
+  if (roll < 0.99) {return 'shield';}
   return 'drone';
 }
 
