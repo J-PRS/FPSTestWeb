@@ -5,7 +5,7 @@ import { Explosion } from '../../effects/explosion.js';
 import { screenShake } from '../../effects/screenShake.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import {
-  GRENADE_CONFIG, BELT_DISC_CONFIG, BELT_STICKY_CONFIG,
+  GRENADE_CONFIG, BELT_DISC_CONFIG, BELT_DISC_PUSH_CONFIG, BELT_STICKY_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
   ARMORNADE_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG,
   CONC_CONFIG, HOOK_CONFIG, EMP_CONFIG,
@@ -230,6 +230,7 @@ function freshFireArgs(deps: CombatDeps): FireArgs {
 // launcher's glue bomb — same fuse, same chain rule, hand-thrown arc.
 const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
   disc: BELT_DISC_CONFIG,
+  pushdisc: BELT_DISC_PUSH_CONFIG,
   grenade: GRENADE_CONFIG,
   cluster: CLUSTER_CONFIG,
   javelin: JAVELIN_CONFIG,

@@ -73,6 +73,7 @@ export class ViewModel {
   /** Sliding-barrel kick (howitzer): slideKickT counts 1→0, slideRef is
    *  the 'slide' child of the active weapon (set in vmKick). */
   slideKickT = 0;
+  slideDwellT = 0; // seconds held at full recoil travel before ride-out
   slideRef: THREE.Object3D | null = null;
   // spinVel cap lives in vmKick.ts (SPIN_MAX) - it owns the spool.
   activeWeapon = 0; // public - the switch envelope rewrites it at the dip
@@ -214,11 +215,11 @@ export class ViewModel {
   kick(strength = 1): void {
     kickF(this, strength);
     if (this.activeWeapon === WeaponType.Chaingun) {this.startBarrelKick();}
-    if (this.activeWeapon === WeaponType.Disc || this.activeWeapon === WeaponType.Implodisc) {
+    if (this.activeWeapon === WeaponType.Disc || this.activeWeapon === WeaponType.Implodisc || this.activeWeapon === WeaponType.FastDiscLauncher) {
       // Spinfusor fake: the chambered disc IS the projectile - it's gone
       // the instant the shot breaks. The NEXT disc slides forward out of
       // the breech into the slit during the refire gap.
-      if (!this.discAmmo) {this.discAmmo = this.weapons.get(WeaponType.Disc)?.getObjectByName('discAmmo') ?? null;}
+      if (!this.discAmmo) {this.discAmmo = this.weapons.get(this.activeWeapon)?.getObjectByName('discAmmo') ?? null;}
       if (this.discAmmo) { this.discAmmo.visible = false; this.discT = 0; }
     }
     if (vmTypeOf(this.activeWeapon) === WeaponType.BoltLauncher) {
@@ -519,9 +520,16 @@ export class ViewModel {
       if (s) {s.position.z = s.userData.baseZ as number; this.slideRef = null;}
       return;
     }
-    this.slideKickT = Math.max(0, this.slideKickT - dt * (this.slideKickT > 0.6 ? 16 : 1.4));
+    // Hold the slam: dwell ~0.3s at full travel so the retract registers,
+    // then the slow hydraulic ride-out (0.3/s) on the reload clock.
+    if (this.slideDwellT > 0) {
+      this.slideDwellT -= dt;
+      s.position.z = (s.userData.baseZ as number) + 0.78;
+      return;
+    }
+    this.slideKickT = Math.max(0, this.slideKickT - dt * 0.3);
     const k = this.slideKickT;
-    s.position.z = (s.userData.baseZ as number) + k * k * 0.14; // in on fire, back out slow
+    s.position.z = (s.userData.baseZ as number) + k * k * 0.78; // rides back until the muzzle rings nearly kiss the receiver
   }
 
   /** Chaingun cluster tick - spin decay (~0.7s coast after firing stops)

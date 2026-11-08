@@ -133,6 +133,9 @@ export interface ProjectileConfig {
    *  (lightning); 'splash' = droplets + mist (sprinkler hose);
    *  'punch' = melee puff. Unset = the shared powder recipe. */
   vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak' | 'shellburst';
+  /** Ground ring spawns AT the AOE edge and thins+fades out instead of
+   *  expanding past the damage line (the honest-read blast variant). */
+  staticRing?: boolean;
   /** Terrain/structure hits: the shell stays planted at the contact point
    *  for N seconds, then shrinks away - a javelin quivering in the dirt.
    *  Combat resolution is unchanged (impact still reports immediately). */

@@ -92,6 +92,9 @@ export const HOWITZER_CONFIG: ProjectileConfig = {
   ribbonColor: 0xFF_88_33,
   ribbonWidth: 1.4,
   damageColor: '#ffaa33',
+  // Fat artillery shell: the shared row's 0.35, not the mortar's 0.3
+  // inherited through the spread (the drift the registry test caught).
+  bodyRadius: WEAPONS[45].bodyRadius,
   vfx: 'shellburst', // cannon-family blast: dirty flash + smoke + iron chips
   speed: WEAPONS[45].speed,
   explosionRadius: WEAPONS[45].aoeRadius * AOE_VFX_SCALE,

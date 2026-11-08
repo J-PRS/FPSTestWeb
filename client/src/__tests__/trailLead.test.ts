@@ -3,14 +3,13 @@ import { TRAIL_LEAD_FRAMES, trailEmitLead } from '../effects/trailLead.js';
 
 // Regression cover for the "smoke puff ahead of the projectile" bug: the
 // lead used to be a fixed 2 frames of the RENDERED delta, which overshot
-// and was inflated by any renderOffset correction blend.
+// and was inflated by any renderOffset correction blend. Current design
+// (568a728c) is ZERO lead: any positive value puts puffs ahead of the
+// mesh on sparse trails, the smoke-ahead bug now lives behind this pin.
 describe('trailEmitLead', (): void => {
-  it('leads by half a frame of true travel, not two', (): void => {
-    expect(TRAIL_LEAD_FRAMES).toBe(0.5);
-    const [x, y, z] = trailEmitLead(3, 4, 0, 250, 1 / 60); // |d| = 5
-    expect(x).toBeCloseTo(3 * 0.5, 6);
-    expect(y).toBeCloseTo(4 * 0.5, 6);
-    expect(z).toBe(0);
+  it('uses zero lead, no puff ahead of the shell', (): void => {
+    expect(TRAIL_LEAD_FRAMES).toBe(0);
+    expect(trailEmitLead(3, 4, 0, 250, 1 / 60)).toEqual([0, 0, 0]);
   });
 
   it('never leads past the overshoot cap on a hitch/teleport frame', (): void => {

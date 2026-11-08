@@ -3,7 +3,7 @@ import { WeaponType } from '../../../../shared/weapons.js';
 import { getMuzzleFlashTexture } from '../../effects/glowTexture.js';
 import { mkPlasmaCannon, mkPlasmaGun, mkSprinkler, mkRailgun, mkLightningGun, mkShocklance } from './weaponsGeoEnergy.js';
 import { mkPistol, mkRevolver, mkRepair, mkBlaster } from './weaponsGeoSidearm.js';
-import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv, mkBombard, mkGonne, mkBasilisk, mkRocketLauncher, mkHowitzer } from './weaponsGeoBallistic.js';
+import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv, mkBombard, mkGonne, mkBasilisk, mkRocketLauncher, mkHowitzer, mkFastDisc } from './weaponsGeoBallistic.js';
 import { darkMat } from './weaponKit.js';
 
 // Procedural weapon geometry — every viewmodel gun built from primitives.
@@ -41,6 +41,7 @@ export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.Gonne, mkGonne],
   [WeaponType.Basilisk, mkBasilisk],
   [WeaponType.Howitzer, mkHowitzer],
+  [WeaponType.FastDiscLauncher, mkFastDisc],
   [WeaponType.Shocklance, mkShocklance],
   [WeaponType.Blaster, mkBlaster],
   // Heal beam wears the repair tool's chassis — same hand-held welder

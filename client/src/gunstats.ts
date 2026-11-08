@@ -7,6 +7,7 @@ import { GRAVITY } from '../../shared/movement.js';
 import { WeaponType, WEAPON_FIRE_INTERVAL_S, BELT_THROW_WEAPONS, HEALBEAM_PER_TICK } from '../../shared/weapons.js';
 import { SLOT_DEFS } from './weapons.js';
 import { LIGHT_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.js';
+import { DEPLOY_ITEMS } from '../../shared/deployItems.js';
 import type { WeaponStats } from '../../shared/weaponTable.js';
 import pkg from '../package.json';
 const RATE = WEAPON_FIRE_INTERVAL_S as Record<number, number | undefined>;
@@ -36,6 +37,7 @@ const num = (v: number | undefined): number => v ?? 0;
 // Table-only display names for enum keys that read ambiguous short.
 const NAME_OVERRIDES = new Map<number, string>([
   [WeaponType.Disc, 'Disc Launcher'],
+  [WeaponType.FastDiscLauncher, 'Fast Disc'],
   [WeaponType.Sticky, 'Sticky Gun'],
 ]);
 
@@ -63,21 +65,24 @@ const COLS: Col[] = [
       const b = WEAPONS[WeaponType.MRVBomblet]; // only MRV clusters today
       return b ? `${b.directDamage}×${s.cluster.count}` : s.directDamage;
     }
-    return s.burst ? `${s.directDamage}×${s.burst}` : s.directDamage;
+    if (s.burst) {return `${s.directDamage}×${s.burst}`;}
+    // Cone-sweep weapons carry their damage on the aoe field — melee's
+    // 55 and slam's 35 would otherwise read as zero-damage entries.
+    return s.directDamage || s.aoeDamage;
   },
   val: (_w, s): number => {
     if (s.cluster) {
       const b = WEAPONS[WeaponType.MRVBomblet];
       return b ? b.directDamage * s.cluster.count : s.directDamage;
     }
-    return s.directDamage * (s.burst ?? 1);
+    return (s.directDamage || s.aoeDamage) * (s.burst ?? 1);
   } },
   { key: 'rate', label: 'tbs s', betterHigh: false, get: (wt): string | number => {
-    const r = RATE[wt] ?? 0;
+    const r = DEP_META.get(wt)?.int ?? RATE[wt] ?? 0;
     // * = energy-fed: the jet tank is the magazine, cadence isn't the limit
     if (wt === WeaponType.Blaster) {return `<span title="energy-fed">${r}*</span>`;}
     return r;
-  }, val: (wt): number => RATE[wt] ?? 0 },
+  }, val: (wt): number => DEP_META.get(wt)?.int ?? RATE[wt] ?? 0 },
   { key: 'spd', label: 'm/s', get: (_w, s): number => s.speed },
   { key: 'ar', label: 'aoe m', get: (_w, s): number => s.aoeRadius },
   { key: 'wt', label: 'id', get: (wt): number => wt, hidden: true },
@@ -98,7 +103,10 @@ const COLS: Col[] = [
   // Range in m. Flat shots: speed × ttl. Gravity shells: the 45° ballistic
   // max v²/g, but if the shell would still be aloft at ttl the lifetime
   // binds first; pick the arc that lands exactly at ttl instead.
-  { key: 'rng', label: 'range', get: (_w, s): number => {
+  { key: 'rng', label: 'range', get: (wt, s): number => {
+    // Deployables: the acquire envelope, not a ballistic reach.
+    const dep = DEP_META.get(wt);
+    if (dep) {return dep.range ?? 0;}
     const v = s.speed, ttl = num(s.maxLifetime);
     if (!v || !ttl) {return 0;}
     if (!s.gravity) {return Math.round(v * ttl);}
@@ -111,12 +119,12 @@ const COLS: Col[] = [
   { key: 'grav', label: 'grav', get: (_w, s): string => flag(s.gravity) },
   { key: 'bnc', label: 'bounce', get: (_w, s): string => flag(s.terrainBounce) },
   { key: 'dps', label: 'dps', get: (wt, s): number => {
-    const r = RATE[wt];
+    const r = DEP_META.get(wt)?.int ?? RATE[wt];
     if (!r) {return 0;}
     // Same payload convention as dmg: cluster = bomblets, burst = pellets.
     const payload = s.cluster
       ? (WEAPONS[WeaponType.MRVBomblet]?.directDamage ?? s.directDamage) * s.cluster.count
-      : s.directDamage * (s.burst ?? 1);
+      : (s.directDamage || s.aoeDamage) * (s.burst ?? 1);
     return Math.round(payload / r);
   } },
 ];
@@ -126,9 +134,35 @@ const COLS: Col[] = [
 // a stale copied list once put Sprinkler & co in "other".
 const SLOT_WTS = new Set(SLOT_DEFS.map((d): number => d.weaponType));
 
-const ALL_ROWS = Object.entries(WEAPONS)
-  .map(([k, s]): [number, WeaponStats] => [Number(k), s])
-  .filter(([wt]): boolean => WeaponType[wt] !== undefined);
+// Deployables aren't WeaponType rows — they live in DEPLOY_ITEMS — but
+// their numbers fit the grid where a column has a real meaning: dmg is
+// per-shot/blast, 'tbs s' is their fireInterval, 'range' is the acquire
+// envelope, 'ttl' the plant's server lifetime. Columns with no honest
+// read (muzzle speed for a planted mine, grav/bounce) stay blank.
+// Fake ids live past the WeaponType space so class/belt/slot filters
+// never claim them.
+const DEP_META = new Map<number, { int?: number; range?: number }>();
+const DEPLOY_ROWS: [number, WeaponStats][] = Object.values(DEPLOY_ITEMS).map((d, i): [number, WeaponStats] => {
+  const wt = 9000 + i;
+  NAME_OVERRIDES.set(wt, d.label);
+  DEP_META.set(wt, { int: d.fireInterval, range: d.range });
+  return [wt, {
+    directDamage: d.damage ?? d.blastDamage ?? 0,
+    aoeDamage: d.blastDamage ?? 0,
+    aoeRadius: d.blastRadius ?? d.shieldRadius ?? d.waterRadius ?? d.tetherRadius ?? d.triggerDist ?? 0,
+    knockbackForce: d.knockback ?? 0,
+    speed: d.projSpeed ?? 0,
+    bodyRadius: d.bodyR,
+    maxLifetime: d.ttlS || undefined,
+  } as WeaponStats];
+});
+
+const ALL_ROWS: [number, WeaponStats][] = [
+  ...Object.entries(WEAPONS)
+    .map(([k, s]): [number, WeaponStats] => [Number(k), s])
+    .filter(([wt]): boolean => WeaponType[wt] !== undefined),
+  ...DEPLOY_ROWS,
+];
 
 type Filter = 'all' | 'weapon' | 'primary' | 'sidearm' | 'belt' | 'other';
 const saved = localStorage.getItem('gunstats.filter') as Filter | null;
@@ -138,7 +172,7 @@ const rowsFor = (f: Filter): [number, WeaponStats][] => {
   if (f === 'primary') {return ALL_ROWS.filter(([wt, s]): boolean => SLOT_WTS.has(wt) && s.sidearm !== true);}
   if (f === 'sidearm') {return ALL_ROWS.filter(([, s]): boolean => s.sidearm === true);}
   if (f === 'belt') {return ALL_ROWS.filter(([wt]): boolean => BELT_THROW_WEAPONS.has(wt));}
-  if (f === 'other') {return ALL_ROWS.filter(([wt, s]): boolean => !SLOT_WTS.has(wt) && s.beltThrow !== true && s.sidearm !== true);}
+  if (f === 'other') {return ALL_ROWS.filter(([wt, s]): boolean => !SLOT_WTS.has(wt) && !BELT_THROW_WEAPONS.has(wt) && s.sidearm !== true);}
   return ALL_ROWS;
 };
 

@@ -31,6 +31,7 @@ import { BOMBARD_CONFIG } from './bombardConfig.js';
 import { GONNE_CONFIG } from './gonneConfig.js';
 import { BASILISK_CONFIG } from './basiliskConfig.js';
 import { ROCKET_CONFIG } from './rocketConfig.js';
+import { FAST_DISC_CONFIG } from './fastDiscConfig.js';
 import { REPAIR_CONFIG } from './repairConfig.js';
 import { SHOCKLANCE_CONFIG } from './shocklanceConfig.js';
 import { HEALBEAM_CONFIG } from './healbeamConfig.js';
@@ -39,7 +40,7 @@ import type { ProjectileConfig } from './types.js';
 export type { ProjectileConfig } from './types.js';
 export { Projectile } from './Projectile.js';
 export { BOLT_CONFIG } from './boltConfig.js';
-export { DISC_CONFIG, BELT_DISC_CONFIG } from './discConfig.js';
+export { DISC_CONFIG, BELT_DISC_CONFIG, BELT_DISC_PUSH_CONFIG } from './discConfig.js';
 export { GRENADE_CONFIG } from './grenadeConfig.js';
 export { CHAINGUN_CONFIG } from './chaingunConfig.js';
 export { MORTAR_CONFIG, HOWITZER_CONFIG } from './mortarConfig.js';
@@ -70,6 +71,7 @@ export { BOMBARD_CONFIG } from './bombardConfig.js';
 export { GONNE_CONFIG } from './gonneConfig.js';
 export { BASILISK_CONFIG } from './basiliskConfig.js';
 export { ROCKET_CONFIG } from './rocketConfig.js';
+export { FAST_DISC_CONFIG } from './fastDiscConfig.js';
 export { REPAIR_CONFIG } from './repairConfig.js';
 export { SHOCKLANCE_CONFIG } from './shocklanceConfig.js';
 export { HEALBEAM_CONFIG } from './healbeamConfig.js';
@@ -77,7 +79,7 @@ export { HEALBEAM_CONFIG } from './healbeamConfig.js';
 
 
 
-export const WEAPON_CONFIGS: ProjectileConfig[] = [BOLT_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, BELT_DISC_PUSH_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, PLASMAGUN_CONFIG, REMOTE_RAILGUN_CONFIG, SPRINKLER_CONFIG, ARMORNADE_CONFIG, MRV_CONFIG, MRV_BOMBLET_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG, CONC_CONFIG, BOMBARD_CONFIG, BELT_STICKY_CONFIG, HOOK_CONFIG, EMP_CONFIG, BLASTER_CONFIG, GONNE_CONFIG, BASILISK_CONFIG, ROCKET_CONFIG, REPAIR_CONFIG, SHOCKLANCE_CONFIG, HEALBEAM_CONFIG, HOWITZER_CONFIG];
+export const WEAPON_CONFIGS: ProjectileConfig[] = [BOLT_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, BELT_DISC_PUSH_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, PLASMAGUN_CONFIG, REMOTE_RAILGUN_CONFIG, SPRINKLER_CONFIG, ARMORNADE_CONFIG, MRV_CONFIG, MRV_BOMBLET_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG, CONC_CONFIG, BOMBARD_CONFIG, BELT_STICKY_CONFIG, HOOK_CONFIG, EMP_CONFIG, BLASTER_CONFIG, GONNE_CONFIG, BASILISK_CONFIG, ROCKET_CONFIG, REPAIR_CONFIG, SHOCKLANCE_CONFIG, HEALBEAM_CONFIG, HOWITZER_CONFIG, FAST_DISC_CONFIG];
 
 // Slot order lives in ../weapons.ts (SLOT_DEFS) — index IS the wid there.
 // WEAPON_CONFIGS stays weaponType-keyed (find-by-id) and includes belt items.

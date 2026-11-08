@@ -126,7 +126,9 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.Basilisk, CANNON_RATE, 1.4),
   // Rocket Launcher - the universal flat rocket: bolt stats minus
   // gravity, every class fields it. Appended last.
-  def(WeaponType.RocketLauncher, BOLT_FIRE_RATE, 1),
+  // Fast Disc Launcher - the flat 130 m/s spinfusor, benches the universal
+  // rocket (enum/row/config kept for a later role).
+  def(WeaponType.FastDiscLauncher, BOLT_FIRE_RATE, 1),
   // Howitzer - siege artillery: 5-charge drum, violent recoil kick.
   // Appended last; never reorder shipped entries.
   def(WeaponType.Howitzer, 3, 2.4),

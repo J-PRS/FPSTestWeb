@@ -38,10 +38,16 @@ export function kickF(v: ViewModel, strength = 1): void {
     if (v.activeWeapon === WeaponType.Chaingun) {
       v.spinVel = Math.min(v.spinVel + strength * 140, SPIN_MAX);
     }
-    // Sliding barrel (howitzer): snap the front tube back into the
-    // receiver; the update envelope re-extends it on the reload clock.
-    const slide = v.weapons.get(v.activeWeapon)?.getObjectByName('barrels');
-    if (slide) { v.slideKickT = 1; v.slideRef = slide; }
+    // Sliding barrel (howitzer ONLY): snap the front tube back into the
+    // receiver. Chaingun's spin cluster shares the 'barrels' node name -
+    // arming the slide on it would fight the spin envelope.
+    if (v.activeWeapon === WeaponType.Howitzer) {
+      const slide = v.weapons.get(v.activeWeapon)?.getObjectByName('barrels');
+      if (slide) {
+        v.slideKickT = 1; v.slideDwellT = 0.3; v.slideRef = slide;
+        if (slide.userData.baseZ === undefined) {slide.userData.baseZ = slide.position.z;}
+      }
+    }
     v.flashMat.color.setHex(f.color);
     v.flashT = FLASH_LIFE * f.life;
     v.flashLifeScale = f.life;

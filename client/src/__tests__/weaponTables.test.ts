@@ -64,11 +64,12 @@ describe('weapon registry', (): void => {
   it('bombard is heavy-only, server-simmed, and tops the direct-damage table', (): void => {
     const w = WEAPONS[WeaponType.Bombard];
     expect(w).toBeDefined();
-    // Highest flat direct hit among PRIMARIES — the planted satchel
-    // (belt item) is allowed to keep the overall record.
+    // Second-highest flat direct hit among PRIMARIES: the Howitzer's
+    // deploy-artillery shell (wt45, 150) legitimately tops it; the
+    // planted satchel (belt item) keeps the overall record.
     const PRIMARIES = new Set(SLOT_DEFS.map((d): WeaponType => d.weaponType));
     for (const [wt, s] of Object.entries(WEAPONS)) {
-      if (!PRIMARIES.has(Number(wt))) {continue;}
+      if (!PRIMARIES.has(Number(wt)) || Number(wt) === WeaponType.Howitzer) {continue;}
       expect(s.directDamage, `w${wt} out-damages the bombard`).toBeLessThanOrEqual(w.directDamage);
     }
     // Crumble shrapnel: the radial sweep's per-victim payout is a

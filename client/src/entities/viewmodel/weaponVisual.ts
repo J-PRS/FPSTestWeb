@@ -19,6 +19,7 @@ const BOLT_FLASH = { color: 0xFF_C8_66, scale: 0, life: 0.5, light: 0 };
 export const WEAPON_VISUAL: Record<number, WeaponVisual> = {
   [WeaponType.BoltLauncher]:    { muzzleZ: -0.36, recoil: BOLT_RECOIL, flash: BOLT_FLASH },
   [WeaponType.Disc]:            { muzzleZ: -0.36, recoil: BOLT_RECOIL, flash: { color: 0x99_DD_FF, scale: 0.7, life: 0.7, light: 1 } },
+  [WeaponType.FastDiscLauncher]: { muzzleZ: -0.55, recoil: BOLT_RECOIL, flash: { color: 0xC8_F4_FF, scale: 0.8, life: 0.7, light: 1 } },
   [WeaponType.Implodisc]:        { muzzleZ: -0.36, recoil: BOLT_RECOIL, flash: { color: 0x99_DD_FF, scale: 0.7, life: 0.7, light: 1 } },
   [WeaponType.Chaingun]:        { muzzleZ: -0.8,  recoil: { recover: 0.18, jitter: 0.02,  amp: 0.5,  back: 1 },  flash: { color: 0xFF_AA_44, scale: 0.9, life: 0.8, light: 0.15 } },
   [WeaponType.Mortar]:          { muzzleZ: -0.28, recoil: { recover: 0.47, jitter: 0,     amp: 1,    back: 1 },  flash: { color: 0xFF_DD_99, scale: 1.6, life: 1.5, light: 1 } },
@@ -42,7 +43,7 @@ export const WEAPON_VISUAL: Record<number, WeaponVisual> = {
   [WeaponType.MRVLauncher]:     { muzzleZ: -0.56, recoil: { recover: 1.5,  jitter: 0.03,  amp: 0.8,  back: 1.35 }, flash: { color: 0xFF_77_44, scale: 1.4, life: 1.4, light: 1 } },
   // Howitzer - the recoil IS the identity: big shove, slow recover,
   // a blast big enough to read as a cannon report not a pop.
-  [WeaponType.Howitzer]:        { muzzleZ: -0.62, recoil: { recover: 0.35, jitter: 0.04, amp: 1.4,  back: 1.6 }, flash: { color: 0xFF_AA_33, scale: 1.9, life: 1.6, light: 1 } },
+  [WeaponType.Howitzer]:        { muzzleZ: -1.1,  recoil: { recover: 3.5,  jitter: 0.06, amp: 1.8,  back: 2.2 }, flash: { color: 0xFF_AA_33, scale: 2.2, life: 2,   light: 1.5 } },
   [WeaponType.Bombard]:         { muzzleZ: -0.42, recoil: { recover: 0.9,  jitter: 0.02,  amp: 1.35, back: 1.2 }, flash: { color: 0xFF_88_33, scale: 2.4, life: 1.9, light: 2 } },
   [WeaponType.Gonne]:        { muzzleZ: -0.44, recoil: { recover: 0.41, jitter: 0.02,  amp: 1,  back: 1 },  flash: { color: 0xFF_A5_50, scale: 1.7, life: 1.6, light: 1.6 } },
   [WeaponType.Basilisk]:        { muzzleZ: -0.53, recoil: { recover: 0.6,  jitter: 0.03,  amp: 1.3,  back: 1.15 }, flash: { color: 0xFF_90_3A, scale: 2.2, life: 1.8, light: 1.9 } },

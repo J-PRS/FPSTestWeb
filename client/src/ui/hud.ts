@@ -31,7 +31,7 @@ export class HUD {
   loss: HTMLSpanElement  // public — HudStats family paints it;
   jitter: HTMLSpanElement  // public — HudStats family paints it;
   fps: HTMLSpanElement  // public — HudStats family paints it;
-  private crosshair: HTMLDivElement;
+  crosshair: HTMLDivElement;
   hitMarker: HTMLDivElement  // public — HudStats family paints it;
   private minimap: Minimap;
   private cmdmap: CommandMap;
@@ -105,6 +105,7 @@ export class HUD {
     this.energyReadout = d.energyReadout;
     this.groundReadout = d.groundReadout;
     this.wammoReadout = d.wammoReadout;
+    this.wammoRegenFill = d.wammoRegenFill;
     this.bloomRing = d.bloomRing;
     this.stats = new HudStats(this);
     this.minimap = new Minimap(this.el);
@@ -118,6 +119,7 @@ export class HUD {
   energyReadout: HTMLDivElement;
   groundReadout: HTMLDivElement;
   wammoReadout: HTMLDivElement  // public - HudStats family paints it;
+  wammoRegenFill: HTMLDivElement // public - regen sliver fill, painted per-frame;
   bloomRing: HTMLDivElement     // public - bloom cone affordance, painted per-frame;
 
   private lastSheepShown = -1;

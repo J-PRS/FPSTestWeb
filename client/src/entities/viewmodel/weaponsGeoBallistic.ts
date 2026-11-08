@@ -329,6 +329,90 @@ disc.visible = false;
 return disc;
 }
 
+/** Fast Disc Launcher - the spinfusor's flat-track sibling. Same hex
+ *  body + chambered disc vocabulary, but elongated forward with a
+ *  tapered muzzle collar and hotter rim glow - reads "velocity tuned". */
+export function mkFastDisc(): THREE.Group {
+const fd = new THREE.Group();
+const zFront = -0.42;                    // stretched forward vs the 0.3 disc
+const slitLen = 0.42;
+// Speed grooves - plasma-style: a V-notch CUT INTO the hex profile at
+// each roof-edge midpoint, so the channel is part of the silhouette
+// (extruded free for the slit length), not geometry laid on top.
+const hexHalfGrooved = (side: 1 | -1): THREE.Shape => {
+  const base = (hexHalf(side) as THREE.Shape).getPoints();
+  const out: THREE.Vector2[] = [];
+  for (let i = 0; i < base.length; i += 1) {
+    const cur = base[i]!; const nxt = base[(i + 1) % base.length]!;
+    out.push(cur);
+    // Notch only real roof edges (both ends above slit height and a
+    // real hex edge length) - the clip baseline isn't a face.
+    if (cur.y > 0 && nxt.y > 0 && Math.abs(cur.x - nxt.x) > DISC_HEX_R * 0.5) {
+      // Narrow U-channel recessed along the FACE NORMAL - the groove
+      // cuts perpendicular into the slope, not inward horizontally.
+      const lerp = (t: number): THREE.Vector2 => new THREE.Vector2(cur.x + (nxt.x - cur.x) * t, cur.y + (nxt.y - cur.y) * t);
+      const a = lerp(0.42), b = lerp(0.58);
+      const ex = nxt.x - cur.x, ey = nxt.y - cur.y, el = Math.hypot(ex, ey) || 1;
+      let nx = ey / el, ny = -ex / el;                    // edge's right normal
+      const mx = (cur.x + nxt.x) / 2, my = (cur.y + nxt.y) / 2;
+      if (mx * nx + my * ny > 0) {nx = -nx; ny = -ny;}    // flip to point inward
+      const depth = DISC_HEX_R * 0.09;
+      out.push(a);
+      out.push(new THREE.Vector2(a.x + nx * depth, a.y + ny * depth));
+      out.push(new THREE.Vector2(b.x + nx * depth, b.y + ny * depth));
+      out.push(b);
+    }
+  }
+  return new THREE.Shape(out);
+};
+fd.add(extrudeAt(hexHalfGrooved(1), zFront, slitLen, bodyMat));
+fd.add(extrudeAt(hexHalfGrooved(-1), zFront, slitLen, bodyMat));
+const fullHex2 = new THREE.Shape();
+for (let k = 0; k <= 6; k += 1) {
+  const a = (k * Math.PI) / 3 + Math.PI / 6;
+  fullHex2[k === 0 ? 'moveTo' : 'lineTo'](Math.cos(a) * DISC_HEX_R, Math.sin(a) * DISC_HEX_R);
+}
+// Longer breech - the velocity sell is a stretched silhouette.
+const breech = extrudeAt(fullHex2, zFront + slitLen - 0.006, 0.24, bodyMat);
+breech.scale.set(0.95, 0.95, 1);
+fd.add(breech);
+// Twin groove rings - speed lines machined into the body.
+for (const off of [-0.012, 0.09]) {
+  const collar = extrudeAt(fullHex2, zFront + slitLen + off, 0.02, darkMat);
+  collar.scale.set(0.93, 0.93, 1);
+  fd.add(collar);
+}
+// Chambered disc - same language, hotter rim (white-cyan = the fast one).
+const ammo = new THREE.Group();
+ammo.name = 'discAmmo';
+const loaded = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.028, 24),
+  new THREE.MeshLambertMaterial({ color: 0x3A_3F_45, emissive: 0x14_16_1A }));
+loaded.position.set(0, 0, -0.2);
+ammo.add(loaded);
+const rim = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.011, 6, 32),
+  new THREE.MeshBasicMaterial({ color: 0xC8_F4_FF }));
+rim.rotation.x = Math.PI / 2;
+rim.position.set(0, 0, -0.2);
+ammo.add(rim);
+fd.add(ammo);
+const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.07, 8), darkMat);
+spindle.position.set(0, 0, -0.2);
+fd.add(spindle);
+// Forend + grip - same stance, the silhouette is what sells it.
+const forend = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.28), darkMat);
+forend.position.set(0, -0.13, -0.2);
+fd.add(forend);
+const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.13, 0.06), darkMat);
+grip.position.set(0, -0.18, 0.16);
+grip.rotation.x = 0.35;
+fd.add(grip);
+const guard2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.1), darkMat);
+guard2.position.set(0, -0.15, 0.09);
+fd.add(guard2);
+fd.visible = false;
+return fd;
+}
+
 // Weapon 2 - chaingun, UT/Serious Sam language: the barrels ARE the
 // gun. Three fat pipes spinning on an exposed cluster, short stubby
 // breech behind, ammo drum slung low. No shroud - a full casing hid
@@ -1027,12 +1111,12 @@ const hw = new THREE.Group();
 const slide = new THREE.Group();
 slide.name = 'barrels'; // bake keeps 'barrels' as a separate animated node
 slide.userData.baseZ = 0;
-slide.add(mkTube(0.16, 0.135, 0.62, -0.12, bodyMat)); // barrel - slimmer than the receiver
-slide.add(mkTube(0.2, 0.17, 0.11, -0.4, bodyMat));   // muzzle flare
-slide.add(mkBore(0.145, -0.461));
+slide.add(mkTube(0.18, 0.155, 1.24, -0.43, bodyMat)); // barrel - fat but still nests in the 0.21 sleeve
+slide.add(mkTube(0.215, 0.185, 0.11, -0.98, bodyMat)); // muzzle flare at the long tip
+slide.add(mkBore(0.16, -1.041));
 // Recoil brake riding the slide - the collar alone sells the shape;
 // slot ports were sub-pixel noise nobody could see.
-slide.add(mkTube(0.185, 0.16, 0.075, -0.25, darkMat));
+slide.add(mkTube(0.2, 0.175, 0.075, -0.85, darkMat));
 hw.add(slide);
 // Receiver sleeve the barrel slides into - wider, stays put.
 hw.add(mkTube(0.21, 0.21, 0.3, 0.12, bodyMat));

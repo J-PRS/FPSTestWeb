@@ -21,11 +21,11 @@ interface DropOpt { v: string; label: string; desc?: string; disabled?: boolean 
 interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: DropOpt[]): void; markUsed?(used: ReadonlySet<string>): void; }
 
 const BELT_LABELS: Record<BeltItem, string> = {
-  disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
+  disc: 'Implodisc', pushdisc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
   javelin: 'Javelin', sticky: 'Sticky Bomb', impact: 'Impact Grenade',
   conc: 'Concussion Grenade',
   remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
-  proxy: 'Proxy Grenade', satchel: 'Satchel Charge (2)', heal: 'Heal Grenade',
+  proxy: 'Proxy Grenade', satchel: 'Satchel Charge', heal: 'Heal Grenade',
   hook: 'Hook', emp: 'EMP Grenade',
 };
 

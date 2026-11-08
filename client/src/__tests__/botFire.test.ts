@@ -25,6 +25,7 @@ function fakeBot(loadoutIdx = 0, pos = new THREE.Vector3()): GameBot {
     vel: new THREE.Vector3(),
     loadout: BOT_LOADOUTS[loadoutIdx]!,
     perkMods: mods,
+    rotation: { yaw: Math.PI / 2, pitch: 0 }, // face +x: every aimAt() target aims +x
     propelUntil: 0,
     propelJetT: 0,
     grounded: false,

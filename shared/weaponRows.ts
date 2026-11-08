@@ -60,6 +60,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     beltThrow: true,
   },
   [WeaponType.BeltDisc]: {
+    sfxKey: WeaponType.Disc, vmKey: WeaponType.Disc,
     fireInterval: 1,
     airtimeScale: true,
     // Belt disc: the plain push variant - same flight/damage, knocks back.
