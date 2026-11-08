@@ -133,21 +133,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
       this.vel.set(0, 0, 0);
       if (s) {s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;}
     } else if (this.airborne) {
-      // The shared sim rides the surface — punts stay an entity override
-      // that hands position back on landing.
-      this.vel.y += GRAVITY * dt;
-      this.pos.addScaledVector(this.vel, dt);
-      if (this.pos.y - this.radius <= gy) {
-        this.pos.y = gy + this.radius;
-        this.airborne = false;
-        this.vel.x *= 0.4; this.vel.z *= 0.4;
-        this.vel.y = 0;
-        this.onLanded?.(this.pos);
-        if (s) {
-          s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
-          s.vx = this.vel.x; s.vz = this.vel.z;
-        }
-      }
+      this.tickAirborne(dt, gy, s);
     } else if (s) {
       const ev = updateLocalSim(this, dt, terrain, stepRoller, playerPos);
       if (ev === 'bite') {this.onHit?.(this);}
@@ -163,6 +149,23 @@ export class Roller implements Targetable, SwarmSlotOwner {
     }
 
     this.writeInstances();
+  }
+
+  /** Punt arc: gravity + integrate; the shared sim rides the surface —
+   *  punts stay an entity override that hands position back on landing. */
+  private tickAirborne(dt: number, gy: number, s: SimRoller | null): void {
+    this.vel.y += GRAVITY * dt;
+    this.pos.addScaledVector(this.vel, dt);
+    if (this.pos.y - this.radius > gy) {return;}
+    this.pos.y = gy + this.radius;
+    this.airborne = false;
+    this.vel.x *= 0.4; this.vel.z *= 0.4;
+    this.vel.y = 0;
+    this.onLanded?.(this.pos);
+    if (s) {
+      s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
+      s.vx = this.vel.x; s.vz = this.vel.z;
+    }
   }
 
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {

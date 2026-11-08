@@ -228,24 +228,8 @@ export class RemoteAnim {
     const {h} = this;
     const moving = this._speed > 0.5 || this._airborne || this.shootT > 0 || this.hitT > 0 || this.throwT > 0;
     const animDt = pickAnimCadence(h.onScreen, h.camDistSq, moving);
-    // Frozen bones skip updateMatrixWorld entirely — valid only while the
-    // mixer never runs (animDt Infinity), otherwise the pose stalls.
     const frozen = animDt === Infinity;
-    if (frozen !== this._bonesFrozen) {
-      this._bonesFrozen = frozen;
-      h.model.setBonesFrozen(frozen);
-      // Full freeze/unfreeze rewrites every bone's flag — the distal LOD
-      // state below must be re-applied after it.
-      h.model.setDistalFrozen(this._distalFrozen);
-    }
-    // Progressive bone LOD: past the 30Hz tier, freeze every bone no key
-    // bone (aim/grip/feet/steady) hangs under — fingers, toes, end-markers
-    // stop composing matrices while the core pose still animates.
-    const distal = !frozen && animDt >= 1 / 30;
-    if (distal !== this._distalFrozen) {
-      this._distalFrozen = distal;
-      h.model.setDistalFrozen(distal);
-    }
+    this.syncBoneLod(animDt, frozen);
     if (animDt > 0) {
       this.animAcc += dt;
       if (this.animAcc >= animDt) {
@@ -272,6 +256,28 @@ export class RemoteAnim {
     }
   }
   private _coverAcc = 0;
+
+  /** Bone freeze/distal LOD sync. Frozen bones skip updateMatrixWorld
+   *  entirely — valid only while the mixer never runs (animDt Infinity),
+   *  otherwise the pose stalls. Progressive bone LOD: past the 30Hz tier,
+   *  freeze every bone no key bone (aim/grip/feet/steady) hangs under —
+   *  fingers, toes, end-markers stop composing matrices while the core
+   *  pose still animates. */
+  private syncBoneLod(animDt: number, frozen: boolean): void {
+    const {h} = this;
+    if (frozen !== this._bonesFrozen) {
+      this._bonesFrozen = frozen;
+      h.model.setBonesFrozen(frozen);
+      // Full freeze/unfreeze rewrites every bone's flag — the distal LOD
+      // state below must be re-applied after it.
+      h.model.setDistalFrozen(this._distalFrozen);
+    }
+    const distal = !frozen && animDt >= 1 / 30;
+    if (distal !== this._distalFrozen) {
+      this._distalFrozen = distal;
+      h.model.setDistalFrozen(distal);
+    }
+  }
 
   /** Distance-tiered render budget — cast shadows, skinned geo LOD. */
   private tickRenderLod(): void {

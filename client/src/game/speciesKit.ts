@@ -275,14 +275,7 @@ fold.count += 1;
     const wireOwned = this.deps.lazyNetworkManager()?.authoritySims() ?? false;
     if (s.t >= s.interval) {
       s.t = 0;
-      // Ambient spawning is owned by this one path — director spawns are
-      // gated in gameLoop. (Per-species spawn fns that guard on isPlaying
-      // anyway are harmless defense — director events call them directly.)
-      // ?spawns=random: ambient timers stay off — the random director
-      // owns population so the total budget isn't double-spent.
-      // ?nocreatures — the lobby sim-gate, applied to the local ambient
-      // population (offline rooms have no server mint to carry it).
-      if (!wireOwned && !this.RANDOM_SPAWNS && !this.deps.lazyDemoManager()?.isPlaying && !(urlParams.noCreatures && !s.decor)) {s.spawn();}
+      this.maybeAmbientSpawn(s, wireOwned);
     }
     const playerPos = this.deps.lazyPlayer().pos;
     for (let i = s.list.length - 1; i >= 0; i -= 1) {
@@ -316,6 +309,18 @@ fold.count += 1;
 
   // Gnaw: a creature committed to a deployable and standing on it chews
   // it down — reach envelope is generous since bite anim reach varies.
+  /** Ambient spawn gate: authority rooms own their population on the
+   *  wire; offline rooms spawn locally unless gated off. Ambient
+   *  spawning is owned by this one path — director spawns are gated in
+   *  gameLoop (per-species isPlaying guards are harmless defense).
+   *  ?spawns=random: ambient timers stay off — the random director owns
+   *  population so the total budget isn't double-spent. ?nocreatures —
+   *  the lobby sim-gate on the local ambient population. */
+  private maybeAmbientSpawn<T extends Targetable & { dispose(): void }>(s: Species<T>, wireOwned: boolean): void {
+    if (wireOwned || this.RANDOM_SPAWNS || this.deps.lazyDemoManager()?.isPlaying || (urlParams.noCreatures && !s.decor)) {return;}
+    s.spawn();
+  }
+
   tickGnaw = (e: Targetable & { radius: number }, tickDt: number): void  => {
     if (tickDt <= 0) {return;}
     const bt = this.targetReg.for(e).target;

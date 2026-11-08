@@ -15,6 +15,20 @@ const _burstPos = new THREE.Vector3();
 
 export interface FlagVis { flag: THREE.Group; stand: THREE.Group }
 
+/** Stand anchor: the wire's home is authoritative; a 'home'-state pos is
+ *  the same spot — the fallback covers a legacy snapshot. */
+function ensureHomeAnchor(marker: { home: THREE.Vector3; homeKnown: boolean }, f: { pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number } }): void {
+  if (f.home) {
+    marker.home.set(f.home.x, f.home.y, f.home.z);
+    marker.homeKnown = true;
+  } else if (!marker.homeKnown) {
+    // No wire home ever arrives (or it raced past) — plant the stand at
+    // the flag's reported spot so the socket reads instead of hiding.
+    marker.home.set(f.pos.x, f.pos.y, f.pos.z);
+    marker.homeKnown = true;
+  }
+}
+
 /** Stand + flag mesh pair. The STAND is just the gem socket — planted at
  *  home forever, a bare socket is how you read "flag's out". The FLAG
  *  (pole + banner + finial) is the piece that gets ripped out, carried,
@@ -224,17 +238,7 @@ frag.show(retMsg);
     if (!marker || marker.mesh !== vis.flag) {
       marker = { mesh: vis.flag, stand: vis.stand, home: new THREE.Vector3(), homeKnown: false, carrier: null, wirePos: new THREE.Vector3() };
     }
-    // Stand anchor: the wire's home is authoritative; a 'home'-state
-    // pos is the same spot — the fallback covers a legacy snapshot.
-    if (f.home) {
-      marker.home.set(f.home.x, f.home.y, f.home.z);
-      marker.homeKnown = true;
-    } else if (!marker.homeKnown) {
-      // No wire home ever arrives (or it raced past) — plant the stand at
-      // the flag's reported spot so the socket reads instead of hiding.
-      marker.home.set(f.pos.x, f.pos.y, f.pos.z);
-      marker.homeKnown = true;
-    }
+    ensureHomeAnchor(marker, f);
     vis.stand.visible = true;
     vis.stand.position.copy(marker.home);
     marker.wirePos.set(f.pos.x, f.pos.y, f.pos.z);

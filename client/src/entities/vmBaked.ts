@@ -124,16 +124,7 @@ export class VmBaked {
       loadGlbOrMain(loader, `/weapons/w${wt}_baked.glb`),
       ao ? texLoader.loadAsync(`${ao}?v=${Date.now()}`) : Promise.resolve(null),
     ]);
-    if (tex) {
-      tex.flipY = false;
-      // Cycles EMIT bakes are stored linear; tagging sRGB would decode twice
-      // and render the albedo ~2 stops dark. Keep it linear.
-      tex.colorSpace = THREE.LinearSRGBColorSpace;
-    }
-    const bakedMat = new THREE.MeshLambertMaterial();
-    if (tex) {bakedMat.map = tex;}
-    if (!tex) {bakedMat.color.set(0x3A_36_32);} // gunmetal fallback until an ao bake exists
-    if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xFF_00_FF); }
+    const bakedMat = this.bakedMaterial(tex);
     // Chaingun special case: the barrel triad is ANIMATED (spinVel), not
     // static geometry — a merged bake folds it into the body and the gun
     // stops spinning forever. null = merged bake, procedural barrels keep
@@ -182,6 +173,22 @@ export class VmBaked {
     // weapon pops back opaque while you're invisible.
     if (this.h.ghostMats.length > 0) {this.ghostBake(gltf.scene);}
     Logger.debug(`[vm] w${wt} baked swap: removed ${swap.size} procedural meshes`);
+  }
+
+  /** Baked-surface material: AO map when the bake has one (kept linear —
+   *  Cycles EMIT bakes are stored linear; tagging sRGB would decode twice
+   *  and render ~2 stops dark), gunmetal fallback until a bake exists,
+   *  magenta under ?bakedbg. */
+  private bakedMaterial(tex: THREE.Texture | null): THREE.MeshLambertMaterial {
+    if (tex) {
+      tex.flipY = false;
+      tex.colorSpace = THREE.LinearSRGBColorSpace;
+    }
+    const bakedMat = new THREE.MeshLambertMaterial();
+    if (tex) {bakedMat.map = tex;}
+    else {bakedMat.color.set(0x3A_36_32);} // gunmetal fallback until an ao bake exists
+    if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xFF_00_FF); }
+    return bakedMat;
   }
 
   private ghostBake(root: THREE.Object3D): void {

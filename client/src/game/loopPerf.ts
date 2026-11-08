@@ -239,7 +239,6 @@ export function setShadows(deps: GameLoopDeps, on: boolean): void {
 // CPU-bound ladder — JS phases dominate the frame, so a smaller buffer
 // buys nothing; shed ambient JS work first, then drop res as a last resort.
 function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
-  const { rendererSetup } = deps;
   const base = baselinePixel();
   const pixelPinned = urlParams.get('px') !== null || (base.p > 1 && base.m === 3);
   const cap = pixelPinned ? 1 : 2;
@@ -253,14 +252,7 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   deps.weather.setQuality(ambientOn);
   deps.groundMist().setActive(ambientOn);
   deps.ambientBirds.setActive(ambientOn);
-  // Stepping back up restores the baseline pick, not necessarily OFF.
-  if (next === 2 || (st.autoPixel && next < 2)) {
-    // CPU-bound: drop to a 2x raw buffer (or the baseline's scale, mode
-    // demoted to raw — CPU dither/xBR passes cost JS/GPU either way).
-    if (next === 2) {rendererSetup.setPixel(base.p > 1 ? base.p : 2, 0, false);}
-    else {rendererSetup.setPixel(base.p, base.m, false);}
-    st.autoPixel = next === 2;
-  }
+  applyCpuPixel(deps, st, next, base);
   // Deepest tier also caps renders at 30 — GPU fill + composer time halve
   // while sim/input stay full-rate. Runtime-only (persist=false like the
   // pixel step); an explicit fps-cap always wins inside fpsCapAllows.
@@ -268,6 +260,18 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   if (next !== 2) {st.renderAcc = 0;}
   st.cpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: cpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+}
+
+/** Pixel-step application: stepping back up restores the baseline pick,
+ *  not necessarily OFF. CPU-bound drops to a 2x raw buffer (or the
+ *  baseline's scale, mode demoted to raw — CPU dither/xBR passes cost
+ *  JS/GPU either way). */
+function applyCpuPixel(deps: GameLoopDeps, st: LoopState, next: number, base: { p: number; m: number }): void {
+  if (!(next === 2 || (st.autoPixel && next < 2))) {return;}
+  const { rendererSetup } = deps;
+  if (next === 2) {rendererSetup.setPixel(base.p > 1 ? base.p : 2, 0, false);}
+  else {rendererSetup.setPixel(base.p, base.m, false);}
+  st.autoPixel = next === 2;
 }
 
 
