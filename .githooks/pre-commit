@@ -146,7 +146,9 @@ if git diff --cached -U0 -- shared/ | grep '^+' | grep -qE 'console\\.(log|debug
   exit 1
 fi
 
-STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
+# Only lint roots oxlint is configured for - _tools/*.ts scripts are
+# outside its config and oxlint exits 1 with "No files found to lint".
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^(client|server_bun|shared)/.*\.(ts|tsx)$' || true)
 if [ -n "$STAGED" ]; then
   echo "$STAGED" | xargs -n 50 npx -y oxlint --fix || exit 1
   # The fixer rewrites files - restage so the commit carries the fix.
