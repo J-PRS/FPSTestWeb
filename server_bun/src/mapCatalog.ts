@@ -114,7 +114,9 @@ export class MapCatalog {
 
   /** Join-time spec resolution: room name, then the numbered-room base
    *  (`ctf-2` inherits ctf.json), then the map arg, then the mode. */
-  specFor(name: string, mode: string, map: string, bots?: number): { spec: MapSpec | undefined; src: string } {
+  /** Spec lookup chain: room name, numbered-room base (`ctf-2` inherits
+   *  ctf.json), map arg, mode, then the default-map fallback. */
+  private resolveSpec(name: string, mode: string, map: string): { spec: MapSpec | undefined; src: string } {
     let spec = this.loadMapSpec(name);
     let src = spec ? name : '';
     if (!spec) {
@@ -130,6 +132,12 @@ export class MapCatalog {
     // map — a spec-less room serves maps/null terrain and traps every
     // rejoiner in an unplayable arena. Rotation head, else rimrock.
     if (!spec) { const d = this.defaultMap(); spec = this.loadMapSpec(d); src = spec ? d : ''; }
+    return { spec, src };
+  }
+
+  specFor(name: string, mode: string, map: string, bots?: number): { spec: MapSpec | undefined; src: string } {
+    const { spec: raw, src } = this.resolveSpec(name, mode, map);
+    let spec = raw;
     // Mode and map are separate axes: a requested mode that the spec
     // can host swaps in over the spec's default; one it can't leaves the
     // map's own ruleset in charge (a dm map never sprouts flag stands).

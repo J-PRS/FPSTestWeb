@@ -40,9 +40,12 @@ export interface BeamSweepWorld {
 /** Chain-fork pick — the nearest OTHER live creature within range of
  *  the primary contact, forward-ish of the beam so the arc can't
  *  reach backward through the shooter. */
-function beamChain(world: BeamSweepWorld, contact: Vec3, dir: Vec3, excludeBall: number | undefined, excludeCrawler: number | undefined):
-    { chainBallId?: number; chainCrawlerId?: number; chainContact?: Vec3 } {
-  const cands: { id: number; kind: 'ball' | 'crawl'; x: number; y: number; z: number; d2: number }[] = [];
+type ChainCand = { id: number; kind: 'ball' | 'crawl'; x: number; y: number; z: number; d2: number };
+
+/** Forward-ish live creatures within chain range of the contact -
+ *  balls and crawlers share one candidate pool, nearest wins. */
+function chainCandidates(world: BeamSweepWorld, contact: Vec3, dir: Vec3, excludeBall: number | undefined, excludeCrawler: number | undefined): ChainCand[] {
+  const cands: ChainCand[] = [];
   const consider = (kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number): void => {
     const dx = x - contact.x, dy = y - contact.y, dz = z - contact.z;
     const d2 = dx * dx + dy * dy + dz * dz;
@@ -59,7 +62,13 @@ function beamChain(world: BeamSweepWorld, contact: Vec3, dir: Vec3, excludeBall:
     if (c.dead || c.id === excludeCrawler) {continue;}
     consider('crawl', c.id, c.x, c.y, c.z);
   }
-  let best: (typeof cands)[number] | null = null;
+  return cands;
+}
+
+function beamChain(world: BeamSweepWorld, contact: Vec3, dir: Vec3, excludeBall: number | undefined, excludeCrawler: number | undefined):
+    { chainBallId?: number; chainCrawlerId?: number; chainContact?: Vec3 } {
+  const cands = chainCandidates(world, contact, dir, excludeBall, excludeCrawler);
+  let best: ChainCand | null = null;
   for (const c of cands) { if (!best || c.d2 < best.d2) {best = c;} }
   if (!best) {return {};}
   return best.kind === 'ball'

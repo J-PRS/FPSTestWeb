@@ -142,6 +142,19 @@ export function assignRole(
   const ids = teammateIds.toSorted();
   const me = ids.indexOf(myId);
   if (me === -1) {return 'offense';}
+  const mine = fillSpecialistRoles(ids, playable, kitOf);
+  let tail = 0;
+  for (const id of ids) {
+    if (mine.has(id)) {continue;}
+    mine.set(id, tail % 3 === 2 ? 'defense' : 'offense');
+tail += 1;
+  }
+  return mine.get(myId) ?? 'offense';
+}
+
+/** Specialist slots first: each ROLE_PRIORITY entry argmax-fits the
+ *  best unclaimed kit; want-count and minSquad gate the fill. */
+function fillSpecialistRoles(ids: string[], playable: BotRole[], kitOf?: (id: string) => string | undefined): Map<string, BotRole> {
   const mine = new Map<string, BotRole>();
   for (const { role, want, minSquad } of ROLE_PRIORITY) {
     if (!playable.includes(role)) {continue;}
@@ -158,13 +171,7 @@ export function assignRole(
       mine.set(best, role);
     }
   }
-  let tail = 0;
-  for (const id of ids) {
-    if (mine.has(id)) {continue;}
-    mine.set(id, tail % 3 === 2 ? 'defense' : 'offense');
-tail += 1;
-  }
-  return mine.get(myId) ?? 'offense';
+  return mine;
 }
 
 /** Where a role should run given the current flag situation. Returns the

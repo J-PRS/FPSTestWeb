@@ -176,6 +176,26 @@ function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
  *  stale plane for up to 0.5s, so the authority could tunnel under rising
  *  terrain while predictors (which walk the real field) parked early:
  *  a 20-90m prediction divergence per event. 800 probes/s is nothing. */
+/** Contact response: slide off the inward normal component only, or
+ *  reflect with elasticity (halved on post-dash/overspeed impacts). */
+function bounceOrSlide(b: SimBall, n: { x: number; y: number; z: number }, dot: number, impactSpeed: number): SegmentKind | null {
+  if (BALL_SLIDE_ENABLED && -dot < BALL_SLIDE_VN_MIN) {
+    // Slide, don't reflect — cancel the inward normal component only.
+    // No segment: predictors reach the identical contact and slide too.
+    b.vx -= n.x * dot;
+    b.vy -= n.y * dot;
+    b.vz -= n.z * dot;
+    return null;
+  }
+  const elasticity = (b.dampNextBounce || impactSpeed > BALL_OVERSPEED) ? 0.5 : BALL_BOUNCE;
+  b.dampNextBounce = false;
+  const k = -(1 + elasticity) * dot;
+  b.vx += n.x * k;
+  b.vy += n.y * k;
+  b.vz += n.z * k;
+  return 'bounce';
+}
+
 function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean, rand?: () => number): SegmentKind | null {
   b.ggy = hmHeight(field, b.x, b.z);
   const gy = b.ggy;
@@ -202,22 +222,7 @@ function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimV
     b.vx = 0; b.vy = 0; b.vz = 0;
     return null;
   }
-  let seg: SegmentKind | null = 'bounce';
-  if (BALL_SLIDE_ENABLED && -dot < BALL_SLIDE_VN_MIN) {
-    // Slide, don't reflect — cancel the inward normal component only.
-    // No segment: predictors reach the identical contact and slide too.
-    b.vx -= _n.x * dot;
-    b.vy -= _n.y * dot;
-    b.vz -= _n.z * dot;
-    seg = null;
-  } else {
-    const elasticity = (b.dampNextBounce || impactSpeed > BALL_OVERSPEED) ? 0.5 : BALL_BOUNCE;
-    b.dampNextBounce = false;
-    const k = -(1 + elasticity) * dot;
-    b.vx += _n.x * k;
-    b.vy += _n.y * k;
-    b.vz += _n.z * k;
-  }
+  const seg: SegmentKind | null = bounceOrSlide(b, _n, dot, impactSpeed);
 
   // Drift check: too far from the committed target → enrage spring (the
   // authority decides; the predictor sees it on the segment event anyway).
