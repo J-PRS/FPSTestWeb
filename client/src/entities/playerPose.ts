@@ -306,7 +306,7 @@ export class PoseControl {
         // frame (the retargeted tracks are garbage on this rig anyway).
         hb.bone.quaternion.slerp(hb.bind, this.holdW);
         hb.last.identity().slerp(hb.off, this.holdW);
-        hb.bone.quaternion.multiply(hb.last);
+        hb.bone.quaternion.multiply(hb.last).normalize();
       }}
     }
     // Ground-loco torso pin — post-mixer so the cache captures the fully
@@ -336,7 +336,11 @@ export class PoseControl {
         // Negative X tilts up for positive pitch (looking up)
         ab.last.setFromAxisAngle(X_AXIS, -procPitch * ab.factor);
       }
-      ab.bone.quaternion.multiply(ab.last);
+      // normalize(): a non-unit quat here scales the bone's whole
+      // subtree (|q|² in matrixWorld) - once it starts it runs away
+      // exponentially and the model-stretch canary catches fingers
+      // flung to 1e10m on extreme aim pitch.
+      ab.bone.quaternion.multiply(ab.last).normalize();
     }}
     this.poseApplied = Boolean(procPitch) || this.holdW > 0;
     this.snapFeetToShins(playingUAL);
