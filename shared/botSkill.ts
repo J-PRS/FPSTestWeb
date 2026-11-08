@@ -181,14 +181,22 @@ export function heroTick(s: BotSkill, pressure: { deficit: number; ownPerf: numb
   // answers survival, not skill.
   s.odHold = Math.max(0, s.odHold - dt);
   if (pressure.menaceHp !== undefined) {
-    if (s.prevMenaceHp >= 0 && pressure.menaceHp < s.prevMenaceHp - 1) {
+    // A real WOUND snaps him back: chip damage (a plink off a 100k
+    // pool, grazing fire) is not "dealing with the threat" - the menace
+    // sits at ~full bar taking non-lethal hits and still has to ramp.
+    if (s.prevMenaceHp >= 0 && pressure.menaceHp < s.prevMenaceHp * 0.85) {
       s.resolve = Math.min(s.resolve, 1); // bled him - back to legal
       s.odHold = 5;                        // damage buys 5s of honest tier
-    } else if (s.resolve > 0.7 && s.odHold <= 0) {
-      s.resolve = Math.min(4, s.resolve * (1 + 0.12 * dt)); // ~12%/s compounding
+      s.prevMenaceHp = pressure.menaceHp;  // re-anchor at the wound
+    } else {
+      if (s.resolve > 0.7 && s.odHold <= 0) {
+        s.resolve = Math.min(4, s.resolve * (1 + 0.12 * dt)); // ~12%/s compounding
+      }
+      // Anchor = PEAK hp: a slow chip bleed must drop 15% off his best
+      // to count as a wound, not 15% since last think (heals lift it).
+      s.prevMenaceHp = Math.max(s.prevMenaceHp, pressure.menaceHp);
     }
   }
-  s.prevMenaceHp = pressure.menaceHp ?? -1;
   // Apply: every dial a roll could have drawn, lerped toward impossible.
   const r = s.resolve;
   const lerp = (a: number, b: number): number => a + (b - a) * r;

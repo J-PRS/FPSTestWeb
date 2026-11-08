@@ -4,7 +4,7 @@ import { rollSkill, heroTick, HERO_ON, BOT_TIERS } from '../../shared/botSkill.t
 // heroTick shape: resolve follows pressure (deficit*perf + menace),
 // escalation lerps every dial toward impossible - and never below the
 // roll a bot was already born with (the nerf regression).
-const tick = (s: ReturnType<typeof rollSkill>, p: { deficit: number; ownPerf: number; menace: number }, secs: number): void => {
+const tick = (s: ReturnType<typeof rollSkill>, p: { deficit: number; ownPerf: number; menace: number; menaceHp?: number }, secs: number): void => {
   for (let t = 0; t < secs; t += 0.1) {heroTick(s, p, 0.1);}
 };
 
