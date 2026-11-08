@@ -260,7 +260,7 @@ function locoVals(id: string): string[] {
     }
     if (!anchor || now - anchor.t < win * 0.5) {return '-';}
     const d = Math.hypot(cur.x - anchor.x, cur.z - anchor.z);
-    return (d / ((now - anchor.t) / 1000)).toFixed(1);
+    return (d / ((now - anchor.t) / 1000)).toFixed(0);
   });
 }
 const locoStr = (id: string): string => { const v = locoVals(id); return v.length ? v.join('/') : '-'; };
