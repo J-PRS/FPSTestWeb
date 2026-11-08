@@ -37,65 +37,66 @@ the *rolls* are reproducible, the outcomes are varied by design.
 
 ## Architecture — where things live
 
-**Shared brain** (`shared/` — runs identically both sides):
+**Shared brain** (`shared/` — runs identically on server and client):
 
-```
-botBrain.ts    the think loop + BrainCtx + the wiring of every sense
-botSkill.ts    skill roll (tiers), baseAxes/mods, resolve + heroTick, HERO_ON
-botHunt.ts     scanVisible/pickHunt (target pick), pickFire (aim+trigger),
-               reaction clock, dread/unreach, finisher, track convergence
-botGoals.ts    goal argmax — wander/heard/social/greed/duty/escort offers
-botMoves.ts    ski/jet/jump intents — "how to get there" (hints out)
-botDisposition.ts  personality-driven step/goal dispositions
-botSteer.ts    the step-destination steerer (memory trail, deflection)
-botSlew.ts     aim slew model — human turn rates, not instant snaps
-botEscape.ts   escape-kit arming (stuck→thrust out of the pocket)
-botGraph.ts    waypoint/nav graph the routed legs walk
-botLines.ts    line-of-travel reads (dive/glide windows, hop rings)
-botLos.ts      LOS helpers the senses ride (sight answers memoized per room)
-botSheep.ts    headhunt sheep-meter (hoard→buffs→panic) logic
-botWeaponHooks.ts  per-weapon aim/fire hooks (range, lead, fuse picks)
-botLoadouts.ts bot kits + wildcard rolls + perk rolls
-botClasses.ts  light/medium/heavy class stats
-botTuning.ts   BOT_TUNING — every knob lives here
-botRand.ts     seeded rng streams (deterministic soaks)
-botNames.ts    bot name tables
-botVec.ts      BotVec + vector helpers
-botTaunts.ts   chatter/taunt economy (parallel seeded stream)
-```
+| File | What it does |
+|---|---|
+| `botBrain.ts` | The think loop. Defines `BrainCtx` (every sense: enemies, sounds, threats, allies, objective, hero, confidence, notice, convoy, spill, desperate, energy, flags, radio) and `BrainOut` (move/fire/aim intents). Per-think: heroTick → menace hearing → pickHunt/goal refresh → moves hints → fire. Owns personality fields (sweat, duty, social, greed, wanderlust, courage) and the sub-modules below. |
+| `botSkill.ts` | The skill roll + hero model. `rollSkill` draws axes (snap/track/arcLead/arcJudge × moving/still), movement, spec tier, mods — plus `baseAxes`/`baseMove`/`baseMods` snapshots heroTick lerps from. `HERO_ON`, `resolve`, `prevMenaceHp`, `odHold`, `heroTick` (pressure→resolve→dial lerp→overdrive). |
+| `botHunt.ts` | Combat brain. `scanVisible` (LOS acquire, nearest + beast), `pickHunt` (hunt/thief/spot/ghost pick + finisher bias + dread/blacklist filters), `pickFire` (reaction gate → cadence → error budget → track convergence → lead/loft). HuntState: reactTicks/jitter/temper baked at roll, acquiredAt, unreachUntil, foeScore, lastSeen ghosts. |
+| `botGoals.ts` | Goal argmax — every candidate is a weighted offer: objective, wander, heard-noise, social (fold to ally), greed (pickup), escort, vulture. Distance falloff + duty-scented danger discount. heardGoal's investigate roll = curiosity + duty + resolve. |
+| `botMoves.ts` | Ski/jet/jump intents — the buttons, not the destination: committed jet holds, glide taps, hop-descents, escape bursts, breath-perch climbing, orbit brakes, recon climbs, dive vetoes. `jetWhy` telemetry tags every burn. |
+| `botDisposition.ts` | Personality→step destination: flinch knock, hunt press/retreat/orbit, quiet-map drift, posted anchoring. Disposition fields per family; the carrier→duelist conversion gate lives here. |
+| `botSteer.ts` | Context steering — scores every direction (not just the goal line): interest = goal alignment + heading momentum; danger = hazards. Produces the ~8m step destinations feed. |
+| `botSlew.ts` | Human-shaped aim turns — turn rates + settle, so the crosshair moves like a wrist, not a snap. Driven by both hosts identically. |
+| `botEscape.ts` | Get-out senses: no-progress sidesteps escalating to a jet escape burst, shell-dodge lateral hop — rewrite the step destination after steering. |
+| `botGraph.ts` | TerrainFlow — leg-scale routing: samples candidate runs 15–60m out; the ray-fan steerer is myopic, this layer sees saddles. |
+| `botLines.ts` | Meso line picking — dive/glide windows, hop rings, overshoot reads between the steerer (9m) and the graph (600m). |
+| `botLos.ts` | The LOS sense — heightfield march + structure solids, memoized per (bot,enemy) cell; extracted from botHunt. |
+| `botSheep.ts` | SheepCore — headhunt's anti-pedestrian meter: hoard→buffs→panic, one impl for wire humans, offline bots, and the local readout. |
+| `botWeaponHooks.ts` | Per-weapon senses the ctx reads — one factory both hosts build: preferredRange, lead, fuse clock, aim axis pick by range. |
+| `botLoadouts.ts` | Kit tables + wildcard rolls + perk rolls — what guns/items a bot draws; `botClassForLoadout` derives class after the roll. |
+| `botClasses.ts` | Armor classes (light/medium/heavy): HP vs speed vs mass — jet thrust and movement differ for real. |
+| `botTuning.ts` | `BOT_TUNING` — every movement/route constant in one mutable table; sweep tooling perturbs genomes from it. |
+| `botRand.ts` | The injectable rng source for every heuristic — seeded per room so decisions replay; never crosses the wire. |
+| `botNames.ts` | Callsign pool shared by client ('bot:VEKTOR') and server ('BOT-VEKTOR') rosters — TTS-safe, no repeats. |
+| `botVec.ts` | `BotVec` plain-record vector + helpers — shared sims can't touch THREE types. |
+| `botTaunts.ts` | Kill/death chatter on the real 'chat' wire — cooldown + speak-chance; a flavor line, not spam. |
 
 **Server bots** (`server_bun/src/` — the authoritative host):
 
-```
-ServerBots.ts    brain registry per room, think cadence, skillOf() telemetry
-serverSenses.ts  BrainCtx feed off the live room: enemies/threats/sounds,
-                 heroOf/menaceScan, confidence, notices, convoy/spill
-botArsenal.ts    bot fire pipeline → RoomProjectiles.spawn (real sims)
-botRouting.ts    squad routing: hunt picks feed room objectives + radio
-botRoster.ts     spawn/respawn roster + loadout/class assignment
-botCommand.ts    GM/admin bot commands (roster control, skill grades)
-botDrive/botGreedy/botMobility  locomotion drivers: the feet
-botMpc*/botMpcSearch/botMpcWorker  MPC drive solver (deep nav on track)
-botBeam.ts       beam-intent handling for bot rays
-botSheep.ts      server-side sheep bookkeeping
-superBot.ts      the "super" admin/test bot variant
-```
+| File | What it does |
+|---|---|
+| `ServerBots.ts` | The server-driven bot: a `PlayerState` with no socket — hit claims, knockback, deaths, respawn reuse the normal player pipeline. Owns the brain registry (`brains` map), the THINK_DIV cadence, `skillOf(id)` telemetry, and wires senses → brain → drive/fire each think. |
+| `serverSenses.ts` | `ServerBotSenses` — the brain's sensorium: every channel a legal client could read — positions, pickups, inbound shells, noises, wall occlusion, plus the heroOf/menaceScan feed, confidence, notices, convoy/spill/desperate, repair jobs. |
+| `botArsenal.ts` | The trigger half: weapon selection, muzzle geometry, ballistic lobs, disc-jump propels. Every bot shot goes through the same `RoomProjectiles.spawn` a client's would — no bot-only damage path. |
+| `botBeam.ts` | Non-shell fire paths: creature shots and projectile-less beam weapons where the honest ray decides contact (earliest of terrain/wall/player). |
+| `botRouting.ts` | Squad routing: hunt picks feed room objectives + radio spots + capSync — the "where the squad pushes" layer. |
+| `botRoster.ts` | Squad bookkeeping: spawn roster, armor-class swaps, role rebalancing, the botFill population floor — tick loop owns "what does the room need." |
+| `botCommand.ts` | Per-team commander: same FlagSituation every role reads; contested jobs (chase thief, return flag, escort carrier) assigned by score. |
+| `botDrive.ts` | Brain→inputs contract: turns a brain destination into legal player inputs and steps the body — every motion through the real move sim, nothing teleports. |
+| `botGreedy.ts` | Path-free local driver: ~4Hz rolls ~14 candidate inputs ~0.9s through the real MoveSim, commits argmax (progress + terminal speed). ~25× cheaper than MPC. |
+| `botMobility.ts` | Stuck leash + mobility watchdog helpers — ~2m travel re-arms, carriers get a short leash. |
+| `botMpc*.ts` | MPC committed-run solver: receding-horizon search over the real MoveSim producing an input schedule — the deep-nav option for cappers (search + worker split). |
+| `botSheep.ts` | Wire-side sheep adapter — the meter lives in shared/botSheep.ts; this feeds wire humans' hoards. |
+| `superBot.ts` | `FPS_SUPERBOT` debug knob: matching bot gets superpowers (faster drive, never-miss, extra HP) — dev/test only. |
 
 **Client offline bots** (`client/src/game/bots/` — the local host):
 
-```
-index.ts       TeamBots: spawn roster, fillSenses/fillNerve/heroOf/
-               menaceScan — mirrors serverSenses semantics
-botBrain.ts    GameBot: the local brain host (slew drive, fire intent,
-               sounds→heard channel, sheep/kill bookkeeping)
-botSenses.ts   offline BrainCtx builder (noises, incoming, contacts)
-botFire.ts     local fire pipeline → client projectiles
-botWatchdog.ts mobility watchdog (stuck/pin detection → recovery)
-botCtf.ts botRabbit.ts botMatch.ts botKill.ts botSheep.ts
-               mode/match-specific wrappers + sheep/kill bookkeeping
-botEnergy.ts   bot tank/energy accounting
-botBolts.ts    bot bolt/projectile helpers
-```
+| File | What it does |
+|---|---|
+| `index.ts` | `TeamBots` — the offline roster: spawn/spec/roster management, per-bot fillSenses (enemies/others/allies/engageRange), fillNerve (sounds/threats/repair/confidence/hero/notice + convoy/spill/desperate), heroOf/menaceScan mirrors of serverSenses, alliesOf/rally, spawnSpot, score tracking. The offline counterpart to ServerBots+serverSenses. |
+| `botBrain.ts` | `GameBot` — the local brain host: per-bot state (position/vel/health/held/class/loadout), think() maps the shared BrainOut onto the local body (locomote via botMoves hints + slew face, fire intents, sounds→heard noises), sheep/kill bookkeeping, `get skill()` exposing brain.skill for telemetry. |
+| `botSenses.ts` | Offline BrainCtx builder: recentNoises, incomingNear threats, enemy contacts with hpFrac — the same channels serverSenses feeds, read off `world.remotePlayers` + the local player. |
+| `botFire.ts` | Local fire pipeline: muzzle geometry + weapon spawn into the client projectile sim — the offline counterpart to botArsenal. |
+| `botWatchdog.ts` | Mobility watchdog: stuck/pin detection and the recovery kicks — the offline counterpart to botMobility's leash. |
+| `botCtf.ts` | Flag-mode offline logic (CTF objective wiring for offline bots). |
+| `botRabbit.ts` | Rabbit-mode offline logic (carrier hunt/roster rules for offline bots). |
+| `botMatch.ts` | Match bookkeeping for the offline roster (rounds, mode glue). |
+| `botKill.ts` | Offline kill/death bookkeeping — killCounts/deathCounts feeds + respawn for local bots. |
+| `botSheep.ts` | Client-side sheep adapter — same shared/botSheep meter for the local bots + HUD read. |
+| `botEnergy.ts` | Bot tank/energy accounting for the offline bodies. |
+| `botBolts.ts` | Bot bolt/projectile helpers for the local sim. |
 
 ## Server bots vs offline bots — same brain, different host
 
