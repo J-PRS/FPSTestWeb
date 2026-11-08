@@ -34,6 +34,7 @@ const WINS = [1, 2, 5, 10, 15];
 const TOTAL = MINS * 60;
 const pathLen = new Map<string, number>();
 let clock = 0;
+let clumpHold = 0;
 for (let t = 0; t < TOTAL; t += 1) {
   clock += 1;
   step(room, 1);
@@ -45,14 +46,29 @@ for (let t = 0; t < TOTAL; t += 1) {
     const huntIds: string[] = [];
     for (const p of ps) {const h = (room.bots as unknown as { brains: Map<string, { h: { hunt?: { id: string } } }> }).brains.get(p.id)?.h.hunt; if (h) {hunts += 1; huntIds.push(h.id.slice(0, 10));}}
     const shots = (room.projectiles as unknown as { projs: Map<string, unknown> }).projs.size;
+    // Crabs-in-a-bucket detector: alive same-team bots within CLUMP_R of
+    // each other count as neighbors; a bot at ≥2 neighbors is in a clump.
+    // Two sustained prints (~3 sim-s) of a ≥3-bot clump earns a warning -
+    // transient pass-bys don't spam, real bowl-sitting does.
+    const CLUMP_R = 15;
+    const nbr = new Map<string, number>();
     for (let i = 0; i < ps.length; i += 1) {for (let j = i + 1; j < ps.length; j += 1) {
-      if (ps[i]!.team === ps[j]!.team) {continue;}
       const d = Math.hypot(ps[i]!.position.x - ps[j]!.position.x, ps[i]!.position.z - ps[j]!.position.z);
+      if (ps[i]!.team === ps[j]!.team) {
+        if (d < CLUMP_R && !ps[i]!.isDead && !ps[j]!.isDead) {
+          nbr.set(ps[i]!.id, (nbr.get(ps[i]!.id) ?? 0) + 1);
+          nbr.set(ps[j]!.id, (nbr.get(ps[j]!.id) ?? 0) + 1);
+        }
+        continue;
+      }
       if (d < minD) {minD = d;}
       if (d < 80) {contacts += 1;}
     }}
+    const clumped = [...nbr.entries()].filter(([, n]) => n >= 2).length;
+    clumpHold = clumped >= 3 ? clumpHold + 1 : 0;
+    const clumpWarn = clumpHold >= 2 ? ` CLUMP x${clumped}` : '';
     const dmg = ps.reduce((a, p): number => a + (p.maxHealth - p.health), 0);
-    console.log(`  t=${(clock * 0.05).toFixed(0)}s(sim) contacts<80m=${contacts} minD=${minD.toFixed(0)} hunts=${hunts}[${huntIds.join(',')}] liveProj=${shots} dmg=${dmg.toFixed(0)} kd=[${kd}] held=${held}`);
+    console.log(`  t=${(clock * 0.05).toFixed(0)}s(sim) contacts<80m=${contacts} minD=${minD.toFixed(0)} hunts=${hunts}[${huntIds.join(',')}] liveProj=${shots} dmg=${dmg.toFixed(0)} kd=[${kd}] held=${held}${clumpWarn}`);
   }
   for (const p of room.players.getAllPlayers().values()) {
     const r = ring.get(p.id) ?? [];
