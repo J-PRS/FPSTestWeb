@@ -23,9 +23,8 @@ import { segSolidHit, type ColliderIndex } from './solidWorld.ts';
 
 import type { StructureCollider } from './ballSim.ts';
 import {
-  newHuntState, pickHunt, pickFire, preyUnreachable,
+  newHuntState, pickHunt, pickFire, preyUnreachable, type HuntState,
   noteFoeHit, noteFoeDeath, dreadOf,
-  STALE_MS, type HuntState,
 } from './botHunt.ts';
 import { stuckBreak, dodge, wallTopOnPath, ownGate, breachAlongWall, type EscapeState } from './botEscape.ts';
 import { driftForm, heroTick, HERO_ON, type BotSkill, type BotSkillSpec } from './botSkill.ts';
@@ -459,6 +458,8 @@ export class BotBrain {
   deployObjR = 60;
   /** Force a deployable kind for item A/B soaks - undefined = the roll. */
   deployForce: string | undefined;
+  /** Skills blind for A/B soaks - statusIntent returns undefined. */
+  skillsOff = false;
 
   /** Hosts can pin the builder trait - a technician role shouldn't be
    *  a dice roll away from never touching the deploy kit. */
@@ -711,7 +712,12 @@ export class BotBrain {
    *  the whole point of sneaking up. */
   private pickBelt(dt: number, pos: BotVec, now: number, ctx: BrainCtx): boolean {
     this.beltT -= dt;
-    if (!this.h.hunt || this.beltT > 0 || now - this.h.lastSeenAt > STALE_MS) {return false;}
+    if (!this.h.hunt || this.beltT > 0) {return false;}
+    // A live sight is the normal window; a ghost that went dark inside
+    // ~4s still earns the AoE - the human "he went cloak, spam the
+    // corner" lob. Beyond that the target is genuinely elsewhere and
+    // the belt stays home.
+    if (now - this.h.lastSeenAt > 4000) {return false;}
     const d = dist3(pos, this.h.lastSeen);
     if (ctx.infiltrating) {
       // Guideline, not doctrine - only commit to the knife-range combo
