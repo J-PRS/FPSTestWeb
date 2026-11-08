@@ -50,7 +50,7 @@ const _aim = new THREE.Vector3();
 
 /**
 
- * GameBot — an in-world fake player. A GameBot is a RemotePlayer registered
+ * GameBot - an in-world fake player. A GameBot is a RemotePlayer registered
 
  * in world.remotePlayers under `bot:<name>`, so every existing funnel treats
 
@@ -66,7 +66,7 @@ const _aim = new THREE.Vector3();
 
  * nearest enemy > roam. Aim uses last-seen position + lead + speed-scaled
 
- * scatter — the same Omicron delay as the pvptest harness bots.
+ * scatter - the same Omicron delay as the pvptest harness bots.
 
  */
 
@@ -80,7 +80,7 @@ export const EYE = BOT_EYE;
 
 const BOT_RESPAWN_S = 4;
 
-// Terrain heights are static mid-match — one shared memo for every bot.
+// Terrain heights are static mid-match - one shared memo for every bot.
 
 const sharedGroundYCache = new Map<number, number>();
 
@@ -95,21 +95,21 @@ export class GameBot extends RemotePlayer {
 
   team: string;
 
-  /** The LOCAL player's team — TeamBots refreshes it each frame so the
+  /** The LOCAL player's team - TeamBots refreshes it each frame so the
 
    *  friendly/enemy verdicts (cloak ghost vs vanish) follow re-seats. */
 
   localTeam?: string;
 
   botHp = BOT_HP;
-  /** Last damage timestamp (perf.now) — mutes the headhunt hoard drip
+  /** Last damage timestamp (perf.now) - mutes the headhunt hoard drip
    *  for HELD_BUFF.graceMs. */
   lastHitAt = 0;
-  /** Headhunt held tokens — the offline mirror of PlayerState.heldTokens;
+  /** Headhunt held tokens - the offline mirror of PlayerState.heldTokens;
    *  death scatters it in denomination coins. */
   heldTokens = 0;
 
-  /** Armor tier — speedScale feeds the shared MoveSim so heavy/light
+  /** Armor tier - speedScale feeds the shared MoveSim so heavy/light
 
    *  ground speed changes land exactly as the server computes them. */
 
@@ -121,7 +121,7 @@ export class GameBot extends RemotePlayer {
    *  PlayerState.ammoPool; botFire spends it, respawn() refills it. */
   ammoPool: AmmoPool = new Map();
 
-  /** Loadout perk modifiers — the same table the server multiplies
+  /** Loadout perk modifiers - the same table the server multiplies
 
    *  through CombatHandler/GameServer. 'none' until setLoadout runs. */
 
@@ -174,7 +174,7 @@ export class GameBot extends RemotePlayer {
 
   respawnAt = 0;
 
-  /** CTF: carrying the enemy flag home — objective overrides roam. */
+  /** CTF: carrying the enemy flag home - objective overrides roam. */
 
   carryingFlag = false;
 
@@ -188,23 +188,23 @@ export class GameBot extends RemotePlayer {
 
    *  sheepShown so the % doesn't flicker frame to frame). */
 
-  sheep = 100;    // llama until proven — high-E play drains it
+  sheep = 100;    // llama until proven - high-E play drains it
 
   sheepShown = 100;
 
-  /** Jets pinned by a propel blast — rides the shove like a disc-jump. */
+  /** Jets pinned by a propel blast - rides the shove like a disc-jump. */
 
   propelJetT = 0;
 
-  /** Brain's belt intent from the last think — TeamBots resolves the arc. */
+  /** Brain's belt intent from the last think - TeamBots resolves the arc. */
 
   wantBelt = false;
 
-  /** Builder intent from the shared brain — TeamBots plants it. */
+  /** Builder intent from the shared brain - TeamBots plants it. */
 
   wantDeploy: { kind: string; pos: { x: number; y: number; z: number } } | null = null;
 
-  /** Weld intent — the deployable key the brain is working on. */
+  /** Weld intent - the deployable key the brain is working on. */
 
   wantRepair: string | null = null;
 
@@ -214,35 +214,35 @@ export class GameBot extends RemotePlayer {
 
   wantPass: { x: number; y: number; z: number } | null = null;
 
-  /** Situation chatter edge from the shared brain — TeamBots routes it
+  /** Situation chatter edge from the shared brain - TeamBots routes it
 
    *  through the taunt pools + local chat sink. */
 
   wantSay: BrainOut['say'] | null = null;
 
-  /** The destination the brain steered toward last think — propel gates
+  /** The destination the brain steered toward last think - propel gates
 
    *  on how far the bot still has to run. */
 
   readonly lastDest = new THREE.Vector3();
 
-  /** Propel cooldown (performance.now deadline) — one jump per launch. */
+  /** Propel cooldown (performance.now deadline) - one jump per launch. */
 
   propelUntil = 0;
 
 
 
-  /** Shared decision core — same brain server bots run. */
+  /** Shared decision core - same brain server bots run. */
 
   private brain: BotBrain;
 
-  /** Kit from the shared roster — TeamBots assigns it so range-band
+  /** Kit from the shared roster - TeamBots assigns it so range-band
 
    *  weapon picks mirror the dedicated server's bots. */
 
   loadout?: BotLoadout;
 
-  /** Per-slot reroll candidates this bot spawned with — alternates for
+  /** Per-slot reroll candidates this bot spawned with - alternates for
 
    *  authored kits, the full pools for wildcards (same rule as
 
@@ -252,7 +252,7 @@ export class GameBot extends RemotePlayer {
 
   /** Respawn kit drift: keep whichever candidate the skill matrix
 
-   *  favors — same adaptation BotRoster.adaptOnRespawn runs online. */
+   *  favors - same adaptation BotRoster.adaptOnRespawn runs online. */
 
   adaptLoadout(): void {
 
@@ -270,13 +270,13 @@ export class GameBot extends RemotePlayer {
 
   }
 
-  /** Shared MoveSim — the same physics the server shadow runs, so a bot
+  /** Shared MoveSim - the same physics the server shadow runs, so a bot
 
    *  skis/jets/lands exactly like a legal player (no invented velocities). */
 
   readonly movement: MovementController;
 
-  /** Live MoveState aliasing position/velocity — the sim mutates the
+  /** Live MoveState aliasing position/velocity - the sim mutates the
 
    *  RemotePlayer's own vectors in place (same trick as Player). */
 
@@ -284,36 +284,36 @@ export class GameBot extends RemotePlayer {
 
   private appliedSpecList: readonly StructureSpec[] | undefined;
 
-  /** Jet energy tank — a bot can only hold burn while fuel remains. */
+  /** Jet energy tank - a bot can only hold burn while fuel remains. */
 
   energy: number = ENERGY.max;
 
-  /** Toggle-skill bits the bot holds (MEND/SHIELD/CLOAK) — the same
+  /** Toggle-skill bits the bot holds (MEND/SHIELD/CLOAK) - the same
 
    *  STATUS mask a legal client's inputMove carries. */
 
   status = 0;
 
-  /** Shared brain's current hunt target — belt throws arc at its spot. */
+  /** Shared brain's current hunt target - belt throws arc at its spot. */
 
   get huntTargetId(): string | null { return this.brain.currentHuntId; }
 
-  /** The brain's skill matrix — the fire resolver biases the draw with it. */
+  /** The brain's skill matrix - the fire resolver biases the draw with it. */
 
   get skill() { return this.brain.skill; }
 
-  /** Kill-zone memory — the death site feeds the brain so the next
+  /** Kill-zone memory - the death site feeds the brain so the next
    *  life routes around it (delegates to the shared brain). */
   markDeath(pos: THREE.Vector3, now: number): void { this.brain.markDeath(pos, now); }
 
-  /** Role-adherence scalar — role policy (HoF lean) scales by it. */
+  /** Role-adherence scalar - role policy (HoF lean) scales by it. */
 
   get dutyLevel(): number { return this.brain.dutyLevel; }
 
-  /** Tryhard scalar — the flag role table reads it for comp-pub behavior. */
+  /** Tryhard scalar - the flag role table reads it for comp-pub behavior. */
   get sweatLevel(): number { return this.brain.sweatLevel; }
 
-  /** MoveSim grounded flag — propel only launches from a stand. */
+  /** MoveSim grounded flag - propel only launches from a stand. */
 
   get grounded(): boolean { return this.moveState.onGround; }
 
@@ -323,7 +323,7 @@ export class GameBot extends RemotePlayer {
 
               cls: ArmorClass = 'medium') {
 
-    // Class must ride super() — the model variant (knight for heavy) is
+    // Class must ride super() - the model variant (knight for heavy) is
 
     // picked inside the RemotePlayer ctor before setBotClass could speak.
 
@@ -339,7 +339,7 @@ export class GameBot extends RemotePlayer {
 
     this.brain = new BotBrain({ x: spawn.x, y: spawn.y, z: spawn.z });
 
-    // Local authority: think() writes position/rotation directly — routing
+    // Local authority: think() writes position/rotation directly - routing
 
     // them through update()→snapshot interp made tick() stomp pos with a
 
@@ -353,7 +353,7 @@ export class GameBot extends RemotePlayer {
 
 
 
-  /** Local-authority damage — the same role the server's hit validation
+  /** Local-authority damage - the same role the server's hit validation
 
    *  plays online. Returns true when the hit killed. */
 
@@ -361,15 +361,15 @@ export class GameBot extends RemotePlayer {
 
     if (this.isDead) {return false;}
 
-    // NaN dmg fails `botHp <= 0` forever — an unkillable bot.
+    // NaN dmg fails `botHp <= 0` forever - an unkillable bot.
 
     if (!Number.isFinite(dmg)) { inv('bot-damage-finite', false, { dmg }); return false; }
 
-    // Plated et al — the server's applyDamage applies the same resist.
+    // Plated et al - the server's applyDamage applies the same resist.
 
     let d = dmg * (1 - effectiveResist(this.mods, this.botHp, this.botMaxHp));
 
-    // Held shield burns tank instead of flesh — same exchange rate the
+    // Held shield burns tank instead of flesh - same exchange rate the
 
     // server shadow models (10 hp per energy point).
 
@@ -386,11 +386,11 @@ export class GameBot extends RemotePlayer {
     }
 
     this.botHp -= d;
-    this.lastHitAt = performance.now(); // HELD_BUFF grace — no hoard drip while under fire
+    this.lastHitAt = performance.now(); // HELD_BUFF grace - no hoard drip while under fire
 
     this.brain.takeHit(fromPos, attackerId); // recoil + foe score live in the shared brain
 
-    this.flinch(); // RemotePlayer 'hit' oneshot — the model reacts, not just the brain
+    this.flinch(); // RemotePlayer 'hit' oneshot - the model reacts, not just the brain
 
     if (this.botHp <= 0) {
 
@@ -410,7 +410,7 @@ export class GameBot extends RemotePlayer {
 
   /** Brain + locomotion. Returns the fire command when the bot wants to
 
-   *  shoot this frame — the manager resolves the hit. */
+   *  shoot this frame - the manager resolves the hit. */
 
   think(dt: number, ctx: {
 
@@ -420,7 +420,7 @@ export class GameBot extends RemotePlayer {
 
     nugget: Nugget | null;
 
-    /** CTF: overrides nugget/roam — the flag or the home base. */
+    /** CTF: overrides nugget/roam - the flag or the home base. */
 
     objective?: THREE.Vector3 | null;
 
@@ -428,61 +428,61 @@ export class GameBot extends RemotePlayer {
 
     others?: THREE.Vector3[];
 
-    /** Teammates only — the rally/fold sense (retreat never folds
+    /** Teammates only - the rally/fold sense (retreat never folds
 
      *  onto an enemy). */
 
     allies?: THREE.Vector3[];
 
-    /** Long-arm reach for mortar heavies — extends acquisition past
+    /** Long-arm reach for mortar heavies - extends acquisition past
 
      *  the duel band. */
 
     engageRange?: number;
 
-    /** Fresh blasts in earshot — the hearing sense. */
+    /** Fresh blasts in earshot - the hearing sense. */
 
     sounds?: { x: number; y: number; z: number }[];
 
-    /** Inbound shells — the dodge sense. */
+    /** Inbound shells - the dodge sense. */
 
     threats?: { x: number; y: number; z: number }[];
 
-    /** Carrying the objective — the route rules the feet. */
+    /** Carrying the objective - the route rules the feet. */
 
     running?: boolean;
 
-    /** Flag-seeker commitment (rabbit hunters, CTF recoverers) — the
+    /** Flag-seeker commitment (rabbit hunters, CTF recoverers) - the
 
      *  objective outranks the hunt/dodge senses, same as server-side. */
 
     runner?: boolean;
 
-    /** Named wave member — feet committed to a push/escort flood. */
+    /** Named wave member - feet committed to a push/escort flood. */
 
     wave?: boolean;
 
-    /** Escort-officer wave — holds position ahead of a moving carrier. */
+    /** Escort-officer wave - holds position ahead of a moving carrier. */
 
     marshal?: boolean;
 
-    /** Posted radius around the objective — 0/omitted hunts freely. */
+    /** Posted radius around the objective - 0/omitted hunts freely. */
 
     posted?: number;
 
-    /** Rushing the enemy stand — cloak candidates cloak up. */
+    /** Rushing the enemy stand - cloak candidates cloak up. */
 
     infiltrating?: boolean;
 
-    /** Enemy carrying OUR flag — beacon-marked, engages without LOS. */
+    /** Enemy carrying OUR flag - beacon-marked, engages without LOS. */
 
     thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } | null;
 
-    /** Both CTF flags on stands — route roles discount mid-field duels. */
+    /** Both CTF flags on stands - route roles discount mid-field duels. */
 
     flagsHome?: boolean;
 
-    /** Sweatlord reset: the objective layer wants this bot to press K —
+    /** Sweatlord reset: the objective layer wants this bot to press K -
      *  the manager executes it, the brain never sees it. */
 
     kout?: boolean;
@@ -493,15 +493,15 @@ export class GameBot extends RemotePlayer {
 
     /** Damaged friendly deployable a builder could weld (host-opaque
 
-     *  key — mirrors the server senses' dep id). */
+     *  key - mirrors the server senses' dep id). */
 
     repair?: { key: string; pos: THREE.Vector3; frac: number } | null;
 
-    /** Room event this bot noticed — the server senses' notice ping. */
+    /** Room event this bot noticed - the server senses' notice ping. */
 
     notice?: { kind: ChatterKind; actor?: string } | null;
 
-    /** The bot's nerve input (score margin + K/D) — mirrors
+    /** The bot's nerve input (score margin + K/D) - mirrors
 
      *  ServerBotSenses.confidenceOf. Team modes only. */
 
@@ -525,7 +525,7 @@ export class GameBot extends RemotePlayer {
 
     const pos = this.position;
 
-    // Heights are static for a match's lifetime — every bot probes the
+    // Heights are static for a match's lifetime - every bot probes the
 
     // same terrain, so ONE shared memo beats a per-bot copy of the same
 
@@ -539,7 +539,7 @@ export class GameBot extends RemotePlayer {
 
         // ~2m cells, not 4cm: getHeight is a smooth bilinear heightmap
 
-        // read, so meter snapping is invisible to the senses — and wider
+        // read, so meter snapping is invisible to the senses - and wider
 
         // cells give the shared memo a much higher hit rate.
 
@@ -549,7 +549,7 @@ export class GameBot extends RemotePlayer {
 
         if (v === undefined) {
 
-          // Cap the memo — roaming bots would otherwise grow it a cell at
+          // Cap the memo - roaming bots would otherwise grow it a cell at
 
           // a time for the whole match. Clear-and-refill beats LRU here:
 
@@ -561,7 +561,7 @@ export class GameBot extends RemotePlayer {
 
           // A NaN floor sample memoized here would poison every later
 
-          // trajectory that crosses the cell — flat-zero instead.
+          // trajectory that crosses the cell - flat-zero instead.
 
           if (!Number.isFinite(v)) {v = 0;}
 
@@ -617,13 +617,13 @@ export class GameBot extends RemotePlayer {
 
 
 
-  /** Toggle-skill intent from the brain — ante on the rising edge,
+  /** Toggle-skill intent from the brain - ante on the rising edge,
 
    *  per-second drains while held, auto-drop on an empty tank. Mirrors
 
    *  what the server shadow applies to out.status. */
 
-  /** Owner callbacks for bot-deployed pads — a station heals its planter. */
+  /** Owner callbacks for bot-deployed pads - a station heals its planter. */
 
   heal(n: number): void { this.botHp = Math.min(this.botMaxHp, this.botHp + n); }
 
@@ -633,7 +633,7 @@ export class GameBot extends RemotePlayer {
 
 
 
-  /** Per-frame locomotion — the brain decides at ~10Hz, but position
+  /** Per-frame locomotion - the brain decides at ~10Hz, but position
 
    *  must integrate every render frame or bots warp in 100ms hops.
 
@@ -653,7 +653,7 @@ export class GameBot extends RemotePlayer {
 
   private lastMove: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined;
 
-  // Held-fire aim point — the head keeps tracking between 10Hz thinks
+  // Held-fire aim point - the head keeps tracking between 10Hz thinks
 
   // and for a beat after the trigger releases.
 
@@ -681,16 +681,16 @@ export class GameBot extends RemotePlayer {
 
     const md = Math.hypot(dest.x - pos.x, dest.z - pos.z);
 
-    // Wrist-speed turn — same slew the server host applies, so an
+    // Wrist-speed turn - same slew the server host applies, so an
 
     // offline bot carves its view around instead of fly-flicking.
 
     // A bot's yaw is its crosshair (like a human's): while a shot is
-    // live it faces the TARGET, not the destination — a body strafing
+    // live it faces the TARGET, not the destination - a body strafing
     // sideways while its shots land on you reads as a silent aimbot.
     // Same rule the server driveMove applies off arsenal.aimPoint.
     const aimFresh = performance.now() - this.lastAimAt < 1500;
-    // Between volleys the trigger is dead but the hunt is live — a
+    // Between volleys the trigger is dead but the hunt is live - a
     // duelist keeps their crosshair on the enemy between pulls, so the
     // look falls back to the last-seen hunt spot (same rule as the
     // server's aimPoint fallback; without it volley weapons re-paid the
@@ -700,13 +700,13 @@ export class GameBot extends RemotePlayer {
       ? Math.atan2(look.x - pos.x, look.z - pos.z)
       : Math.atan2(dest.x - pos.x, dest.z - pos.z);
 
-    // Head tracks the last aim point like the server drive does — wire
+    // Head tracks the last aim point like the server drive does - wire
 
     // pitch is negated (positive looks down), and a disengaged bot eases
 
     // back to level at the same 5 rad/s slew as the wrist turn.
 
-    // Pitched at the MUZZLE (+1.4 over eye) like the server drive —
+    // Pitched at the MUZZLE (+1.4 over eye) like the server drive -
 
     // shots launch along this dir, so an eye-height solve lofts every
 
@@ -720,7 +720,7 @@ export class GameBot extends RemotePlayer {
 
     // Human-shaped turn: spring flick + overshoot + settling noise,
 
-    // skill-scaled — shared/botSlew.ts, same drive the server uses.
+    // skill-scaled - shared/botSlew.ts, same drive the server uses.
 
     if (look || md > 0.01) {
       const f = this.brain.slew.face(dt, this.rotation.yaw, wantYaw, this.rotation.pitch, wantPitch, this.brain.skill);
@@ -788,7 +788,7 @@ export class GameBot extends RemotePlayer {
 
     this.wireSki = Boolean(move?.ski);
 
-    // Real jet button for the trail — the vel.y heuristic can't tell a
+    // Real jet button for the trail - the vel.y heuristic can't tell a
 
     // burn from a knockback launch; the brain knows.
 
@@ -802,7 +802,7 @@ export class GameBot extends RemotePlayer {
 
   override applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
 
-    // Local authority: the shove lands directly on the sim velocity —
+    // Local authority: the shove lands directly on the sim velocity -
 
     // no dead-reckoning guess like wire remotes get.
 
@@ -846,7 +846,7 @@ export class GameBot extends RemotePlayer {
 
 
 
-// Map structures every bot's movement surface resolves against — set from
+// Map structures every bot's movement surface resolves against - set from
 
 let botStructureSpec: readonly StructureSpec[] | undefined = undefined;
 

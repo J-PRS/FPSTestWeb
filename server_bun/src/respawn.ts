@@ -1,5 +1,5 @@
 /**
- * RespawnManager — the death→spawn lifecycle: one pending timer per
+ * RespawnManager - the death→spawn lifecycle: one pending timer per
  * player, cancelled on teardown/disconnect, re-armed on rejoin. Split
  * from CombatHandler so the damage funnel stops owning timer hygiene.
  */
@@ -15,12 +15,12 @@ type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 
 export class RespawnManager {
   private timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-  /** Sim-time deadline per pending respawn — the fast-forward driver
+  /** Sim-time deadline per pending respawn - the fast-forward driver
    *  ticks these down since wall-clock setTimeout can't keep pace when
    *  sim-time outruns real time. In live mode the wall timer still fires
    *  first; tick is a no-op shadow then. */
   private dueAt: Map<string, number> = new Map();
-  /** Die-and-spectate holds — the respawn claim's `hold` flag parks the
+  /** Die-and-spectate holds - the respawn claim's `hold` flag parks the
    *  corpse: the timer fires and leaves the player dead until a plain
    *  dead-state respawn releases it. */
   private held = new Set<string>();
@@ -28,16 +28,16 @@ export class RespawnManager {
   constructor(
     private playerManager: PlayerManager,
     private broadcast: BroadcastFn,
-    /** Seat the move-sim shadow at the spawn — the corpse→spawn jump
+    /** Seat the move-sim shadow at the spawn - the corpse→spawn jump
      *  reads as divergence without it. */
     private moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void,
   ) {}
 
-  /** Cancel a pending respawn on disconnect/removal — a stale timer
+  /** Cancel a pending respawn on disconnect/removal - a stale timer
    *  would fire on a rejoining player's new session (or double-respawn
    *  if they died again after reconnecting). */
   cancel(playerId: string): void {
-    this.held.delete(playerId); // a disconnect/removal ends any hold — a rejoin re-arms fresh
+    this.held.delete(playerId); // a disconnect/removal ends any hold - a rejoin re-arms fresh
     const pending = this.timers.get(playerId);
     if (pending) {
       clearTimeout(pending);
@@ -51,32 +51,32 @@ export class RespawnManager {
   hold(playerId: string): void { this.held.add(playerId); }
   isHeld(playerId: string): boolean { return this.held.has(playerId); }
 
-  /** Dead-state respawn press — releases a die-and-spectate hold. A
+  /** Dead-state respawn press - releases a die-and-spectate hold. A
    *  pending unheld timer is NOT skippable: clicking through the
    *  countdown would make respawnDelay decorative, so the press waits
    *  for the fire like everyone else. */
   respawnNow(playerId: string): void {
     this.held.delete(playerId);
     const pending = this.timers.get(playerId);
-    if (pending) {return;} // countdown still owed — the timer fires
+    if (pending) {return;} // countdown still owed - the timer fires
     this.dueAt.delete(playerId);
     this.fire(playerId, wallNow());
   }
 
-  /** The shared revive tail — timer, sim-tick, and respawnNow all land
+  /** The shared revive tail - timer, sim-tick, and respawnNow all land
    *  here so grace + broadcast can't drift between paths. `graceClock`
    *  is the caller's domain (sim-time drivers arm sim-time grace). */
   private fire(playerId: string, graceClock: number): void {
     const result = this.playerManager.respawnPlayer(playerId);
     if (!result) {
-      // A held seat refused — lapsing the deadline leaves the player
+      // A held seat refused - lapsing the deadline leaves the player
       // dead forever if holdSpawn keeps re-arming (reconnect/resync
       // churn refreshing awaitingReady faster than READY_HOLD releases
       // it). Retry on the respawn cadence until the seat is free; the
       // refusal itself gets a line so a stuck-dead report names itself.
       const p = this.playerManager.getPlayer(playerId);
       if (p?.awaitingReady) {
-        logger.warn('respawn refused: seat held off-spawn — re-arming', { playerId });
+        logger.warn('respawn refused: seat held off-spawn - re-arming', { playerId });
         this.schedule(playerId);
       } else {
         logger.warn('respawn refused: respawnPlayer returned null', { playerId });
@@ -88,25 +88,25 @@ export class RespawnManager {
     logger.info('Player respawned', { playerId, position: result.position });
     this.moveResync?.(playerId, result.position, result.rotation.yaw, true);
     // The respawn broadcast and the honest post-snap report are both
-    // in flight — the client's snap to spawn (and any straggler
+    // in flight - the client's snap to spawn (and any straggler
     // reports from the corpse spot) read as impossible speed/
     // divergence against the reseated anchors. Same drain window a
     // correction gets.
     player.correctionGraceUntil = wallMs(graceClock + CONFIG.reportGraceMs);
-    // A banked classUpdate may have just applied — remotes rebuild
+    // A banked classUpdate may have just applied - remotes rebuild
     // the silhouette off armorClass rather than learning it on next join.
     this.broadcast(eventPayload(WORLD_MODEL.player!, 'playerRespawn', 'playerId', playerId, {
       internalId: player.internalId,
       position: result.position,
       rotation: result.rotation,
       armorClass: result.armorClass,
-      // Remotes rebuild class health off the event — a hardcoded 100 would
+      // Remotes rebuild class health off the event - a hardcoded 100 would
       // leave heavy/light classes misbarred until the next tick record.
       health: player.health,
     }) as ServerMessage);
   }
 
-  /** Reconnect restores state verbatim — including isDead. If the
+  /** Reconnect restores state verbatim - including isDead. If the
    *  disconnect cancelled a pending respawn (it did), a restored-dead
    *  player would stay dead forever without this re-arm. */
   ensure(playerId: string): void {
@@ -116,7 +116,7 @@ export class RespawnManager {
     }
   }
 
-  /** Re-arm respawn for a rejoining dead player — same gap as ensure,
+  /** Re-arm respawn for a rejoining dead player - same gap as ensure,
    *  but replaces an existing timer (socket flap mid-death). */
   ensureScheduled(playerId: string): void {
     const player = this.playerManager.getPlayer(playerId);
@@ -124,7 +124,7 @@ export class RespawnManager {
   }
 
   schedule(playerId: string): void {
-    // One respawn timer per player — a second kill while dead replaces
+    // One respawn timer per player - a second kill while dead replaces
     // it instead of stacking.
     const existing = this.timers.get(playerId);
     if (existing) {clearTimeout(existing);}
@@ -132,13 +132,13 @@ export class RespawnManager {
     const timer = setTimeout((): void => {
       this.timers.delete(playerId);
       this.dueAt.delete(playerId);
-      // Held corpse (die-and-spectate) — the deadline lapses silently;
+      // Held corpse (die-and-spectate) - the deadline lapses silently;
       // a dead-state respawn claim is what revives them.
       if (this.held.has(playerId)) {return;}
       try {
       this.fire(playerId, wallNow());
       } catch (error) {
-        // A throw here stranded the player dead forever — the process
+        // A throw here stranded the player dead forever - the process
         // handler would survive it but nobody would ever re-fire the
         // respawn. Log with the victim so a stuck-dead report names him.
         logger.error('Respawn timer failed', { playerId, err: error instanceof Error ? error.message : String(error) });
@@ -148,12 +148,12 @@ export class RespawnManager {
   }
 
   /** Sim-paced respawn pass for un-networked drivers: fires any pending
-   *  respawn whose sim-deadline passed. Live rooms never call this — the
-   *  wall timer does the firing — so wire behavior is unchanged. */
+   *  respawn whose sim-deadline passed. Live rooms never call this - the
+   *  wall timer does the firing - so wire behavior is unchanged. */
   tick(now: number): void {
     for (const [id, at] of this.dueAt) {
       if (now < at) {continue;}
-      // The wall timer is still armed — deleting the bookkeeping alone
+      // The wall timer is still armed - deleting the bookkeeping alone
       // leaves it to fire() a second time on its own schedule. Sim-paced
       // drivers reach deadlines ahead of wall clock, so every respawn
       // would broadcast twice.
@@ -161,12 +161,12 @@ export class RespawnManager {
       if (t) {clearTimeout(t);}
       this.timers.delete(id);
       this.dueAt.delete(id);
-      if (this.held.has(id)) {continue;} // held corpse — same gate as the wall timer
+      if (this.held.has(id)) {continue;} // held corpse - same gate as the wall timer
       this.fire(id, now);
     }
   }
 
-  /** Room teardown — pending respawns die with the room or they fire
+  /** Room teardown - pending respawns die with the room or they fire
    *  broadcasts into an empty world. */
   dispose(): void {
     for (const t of this.timers.values()) {clearTimeout(t);}

@@ -50,30 +50,30 @@ export class GameServer {
   private bunServer: Server<WebSocketData> | null = null;
   readonly tickLoop: TickLoop;
   readonly sessions: SessionManager;
-  /** Session lifecycle state machine — every connect/seat/grace/reap
+  /** Session lifecycle state machine - every connect/seat/grace/reap
    *  decision funnels through here (see sessionRegistry.ts). */
   readonly registry = new SessionRegistry();
   private readonly maps = new MapCatalog();
   private readonly factory: RoomFactory;
   private readonly switcher: RoomSwitcher;
 
-  /** Verbs a spectator may drive — read-only otherwise. tickNack is safe:
+  /** Verbs a spectator may drive - read-only otherwise. tickNack is safe:
    *  nackFor scopes its reseed to the spec's own intro window. */
   private static readonly SPEC_VERBS = new Set(['ping', 'pong', 'clientStats', 'snapshotRequest', 'resync', 'tickNack']);
 
-  // Ops counters — cheap ints, read by /metrics. msgsIn counts everything
+  // Ops counters - cheap ints, read by /metrics. msgsIn counts everything
   // that passed validation; tick lag measures setInterval drift (the
   // server-clock skew that makes client replays overshoot).
   ops = {
     startedAt: wallNow(),
     msgsIn: 0, msgsRejected: 0, joins: 0, leaves: 0,
-    // Which netcode-v2 tier clients actually land on — the cost/perf mix
+    // Which netcode-v2 tier clients actually land on - the cost/perf mix
     // this deployment is paying for.
     tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0,
-    // Join-phase rollup — wait = upgrade→handshake dispatch (inbound
+    // Join-phase rollup - wait = upgrade→handshake dispatch (inbound
     // queue/loop starvation), work = seat+worldstate serialize+send.
     joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0,
-    // Close attribution — ws code histogram + seats that died before
+    // Close attribution - ws code histogram + seats that died before
     // seating. The herd's mass-drop mechanism was never provable without
     // this (drown vs join-timeout vs client 1006 all look identical).
     closeCodes: new Map<number, number>(), closesUnseated: 0,
@@ -83,7 +83,7 @@ export class GameServer {
 
   constructor() {
     // Server-owned creatures: balls are the shared-PvE pilot. A missing
-    // heightmap must degrade gracefully — log and run creature-free rather
+    // heightmap must degrade gracefully - log and run creature-free rather
     // than take down the whole game server. The parsed field is shared by
     // every room's BallSim rather than re-read per match.
     const heightmapPath = CONFIG.heightmapPath || fileURLToPath(new URL('../heightmap.bin', import.meta.url));
@@ -96,23 +96,23 @@ export class GameServer {
           // finished) get the field attached now.
           for (const room of this.rooms.values()) {
             if (!room.ballSim.hasField) { room.field = this.field; room.ballSim.attachField(this.field); }
-            // The creature sim rides the same field — it sits dead
+            // The creature sim rides the same field - it sits dead
             // without it (step() early-returns on !field).
             if (!room.creatureSim.hasField) {room.creatureSim.attachField(this.field);}
             // moveSim + projectiles got null at construction the same
-            // way — without this their seats sit in pendingTrack forever:
+            // way - without this their seats sit in pendingTrack forever:
             // no reconcile, no transit channel, no corrections for anyone
             // who joined before the heightmap read resolved.
             if (!room.moveSim.hasField) {room.moveSim.attachField(this.field, (pid) => room.players.getPlayer(pid)?.position);}
             room.projectiles.attachField(this.field);
           }
         return; })
-        .catch((error): void => logger.warn('BallSim disabled — heightmap load failed', { err: String(error) }));
+        .catch((error): void => logger.warn('BallSim disabled - heightmap load failed', { err: String(error) }));
     } else {
-      logger.warn('BallSim disabled — not running under Bun');
+      logger.warn('BallSim disabled - not running under Bun');
     }
 
-    // The broadcast engine — owns both timers; teardown delegates back
+    // The broadcast engine - owns both timers; teardown delegates back
     // here so playerRoom/ops stay in one place.
     this.tickLoop = new TickLoop(this.rooms, this.ops, (room, id, reason): void => this.removePlayerCompletely(room, id, reason));
     this.tickLoop.start();
@@ -153,16 +153,16 @@ export class GameServer {
       registry: this.registry,
     });
     // Standing lobbies: specs flagged standing:true get a permanent
-    // <name>-1 room now — hibernating empty (near-zero cost), always
+    // <name>-1 room now - hibernating empty (near-zero cost), always
     // joinable and always listed in /rooms (a 1v1 duel-1 with nobody in
     // it is still an open table, not a dead room). Fleet workers skip
     // this: every worker seeding 'duel-1' shadows the same-named room
     // on its siblings in the claim directory (duplicate /rooms rows,
-    // joiners split across invisible instances) — the matchmaker owns
+    // joiners split across invisible instances) - the matchmaker owns
     // room naming fleet-wide instead.
     // Standing lobbies: specs flagged standing:true get a permanent
     // <name>-1 room. Single-worker deploys seed them at boot. In fleet
-    // mode only the primary worker (w0) seeds — every worker seeding
+    // mode only the primary worker (w0) seeds - every worker seeding
     // 'duel-1' would shadow the same-named room on its siblings (duplicate
     // /rooms rows, joiners split across invisible instances). The
     // matchmaker routes joins to w0 for those rooms.
@@ -171,10 +171,10 @@ export class GameServer {
     }
   }
 
-  /** Native-shell volatile lane — one datagram socket, sessions bind by
+  /** Native-shell volatile lane - one datagram socket, sessions bind by
    *  token (issued in gameState). The ws session still owns the reliable
    *  lane; only volatile binary (claims up, ticks down) rides UDP. */
-  /** Per-session decode scratch for udp-sourced frames — same zero-alloc
+  /** Per-session decode scratch for udp-sourced frames - same zero-alloc
    *  contract as ws.data.posScratch. */
   private udpScratch = new Map<string, WebSocketData>();
   attachUdpLane(lane: UdpLane): void {
@@ -188,7 +188,7 @@ export class GameServer {
       port: lane.port,
     });
     ConnectionManager.udpSend = (playerId, data): boolean => {
-      // Stale lanes fall back to ws — a client whose inbound path died
+      // Stale lanes fall back to ws - a client whose inbound path died
       // (shim crash, NAT blackhole) gets ticks back without a reconnect.
       if (!lane.live(playerId)) {return false;}
       lane.sendTo(playerId, data);
@@ -212,16 +212,16 @@ export class GameServer {
     return this.playerRoom.get(playerId);
   }
 
-  // Match history lives in MatchJournal — the ring is a read cache over
+  // Match history lives in MatchJournal - the ring is a read cache over
   // the append-only matches.jsonl journal.
   private readonly journal = new MatchJournal();
 
-  /** Recent match results — newest last. */
+  /** Recent match results - newest last. */
   listMatches(): unknown[] {
     return this.journal.list();
   }
 
-  /** Lifetime leaderboard read off the match journal — survives restarts
+  /** Lifetime leaderboard read off the match journal - survives restarts
    *  since matches.jsonl is append-only. */
   async getStats(): Promise<unknown[]> {
     return this.journal.stats();
@@ -229,7 +229,7 @@ export class GameServer {
 
   /** AFK demotion: humans who stop claiming (hidden tab, parked menu)
    *  become spectators so their player seat frees for a joiner. On
-   *  return a normal join/reclaim re-seats them — they were only ever
+   *  return a normal join/reclaim re-seats them - they were only ever
    *  watching. lastClaimAt is claims-only (pings don't count). */
   afkSweep(): void {
     const now = wallNow();
@@ -240,7 +240,7 @@ export class GameServer {
         const ws = room.socketOf(id);
         this.removePlayerCompletely(room, id, 'afk demote');
         if (ws) {
-          // begin() before seat() — the demote just deleted the session,
+          // begin() before seat() - the demote just deleted the session,
           // and seat-without-begin both spams the anomaly log and leaves a
           // room-less session that corrupts the next reclaim's room lookup.
           this.registry.begin(id, room.name);
@@ -255,7 +255,7 @@ export class GameServer {
     }
   }
 
-  /** Drain-deploys: armed via /admin/drain — SessionManager refuses new
+  /** Drain-deploys: armed via /admin/drain - SessionManager refuses new
    *  joins (reclaims still land), and the drain checker exits the process
    *  once every human has left. */
   draining = false;
@@ -283,7 +283,7 @@ export class GameServer {
     return this.maps.list();
   }
 
-  /** Spectator sockets aren't players — roomOfPlayer can't find them. */
+  /** Spectator sockets aren't players - roomOfPlayer can't find them. */
   private specRooms = new Map<string, Room>();
 
   /** Unseated sockets per source IP: upgraded but not yet joined.
@@ -306,10 +306,10 @@ export class GameServer {
     }
     // Join deadline: a socket that connects but never completes the join
     // handshake would otherwise sit forever (QUIC/RTC peers don't die on
-    // their own quickly). 15s is generous — real clients join in ms.
+    // their own quickly). 15s is generous - real clients join in ms.
     setTimeout((): void => {
       if (!ws.data.playerId && ws.readyState === 1) {
-        // Name the socket's age — a ~ms close means the join raced off
+        // Name the socket's age - a ~ms close means the join raced off
         // generation (client-side churn), a real 15s close means the join
         // never arrived. The tunnel session proved these are indistinguishable
         // in the log otherwise.
@@ -330,7 +330,7 @@ export class GameServer {
       if (s?.delete(ws) && s.size === 0) {this.pendingByIp.delete(ip!);}
     }
     try {
-    // Wrap first: the binary metering tag needs byte 1 — a DataView +
+    // Wrap first: the binary metering tag needs byte 1 - a DataView +
     // string per frame was ~50K throwaway allocs/s at load.
     const u8 = typeof message === 'string'
       ? undefined
@@ -358,7 +358,7 @@ export class GameServer {
     }
   }
 
-  /** Binary frames from ANY lane (ws binary, udp datagrams) — the decode
+  /** Binary frames from ANY lane (ws binary, udp datagrams) - the decode
    *  is the validation, dispatch is the trusted path. `data` is the
    *  per-source decode-slot holder (ws.data or the lane's scratch bag);
    *  `onFatal` severs the source on a throwing handler. */
@@ -371,12 +371,12 @@ export class GameServer {
   ): void {
     {
         const room = existingId ? this.roomOfPlayer(existingId) : undefined;
-        if (!existingId || !room) {return;} // binary before join — ignore
+        if (!existingId || !room) {return;} // binary before join - ignore
         // JSON-over-binary: combat claims ride the position lane for
-        // transit, then decode back into the ordinary text path — same
+        // transit, then decode back into the ordinary text path - same
         // parse, same validation, same dispatch.
         if (u8[1] === WIRE_JSON) {
-          // Reliable traffic doesn't ride the volatile lane — a udp-bound
+          // Reliable traffic doesn't ride the volatile lane - a udp-bound
           // datagram reaching here is a protocol violation, drop it.
           if (!ws) {return;}
           const text = decodeWireJson(u8);
@@ -386,11 +386,11 @@ export class GameServer {
         }
         // Per-socket decode slot: ~30Hz × n frames' worth of object churn
         // becomes zero-alloc. Every consumer copies field-wise inside the
-        // handler — nothing may retain `pos` past this call.
+        // handler - nothing may retain `pos` past this call.
         // The binary input path: inputMove edges ride the same lane as
-        // position reports — the change-only journal lands ~50ms fresher
+        // position reports - the change-only journal lands ~50ms fresher
         // than the JSON stream it duplicates (edge timing = replay fidelity).
-        // Binary claims — the decoders' bounded reads + finite checks
+        // Binary claims - the decoders' bounded reads + finite checks
         // ARE the validation, same trusted dispatch as position frames.
         if (u8[1] === WIRE_JUMP || u8[1] === WIRE_JETPACK) {
           const c = decodePosClaim(u8, u8[1]!);
@@ -436,7 +436,7 @@ export class GameServer {
           seq: 0, ping: 0,
         });
         if (pos) {
-          // Same containment as the JSON lane — a throwing handler drops
+          // Same containment as the JSON lane - a throwing handler drops
           // this socket, not the process.
           try {
             this.handleGameMessageTrusted(room, existingId, pos);
@@ -449,11 +449,11 @@ export class GameServer {
     }
   }
 
-  /** The text/JSON path — WS strings and WIRE_JSON frames share it. */
+  /** The text/JSON path - WS strings and WIRE_JSON frames share it. */
   private onJsonText(ws: ServerWebSocket<WebSocketData>, text: string): void {
     const message = text;
     // Pre-join CPU guard: an unseated socket's only legitimate frame is
-    // the (small) join handshake — unlimited 1MB JSON parses are free DoS.
+    // the (small) join handshake - unlimited 1MB JSON parses are free DoS.
     if (!ws.data.playerId) {
       ws.data.preJoin = (ws.data.preJoin ?? 0) + 1;
       if (message.length > 64 * 1024 || ws.data.preJoin > 16) {
@@ -479,7 +479,7 @@ export class GameServer {
       // to their own intro window by nackFor, not room-wide).
       room = this.specRooms.get(existingPlayerId);
       // A still-connecting seat (join deferred on terrainReady) has no
-      // room yet — join/switchRoom from it are re-intents, not noise.
+      // room yet - join/switchRoom from it are re-intents, not noise.
       // Swallowing them here locks the client to whatever room the stale
       // deferred seat lands in (the hop-during-load hole).
       if (!room && this.registry.state(existingPlayerId) === 'connecting') {
@@ -490,7 +490,7 @@ export class GameServer {
       if (!room || !GameServer.SPEC_VERBS.has((raw as { type?: string }).type ?? '')) {return;}
     }
 
-    // A bad message must only cost its own sender — anything downstream
+    // A bad message must only cost its own sender - anything downstream
     // that throws (handler bug, malformed fields the shape checks missed)
     // logs the player + message type and drops that socket, not the process.
     try {
@@ -499,7 +499,7 @@ export class GameServer {
       return;
     }
 
-    // A room hop crosses room ownership — handle it at the dispatcher, not
+    // A room hop crosses room ownership - handle it at the dispatcher, not
     // inside one room's MessageHandler.
     const probe = raw as { type?: string };
     if (probe.type === 'switchRoom') {
@@ -528,14 +528,14 @@ export class GameServer {
       if (s?.delete(ws) && s.size === 0) {this.pendingByIp.delete(ip!);}
     }
     if (!playerId) {return;}
-    // Throttle entries keyed by playerId must die with the socket —
+    // Throttle entries keyed by playerId must die with the socket -
     // otherwise they linger until the 4096 wholesale clear, which also
     // resets the gate for live spammers.
     this.invalidWarnAt.delete(playerId);
     if (this.departSpectator(playerId, 'spectator left')) {return;}
     const room = this.roomOfPlayer(playerId);
     if (!room) {
-      // Closed mid-handshake (connecting, never seated) — no room entry
+      // Closed mid-handshake (connecting, never seated) - no room entry
       // exists to tear down, but the session record must not leak.
       this.ops.closesUnseated += 1;
       this.registry.terminate(playerId, 'closed before seat');
@@ -545,14 +545,14 @@ export class GameServer {
     // A stale socket's close must not detach a re-seated session: RTC
     // adapters close both datachannels asynchronously, so the old
     // socket's onClose can land AFTER a reclaim already handed the seat
-    // to a new socket — marking a live player disconnected and flapping
+    // to a new socket - marking a live player disconnected and flapping
     // the connection every reconnect cycle. The seat generation makes it
     // a no-op by construction; the map check stays as belt-and-suspenders
     // for sockets seated before the registry existed (adapters).
     if (room.connections.getConnection(playerId) !== ws) {return;}
     if (ws.data.gen !== undefined && ws.data.gen !== this.registry.gen(playerId)) {return;}
 
-    // The grace countdown arms inside the session itself — reclaim and
+    // The grace countdown arms inside the session itself - reclaim and
     // terminate clear it, so the timer can't outlive the seat.
     this.registry.disconnect(playerId, 'socket closed', this.reconnectGraceMs,
       (): void => this.removePlayerCompletely(room, playerId, 'grace period'));
@@ -567,7 +567,7 @@ export class GameServer {
     logger.debug('Backpressure drain', { playerId: ws.data.playerId });
   }
 
-  /** Display name for a player id, scanning live rooms — ops paths only,
+  /** Display name for a player id, scanning live rooms - ops paths only,
    *  called per-conn on admin endpoints, not per-tick. */
   playerName(id: string): string | undefined {
     for (const room of this.rooms.values()) {
@@ -577,19 +577,19 @@ export class GameServer {
     return undefined;
   }
 
-  /** Lobby listing — live matches a client can join by name. `withNames`
+  /** Lobby listing - live matches a client can join by name. `withNames`
    *  (ops callers only) adds the per-player id→name roster. */
   listRooms(withNames = false) {
     return [...this.rooms.values()].filter((r): boolean => !r.unlisted).map(r => ({
       name: r.name,
       mode: r.mode || undefined,
-      // Terrain name is what "map" means to a browser — duel-1 and
+      // Terrain name is what "map" means to a browser - duel-1 and
       // headhunt-1 both run rimrock.bin, their spec files just carry the
       // rules. mapNameOf stays spec-source (reload/matchmaker key on it).
       map: r.spec.terrain?.split('/').pop()?.replace(/\.bin$/, '') ?? this.maps.mapNameOf(r.name),
       players: r.playerCount(),
       humans: r.players.getHumanCount(),
-      // Humans actually playing — a position claim within 90s. A parked
+      // Humans actually playing - a position claim within 90s. A parked
       // hidden-tab client keeps its seat (humans) but isn't counted
       // here, so a ghost doesn't read as "someone online".
       active: r.players.getActiveHumanCount(90_000),
@@ -604,7 +604,7 @@ export class GameServer {
         ? [...r.ffaScores.entries()].toSorted((a, b): number => b[1] - a[1])[0]
         : undefined,
       winAt: r.modeSpec?.winAt,
-      // Lobby countdown — ms until the horn; omitted when the clock isn't armed.
+      // Lobby countdown - ms until the horn; omitted when the clock isn't armed.
       timeLeftMs: r.matchTimeLeftMs() || undefined,
     }));
   }
@@ -613,17 +613,17 @@ export class GameServer {
 
   /** Re-read maps/<name>.json and hot-swap it into the live room. The
    *  room keeps its mode (locked at creation) and roster; only the
-   *  layout — spawns, structures, arena, ball mix, bot fill — reloads. */
+   *  layout - spawns, structures, arena, ball mix, bot fill - reloads. */
   reloadRoom(name: string): 'ok' | 'no-room' | 'no-spec' {
     const room = this.rooms.get(name);
     if (!room) {return 'no-room';}
     // The room's name isn't always its map's (ad-hoc room names, map= pick
-    // in /join, post-rotation state) — reload whatever spec it's playing.
+    // in /join, post-rotation state) - reload whatever spec it's playing.
     const spec = this.maps.reloadSpec(this.maps.mapNameOf(name) ?? name);
     if (!spec) {return 'no-spec';}
     room.mapSrc = this.maps.mapNameOf(name) ?? name;
     // A .bin re-baked under the same filename isn't a 'terrainChanged'
-    // key diff — evict the cached field and force re-attach or the
+    // key diff - evict the cached field and force re-attach or the
     // reload silently keeps the old heightmap.
     if (spec.terrain) {this.factory.invalidateField(spec.terrain);}
     room.applySpec(spec);
@@ -632,7 +632,7 @@ export class GameServer {
     return 'ok';
   }
 
-  /** Boot a player out of their room — the wire sees a normal playerLeft. */
+  /** Boot a player out of their room - the wire sees a normal playerLeft. */
   kickPlayer(playerId: string): boolean {
     const room = this.roomOfPlayer(playerId);
     if (!room) {return false;}
@@ -643,7 +643,7 @@ export class GameServer {
   }
 
   /** Close a room outright: humans get kicked (they reconnect through
-   *  the matchmaker into a live room — bare rejoins can't re-mint),
+   *  the matchmaker into a live room - bare rejoins can't re-mint),
    *  bots die with the room. For draining twin rooms / zombie arenas. */
   closeRoom(name: string): string {
     const room = this.rooms.get(name);
@@ -658,7 +658,7 @@ export class GameServer {
     return 'ok';
   }
 
-  /** Socket-only kill — the seat record survives so grace + the
+  /** Socket-only kill - the seat record survives so grace + the
    *  reconnect/reclaim path fire (vs kickPlayer's full removal). The
    *  test-op for "real socket dropped mid-match". */
   dropSocket(playerId: string): boolean {
@@ -678,7 +678,7 @@ export class GameServer {
     return room.forceEndMatch() ? 'ok' : 'no-mode';
   }
 
-  /** Flush a room's authoritative demo capture to disk (live — no
+  /** Flush a room's authoritative demo capture to disk (live - no
    *  teardown). Needs FPS_DEMO so the room has a recorder attached. */
   dumpDemo(roomName: string): 'ok' | 'no-room' | 'no-demo' | { file: string } {
     const room = this.rooms.get(roomName);
@@ -689,7 +689,7 @@ export class GameServer {
   }
 
   /** Server-browser card: what a master list / LAN browser displays per
-   *  host. Cheap to poll — one row per room, no per-player data. */
+   *  host. Cheap to poll - one row per room, no per-player data. */
   getServerInfo() { return opsGetServerInfo(this); }
 
   getHealthStatus() { return opsGetHealthStatus(this); }
@@ -706,7 +706,7 @@ export class GameServer {
     ConnectionManager.publishFns.add((topic: string, data: string | Uint8Array): void => { server.publish(topic, data as string | Uint8Array<ArrayBuffer>); });
   }
 
-  /** Dev-restart seat snapshot — humans only, bots re-mint from spec.bots.
+  /** Dev-restart seat snapshot - humans only, bots re-mint from spec.bots.
    *  Handed to the dev-watch parent (in-memory, no disk) so a respawned
    *  child can re-seat reconnecting clients where they were. */
   exportRestore(): RestoreState {
@@ -716,7 +716,7 @@ export class GameServer {
       for (const [id, p] of room.players.getAllPlayers()) {
         if (p.isBot) {continue;}
         const token = room.sessionTokens.get(id);
-        if (!token) {continue;} // pre-seat or bot — nothing to reclaim with
+        if (!token) {continue;} // pre-seat or bot - nothing to reclaim with
         players.push({
           id, name: p.name, team: p.team, perk: p.perk, armorClass: p.armorClass,
           pendingClass: p.pendingClass, pendingPerk: p.pendingPerk,
@@ -733,7 +733,7 @@ export class GameServer {
   }
 
   /** Re-seat the exported snapshot: rebuild rooms, drop each human body
-   *  back at its saved spot, park the session in grace — the client's
+   *  back at its saved spot, park the session in grace - the client's
    *  normal reconnect then walks the existing reclaim path (token check,
    *  resumeSeq replay, respawn re-arm) untouched. */
   restoreFrom(raw: unknown): void {
@@ -761,11 +761,11 @@ export class GameServer {
         p.isDead = ps.isDead === true;
         p.pendingRespawn = p.isDead;
         p.name = ps.name;
-        // Banked mid-match picks ride the blob — a restart must not eat
+        // Banked mid-match picks ride the blob - a restart must not eat
         // the classUpdate/perkUpdate the player was owed at next life.
         p.pendingClass = ps.pendingClass === 'light' || ps.pendingClass === 'medium' || ps.pendingClass === 'heavy' ? ps.pendingClass : undefined;
         p.pendingPerk = ps.pendingPerk;
-        // A mid-fight seat, not a fresh spawn — no protection bubble.
+        // A mid-fight seat, not a fresh spawn - no protection bubble.
         p.protectedUntil = simMs(0);
         room.sessionTokens.set(ps.id, ps.token);
         this.playerRoom.set(ps.id, room);
@@ -781,12 +781,12 @@ seated += 1;
 
   stop(): void {
     this.tickLoop.stop();
-    // Deliver real close frames first — server.stop(true) severs sockets
+    // Deliver real close frames first - server.stop(true) severs sockets
     // mid-flight, so without this every player sees a mystery drop on
     // both the banner and their logs rather than 'server restarting'.
     for (const room of this.rooms.values()) {room.connections.closeAll(1001, 'server restarting');}
     for (const room of this.specRooms.values()) {room.connections.closeAll(1001, 'server restarting');}
-    // Flush authoritative demos BEFORE the process dies — a graceful
+    // Flush authoritative demos BEFORE the process dies - a graceful
     // shutdown is the last chance to land the room's capture.
     const demoDir = process.env.FPS_DEMO;
     if (demoDir) {
@@ -807,7 +807,7 @@ seated += 1;
   }
 
   // Garbage-flood bound: every bad message is counted, but warning about
-  // each one trades a wire flood for a log-IO flood — one warn per
+  // each one trades a wire flood for a log-IO flood - one warn per
   // player per window keeps the abuse visible without the write cost.
   private readonly invalidWarnAt = new Map<string, number>();
   private static readonly INVALID_WARN_GAP_MS = 5000;
@@ -825,7 +825,7 @@ seated += 1;
     }
   }
 
-  /** One warn per sender per window for every garbage-frame path —
+  /** One warn per sender per window for every garbage-frame path -
    *  parse/binary rejects arrive before validation, so they share this
    *  throttle or a malformed flood bypasses the bound entirely. */
   private invalidWarn(playerId: string | undefined, msg: string, data?: Record<string, unknown>): void {
@@ -839,7 +839,7 @@ seated += 1;
   }
 
   /** Binary-decoded frames arrive pre-shaped and range-checked inside
-   *  decodePosition/decodeInputMove — the JSON validator would re-walk
+   *  decodePosition/decodeInputMove - the JSON validator would re-walk
    *  ~30Hz×players of known-good objects for nothing. */
   private handleGameMessageTrusted(room: Room, playerId: string, msg: ClientMessage): void {
     this.dispatchMessage(room, playerId, msg, true);
@@ -859,21 +859,21 @@ this.ops.msgsRejected += 1;
   private dispatchMessage(room: Room, playerId: string, data: ClientMessage, trusted = false): void {
 this.ops.msgsIn += 1;
     // Backstop bound: legit traffic is ~20 reports + a few actions per
-    // player per tick (~500 for a full room) — a flooding client would
+    // player per tick (~500 for a full room) - a flooding client would
     // otherwise grow this array unboundedly between drains and stall the
     // cmd phase for everyone. Excess counts as rejected (the metric is
-    // the observability surface — a per-drop log would spam, since a
+    // the observability surface - a per-drop log would spam, since a
     // flooded queue parks at the cap until the next drain).
     if (room.commands.length >= 2000) {
 this.ops.msgsRejected += 1;
       return;
     }
     // Ingest-fast-path: messages whose ordering lives somewhere OTHER
-    // than the command buffer ride it for nothing — parking them just
+    // than the command buffer ride it for nothing - parking them just
     // adds 0-50ms of queue to every reply they send. Telemetry mutates
     // no sim state (and its transit stamps are arrival-time by design);
     // position/inputMove/teleport order through the shadow's own seq-
-    // gated pending/setInput machinery — the outer buffer was only ever
+    // gated pending/setInput machinery - the outer buffer was only ever
     // delaying p.position/p.lastSeen/corrections for the tick fanout.
     // Combat claims stay parked: they adjudicate against sim state and
     // must see this window's earlier commands in wire order.
@@ -896,15 +896,15 @@ this.ops.msgsRejected += 1;
       catch (error) { logger.warn('earlyShotRelay threw', { playerId, error }); }
     }
     // Command buffer: effects land at phase 0 of the next room tick, in
-    // arrival order — sims never see a mid-frame mutation order. The
+    // arrival order - sims never see a mid-frame mutation order. The
     // arrival stamp feeds the rate limiter: a stalled tick draining a
     // backlog must not count every queued report inside one window.
     room.commands.push({ playerId, msg: data, at: wallNow() });
   }
 
-  // Full teardown shared by grace expiry and idle reap — the five stores
+  // Full teardown shared by grace expiry and idle reap - the five stores
   // and the broadcast must move together or a stale slot/token leaks.
-  /** Single spectator exit path — onClose and SessionManager's id-claim
+  /** Single spectator exit path - onClose and SessionManager's id-claim
    *  both route here so the room roster, connection, specRooms index and
    *  session record always die together. closeCode closes the spectator's
    *  socket first when its departure is server-initiated (id claim). */

@@ -26,7 +26,7 @@ describe('perks', () => {
         expect(v as number, `${id}.${k}`).toBeGreaterThanOrEqual(0);
         // Multipliers must stay inside a sane band — a 0 or 5x modifier
         // is a balance typo, not a perk.
-        if (k !== 'maxHealth' && k !== 'regen' && k !== 'regenRamp' && k !== 'damageResist' && k !== 'fallSoak' && k !== 'jumpstart' && k !== 'platingPer' && k !== 'hpPlating') {
+        if (k !== 'maxHealth' && k !== 'regen' && k !== 'regenRamp' && k !== 'damageResist' && k !== 'fallSoak' && k !== 'jumpstart' && k !== 'platingPer' && k !== 'hpPlating' && k !== 'projSpeedCap') {
           expect(v as number, `${id}.${k}`).toBeLessThanOrEqual(3);
         }
         if (k === 'damageResist') {expect(v as number).toBeLessThan(1);}
@@ -38,7 +38,7 @@ describe('perks', () => {
     const zero = perkMods('none');
     // platingPer is a divisor (10), not a multiplier — its neutral row
     // is neither 0 nor 1, so it gets its own case.
-    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal', 'fallSoak', 'jumpstart', 'hpPlating']);
+    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal', 'fallSoak', 'jumpstart', 'hpPlating', 'projSpeedCap']);
     for (const k of MOD_KEYS) {
       expect(zero[k], k).toBe(k === 'platingPer' ? 10 : (ADDITIVE.has(k) ? 0 : 1));
     }

@@ -1,4 +1,4 @@
-// One owner for "which structure specs are live" — map list plus flag
+// One owner for "which structure specs are live" - map list plus flag
 // stands, minus shield panes whose team's generator is down. Every site
 // that used to re-derive the collider surfaces (map load, stand merge)
 // funnels through applyStructureSpecs so a mid-match power flip can
@@ -17,19 +17,19 @@ import { setStructureTopAt } from '../entities/bodyGround.js';
 type MoveStructures = { setStructures(l: readonly StructureSpec[] | undefined): void };
 
 let specList: readonly StructureSpec[] = [];
-/** Mode-minted structures (offline conquest's node bases) — hull specs
+/** Mode-minted structures (offline conquest's node bases) - hull specs
  *  merged over the map's list at every apply. Hosted conquest ships its
  *  node kits IN the wire's structure echo, so this stays empty online. */
 let extraList: readonly StructureSpec[] = [];
 let move: MoveStructures | undefined = undefined;
 const gridDown = new Set<string>();
-/** Live structure world for point/footprint ground queries — rebuilt on
+/** Live structure world for point/footprint ground queries - rebuilt on
  *  the same edge as the collider surfaces so it's never stale vs the
  *  rendered walls. */
 let live: SolidWorld | null = null;
 
 /** Highest structure top face under (x,z), -Infinity when none. Mirrors
- *  SolidWorld.topAt — `maxTop` caps which tops count as floor (within
+ *  SolidWorld.topAt - `maxTop` caps which tops count as floor (within
  *  step reach), or standing under a deck reads it as a ceiling, not
  *  ground. The bodyGround lift folds this into terrain height so a body
  *  beside a deck lip/dome cap doesn't bury in it. */
@@ -64,7 +64,7 @@ export function structureNormalAt(x: number, y: number, z: number, out: THREE.Ve
 
 const _segDn = new THREE.Vector3();
 
-/** Swept segment vs the live structure set — writes the contact point
+/** Swept segment vs the live structure set - writes the contact point
  *  and the hit FACE's normal (side walls and ceilings included, not just
  *  tops). Returns false on a clean pass. Thrown deploy pods use it to
  *  glance off walls instead of phasing through. */
@@ -117,7 +117,7 @@ export function applyStructureSpecs(list: readonly StructureSpec[] | undefined, 
   setBotStructureSpecs(eff);
 }
 
-/** Mode-geometry colliders — offline mode bridges feed hull specs here
+/** Mode-geometry colliders - offline mode bridges feed hull specs here
  *  so their solids block players/bots/balls/shots through the same
  *  pipeline as authored structures. Empty list = no mode solids. */
 export function setExtraStructures(list: readonly StructureSpec[]): void {
@@ -125,17 +125,17 @@ export function setExtraStructures(list: readonly StructureSpec[]): void {
   applyStructureSpecs(specList);
 }
 
-/** Bump on every extra-list reset — feeders key their dedupe on it so a
+/** Bump on every extra-list reset - feeders key their dedupe on it so a
  *  same-content re-feed still lands after a clear (map re-apply edge). */
 let extraGen = 0;
 export function extraStructGen(): number { return extraGen; }
 
-/** Drop mode solids without reapplying — world rebuilds (gameState /
+/** Drop mode solids without reapplying - world rebuilds (gameState /
  *  mapUpdate / solo re-pick) call this before their own apply, so mode
  *  geometry dies with its world instead of leaking onto the next map. */
 export function clearExtraStructures(): void { extraList = []; extraGen += 1; }
 
-/** Generator power edge — a team's gate panes drop while its generator
+/** Generator power edge - a team's gate panes drop while its generator
  *  is a hulk (collider AND visual), and come back on revive. */
 export function setTeamGridDown(team: string, down: boolean): void {
   if (down === gridDown.has(team)) {return;}

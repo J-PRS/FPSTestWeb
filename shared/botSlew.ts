@@ -1,18 +1,18 @@
 /**
- * BotSlew — human-shaped aiming turns for a bot body, one instance per
+ * BotSlew - human-shaped aiming turns for a bot body, one instance per
  * bot, driven by BOTH hosts (offline GameBot.locomote, server driveMove)
  * so a bot's crosshair behaves identically wherever the sim runs.
  *
- * Humans don't turn at a constant rate: a flick is a ballistic spring —
+ * Humans don't turn at a constant rate: a flick is a ballistic spring -
  * fast mid-arc, decelerating into a small overshoot + settle (Fitts /
- * bang-bang control) — and tracking carries continuous low-frequency
+ * bang-bang control) - and tracking carries continuous low-frequency
  * motor noise that SHRINKS the longer the bot has been on target (KTX
  * bot_aim's volatility: big error at contact, decaying over ~1.5s of
  * engagement, re-spiking on target switch). A constant rad/s slew reads
  * as an aimbot for exactly the uniformity this removes.
  *
- * All randomness rides skill.rng — the brain's private deterministic
- * stream — so server sims stay replayable. Hosts feed `dt`, never clocks.
+ * All randomness rides skill.rng - the brain's private deterministic
+ * stream - so server sims stay replayable. Hosts feed `dt`, never clocks.
  */
 
 import { wrapAngleDelta } from './angles.ts';
@@ -29,24 +29,24 @@ const axisMid = (p: { moving: number; still: number } | undefined): number =>
 export class BotSlew {
   private vy = 0;
   private vp = 0;
-  /** Seconds on the current aim — the volatility clock. */
+  /** Seconds on the current aim - the volatility clock. */
   private settle = 0;
   /** Last want-yaw for switch detection (NaN until first call). */
   private ty = Number.NaN;
   /** OU noise state per axis. */
   private nY = 0;
   private nP = 0;
-  /** No-skill fallback stream — LCG keeps even a skill-less bot
+  /** No-skill fallback stream - LCG keeps even a skill-less bot
    *  deterministic (sims stay replayable; hosts normally pass
    *  skill.rng anyway). */
-  private fbSeq = 0x9E3779B9;
+  private fbSeq = 0x9E_37_79_B9;
   private fbRng(): number {
     this.fbSeq = (this.fbSeq * 1_664_525 + 1_013_904_223) >>> 0;
     return this.fbSeq / 0x1_00_00_00_00;
   }
 
   private ou(dt: number, n: number, sigma: number, rng: () => number): number {
-    // Ornstein-Uhlenbeck: mean-reverting, band-limited — wanders like a
+    // Ornstein-Uhlenbeck: mean-reverting, band-limited - wanders like a
     // hand, never random-walks off. Two uniform draws ≈ gaussian step.
     const g = rng() + rng() - 1;
     return n + (-n * 6 * dt + sigma * g * Math.sqrt(dt));

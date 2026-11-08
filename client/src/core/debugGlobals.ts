@@ -1,7 +1,7 @@
-/** Debug/probe globals — one typed home for every `window.__x` handle the
+/** Debug/probe globals - one typed home for every `window.__x` handle the
  *  headless probes and console debugging reach for. Declaring them here
  *  keeps the cast sites honest: a renamed field type-errors instead of
- *  silently writing a key no probe reads. All optional — prod builds only
+ *  silently writing a key no probe reads. All optional - prod builds only
  *  get them under DEV or ?debug. */
 import type * as THREE from 'three';
 import type { Player } from '../entities/Player.js';
@@ -26,14 +26,14 @@ export interface TestHandle {
   networkManager: NetworkManager;
   demoManager: DemoManager | null;
   rendererSetup: ReturnType<typeof createRenderer>;
-  /** Playback truth lives here during a replay (playbackRemotes/playbackBallById) —
+  /** Playback truth lives here during a replay (playbackRemotes/playbackBallById) -
    *  probes must read it, not world.remotePlayers, to compare replay vs live. */
   demoLifecycle: ReturnType<typeof createDemoLifecycle>;
   chatSink: typeof chatSink;
   hud: HUD;
-  /** Offline bot squad — null outside solo. Lets soaks count alive/moving. */
+  /** Offline bot squad - null outside solo. Lets soaks count alive/moving. */
   teamBots: import('../game/bots/index.js').TeamBots | null;
-  /** parity.ts counters — fates/echoes census for soak verdicts. */
+  /** parity.ts counters - fates/echoes census for soak verdicts. */
   parity: { fatesSeen: number; echoesStamped: number; echoesConfirmed: number; destroysSeen: number; msgSeen: Record<string, number> };
 }
 
@@ -47,23 +47,23 @@ declare global {
     __scene?: THREE.Scene;
     __renderer?: THREE.WebGLRenderer;
     __demoManager?: DemoManager;
-    /** vfx pool hit/miss counters — perfprobe asserts pooling works. */
+    /** vfx pool hit/miss counters - perfprobe asserts pooling works. */
     __vfxStats?: { hits: number; misses: number };
-    /** Merged FX census — sections self-register via registerDiag() in the
+    /** Merged FX census - sections self-register via registerDiag() in the
      *  owning modules (vfx pools, ribbons, inst pools, swarms…). Sections
      *  are optional: a section absent means its module never loaded. */
     __trailDump?: () => Record<string, unknown>;
-    /** Render-pipeline census — registered by createRenderer; the Alt+Q
+    /** Render-pipeline census - registered by createRenderer; the Alt+Q
      *  dump reads it for the pixel-mode/AA/pass-state section. */
     __renderDump?: () => Record<string, unknown>;
-    /** Standalone dump bundles (posedump/vmdump/sfxdump) — screenshot
+    /** Standalone dump bundles (posedump/vmdump/sfxdump) - screenshot
      *  harnesses read these once ready. */
     __pm?: unknown;
     /** .rec wire-capture replay through the live pipeline (dev only). */
     __playRec?: (src: string | File, speed?: number) => Promise<() => void>;
-    /** ?autopilot — shared BotBrain driving the local player's inputs. */
+    /** ?autopilot - shared BotBrain driving the local player's inputs. */
     __botpilot?: { stop: () => void };
-    /** ?telemetry=deep — the flight recorder's journal dump. */
+    /** ?telemetry=deep - the flight recorder's journal dump. */
     __telemetry?: { enabled: boolean; dump: () => Record<string, unknown> };
     __clips?: string[];
     __ready?: boolean;

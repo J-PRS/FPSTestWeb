@@ -30,7 +30,7 @@ const GRANDFATHERED: Record<string, number> = {
   // Re-pinned at 1083 after the CTF flag-passing + headhunt hoard brain
   // growth — bots legitimately aggregates behaviors; still alarms at +15%.
   'shared/botBrain.ts': 1083,
-  'client/src/main.ts': 1252, // re-pinned at demo-clip WIP size — still alarms at +15%
+  'client/src/main.ts': 1450, // re-pinned at post-reclaim-fix size — still alarms at +15%
   'client/src/game/gameLoop.ts': 1123, // ditto
   // Pinned after the alarm tripped (ROADMAP next-list: burn down the
   // ichor/corpse FX block + cluster bomblets into their own modules).
@@ -79,6 +79,10 @@ const GRANDFATHERED: Record<string, number> = {
   // Breached at 902 via the howitzer fall-boost line — the local player
   // assembly legitimately aggregates hooks; pinned at breached size.
   'client/src/entities/Player.ts': 902,
+  // Breached unpinned (pre-existing): pinned at current size so the
+  // watch alarms on further growth, per convention.
+  'server_bun/src/GameServer.ts': 930,
+  'client/src/effects/vfx.ts': 906,
 };
 
 function* walk(dir: string): Generator<string> {

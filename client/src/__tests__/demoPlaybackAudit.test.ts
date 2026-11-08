@@ -52,9 +52,9 @@ const CLIP2 = process.env.DEMO_CLIP2 ?? resolve(dirname(fileURLToPath(import.met
 const flatTerrain = {
   getHeight: (): number => 0,
   getNormal: (): THREE.Vector3 => new THREE.Vector3(0, 1, 0),
-  reloadHeightmap(): void { /* flat stub — nothing to reload */ },
+  reloadHeightmap(): void { /* flat stub - nothing to reload */ },
   heightfield: null,
-  // InstancedBlobShadows binds the shared uniform objects verbatim —
+  // InstancedBlobShadows binds the shared uniform objects verbatim -
   // a flat 1×1 black map samples as height 0, same as getHeight().
   heightU: {
     heightMap: { value: new THREE.DataTexture(new Uint8Array(4), 1, 1) },
@@ -85,9 +85,9 @@ function makePlaybackRig(): {
     debrisList: [] as never[], explosions: [] as never[], implosions: [] as never[],
     flagMarkers: new Map(), flagStates: {},
   } as unknown as WorldState;
-  // A stub manager carrying the real wireDemoHandlers graft — the kick
+  // A stub manager carrying the real wireDemoHandlers graft - the kick
   // path only exists inside onPlaybackEvent, so tests drive events
-  // through that handler — calling applyPlaybackEvents directly would
+  // through that handler - calling applyPlaybackEvents directly would
   // leak straight past it.
   const mgr = {
     isPlaying: false, mode: 'playing', currentTime: 0,
@@ -135,7 +135,7 @@ const spawnedBall = (world: ReturnType<typeof makePlaybackRig>['world'],
   });
 };
 
-// Emit events the way demo playback does — through the wired handler so
+// Emit events the way demo playback does - through the wired handler so
 // the kick/viewmodel path runs alongside world reconstruction.
 const emit = (rig: ReturnType<typeof makePlaybackRig>,
   projectiles: ProjectileEvent[], targets: TargetEvent[]): void => {
@@ -161,7 +161,7 @@ describe('playback audit - every lane animates', (): void => {
   it('deployable spawn → scene mesh; down state dims; destroy removes', (): void => {
     const rig = makePlaybackRig();
     applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
-      targetId: 902, targetType: TARGETTYPE_DEPLOY_BASE + 1, // mine — pops on destroy
+      targetId: 902, targetType: TARGETTYPE_DEPLOY_BASE + 1, // mine - pops on destroy
     })] });
     const d = rig.world.playbackDeployableById.get(902)!;
     expect(d).toBeTruthy();
@@ -186,7 +186,7 @@ describe('playback audit - every lane animates', (): void => {
     })] });
     const flag = rig.world.playbackFlags.get(flagId)!;
     expect(flag).toBeTruthy();
-    // Carrier pos provider — the seam updatePlaybackFlags consults.
+    // Carrier pos provider - the seam updatePlaybackFlags consults.
     rig.world.remotePosAt = (idx: number): THREE.Vector3 | null => idx === 3 ? new THREE.Vector3(10, 2, -5) : null;
     rig.life.updateBallsPlayback(1 / 60);
     expect(flag.position.x).toBeCloseTo(10, 1);
@@ -251,10 +251,10 @@ describe.skipIf(!existsSync(CLIP))('remote replica interpolation', (): void => {
   });
 });
 
-describe('playback audit — entities must animate', (): void => {
+describe('playback audit - entities must animate', (): void => {
   it('spawned playback balls integrate gravity (frozen-ball regression)', (): void => {
     const rig = makePlaybackRig();
-    // Demo id deliberately differs from Ball's internal nextTargetId() —
+    // Demo id deliberately differs from Ball's internal nextTargetId() -
     // the exact mismatch that froze every playback ball midair.
     spawnedBall(rig.world, 42_000, new THREE.Vector3(0, 80, 0));
     const ball = rig.world.playbackBallById.get(42_000)!;
@@ -293,7 +293,7 @@ describe('playback audit — entities must animate', (): void => {
   });
 
   it('a Hit after the shell unmapped still spawns its blast', (): void => {
-    // The replayed sim runs live collision — a shell can self-detonate
+    // The replayed sim runs live collision - a shell can self-detonate
     // and drain before its recorded edge. The event is the truth: the
     // explosion must still fire or the demo silently loses every boom.
     const rig = makePlaybackRig();
@@ -320,9 +320,9 @@ n += 1;
   return n;
 };
 
-describe('playback audit — corpse lifecycle', (): void => {
+describe('playback audit - corpse lifecycle', (): void => {
   // Ticks the playback loop until every tracked ball drains or the bound
-  // trips — a corpse that never reaches `disposed` is the frozen-midair bug.
+  // trips - a corpse that never reaches `disposed` is the frozen-midair bug.
 
   it('a recorded kill (Hit→0hp) fades the corpse out of the world', (): void => {
     const rig = makePlaybackRig();
@@ -333,10 +333,10 @@ describe('playback audit — corpse lifecycle', (): void => {
       posX: 0, posY: 80, posZ: 0,
     })] });
     expect(ball.dead).toBe(true);
-    // Killing Hit drops the same debris a Destroyed does — otherwise the
+    // Killing Hit drops the same debris a Destroyed does - otherwise the
     // body vanishes instantly and only the trail wisp remains.
     expect(rig.world.debrisList.length).toBeGreaterThan(0);
-    // Mapped while fading — unmapping here is the frozen-corpse regression.
+    // Mapped while fading - unmapping here is the frozen-corpse regression.
     expect(rig.world.playbackBallById.has(50_000)).toBe(true);
     drain(rig);
     expect(rig.world.playbackBallById.has(50_000)).toBe(false);
@@ -360,7 +360,7 @@ describe('playback audit — corpse lifecycle', (): void => {
     expect(rig.balls).not.toContain(ball);
   });
 
-  it('Spawned re-keying over a fading corpse evicts it — no ghost ball', (): void => {
+  it('Spawned re-keying over a fading corpse evicts it - no ghost ball', (): void => {
     const rig = makePlaybackRig();
     spawnedBall(rig.world, 50_002, new THREE.Vector3(0, 80, 0));
     const corpse = rig.world.playbackBallById.get(50_002)!;
@@ -368,7 +368,7 @@ describe('playback audit — corpse lifecycle', (): void => {
       eventType: TargetEventType.Destroyed, targetId: 50_002, posY: 80,
     })] });
     expect(corpse.dead).toBe(true);
-    // Id reuse while the corpse still fades — the new ball must own the key.
+    // Id reuse while the corpse still fades - the new ball must own the key.
     spawnedBall(rig.world, 50_002, new THREE.Vector3(5, 60, 0));
     const fresh = rig.world.playbackBallById.get(50_002)!;
     expect(fresh).not.toBe(corpse);
@@ -433,13 +433,13 @@ function scrubDemo(demo: DemoFile) {
 }
 
 // File-level differential audit: replay the real clip through real playback,
-// then every spawned entity must have moved (or died) — never froze midair.
+// then every spawned entity must have moved (or died) - never froze midair.
 describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let demo!: ReturnType<typeof deserializeDemo>;
   beforeAll((): void => { demo = deserializeDemo(readFileSync(CLIP).buffer); });
 
-  it('every spawned ball animates or rests on ground — none hover midair', (): void => {
+  it('every spawned ball animates or rests on ground - none hover midair', (): void => {
     const rig = makePlaybackRig();
     const {world} = rig;
     const birthPos = new Map<number, THREE.Vector3>();
@@ -463,7 +463,7 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
       rig.life.updatePlaybackProjectiles(dt);
     }
     // After the full clip, each spawned ball either moved, died, or rests
-    // within 1.5m of ground — the frozen-midair signature is none of those.
+    // within 1.5m of ground - the frozen-midair signature is none of those.
     const violations: string[] = [];
     for (const [id, born] of birthPos) {
       const ball = world.playbackBallById.get(id);
@@ -502,18 +502,18 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
     const stuck: number[] = [];
     for (const [id, o] of origins) {
       const r = world.playbackProjectileById.get(id);
-      if (!r) {continue;} // terminated — fine
+      if (!r) {continue;} // terminated - fine
       if (r.pos.distanceTo(o) < 0.5) {stuck.push(id);}
     }
     expect(stuck, `stuck shells: ${stuck.join(',')}`).toHaveLength(0);
     expect(origins.size).toBeGreaterThan(100);
   });
 
-  it('kick audit — only the clip POV shots kick, nothing else', (): void => {
+  it('kick audit - only the clip POV shots kick, nothing else', (): void => {
     const zeroShots = demo.projectileEvents.filter((
       e): boolean => e.eventType === ProjectileEventType.Fired && e.targetId === 0 && e.timestamp > 0.01,
     );
-    // A promoted POV clip: local shots exist but stay a small minority —
+    // A promoted POV clip: local shots exist but stay a small minority -
     // a foreign-shot leak floods this count (was 18 incl. observer+deploys).
     expect(zeroShots.length).toBeGreaterThan(0);
     expect(zeroShots.length).toBeLessThan(20);
@@ -524,16 +524,16 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
     ).length);
   });
 
-  it('killed balls die at the recorded kill spot — mesh+trail, not a phantom', (): void => {
+  it('killed balls die at the recorded kill spot - mesh+trail, not a phantom', (): void => {
     const rig = makePlaybackRig();
     const { world } = rig;
-    // The clip's OWN embedded heightmap as Ball.field — the ball sim
+    // The clip's OWN embedded heightmap as Ball.field - the ball sim
     // then bounces on the recording's real terrain, so edge reseeds +
     // stepBall should keep the body near the recorded track. Without a
     // field the harness silently takes the ballistic fallback and the
     // sim-overwrite bug can never reproduce here.
     const prevField = Ball.netField;
-    expect(demo.heightmap, 'clip lacks embedded heightmap — test needs real terrain').toBeTruthy();
+    expect(demo.heightmap, 'clip lacks embedded heightmap - test needs real terrain').toBeTruthy();
     const hm = demo.heightmap!;
     (Ball as unknown as { field: Heightfield | null }).field = {
       size: hm.gridN, data: hm.data, stride: 1,
@@ -583,9 +583,9 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
     const dists = kills.map((k): number => k.dist).sort((a, b): number => a - b);
     console.log(`kill dists=[${dists.map((d): string => d.toFixed(1)).join(', ')}]`);
     // Phantom signature: the ctor's ambient ring spot put bodies 200-400m
-    // off the recorded track for EVERY ball — max <250 asserts that class
+    // off the recorded track for EVERY ball - max <250 asserts that class
     // is dead. Edge-starved balls (ball 54: zero edges for 10.4s) still
-    // diverge on bounce drift — a fidelity ceiling the recording sets,
+    // diverge on bounce drift - a fidelity ceiling the recording sets,
     // not a bug. Median is the real assertion: bodies track the tape.
     expect(dists[dists.length - 1]).toBeLessThan(250);
     expect(dists[Math.floor(dists.length / 2)]).toBeLessThan(30);
@@ -606,13 +606,13 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
 });
 
 // Crossfire clip carries the lanes henge lacks: 27 creature events, 109 flag,
-// 34 pickup — every lane asserted against real recorded data.
-describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real data', (): void => {
+// 34 pickup - every lane asserted against real recorded data.
+describe.skipIf(!existsSync(CLIP2))('crossfire clip - remaining lanes on real data', (): void => {
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let demo2!: DemoFile;
   beforeAll((): void => { demo2 = deserializeDemo(readFileSync(CLIP2).buffer); });
 
-  it('every spawned creature animates or dies — none freeze', (): void => {
+  it('every spawned creature animates or dies - none freeze', (): void => {
     const { world, trace } = scrubDemo(demo2);
     expect(trace.creatureBirths.size).toBeGreaterThan(3);
     const violations: string[] = [];
@@ -636,7 +636,7 @@ describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real 
     const livePickups = [...trace.pickupSpawns].filter((id): boolean => world.playbackPickups.has(id));
     expect(world.playbackPickups.size).toBeGreaterThan(0);
     expect(livePickups.length + world.playbackPickups.size).toBeGreaterThanOrEqual(trace.pickupSpawns.size);
-    // Kill events emit a visible burst — a silently dropped kill fails here.
+    // Kill events emit a visible burst - a silently dropped kill fails here.
     expect(trace.killBursts).toBeGreaterThan(0);
   });
 
@@ -644,7 +644,7 @@ describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real 
     const { world, trace, scene } = scrubDemo(demo2);
     for (const id of trace.deploySpawns) {
       const d = world.playbackDeployableById.get(id);
-      if (!d) {continue;} // destroyed mid-clip — fine
+      if (!d) {continue;} // destroyed mid-clip - fine
       expect(scene.children).toContain(d.mesh);
     }
   });
@@ -678,9 +678,9 @@ describe('cross-lane id aliasing', (): void => {
 });
 
 // A recorded re-seat (wire 'teleport' arrives as a Bounce edge) must cut
-// instantly like the live hard segment — not sweep the mesh through a
+// instantly like the live hard segment - not sweep the mesh through a
 // renderOffset blend across hundreds of meters.
-it('teleport-class keyframes snap instantly — no renderOffset sweep', (): void => {
+it('teleport-class keyframes snap instantly - no renderOffset sweep', (): void => {
   const rig = makePlaybackRig();
   spawnedBall(rig.world, 88_000, new THREE.Vector3(0, 80, 0));
   const ball = rig.world.playbackBallById.get(88_000)!;
@@ -694,7 +694,7 @@ it('teleport-class keyframes snap instantly — no renderOffset sweep', (): void
 });
 
 // A re-fired Spawned at a live id (id wrap, or synthetic+real pair at a
-// clip boundary) must re-key the existing ball — not push a second one
+// clip boundary) must re-key the existing ball - not push a second one
 // that nobody updates.
 it('duplicate Spawned at a live id does not orphan a frozen ball', (): void => {
   const rig = makePlaybackRig();
