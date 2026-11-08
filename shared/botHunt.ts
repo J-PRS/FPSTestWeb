@@ -523,7 +523,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // Hero resolve cuts the reaction clock: at full resolve the acquired
   // target is live in half the ticks - escalation at the READ site, not
   // the baked field (the hunt-state rolls are construction-time).
-  if (acq !== undefined && st.huntTick - acq < st.reactTicks / (1 + st.skill.resolve)) {return undefined;}
+  if (acq !== undefined && st.huntTick - acq < st.reactTicks / (1 + st.skill.resolve * 1.5)) {return undefined;}
   const d = dist3(pos, memS > 0 ? st.hunt.pos : st.lastSeen);
   // Reach gate: a beam at 100m is a guaranteed whiff the ledger counts
   // - humans close instead of hosing air (FFA: LG acc 6.6% was mostly
@@ -539,7 +539,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
 st.burstLeft -= 1;
   st.fireT = (st.burstLeft > 0
     ? Math.max(interval, 0.25) + botRand() * 0.15
-    : 0.8 + botRand() * 0.5) / (st.temper * (1 + st.skill.resolve * 0.6))
+    : 0.8 + botRand() * 0.5) / (st.temper * (1 + st.skill.resolve * 0.9))
     * (hero ? 0.65 : fearing ? 0.9 : 1);
   // Suppressive fire is deliberately sloppy - noise, not hits. Hero
   // aim just stops being sloppy.
@@ -569,7 +569,7 @@ st.burstLeft -= 1;
   // snap-aim budget (19% FFA acc at full scatter vs ~35% pro norms).
   if (ws === 0) {err *= 0.5;}
   err *= hero ? 0.3 : fearing ? 1.8 : 1;
-  err *= st.jitter / (1 + st.skill.resolve * 0.8); // resolve = steady hand
+  err *= st.jitter / (1 + st.skill.resolve * 1.2); // resolve = steady hand
   // The skill matrix: hosts that know which weapon will actually fire
   // report it via aimSkill - a snap phenom threads rails, a mortar
   // artist plants the stand, a potato sprays and prays.

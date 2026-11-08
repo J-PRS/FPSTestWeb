@@ -169,7 +169,7 @@ export function heroTick(s: BotSkill, pressure: { deficit: number; ownPerf: numb
   // Menace pull is STRONG and barely perf-weighted: a 30/1 player must
   // lift the whole lobby past the overdrive gate, not just the seeds.
   const p = pressure.deficit * (0.4 + 0.6 * pressure.ownPerf)
-    + pressure.menace * (0.55 + 0.25 * pressure.ownPerf)
+    + pressure.menace * (0.65 + 0.25 * pressure.ownPerf)
     + (s.rng() - 0.5) * 0.04; // ±0.02/tick organic drift
   const target = Math.max(0, Math.min(1, p));
   // Rise fast under pressure (~4s to full), cool slowly (~20s) - a
