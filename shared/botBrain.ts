@@ -28,7 +28,7 @@ import {
   STALE_MS, type HuntState,
 } from './botHunt.ts';
 import { stuckBreak, dodge, wallTopOnPath, ownGate, breachAlongWall, type EscapeState } from './botEscape.ts';
-import { driftForm, type BotSkill, type BotSkillSpec } from './botSkill.ts';
+import { driftForm, heroTick, HERO_ON, type BotSkill, type BotSkillSpec } from './botSkill.ts';
 import { pickDest, pickDeploy, pickRepair, statusIntent } from './botDisposition.ts';
 import { dist3, distSqXZ, dirXZ, type BotVec } from './botVec.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
@@ -180,6 +180,11 @@ export interface BrainCtx {
    *  rattled bots seek company, confident ones spread out and hunt.
    *  Omit where there's no scoreboard; 0.5 (neutral) is assumed. */
   confidence?: number;
+  /** Hero-mode pressure (host-computed): deficit = how badly the bot's
+   *  side loses, ownPerf = this bot's K/D vs the lobby, menace = the
+   *  dominant-enemy pull, menacePos = where that player is. heroTick in
+   *  shared/botSkill turns it into resolve. */
+  hero?: { deficit: number; ownPerf: number; menace: number; menacePos?: BotVec };
   /** Wall/sim time in ms - brain cooldowns key off this, not frames. */
   now: number;
   /** Modeled energy tank (server shadow truth) - skills/jet gate on it.
@@ -765,6 +770,20 @@ export class BotBrain {
     // Brain-owned trait injected into ctx - pickHunt's ectx clone then
     // carries it to scanVisible without another parameter thread.
     ctx.sweat = this.sweat;
+
+    // Hero mode: pressure -> resolve -> the skill dials lerp toward
+    // impossible. menacePos rides the hearing sense at high resolve -
+    // the bot investigates the dominant player, no lock-on.
+    if (HERO_ON && ctx.hero && this.h.skill) {
+      heroTick(this.h.skill, ctx.hero, dt);
+      // Earshot only - pushing a distant menace's live pos would be a
+      // wallhack, not a heard fight. 50m matches the server noisesNear
+      // radius the real hearing sense samples.
+      if (this.h.skill.resolve > 0.5 && ctx.hero.menacePos
+          && distSqXZ(ctx.hero.menacePos, pos) < 50 * 50) {
+        (ctx.sounds ??= []).push(ctx.hero.menacePos);
+      }
+    }
 
     // --- pick a hunt target / refresh the goal (slow cadence) ---
     this.thinkT -= dt;

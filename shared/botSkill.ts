@@ -68,6 +68,16 @@ export function skillMods(spec: BotSkillSpec | undefined): BotTierMods {
 
 export interface BotSkill {
   axes: Record<AimAxis, AxisPair>;
+  /** Pre-resolve snapshot - applyResolve lerps axes/mods/movement from
+   *  these toward impossible; the roll values are never touched. */
+  baseAxes: Record<AimAxis, AxisPair>;
+  baseMove: number;
+  baseMods: BotTierMods;
+  /** Hero mode resolve 0-1 - sustained escalation from team deficit,
+   *  menace pressure, and personal performance. Distinct from the
+   *  brain's heroT last-stand roll: this one changes WHO the bot is,
+   *  not how loud it fights. */
+  resolve: number;
   /** Ski/jet competence — how well it holds speed and picks lines. */
   movement: number;
   /** Form multiplier: >1 in the zone, <1 tilted. Random-walked each
@@ -114,16 +124,68 @@ export function rollSkill(spawn: BotVec, spec: BotSkillSpec = 'medium'): BotSkil
       still: clamp(base + (rng() - 0.5) * spread),
     };
   };
+  const axes = { snap: axis(), track: axis(), arcLead: axis(), arcJudge: axis() };
+  const movement = clamp((0.7 + rng() * 0.8) * mods.move);
   return {
-    axes: { snap: axis(), track: axis(), arcLead: axis(), arcJudge: axis() },
-    movement: clamp((0.7 + rng() * 0.8) * mods.move),
+    axes: { snap: Object.assign({}, axes.snap), track: Object.assign({}, axes.track), arcLead: Object.assign({}, axes.arcLead), arcJudge: Object.assign({}, axes.arcJudge) },
+    baseAxes: axes,
+    baseMove: movement,
+    baseMods: mods,
+    resolve: 0,
+    movement,
     form: 1,
     beltPull: rng() < 0.45,
     courage: rng(),
     spec,
-    mods,
+    mods: Object.assign({}, mods),
     rng,
   };
+}
+
+/** HERO MODE - config toggle. With it on, a losing side's resolve rises
+ *  toward the impossible tier: performance-seeded (the bots already
+ *  doing well escalate first) plus a slow random walk so any nobody can
+ *  spike. All escalation is legal - it only moves the skill dials a
+ *  roll could have drawn. */
+export const HERO_ON = true;
+const IMPOSSIBLE = BOT_TIERS.impossible;
+
+/** Per-think resolve update. pressure = host-computed inputs:
+ *  deficit 0..1 (how badly the bot's side is losing),
+ *  ownPerf 0..1 (this bot's personal form vs the lobby - the hero seed),
+ *  menace 0..1 (a dominant enemy exists - their pull on this bot). */
+export function heroTick(s: BotSkill, pressure: { deficit: number; ownPerf: number; menace: number }, dt: number): void {
+  // Resolve target: team deficit is the floor pressure, personal form
+  // amplifies it (surprising hero = the seed who's already rolling),
+  // a menace adds its own pull, and a slow random walk keeps spikes
+  // organic. Weighted so a nobody only spikes on luck, never on deficit.
+  const p = pressure.deficit * (0.4 + 0.6 * pressure.ownPerf)
+    + pressure.menace * (0.3 + 0.4 * pressure.ownPerf)
+    + (s.rng() - 0.5) * 0.04; // ±0.02/tick organic drift
+  const target = Math.max(0, Math.min(1, p));
+  // Rise fast under pressure (~4s to full), cool slowly (~20s) - a
+  // comeback shouldn't instantly deflate the moment the score evens.
+  const rate = target > s.resolve ? 0.25 : 0.05;
+  s.resolve = Math.max(0, Math.min(1, s.resolve + (target - s.resolve) * Math.min(1, rate * dt)));
+  // Apply: every dial a roll could have drawn, lerped toward impossible.
+  const r = s.resolve;
+  const lerp = (a: number, b: number): number => a + (b - a) * r;
+  s.mods.aim = lerp(s.baseMods.aim, IMPOSSIBLE.aim);
+  s.mods.move = lerp(s.baseMods.move, IMPOSSIBLE.move);
+  s.mods.react = lerp(s.baseMods.react, IMPOSSIBLE.react);
+  s.mods.jitter = lerp(s.baseMods.jitter, IMPOSSIBLE.jitter);
+  s.mods.temper = lerp(s.baseMods.temper, IMPOSSIBLE.temper);
+  // Axis/movement targets scale with the roll, not an absolute - a
+  // hard-spec axis drawn at 1.8 lerping toward 1.45 would be resolve
+  // as a NERF. impossible/own-tier ratio keeps direction correct for
+  // every spec.
+  const aimK = IMPOSSIBLE.aim / s.baseMods.aim;
+  const moveK = IMPOSSIBLE.move / s.baseMods.move;
+  s.movement = lerp(s.baseMove, s.baseMove * moveK);
+  for (const ax of ['snap', 'track', 'arcLead', 'arcJudge'] as const) {
+    s.axes[ax].moving = lerp(s.baseAxes[ax].moving, s.baseAxes[ax].moving * aimK);
+    s.axes[ax].still = lerp(s.baseAxes[ax].still, s.baseAxes[ax].still * aimK);
+  }
 }
 
 /** Weapon → the axis its shots actually exercise. Reads the `aimAxis`

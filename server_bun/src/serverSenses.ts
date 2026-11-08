@@ -300,7 +300,7 @@ export class ServerBotSenses {
       ), (skill ? {
         aimSkill: (d: number, targetSpeed: number): number =>
           aimSkillFor(skill, pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage), targetSpeed),
-      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,held: this.room.mode === 'headhunt' ? p.heldTokens : undefined,convoy: this.convoyOf(p),spillSoon: this.spillWatchOf(p),desperate: this.desperateOf(p),capSync: this.routing.capSyncFor(p),confidence: this.confidenceOf(p),threats: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec): { x: number; z: number; } =>
+      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,held: this.room.mode === 'headhunt' ? p.heldTokens : undefined,convoy: this.convoyOf(p),spillSoon: this.spillWatchOf(p),desperate: this.desperateOf(p),capSync: this.routing.capSyncFor(p),confidence: this.confidenceOf(p),hero: this.heroOf(p),threats: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec): { x: number; z: number; } =>
         this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),imapHottest: (v: BotVec): { x: number; z: number; v: number; } | null => this.room.influence.hottestNear(v, 'opportunity'),imapDanger: (v: BotVec): number =>
         this.room.influence.value(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),notice: this.notices.for(id, p.team, now),repair: builder === false ? null : this.repairJob(p), now});
     // Squad spot-report: reports land via reportSpots() AFTER the bot's
@@ -327,6 +327,42 @@ export class ServerBotSenses {
     const margin = (this.room.scores[p.team] - this.room.scores[other]) / Math.max(1, spec.winAt);
     const kd = Math.tanh(((p.kills ?? 0) - (p.deaths ?? 0)) / 4);
     return Math.min(1, Math.max(0, 0.5 + margin * 0.35 + kd * 0.25));
+  }
+
+  /** Hero-mode pressure feed: how badly this bot's side bleeds, how hot
+   *  this bot personally runs, and whether a dominant enemy exists to
+   *  pull on. heroTick turns it into resolve - the skill lerp lives in
+   *  shared/botSkill. */
+  private heroOf(p: { id: string; team?: string; kills?: number; deaths?: number; position: Vec3 }): { deficit: number; ownPerf: number; menace: number; menacePos?: BotVec } | undefined {
+    const spec = this.room.modeSpec;
+    const teams = spec?.teams === true && (p.team === 'alpha' || p.team === 'bravo');
+    const ownKd = Math.tanh(((p.kills ?? 0) - (p.deaths ?? 0)) / 4); // -1..1
+    const ownPerf = Math.min(1, Math.max(0, 0.5 + ownKd));
+    const isFoe = (fid: string, f: { team?: string }): boolean => fid !== p.id && (teams ? f.team !== p.team : true);
+    const scan = this.menaceScan(isFoe);
+    const {menace} = scan, menacePos = scan.pos;
+    const topKills = Math.max(p.kills ?? 0, scan.topKills);
+    // Deficit: teams read the scoreboard margin; FFA has no sides, so
+    // the gap to the kill leader IS the deficit - plus personal slump.
+    const scoreDeficit = teams
+      ? (this.room.scores[p.team as 'alpha' | 'bravo'] - this.room.scores[p.team === 'alpha' ? 'bravo' : 'alpha']) / Math.max(1, spec!.winAt)
+      : 0;
+    const killGap = teams ? 0 : (topKills - (p.kills ?? 0)) / Math.max(4, spec?.winAt ?? 10);
+    const deficit = Math.min(1, Math.max(0, Math.max(-scoreDeficit, killGap) * 0.7 + Math.max(0, -ownKd) * 0.5));
+    return { deficit, ownPerf, menace: Math.max(0, menace), menacePos };
+  }
+
+  /** Lobby scan behind heroOf: the strongest enemy K/D + pos, and the
+   *  top kill count (the FFA leader mark the kill-gap measures). */
+  private menaceScan(isFoe: (fid: string, f: { team?: string }) => boolean): { menace: number; pos?: BotVec; topKills: number } {
+    let menace = 0, pos: BotVec | undefined, topKills = 0;
+    for (const [fid, f] of this.room.players.getAllPlayers()) {
+      if (f.isDead || !isFoe(fid, f)) {continue;}
+      topKills = Math.max(topKills, f.kills ?? 0);
+      const m = Math.tanh(((f.kills ?? 0) - (f.deaths ?? 0)) / 4);
+      if (m > menace) {menace = m; pos = f.position;}
+    }
+    return { menace, pos, topKills };
   }
 
   /** Which gem to chase: nearest within real reach, unless the bot is so

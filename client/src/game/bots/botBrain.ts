@@ -183,6 +183,8 @@ interface BotThinkCtx {
    *  ServerBotSenses.confidenceOf. Team modes only. */
 
   confidence?: number;
+  /** Hero-mode pressure - mirrors ServerBotSenses.heroOf. */
+  hero?: { deficit: number; ownPerf: number; menace: number; menacePos?: { x: number; y: number; z: number } };
 
   /** The objective flag's real position - altitude vetoes measure
    *  this, not the offset aim point (shared brain contract). */
@@ -564,7 +566,7 @@ export class GameBot extends RemotePlayer {
 
         return v;
 
-      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,flagsHome: ctx.flagsHome,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,flagPos: ctx.flagPos ?? null,moveSkill: ctx.moveSkill,pickupVal: ctx.pickupVal,desperate: ctx.desperate,convoy: ctx.convoy ?? null,spillSoon: ctx.spillSoon ?? null,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp,held: this.heldTokens};
+      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,flagsHome: ctx.flagsHome,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,hero: ctx.hero,flagPos: ctx.flagPos ?? null,moveSkill: ctx.moveSkill,pickupVal: ctx.pickupVal,desperate: ctx.desperate,convoy: ctx.convoy ?? null,spillSoon: ctx.spillSoon ?? null,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp,held: this.heldTokens};
   }
 
   think(dt: number, ctx: BotThinkCtx): { targetId: string; aim: THREE.Vector3 } | null {

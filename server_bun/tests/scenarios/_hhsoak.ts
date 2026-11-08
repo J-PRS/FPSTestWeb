@@ -92,6 +92,9 @@ console.log(`hhsoak: ${ROUNDS} rounds x ${ROUND_S}s, ${BOTS} impossible bots, ar
 
 const t0 = Date.now();
 let simS = 0;
+// ASWS sampler - air/ski/walk/stationary shares for the bot pool, accrued
+// per tick. Grounded is the move shadow's verdict, not a height guess.
+const asws = { a: 0, s: 0, w: 0, st: 0, ticks: 0 };
 // Ceiling: ROUND_S + intermission + slack, so a stuck round can't hang the soak.
 const CAP_S = ROUNDS * (ROUND_S + 60);
 let killsBase = 0;
@@ -101,6 +104,14 @@ while (rounds.length < ROUNDS && simS < CAP_S) {
   respawns(0.05);
   room.checkMatchClock(simNow());
   drain();
+  for (const b of bots) {
+    if (b.isDead) {continue;}
+    const sh = (room.moveSim as unknown as { shadows?: Map<string, { sim: { state: { onGround: boolean } } }> }).shadows?.get(b.id);
+    const grounded = sh?.sim.state.onGround ?? true;
+    const spd = Math.hypot(b.velocity.x, b.velocity.z);
+    if (!grounded) {asws.a++;} else if (spd < 5) {asws.st++;} else if (b.skiing) {asws.s++;} else {asws.w++;}
+    asws.ticks++;
+  }
   if (cur.winner !== '?') {
     cur.simS = simS;
     const k = kills() - killsBase;
@@ -122,4 +133,6 @@ for (const [kind, r] of Object.entries(funnel)) {
   const row = r as { spawned: number; banked: number; decayed: number; refused: number };
   console.log(`  ${kind}: spawned=${row.spawned} banked=${row.banked} decayed=${row.decayed} refused=${row.refused}`);
 }
+const t = asws.ticks || 1, pct = (v: number): number => Math.round(v / t * 100);
+console.log(`\nASWS shares (all bot life-samples): air=${pct(asws.a)}% ski=${pct(asws.s)}% walk=${pct(asws.w)}% stationary=${pct(asws.st)}%`);
 console.log(`\nwall=${((Date.now() - t0) / 1000).toFixed(1)}s for ${simS.toFixed(0)} sim-s (${(simS / ((Date.now() - t0) / 1000)).toFixed(1)}x)`);

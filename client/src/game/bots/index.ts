@@ -582,18 +582,7 @@ bn += 1;
     ctx.allies = this.alliesOf(bot);
     // Mortar heavies reach past the duel band — same reach rule the
     // server senses applies.
-    ctx.engageRange = bot.loadout?.far === WeaponType.Mortar ? 95 : undefined;
-    // Hearing: fresh blasts pull idle bots toward the action — the
-    // same noisesNear sense the server feeds its brains.
-    ctx.sounds = this.senses.recentNoises(bot.position);
-    ctx.threats = this.senses.incomingNear(bot.position);
-    ctx.repair = this.hooks.botRepairJob?.(bot.team, bot.position, bot.playerId) ?? null;
-    // Same nerve the server senses feeds: team margin + own K/D. FFA
-    // leaves it undefined — no allies to drift toward anyway.
-    ctx.confidence = this.confidenceOf(bot);
-    // Room-event ping — the server senses feeds the same notice ctx so
-    // offline bots groan a cap and alert a grab like online ones.
-    ctx.notice = this.notices.for(bot.playerId, bot.team, performance.now());
+    this.fillNerve(ctx, bot);
     // Economy + desperation channels — the shared brain already reads
     // these fields; feeding them isn't a leak, just correct wiring.
     // convoy = richest ally hoard worth drifting to escort; spillSoon =
@@ -666,6 +655,59 @@ bn += 1;
     return Math.min(1, Math.max(0, 0.5 + margin * 0.35 + kd * 0.25));
   }
 
+  /** Room-event ping + hero feed — the nerve channels the shared brain
+   *  reads; split out of fillSenses to keep both under the complexity cap. */
+  private fillNerve(ctx: Parameters<GameBot['think']>[1], bot: GameBot): void {
+    ctx.engageRange = bot.loadout?.far === WeaponType.Mortar ? 95 : undefined;
+    ctx.sounds = this.senses.recentNoises(bot.position);
+    ctx.threats = this.senses.incomingNear(bot.position);
+    ctx.repair = this.hooks.botRepairJob?.(bot.team, bot.position, bot.playerId) ?? null;
+    // Same nerve the server senses feeds: team margin + own K/D.
+    ctx.confidence = this.confidenceOf(bot);
+    ctx.hero = this.heroOf(bot);
+    ctx.notice = this.notices.for(bot.playerId, bot.team, performance.now());
+  }
+
+  /** Mirrors ServerBotSenses.heroOf — the shared brain's resolve feed
+   *  must read the same scoreboard offline that it reads on the wire. */
+  private heroOf(bot: GameBot): { deficit: number; ownPerf: number; menace: number; menacePos?: { x: number; y: number; z: number } } | undefined {
+    const teams = this.spec.teams === true && (bot.team === 'alpha' || bot.team === 'bravo');
+    const other = bot.team === 'alpha' ? 'bravo' : 'alpha';
+    const w = this.deps.world;
+    const ownKd = Math.tanh(((w.killCounts.get(bot.playerId) ?? 0) - (w.deathCounts.get(bot.playerId) ?? 0)) / 4);
+    const ownPerf = Math.min(1, Math.max(0, 0.5 + ownKd));
+    // The menace: best ENEMY K/D - teams reads the other side; FFA is
+    // everyone (the local player counts too - they're a foe to all).
+    const scan = this.menaceScan(bot, teams, other);
+    const {menace} = scan, menacePos = scan.pos;
+    const topKills = Math.max(w.killCounts.get(bot.playerId) ?? 0, scan.topKills);
+    const scoreDeficit = teams ? (this.scores[other] - this.scores[bot.team as 'alpha' | 'bravo']) / Math.max(1, this.spec.winAt) : 0;
+    const killGap = teams ? 0 : (topKills - (w.killCounts.get(bot.playerId) ?? 0)) / Math.max(4, this.spec.winAt ?? 10);
+    const deficit = Math.min(1, Math.max(0, Math.max(-scoreDeficit, killGap) * 0.7 + Math.max(0, -ownKd) * 0.5));
+    return { deficit, ownPerf, menace, menacePos };
+  }
+
+  /** Lobby scan behind heroOf: strongest enemy K/D + pos + the top
+   *  kill count (the FFA leader mark the kill-gap measures). */
+  private menaceScan(bot: GameBot, teams: boolean, other: string): { menace: number; pos?: { x: number; y: number; z: number }; topKills: number } {
+    const w = this.deps.world;
+    const kdOf = (id: string): number => Math.tanh(((w.killCounts.get(id) ?? 0) - (w.deathCounts.get(id) ?? 0)) / 4);
+    let menace = 0, pos: { x: number; y: number; z: number } | undefined;
+    let topKills = 0;
+    const player = this.deps.lazyPlayer();
+    if (!player.isDead && (teams ? this.playerTeam === other : true)) {
+      menace = Math.max(0, kdOf('local')); ({ pos } = player);
+      topKills = w.killCounts.get('local') ?? 0;
+    }
+    for (const b of this.bots) {
+      if (b === bot || b.isDead || (teams && b.team !== other)) {continue;}
+      topKills = Math.max(topKills, w.killCounts.get(b.playerId) ?? 0);
+      const m = kdOf(b.playerId);
+      if (m > menace) {menace = m; pos = b.position;}
+    }
+    return { menace, pos, topKills };
+  }
+
   /** Rally channel = live teammates (incl. the local player). Team
    *  modes have a real squad to fold onto; FFA passes nothing (there's
    *  nobody safe to run to — bot.team is its own playerId there). */
@@ -708,7 +750,27 @@ bn += 1;
       return Number.isFinite(g) ? g : 0;
     };
     if (pool?.length) {
-      const p = pool[Math.floor(simRand() * pool.length)]!;
+      // Enemy clearance — the shared pool means alpha and bravo can
+      // draw the same anchor, which is a spawn-kill, not a spawn. Same
+      // rule the server's spawnPicker scores on: random among anchors
+      // with a live-foe buffer; if every draw is camped, take the
+      // safest instead of feeding a camper.
+      const foes: { x: number; z: number }[] = [];
+      const lp = this.deps.lazyPlayer();
+      if (!lp.isDead && this.teamOf.get('local') !== team) {foes.push(lp.pos);}
+      for (const ob of this.bots) {
+        if (ob.isDead) {continue;}
+        if (team !== 'ffa' && ob.team === team) {continue;}
+        foes.push(ob.position);
+      }
+      const clear = (p: { x: number; z: number }): number => {
+        let m = Infinity;
+        for (const f of foes) {const d = Math.hypot(p.x - f.x, p.z - f.z); if (d < m) {m = d;}}
+        return m === Infinity ? 1e9 : m;
+      };
+      let p = pool[Math.floor(simRand() * pool.length)]!;
+      for (let i = 0; i < 4 && clear(p) < 40; i += 1) {p = pool[Math.floor(simRand() * pool.length)]!;}
+      if (clear(p) < 40) {for (const q of pool) {if (clear(q) > clear(p)) {p = q;}}}
       const jx = (simRand() - 0.5) * 8, jz = (simRand() - 0.5) * 8;
       return new THREE.Vector3(p.x + jx, Math.max(p.y, floorAt(p.x + jx, p.z + jz) + EYE), p.z + jz);
     }

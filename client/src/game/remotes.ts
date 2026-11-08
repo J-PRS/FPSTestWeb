@@ -430,24 +430,36 @@ if (typeof window !== 'undefined') {
   };
   // Shift+Alt+Q: game-STATE dump for balancing/testing - scoreboard rows
   // (name/team/frags/deaths/score) + team tally + ASW split. Not logs.
-  (window as { __gameDump?: () => string[] }).__gameDump = (): string[] => {
-    const d = depsRef;
-    if (!d) {return ['  no world yet'];}
-    const w = d.world;
-    const now = performance.now();
-    const lines: string[] = [`  mode=${w.mode} map=${w.mapName ?? '-'} teams=${JSON.stringify(w.teamScores ?? {})}`];
-    lines.push('  name                 team      cls      F  D  score sheep alive ping net   asw(HA/A/S/W/ST/I)');
-    const nm = d.lazyNetworkManager();
-    const localId = nm.getLocalPlayerId();
-    const { scores, localScoreId } = scoreboardScores(d, nm, localId);
-    const self = d.lazyPlayer();
-    const selfF = (w.killCounts.get('local') ?? 0) + (localScoreId === 'local' ? 0 : w.killCounts.get(localScoreId) ?? 0);
-    const selfD = (w.deathCounts.get('local') ?? 0) + (localScoreId === 'local' ? 0 : w.deathCounts.get(localScoreId) ?? 0);
-    const ss = aswStr(localId);
-    lines.push(`  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(d.lazyPlayerSheep?.().shown === undefined ? '-' : Number(d.lazyPlayerSheep!().shown!.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`);
-    for (const [id, rp] of w.remotePlayers) {lines.push(gameDumpRow(w, id, rp, now));}
-    return lines;
-  };
+  (window as { __gameDump?: () => string[] }).__gameDump = gameDump;
+}
+// The local player's kills/deaths split across two keys - 'local' and
+// the score-id when it's a real player id (scoreboardScores decides).
+function selfCount(map: Map<string, number>, localScoreId: string): number {
+  return (map.get('local') ?? 0) + (localScoreId === 'local' ? 0 : map.get(localScoreId) ?? 0);
+}
+function gameDumpSelfRow(d: RemotesDeps, w: WorldState, now: number): string {
+  const nm = d.lazyNetworkManager();
+  const localId = nm.getLocalPlayerId();
+  const { scores, localScoreId } = scoreboardScores(d, nm, localId);
+  const self = d.lazyPlayer();
+  const selfF = selfCount(w.killCounts, localScoreId);
+  const selfD = selfCount(w.deathCounts, localScoreId);
+  const ss = aswStr(localId);
+  const shown = d.lazyPlayerSheep?.().shown;
+  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
+}
+function gameDump(): string[] {
+  const d = depsRef;
+  if (!d) {return ['  no world yet'];}
+  const w = d.world;
+  // Date.now, not performance.now - aliveSince is stamped by the
+  // scoreboard path on the wall clock; mixing epochs prints garbage.
+  const now = Date.now();
+  const lines: string[] = [`  mode=${w.mode} map=${w.mapName ?? '-'} teams=${JSON.stringify(w.teamScores ?? {})}`];
+  lines.push('  name                 team      cls      F  D  score sheep alive ping net   asw(HA/A/S/W/ST/I)');
+  lines.push(gameDumpSelfRow(d, w, now));
+  for (const [id, rp] of w.remotePlayers) {lines.push(gameDumpRow(w, id, rp, now));}
+  return lines;
 }
 // Module ref - the dump hooks are module-scope; deps flows in on tick.
 let depsRef: RemotesDeps | undefined;

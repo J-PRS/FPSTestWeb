@@ -10,6 +10,7 @@
 
 import type * as THREE from 'three';
 import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BrainCtx } from '../../../../shared/botBrain.js';
+import { getWeaponStats } from '../../../../shared/weapons.js';
 import { classCapsule } from '../../../../shared/botClasses.js';
 import { shootRevealed } from '../../../../shared/status.js';
 import { NOISE_TTL_MS } from '../../../../shared/wire.js';
@@ -139,7 +140,10 @@ export class BotSenses {
       const dx = pos.x - p.pos.x, dy = pos.y - p.pos.y, dz = pos.z - p.pos.z;
       const d = Math.hypot(dx, dy, dz);
       if (d > 12) {continue;}
-      if (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz <= 0) {continue;}
+      // Parked bomb exemption, same as the server's: a settled AOE shell
+      // is still a live threat - bounced howitzer rounds at your feet.
+      const parked = getWeaponStats((p as { config?: { weaponType?: number } }).config?.weaponType).aoeRadius > 0 && p.vel.lengthSq() < 4;
+      if (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz <= 0 && !parked) {continue;}
       const v = nextVec();
       v.x = p.pos.x; v.y = p.pos.y; v.z = p.pos.z;
       out.push(v);
