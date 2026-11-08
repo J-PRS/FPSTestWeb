@@ -253,7 +253,7 @@ clipGen += 1;
     }, DEAD_CLIP_MS);
     // Warm the next clip so the swipe lands with no network gap.
     const nxt = entries[wrapIdx(index + 1)];
-    if (nxt?.filename) {dm.coolShotMgr.prefetchClip(nxt.filename);}
+    if (nxt?.filename) {dm.coolShotMgr.prefetchClip(nxt.filename).catch((): void => { /* prefetch is best-effort */ });}
   }
 
   // Shared commit tail: slide the playing clip out, swap the canvas to
@@ -270,6 +270,10 @@ clipGen += 1;
   }
 
   async function go(dir: 1 | -1): Promise<void> {
+    // Every await below is non-rejecting by contract (slidePanes resolves
+    // on a timer, resolveClip catches to null) - the try is lint honesty
+    // for the nine fire-and-forget call sites, not a real failure path.
+    try {
     if (entries.length === 0 || advancing) {return;}
     // An auto-advance/keys/wheel go() can land mid-gesture - cancel the
     // drag outright or touchend's commit path advances a second clip.
@@ -281,6 +285,7 @@ clipGen += 1;
     poster.style.transform = `translateY(${dir * window.innerHeight}px)`;
     d.canvas.style.transform = centered(0);
     await commitAdvance(dir, ni, resolveClip(e));
+    } catch { /* see above - unreachable today, cheap insurance */ }
     advancing = 0;
   }
 
@@ -418,14 +423,14 @@ clipGen += 1;
       (async (): Promise<void> => {
         await commitAdvance(dir, ni, ready);
         advancing = 0;
-      })();
+      })().catch((): void => { /* nav is best-effort - see go() */ });
     } else {
       // Spring back - the outgoing clip never paused, so the restore is
       // pure CSS: both panes ease home and the poster drops.
       (async (): Promise<void> => {
         await slidePanes(d0.dir, false, SLIDE_MS);
         hidePoster();
-      })();
+      })().catch((): void => { /* nav is best-effort - see go() */ });
     }
   }, { passive: true });
 
