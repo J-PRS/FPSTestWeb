@@ -330,8 +330,8 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
     b.deployT -= dt;
     const handsFree = !b.h.hunt || dist3(pos, b.h.hunt.pos) > 25;
     if (!b.builder || b.deployT > 0 || !handsFree || fearing || !ctx.objective) {return undefined;}
-    if (dist3(pos, ctx.objective) >= 15) {return undefined;}
-    b.deployT = 28 + botRand() * 20;
+    if (dist3(pos, ctx.objective) >= b.deployObjR) {return undefined;}
+    b.deployT = b.deployCdLo + botRand() * b.deployCdSpan;
     // A hurting builder drops a station first (it heals the squad);
     // otherwise the stand gets guns, a minefield, or a patrol drone
     // by temperament — drones roam the stand's perimeter so they're

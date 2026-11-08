@@ -373,6 +373,10 @@ export class BotBrain {
   flinchT = 0;
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
   private beltT = 8; // staggered in the constructor along with thinkT
+  /** Belt trigger window/cooldown - tunable for A/B trigger soaks. */
+  beltMin = 5;
+  beltMax = 45;
+  beltCd = 6;
   // Stuck/dodge senses live in botEscape.ts - escapeS is their state bag.
   private readonly escapeS: EscapeState = {
     stuckStreak: 0,
@@ -449,6 +453,10 @@ export class BotBrain {
   // Both get re-seeded from the spawn hash inside the constructor instead.
   deployT = 8;
   builder = false;
+  /** Deploy trigger gates - tunable for A/B trigger soaks. */
+  deployCdLo = 8;
+  deployCdSpan = 10;
+  deployObjR = 60;
 
   /** Hosts can pin the builder trait - a technician role shouldn't be
    *  a dice roll away from never touching the deploy kit. */
@@ -709,11 +717,11 @@ export class BotBrain {
       // tank carrying the fight, and not walking into a crowd.
       const crowded = (ctx.enemies?.length ?? 0) > 2;
       if (d > 22 || crowded || (ctx.healthFrac ?? 1) < 0.45 || (ctx.energy ?? 99) < 25) {return false;}
-      this.beltT = 9;
+      this.beltT = this.beltCd;
       return true;
     }
-    if (d <= 10 || d >= 35) {return false;}
-    this.beltT = 9;
+    if (d <= this.beltMin || d >= this.beltMax) {return false;}
+    this.beltT = this.beltCd;
     return true;
   }
 

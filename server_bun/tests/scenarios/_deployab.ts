@@ -20,11 +20,18 @@ const field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale 
 
 const room = mkRoom({ mode: 'headhunt', bots: 16, botSkill: "hard" }, 'headhunt', 4242, false, field);
 
-// Patch pickDeploy off for the non-belt team - same shape as the real gate.
+// Two modes: --off = control (deploy vs deploy-blind), default = trigger
+// A/B (both deploy, one team LOOSE: 8-18s cd + 60m objective radius vs
+// stock 28-48s + 15m). --loose=alpha|bravo picks the loose side.
+// All brains forced builder so every bot carries the kit for the A/B.
+const OFF = process.argv.includes('--off');
+const LOOSE = process.argv.find((a) => a.startsWith('--loose='))?.split('=')[1] ?? 'bravo';
 for (const p of room.players.getAllPlayers().values()) {
-  if (p.team === DEPLOY_TEAM) {continue;}
-  const brain = (room.bots as unknown as { brains: Map<string, { pickDeploy: () => boolean }> }).brains.get(p.id);
-  if (brain) {brain.pickDeploy = (): boolean => false;}
+  const brain = (room.bots as unknown as { brains: Map<string, { pickDeploy: () => boolean; builder: boolean; deployCdLo: number; deployCdSpan: number; deployObjR: number }> }).brains.get(p.id);
+  if (!brain) {continue;}
+  brain.builder = true;
+  if (OFF && p.team !== DEPLOY_TEAM) {brain.pickDeploy = (): never => undefined as never;}
+  if (!OFF && p.team === LOOSE) {brain.deployCdLo = 8; brain.deployCdSpan = 10; brain.deployObjR = 60;}
 }
 
 const start = Date.now();
@@ -36,7 +43,7 @@ for (; Date.now() - start < WALL * 1000; t += 1) {
     const a = ps.filter((p) => p.team === 'alpha'), b = ps.filter((p) => p.team === 'bravo');
     const ka = a.reduce((s, p) => s + p.kills, 0), kb = b.reduce((s, p) => s + p.kills, 0);
     const da = a.reduce((s, p) => s + p.deaths, 0), db = b.reduce((s, p) => s + p.deaths, 0);
-    console.log(`  t=${t + 1}s deploy=${DEPLOY_TEAM} alpha ${ka}/${da} bravo ${kb}/${db}`);
+    console.log(`  t=${t + 1}s ${OFF ? 'deploy=' + DEPLOY_TEAM : 'loose=' + LOOSE} alpha ${ka}/${da} bravo ${kb}/${db}`);
   }
 }
 const ps = [...room.players.getAllPlayers().values()];
