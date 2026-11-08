@@ -12,6 +12,7 @@
  */
 import * as THREE from 'three';
 import { ConquestSim, type ConquestBody } from '../../../shared/conquestSim.js';
+import type { SweepObstacle } from '../projectiles/Projectile.js';
 import type { TeamId } from '../../../shared/teams.ts';
 import { KIT_BUILDERS } from '../world/mapStructures.js';
 import { setExtraStructures } from './structureSpecs.js';
@@ -45,8 +46,12 @@ export interface SoloConquestDeps {
 export class SoloConquest {
   readonly sim: ConquestSim;
   private readonly group = new THREE.Group();
+  private readonly nodeObstacles: SweepObstacle[] = [];
+  /** Crystal sweep hulls for updateProjectiles - direct fire stops on
+   *  nodes; damage still flows through applyBlast's frontier gate. */
+  obstacles(): SweepObstacle[] { return this.nodeObstacles; }
 
-  constructor(deps: SoloConquestDeps, span: number, n?: number) {
+  constructor(private deps: SoloConquestDeps, span: number, n?: number) {
     const bodyScratch = { local: { id: 'local', team: undefined as string | undefined, position: deps.lazyPlayer().pos, isDead: false } };
     this.sim = new ConquestSim({
       groundAt: (x, z): number => {
@@ -87,6 +92,20 @@ export class SoloConquest {
       this.group.add(g);
     }
     deps.scene.add(this.group);
+    // Crystal hitboxes: every node is a sweep obstacle so direct fire
+    // stops on the hull instead of phasing through. onBlocked feeds
+    // the same applyBlast funnel - frontier gate still applies, so a
+    // ghosted crystal eats shots but takes no damage (that's the point).
+    for (const nd of this.sim.nodes) {
+      // Hull centered on the hovering crystal (baseTop ~3.4/7 + bob),
+      // not the ground point - a sphere at pos covers only the pedestal.
+      const pos = new THREE.Vector3(nd.pos.x, nd.pos.y + (nd.core ? 9 : 4.5), nd.pos.z);
+      this.nodeObstacles.push({ pos, prevPos: pos.clone(), radius: nd.core ? 6 : 4.5,
+        // Predicate is REQUIRED: unfiltered obstacles only stop explosive
+        // shells - noExplosion slugs (disc/LG) phase straight through.
+        blocks: (): boolean => true,
+        onBlocked: (p): void => { this.sim.applyBlast({ x: nd.pos.x, y: nd.pos.y, z: nd.pos.z }, p.config.aoeDamage ?? 15, 6, p.shooterId ?? undefined); } });
+    }
     // And the hulls — hosted clients collide with the echo's kit specs;
     // solo feeds the same KIT_HULLS pieces through the extra seam.
     setExtraStructures(this.sim.structures());

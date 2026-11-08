@@ -11,6 +11,8 @@ import type { NetCtx } from './ctx.js';
 import { reconcileReplicas } from '../replicas.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 import { CONQUEST, conquestN4, conquestActionable } from '../../../../shared/conquest.js';
+import { Explosion } from '../../effects/explosion.js';
+import { explosionAt } from '../../core/sfx/explosions.js';
 import type { FieldRing } from '../../world/terrain.js';
 import type { RepairTarget } from '../../ui/HealthBarSystem.js';
 
@@ -27,7 +29,7 @@ export interface NodeRow {
 export interface NodeLayerDeps {
   lazyScene(): THREE.Scene;
   lazyTerrain(): { getHeight(x: number, z: number): number; addFieldRing(x: number, z: number, r: number, tint: readonly [number, number, number]): FieldRing; removeFieldRing(h: FieldRing): void };
-  world: { localTeam?: string; nodeMarkers: Map<number, { pos: THREE.Vector3; owner: NodeOwner; core: boolean; gx: number; gz: number; show: boolean; hot: boolean }>; nodeLayer?: { tick(dt: number, now: number): void } | null };
+  world: { localTeam?: string; nodeMarkers: Map<number, { pos: THREE.Vector3; owner: NodeOwner; core: boolean; gx: number; gz: number; show: boolean; hot: boolean }>; nodeLayer?: { tick(dt: number, now: number): void } | null; explosions: Explosion[] };
   lazyHud(): { logEvent(text: string, cls?: string): void; removePlayerIndicator(id: string): void };
   fragMessages: { show(text: string): void };
   lazyHealthBarSystem(): { showDamage(item: RepairTarget, ally: boolean): void };
@@ -57,6 +59,10 @@ interface NodeVis {
   tint: [number, number, number];
   beam: THREE.Mesh;
   beamMat: THREE.MeshBasicMaterial;
+  /** Inner 40%-width core beam - visible only on frontier (actionable)
+   *  nodes so reachable crystals read as "hot" at a glance. */
+  beam2: THREE.Mesh;
+  beam2Mat: THREE.MeshBasicMaterial;
   crystal: THREE.Mesh;
   crystalMat: THREE.MeshBasicMaterial;
   /** RepairTarget adapter — vitals bar reads health live off it. */
@@ -93,6 +99,15 @@ function buildVis(row: NodeRow, terrain: ReturnType<NodeLayerDeps['lazyTerrain']
   beam.position.y = baseTop + h / 2;
   beam.scale.y = h; // unit cylinder stretched to full height
   g.add(beam);
+  const beam2Mat = new THREE.MeshBasicMaterial({
+    color: col, transparent: true, opacity: 0.5,
+    side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const beam2 = new THREE.Mesh(row.core ? CORE_BEAM_GEO : BEAM_GEO, beam2Mat);
+  beam2.scale.set(0.4, h, 0.4);
+  beam2.position.y = baseTop + h / 2;
+  beam2.visible = false;
+  g.add(beam2);
   const crystalMat = new THREE.MeshBasicMaterial({ color: col });
   const crystal = new THREE.Mesh(CRYSTAL_GEO, crystalMat);
   const cs = row.core ? 1.6 : 1;
@@ -105,7 +120,7 @@ function buildVis(row: NodeRow, terrain: ReturnType<NodeLayerDeps['lazyTerrain']
     v: { health: row.hp, armor: 0, maxHealth: row.maxHp },
   };
   g.position.set(row.pos.x, row.pos.y, row.pos.z);
-  return { g, ring, tint, beam, beamMat, crystal, crystalMat, target, lastHp: row.hp, core: row.core, baseTop, hot: false, crystY: baseTop + cs * 1.2 };
+  return { g, ring, tint, beam, beamMat, beam2, beam2Mat, crystal, crystalMat, target, lastHp: row.hp, core: row.core, baseTop, hot: false, crystY: baseTop + cs * 1.2 };
 }
 
 /** One row roster → one lattice paint. The hosted path feeds wire
@@ -166,6 +181,13 @@ export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow
       const prevHp = prevCoreHp.get(r.id);
       if (prevHp !== undefined && r.hp < prevHp) {
         deps.fragMessages.show(r.owner === deps.world.localTeam ? 'OUR CORE UNDER ATTACK!' : 'ENEMY CORE UNDER ATTACK!');
+      }
+      // Core death gets the mega bloom - a razed node just flips neutral,
+      // a dead core is the match ending and should LOOK like it.
+      if (prevHp !== undefined && prevHp > 0 && r.hp <= 0) {
+        const pos = new THREE.Vector3(r.pos.x, r.pos.y, r.pos.z);
+        deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, true, 0, undefined, 3, undefined, 'shellburst'));
+        explosionAt(pos, true);
       }
       prevCoreHp.set(r.id, r.hp);
     }
@@ -270,6 +292,17 @@ export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow
         v.beamMat.opacity = r.owner === 'neutral'
           ? (r.core ? 0.42 : 0.3)
           : 0.12 + 0.38 * Math.max(0, Math.min(1, r.hp / r.maxHp));
+        // Frontier double-beam: the inner 40% core only shows on nodes
+        // the chain can reach, so "your next objective" reads instantly.
+        v.beam2.visible = actionable.has(r.id);
+        v.beam2.scale.y = h * frac;
+        v.beam2.position.y = v.baseTop + (h * frac) / 2;
+        v.beam2Mat.color.setHex(color);
+        // Out-of-frontier enemy crystals ghost: damage-intangible reads
+        // as translucent - only the gem dims, the stand stays solid.
+        const ghost = r.owner !== me && r.buildBy !== me && !actionable.has(r.id);
+        v.crystalMat.transparent = ghost;
+        v.crystalMat.opacity = ghost ? 0.5 : 1;
       },
       reap: (v, id): void => {
         deps.lazyScene().remove(v.g);

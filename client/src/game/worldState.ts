@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { RemotePlayer } from '../entities/RemotePlayer.js';
-import type { Projectile } from '../projectiles/Projectile.js';
+import type { Projectile, SweepObstacle } from '../projectiles/Projectile.js';
 import type { BallDebris, PlayerDebris } from '../effects/debris.js';
 import type { Explosion } from '../effects/explosion.js';
 import type { ScorchDecal } from '../effects/scorch.js';
@@ -113,6 +113,7 @@ export interface WorldState {
   soloConquest?: {
     tick(dt: number): void;
     applyBlast(pos: THREE.Vector3, damage: number, radius: number, shooterId: string | undefined, scales?: readonly number[]): void;
+    obstacles(): SweepObstacle[];
   } | null;
 }
 

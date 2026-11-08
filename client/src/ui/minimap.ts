@@ -108,17 +108,50 @@ export class Minimap {
   private drawNodes(nodes: Iterable<MinimapNode> | undefined, t: MapBasis): void {
     if (!nodes) {return;}
     const c = this.ctx, m = this._map;
+    // Lattice links first (under the cells): 4-neighbors on the grid.
+    // Cell pitch = min nonzero pair distance; same-owner gets a solid
+    // team line, mixed pairs get a middle-half gradient blend.
+    const pts: { x: number; y: number; col: string; owner: string; core: boolean; hot: boolean }[] = [];
     for (const n of nodes) {
       this.toMap(n.pos.x - t.pos.x, n.pos.z - t.pos.z, t.sin, t.cos, t.k, t.mid);
       const col = n.owner === 'neutral' ? 'rgba(140,148,158,0.8)' : `#${(TEAM_COLORS[n.owner as TeamId] ?? 0xFF_FF_FF).toString(16).padStart(6, '0')}`;
-      c.fillStyle = col;
-      const s = n.core ? 3.4 : 2.4;
-      c.fillRect(m[0] - s, m[1] - s, s * 2, s * 2);
-      if (n.hot) {
+      pts.push({ x: m[0], y: m[1], col, owner: n.owner, core: n.core, hot: n.hot });
+    }
+    let pitch = Infinity;
+    for (let i = 0; i < pts.length; i += 1) {
+      for (let j = i + 1; j < pts.length; j += 1) {
+        const d = Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.y - pts[j]!.y);
+        if (d > 0.5 && d < pitch) {pitch = d;}
+      }
+    }
+    if (pitch < Infinity) {
+      const near = pitch * 1.15;
+      c.lineWidth = 1.5;
+      for (let i = 0; i < pts.length; i += 1) {
+        for (let j = i + 1; j < pts.length; j += 1) {
+          const a = pts[i]!, b = pts[j]!;
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d > near) {continue;}
+          c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y);
+          if (a.owner === b.owner) {c.strokeStyle = a.col; c.globalAlpha = 0.55; c.stroke(); continue;}
+          const g = c.createLinearGradient(
+            a.x + (b.x - a.x) * 0.25, a.y + (b.y - a.y) * 0.25,
+            a.x + (b.x - a.x) * 0.75, a.y + (b.y - a.y) * 0.75);
+          g.addColorStop(0, a.col); g.addColorStop(1, b.col);
+          c.strokeStyle = g; c.globalAlpha = 0.55; c.stroke();
+        }
+      }
+      c.globalAlpha = 1;
+    }
+    for (const p of pts) {
+      c.fillStyle = p.col;
+      const s = p.core ? 3.4 : 2.4;
+      c.fillRect(p.x - s, p.y - s, s * 2, s * 2);
+      if (p.hot) {
         c.strokeStyle = 'rgba(255,255,255,0.95)';
         c.lineWidth = 1;
         c.beginPath();
-        c.arc(m[0], m[1], s + 2, 0, Math.PI * 2);
+        c.arc(p.x, p.y, s + 2, 0, Math.PI * 2);
         c.stroke();
       }
     }
