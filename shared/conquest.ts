@@ -22,8 +22,8 @@ export const CONQUEST = {
   TOUCH_R: 8,
   /** Blast durability of a built node (0 → neutral). A node under
    *  construction has hp ∝ build progress, so it's fragile on purpose. */
-  NODE_HP: 1500,
-  CORE_HP: 4000,
+  NODE_HP: 500,
+  CORE_HP: 2000,
   /** Respawn sphere minted at each owned node — frontier-forward spawns. */
   NODE_SPAWN_R: 12,
   /** Coordinator: seconds a bot keeps its node assignment before a

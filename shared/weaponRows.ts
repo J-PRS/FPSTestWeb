@@ -8,7 +8,7 @@ import { WeaponType, type WeaponStats } from './weaponTable.ts';
 export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.BoltLauncher]: {
     aimAxis: 'arcJudge',
-    fireInterval: 1,
+    fireInterval: 1.2,
     gib: true, airtimeScale: true, aoeBonus: true,
     directDamage: 50,
     aoeDamage: 15,
@@ -498,6 +498,26 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 50,
     aoeDamage: 15,
     aoeRadius: 8,
+    knockbackForce: 28,
+    forceMode: 'push',
+    speed: 120,
+    gravity: false,
+    bodyRadius: 0.18,
+    hitMin: 0,
+    hitMax: 8,
+    hitGrow: 2,
+    maxLifetime: 12,
+  },
+  [WeaponType.FastDiscLauncher]: {
+    aimAxis: 'arcLead',
+    fireInterval: 1.2,
+    gib: true, airtimeScale: true, aoeBonus: true,
+    sfxKey: WeaponType.Disc, vmKey: WeaponType.Disc,
+    // The fast disc: exact mirror of the benched universal rocket -
+    // same flat 120 m/s flight and damage, only the silhouette changes.
+    directDamage: 50,
+    aoeDamage: 15,
+    aoeRadius: 5,
     knockbackForce: 28,
     forceMode: 'push',
     speed: 120,

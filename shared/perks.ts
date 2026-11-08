@@ -10,7 +10,7 @@
  * name, never scattered).
  */
 
-export type PerkId = 'none' | 'featherjets' | 'plated' | 'armored' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall' | 'jumpstart' | 'recon';
+export type PerkId = 'none' | 'featherjets' | 'plated' | 'armored' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall' | 'jumpstart' | 'slugger' | 'recon';
 
 export interface PerkMods {
   /** Jet fuel burn multiplier (1 = normal, 0.7 = 30% thriftier). */
@@ -60,13 +60,16 @@ export interface PerkMods {
   /** Plated: +1 plating per N current hp, floored — heavies on a hoard
    *  become walking fortresses (150hp = +3 plating before tokens). 0=off. */
   hpPlating: number;
+  /** Momentum: projectile launch speed cap (m/s) - excess converts to
+   *  direct-hit damage at min(1.5, origSpeed/cap). 0 = off. */
+  projSpeedCap: number;
   /** Recon: multiplier on how long a contact YOU personally spotted
    *  stays on your IFF after it breaks sight (1 = base linger). Server-
    *  stamped per viewer - teammates never inherit your memory. */
   intelLinger: number;
 }
 
-const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0, jumpstart: 0, platingPer: 10, hpPlating: 0, intelLinger: 1 };
+const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0, jumpstart: 0, platingPer: 10, hpPlating: 0, projSpeedCap: 0, intelLinger: 1 };
 
 /** Regenerator wind-up: the ramp only accrues after this many unhurt
  *  seconds — sustained combat denies the perk entirely instead of
@@ -90,10 +93,11 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   reach:       { name: 'Reach',       blurb: 'Grab pickups and flags from 25% farther', mods: { pickupRadius: 1.25 } },
   featherfall: { name: 'Featherfall', blurb: 'Fall damage energy shield, 20 hp per energy point', mods: { fallSoak: 20 } },
   jumpstart:   { name: 'Jumpstart',   blurb: 'Ski launch: pressing ski boosts +8 m/s, up to run speed +8', mods: { jumpstart: 8 } },
+  slugger:      { name: 'Slugger',     blurb: 'Shells capped at 120 m/s - capped speed pays back up to 1.5x direct damage', mods: { projSpeedCap: 120 } },
   recon:       { name: 'Recon',       blurb: 'Contacts you spot yourself linger 3x longer on your IFF', mods: { intelLinger: 3 } },
 };
 
-export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'armored', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall', 'jumpstart', 'recon'];
+export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'armored', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall', 'jumpstart', 'slugger', 'recon'];
 
 export function perkMods(id: string | undefined | null): PerkMods {
   const p = PERKS[(id ?? 'none') as PerkId];

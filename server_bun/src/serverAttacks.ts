@@ -65,7 +65,11 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
       const d = Math.hypot(target.position.x - shooter.position.x, target.position.y - shooter.position.y, target.position.z - shooter.position.z);
       if (d > (stats?.aoeRadius ?? 3.2) + 2.4) {return;} // swing radius + capsule
     }
-    let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
+    // Slugger bonus re-derived, not sent: cap + row speed decide it
+    // identically on both ends (spawn clamps, hit pays back).
+    const sm = perkMods(shooter.perk);
+    const slug = sm.projSpeedCap > 0 && stats.speed > sm.projSpeedCap ? Math.min(1.5, stats.speed / sm.projSpeedCap) : 1;
+    let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * sm.directDamage * slug;
     // Bot beams ramp down like human ones - the beam-rider loadout pays
     // the same hold-decay a client's beam does.
     if (weaponType === WeaponType.Lightning) {

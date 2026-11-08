@@ -202,7 +202,9 @@ export class PlayerManager {
    *  not fold the forced isDead into the saved state. */
   holdSpawn(playerId: string): void {
     const p = this.players.get(playerId);
-    if (!p || p.awaitingReady) {return;}
+    // Bots have no 'ready' handshake - a held bot seat wedges dead
+    // forever while the sim keeps shooting (frozen body + live shots).
+    if (!p || p.awaitingReady || p.isBot) {return;}
     p.awaitingReady = { at: wallNow(), dead: p.isDead, hp: p.health };
     p.isDead = true;
   }

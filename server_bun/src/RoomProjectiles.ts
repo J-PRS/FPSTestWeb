@@ -31,6 +31,7 @@ import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shar
 import type { PlayerManager } from './PlayerManager.ts';
 import type { MessageHandler } from './MessageHandler.ts';
 import { stepContact, dischargeRay } from './projContact.ts';
+import { perkMods } from '../../shared/perks.ts';
 import { weaponStats } from './weaponStats.ts';
 import { encodeProjSpawn, encodeProjGone } from '../../shared/wire.ts';
 
@@ -45,6 +46,9 @@ export interface LiveProj {
   /** Age at which the parabola could first reach the terrain ceiling.
    *  Before it, segFieldHit is skipped - provably nothing below. */
   terrainAt: number;
+  /** Slugger perk: direct-hit bonus stamped at spawn when the launch
+   *  speed was capped down (min(1.5, orig/cap)). 1 = no trade. */
+  directBonus: number;
   /** This shell's fuse - maxLifetime jittered per id so burst weapons
    *  (flak) pop raggedly. Client replicas derive the same value from the
    *  projectileId, so both ends' pops line up. */
@@ -237,10 +241,16 @@ export class RoomProjectiles {
     if (!BELT_THROW_WEAPONS.has(weaponType)) {owner.weapon = weaponType;}
     const id = `sp-${((this.nextId += 1) - 1)}`;
     const inh = stats.inherit ?? 0.5;
+    // Slugger perk: cap launch speed, excess pays back as direct bonus.
+    // Same formula as the client's spawn - cap drives BOTH sim ends.
+    const cap = perkMods(owner.perk).projSpeedCap;
+    const capped = cap > 0 && stats.speed > cap;
+    const effSpeed = capped ? cap : stats.speed;
+    const speedRatio = stats.speed / effSpeed;
     const vel: Vec3 = {
-      x: dir.x * stats.speed + ownerVel.x * inh,
-      y: dir.y * stats.speed + ownerVel.y * inh,
-      z: dir.z * stats.speed + ownerVel.z * inh,
+      x: dir.x * effSpeed + ownerVel.x * inh,
+      y: dir.y * effSpeed + ownerVel.y * inh,
+      z: dir.z * effSpeed + ownerVel.z * inh,
     };
     const g = stats.gravity ? GRAVITY : 0;
     // Schedule the first age at which this arc could reach the terrain
@@ -250,7 +260,9 @@ export class RoomProjectiles {
       id, ownerId, weaponType, stats, p: { pos: Object.assign({}, origin), vel, age: lagS }, terrainAt,
       pull: shotId ?? id,
       ownerTeam: owner.team,
-      ttl: jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S,
+      // ttl scales by the same cut ratio - capped shells keep range.
+      ttl: (jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S) * speedRatio,
+      directBonus: capped ? Math.min(1.5, speedRatio) : 1,
     });
     // shotId/pellet are the intent's nonce - the shooter's predicted
     // shell binds its server identity off this echo (linkOwnProjectile).
@@ -409,12 +421,12 @@ export class RoomProjectiles {
     // blast splashes the rest of the swarm - same outcome a player-caused
     // hit + aoeShot pair produces, minus the claims.
     if (ballId !== undefined) {
-      const dmg = scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage;
+      const dmg = (scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage) * proj.directBonus;
       const killed = this.room.ballSim?.handleHit(proj.ownerId, ballId, dmg).killed ?? false;
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
     if (crawlerId !== undefined) {
-      const dmg = scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage;
+      const dmg = (scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage) * proj.directBonus;
       const killed = this.room.creatureSim?.handleHit(proj.ownerId, crawlerId, dmg).killed ?? false;
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }

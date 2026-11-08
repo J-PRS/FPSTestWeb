@@ -49,6 +49,7 @@ export enum WeaponType {
   Basilisk = 43,        // heavy-frame cannon: the same 80 m/s arc shell in a huge-bore long gun - the gravity-arc primary family member for heavies
   RocketLauncher = 44,  // universal rocket: the Bolt Launcher's shell with no gravity - every class fields it
   Howitzer = 45,        // siege artillery: mortar-on-steroids - 5-charge drum, 6s/round regen, arming fuse that bars close work, and a violent recoil kick that punishes grounded firing
+  FastDiscLauncher = 46, // the flat fast spinfusor: 130 m/s straight disc, small splash - the fast-straight-proj pick in place of the benched universal rocket
 }
 
 export interface WeaponStats {
