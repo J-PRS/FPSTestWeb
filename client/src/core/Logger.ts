@@ -119,6 +119,26 @@ export namespace Logger {
     return level >= currentLevel;
   }
 
+  /** Console sink pick: DEBUG/INFO share log(), WARN/ERROR their own. */
+  function writeConsole(level: LogLevel, fullMessage: string, context?: unknown): void {
+    switch (level) {
+      case LogLevel.DEBUG:
+      case LogLevel.INFO: {
+        console.log(fullMessage, context || '');
+        break;
+      }
+      case LogLevel.WARN: {
+        console.warn(fullMessage, context || '');
+        break;
+      }
+      case LogLevel.ERROR: {
+        console.error(fullMessage, context || '');
+        break;
+      }
+      default: { break; }
+    }
+  }
+
   /**
    * Core logging method
    */
@@ -133,22 +153,7 @@ export namespace Logger {
     if (level >= consoleLevel) {
       writingToConsole = true;
       try {
-        switch (level) {
-          case LogLevel.DEBUG:
-          case LogLevel.INFO: {
-            console.log(fullMessage, context || '');
-            break;
-          }
-          case LogLevel.WARN: {
-            console.warn(fullMessage, context || '');
-            break;
-          }
-          case LogLevel.ERROR: {
-            console.error(fullMessage, context || '');
-            break;
-          }
-                  default: { break; }
-}
+        writeConsole(level, fullMessage, context);
       } finally {
         writingToConsole = false;
       }

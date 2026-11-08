@@ -6,6 +6,14 @@ import { ChildLogger } from '../../core/Logger.js';
 import { tokenTier } from '../../../../shared/pickups.js';
 import { ndcToClient } from '../ndcScreen.js';
 
+/** Badge text pick: sheep count > truncated name > HP number. */
+function sheepBadgeText(sheepMode: boolean, sheep: number | undefined, name: string | undefined, hp: number | undefined): string | null {
+  if (sheepMode) {return `${Math.round(sheep!)}`;}
+  if (name) {return name.length > 16 ? `${name.slice(0, 15)}…` : name;}
+  if (hp !== undefined) {return `${Math.round(hp)}`;}
+  return null;
+}
+
 const band = (x: number, invert: boolean): string => {
   if (x >= 60) {return invert ? '#ff6b6b' : '#7ddf7d';}
   if (x >= 30) {return '#ffd166';}
@@ -159,10 +167,7 @@ export class PlayerIndicators {
    *  pedestrian-vs-skier read lives for triage). */
   private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined, hp: number | undefined, friendly: boolean, name?: string): void {
     const sheepMode = debugOverlays && sheep !== undefined && sheep > 0;
-    let text: string | null = null;
-    if (sheepMode) {text = `${Math.round(sheep!)}`;}
-    else if (name) {text = name.length > 16 ? `${name.slice(0, 15)}…` : name;}
-    else if (hp !== undefined) {text = `${Math.round(hp)}`;}
+    const text = sheepBadgeText(sheepMode, sheep, name, hp);
     // Text + team + mode ride the cache key — a rename, debug toggle or
     // team swap must rewrite the badge even when the text is unchanged.
     const key = text === null ? '' : `${text}|${sheepMode ? 's' : ''}|${friendly ? 'f' : 'e'}`;

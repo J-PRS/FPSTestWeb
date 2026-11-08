@@ -9,7 +9,6 @@ import type { ArmorClass } from '../../../../shared/botClasses.js';
 import { finiteVec } from '../../../../shared/wire.js';
 import { inv } from '../../../../shared/invariants.js';
 import { weaponDef } from '../../weapons.js';
-import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
@@ -155,19 +154,15 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
 
 
 /** Wire playerHit → health/death feedback + the demo's damage edge. */
-function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage: number, health: number, armor?: number, predicted?: boolean): void {
+function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage: number, health: number, opts?: { armor?: number; predicted?: boolean }): void {
+  const armor = opts?.armor;
+  const predicted = opts?.predicted;
   const { deps, nm } = ctx;
   const {logger} = deps;
   if (deps.world.playbackMode) {return;}
   inv('wire-hit-finite', Number.isFinite(damage) && Number.isFinite(health), { damage, health, shooterId, targetId });
   if (!Number.isFinite(damage) || !Number.isFinite(health)) {return;}
-  // Every credited hit lands in the demo - demodiff pairs it 1:1 with
-  // the server's own playerHit edge; a missing one is a dropped wire
-  // event (the "no missing damage" oracle).
-  const hitPos = targetId === nm().getLocalPlayerId()
-    ? deps.lazyPlayer().pos
-    : (deps.world.remotePlayers.get(targetId)?.pos ?? deps.lazyPlayer().pos);
-  deps.lazyDemoManager?.()?.recordPlayerHit(shooterId === 'environment' ? null : shooterId, targetId, damage, hitPos);
+  recordWireHitDemo(ctx, shooterId, targetId, damage);
   if (targetId === nm().getLocalPlayerId()) {wireHitSelf(ctx, shooterId, damage, health, armor); return;}
 
   // Non-lethal hits don't trigger death animation
@@ -176,16 +171,30 @@ function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage:
   deps.world.remotePlayers.get(targetId)?.flinch();
   // Server-confirmed hit on a remote: flash the marker even when client
   // prediction didn't (e.g. lag-comp rewound the victim into the shot).
-  if (shooterId === nm().getLocalPlayerId()) {
-    // Authority-simmed shells never run the client's predict path, so
-    // the damage number has to live on the echo or it never appears.
-    const rp = deps.world.remotePlayers.get(targetId);
-    // A hit the client already predicted painted its number at impact
-    // time — echo-spawning it again reads as double damage on the HUD.
-    if (rp && !predicted) {deps.lazyDamageNumbers().spawn(rp.pos, damage, '#ffe08a', deps.lazyCamera());}
-    deps.lazyHud().showHitMarker();
-    sfx.hitMarker(false);
-  }
+  if (shooterId === nm().getLocalPlayerId()) {confirmLocalHit(ctx, targetId, damage, predicted);}
+}
+
+/** Every credited hit lands in the demo - demodiff pairs it 1:1 with
+ *  the server's own playerHit edge; a missing one is a dropped wire
+ *  event (the "no missing damage" oracle). */
+function recordWireHitDemo(ctx: NetCtx, shooterId: string, targetId: string, damage: number): void {
+  const { deps, nm } = ctx;
+  const hitPos = targetId === nm().getLocalPlayerId()
+    ? deps.lazyPlayer().pos
+    : (deps.world.remotePlayers.get(targetId)?.pos ?? deps.lazyPlayer().pos);
+  deps.lazyDemoManager?.()?.recordPlayerHit(shooterId === 'environment' ? null : shooterId, targetId, damage, hitPos);
+}
+
+/** Our own shot echoed back: hitmarker + damage number unless the client
+ *  already predicted it (double-paint reads as double damage). */
+function confirmLocalHit(ctx: NetCtx, targetId: string, damage: number, predicted?: boolean): void {
+  const { deps } = ctx;
+  // Authority-simmed shells never run the client's predict path, so
+  // the damage number has to live on the echo or it never appears.
+  const rp = deps.world.remotePlayers.get(targetId);
+  if (rp && !predicted) {deps.lazyDamageNumbers().spawn(rp.pos, damage, '#ffe08a', deps.lazyCamera());}
+  deps.lazyHud().showHitMarker();
+  sfx.hitMarker(false);
 }
 
 /** playerHit on the LOCAL seat - corpse-revive, shield soak, hurt feedback. */
@@ -360,35 +369,32 @@ function wireKnockback(ctx: NetCtx, position: { x: number; y: number; z: number 
   }
 }
 
-/** Hit feedback, knockback, reconciliation, kills - the damage wire. */
-function wirePlayerCombat(ctx: NetCtx): void {
-  const { deps, networkManager, nm } = ctx;
-  const {logger} = deps;
+/** The server never spawned this shell - the predicted fake must die
+ *  silently or it flies on and explodes solo (the ghost-shot class).
+ *  Fan pulls reject under the PULL nonce: pellets keyed their own
+ *  shotIds, so the pull id only resolves through unbound fan slots
+ *  (a rejected intent never echoes creates, so nothing bound yet). */
+function killPredictedShell(deps: NetCtx['deps'], shotId: string | undefined): void {
+  if (!shotId) {return;}
+  const shell = deps.world.projectileRegistry.byShotId.get(shotId);
+  if (shell && !shell.dead) {shell.dead = true;}
+  if (shell) {return;}
+  for (const [slot, pellet] of deps.world.projectileRegistry.byFanSlot) {
+    if (slot.startsWith(`${shotId}#`) && !pellet.dead) {pellet.dead = true;}
+  }
+}
 
-  networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor, predicted): void =>
-    handleWireHit(ctx, shooterId, targetId, damage, health, armor, predicted);
-
+/** Rejected-claim handler factory - owns the class-resync throttle.
+ *  A predicted self-blast that never happened server-side leaves our
+ *  health low until the next real event; adopt the server's value so
+ *  state-hash health checks stop screaming desync. */
+function makeShotRejectedHandler(ctx: NetCtx, networkManager: NetCtx['networkManager']): NonNullable<NetCtx['networkManager']['onShotRejected']> {
+  const { deps } = ctx;
   let lastClassResync = 0;
-  // Rejected claim: a predicted self-blast that never happened server-side
-  // leaves our health low until the next real event. Adopt the server's
-  // value so state-hash health checks stop screaming desync.
-  networkManager.onShotRejected = (reason, _targetId, weaponType, health, shotId): void => {
+  return (reason, _targetId, weaponType, health, shotId): void => {
     if (deps.world.playbackMode) {return;}
     const player = deps.lazyPlayer();
-    // The server never spawned this shell - the predicted fake must die
-    // silently or it flies on and explodes solo (the ghost-shot class).
-    if (shotId) {
-      const shell = deps.world.projectileRegistry.byShotId.get(shotId);
-      if (shell && !shell.dead) {shell.dead = true;}
-      // Fan pulls reject under the PULL nonce - pellets keyed their own
-      // shotIds, so the pull id only resolves through unbound fan slots
-      // (a rejected intent never echoes creates, so nothing bound yet).
-      if (!shell) {
-        for (const [slot, pellet] of deps.world.projectileRegistry.byFanSlot) {
-          if (slot.startsWith(`${shotId}#`) && !pellet.dead) {pellet.dead = true;}
-        }
-      }
-    }
+    killPredictedShell(deps, shotId);
     // The authority says this pick is class-locked - a stale slot keeps
     // spam-rejecting every pull for the rest of the life. Unshoulder it
     // to the class fallback once and the next pull fires something legal.
@@ -412,6 +418,17 @@ function wirePlayerCombat(ctx: NetCtx): void {
     }
     if (health !== undefined && Number.isFinite(health) && !player.isDead) {player.health = health;}
   };
+}
+
+/** Hit feedback, knockback, reconciliation, kills - the damage wire. */
+function wirePlayerCombat(ctx: NetCtx): void {
+  const { deps, networkManager, nm } = ctx;
+  const {logger} = deps;
+
+  networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor, predicted): void =>
+    handleWireHit(ctx, shooterId, targetId, damage, health, { armor, predicted });
+
+  networkManager.onShotRejected = makeShotRejectedHandler(ctx, networkManager);
 
   // Server-healed hp (regen perk, mend channel, regen powerup) - arrives
   // at ~2Hz while a channel is live; adopt it wholesale, the server owns

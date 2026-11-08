@@ -60,18 +60,20 @@ export class TrailBatch {
     }
     if (frame === this.debugFrame) {return;}
     this.debugFrame = frame;
-    if (!this.debugMesh) {
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(this.debugPos, 3).setUsage(THREE.DynamicDrawUsage));
-      this.debugMesh = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x00_FF_F0, transparent: true, opacity: 0.9, depthTest: false }));
-      this.debugMesh.frustumCulled = false;
-      this.debugMesh.renderOrder = 999;
-      this.scene.add(this.debugMesh);
-    }
+    const debugMesh = this.ensureDebugMesh();
     const C = 0.28; // half-size of the cross gizmo, meters - readable
     let w = 0;
     const put = (x: number, y: number, z: number): void => { this.debugPos[w++] = x; this.debugPos[w++] = y; this.debugPos[w++] = z; };
     const now = performance.now();
+    this.debugDrawSlots(put, now, C);
+    debugMesh.visible = true;
+    (debugMesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    debugMesh.geometry.setDrawRange(0, w / 3);
+    this.rebuildGhosts(now, C);
+  }
+
+  /** Per-slot debug scan: cross gizmo per lit sample + ghost pin. */
+  private debugDrawSlots(put: (x: number, y: number, z: number) => void, now: number, C: number): void {
     for (const s of this.used) {
       const base = s * RIBBON_FLOATS_PER_SLOT;
       let px = 0, py = 0, pz = 0, hasPrev = false;
@@ -98,10 +100,6 @@ export class TrailBatch {
         px = x; py = y; pz = z; hasPrev = true;
       }
     }
-    this.debugMesh.visible = true;
-    (this.debugMesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-    this.debugMesh.geometry.setDrawRange(0, w / 3);
-    this.rebuildGhosts(now, C);
   }
 
   /** Ghost pins - every lit sample leaves a marker that fades over ~4s
@@ -111,6 +109,18 @@ export class TrailBatch {
   private ghostMesh: THREE.LineSegments | null = null;
   private ghostPos = new Float32Array(2000 * 6 * 3);
   private ghostCol = new Float32Array(2000 * 6 * 3);
+  /** Lazily build the debug line mesh once (debug overlay only). */
+  private ensureDebugMesh(): THREE.LineSegments {
+    if (this.debugMesh) {return this.debugMesh;}
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(this.debugPos, 3).setUsage(THREE.DynamicDrawUsage));
+    this.debugMesh = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x00_FF_F0, transparent: true, opacity: 0.9, depthTest: false }));
+    this.debugMesh.frustumCulled = false;
+    this.debugMesh.renderOrder = 999;
+    this.scene.add(this.debugMesh);
+    return this.debugMesh;
+  }
+
   private rebuildGhosts(now: number, C: number): void {
     const LIFE = 4000;
     let keep = 0;
