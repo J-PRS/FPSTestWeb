@@ -80,7 +80,7 @@ export function histAt(hist: WorldState['localPosHistory'], backMs: number): Wor
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined {
   // Same law as combat.ts's onWeaponFire gate: a weapon the authority
   // calls class-locked must not spawn a predicted shell or send an
-  // intent — every pull otherwise spam-rejects for the life (belt
+  // intent - every pull otherwise spam-rejects for the life (belt
   // throws reach this without passing fireWeapon).
   if (!classCanFire(deps.lazyPlayer().appliedClass, config.weaponType)) {return undefined;}
   // One-shot TTS (time-to-shoot) marker - invisible, no debug overlays.
