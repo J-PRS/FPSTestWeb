@@ -347,14 +347,7 @@ export class ServerBotSenses {
     for (const g of snaps) {
       const d = dist3(p.position, g.pos);
       if (!worthIt(d)) {continue;}
-      // Price the PILE, not the coin: a rich corpse decomposes into
-      // denominations (27+9+3+1) scattered at the spot, so two purples
-      // there out-pull one. Sum every pickup inside 15m and cap the
-      // distance discount at 70% of a 40-token pile.
-      let val = 0;
-      for (const h of snaps) {
-        if (Math.hypot(h.pos.x - g.pos.x, h.pos.z - g.pos.z) < 15) {val += h.val ?? 1;}
-      }
+      const val = pileValueAt(snaps, g.pos);
       // A fat pile out-pulls a near white - value shrinks effective
       // distance up to 70%, so a purple spill draws the lobby while a
       // lone 1-coin stays opportunism. Non-token kinds carry val≈0-1
@@ -375,4 +368,15 @@ export class ServerBotSenses {
     return best;
   }
 
+}
+
+/** Price the PILE, not the coin: a rich corpse decomposes into
+ *  denominations (27+9+3+1) scattered at the spot, so two purples there
+ *  out-pull one. Sum every pickup inside 15m of g. */
+function pileValueAt(snaps: { pos: Vec3; val?: number }[], g: Vec3): number {
+  let val = 0;
+  for (const h of snaps) {
+    if (Math.hypot(h.pos.x - g.x, h.pos.z - g.z) < 15) {val += h.val ?? 1;}
+  }
+  return val;
 }

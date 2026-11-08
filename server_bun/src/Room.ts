@@ -250,42 +250,47 @@ export class Room {
   private unburySweep(includeUnreported = false): void {
     if (!this.field) {return;}
     for (const p of this.players.getAllPlayers().values()) {
-      if (p.isDead || (!p.isBot && !p.hasReceivedPosition && !includeUnreported)) {continue;}
-      // Measure with the shadow's own eye when one exists  -  the class
-      // capsule and the sim body disagree whenever a refit left the sim
-      // at the default eye, and the record's view was the stale one.
-      const eye = this.moveSim.eyeOf(p.id) ?? classCapsule(p.armorClass as ArmorClass).eye;
-      // Judge each body on the floor it sims on: bot shadows ride the
-      // chord-augmented surface (what remotes draw), human shadows the
-      // plain field  -  a field-grounded human in a gully is legitimately
-      // under the drawn chord, and popping their claim is a phantom
-      // correction. Remote-side render lift owns the visual clearance.
-      const terrain = p.isBot
-        ? Math.max(hmHeight(this.field, p.position.x, p.position.z), hmChord(this.field, p.position.x, p.position.z))
-        : hmHeight(this.field, p.position.x, p.position.z);
-      // The ground law as an invariant  -  scoped to sim-owned bodies.
-      // A bot's record mirrors its shadow every tick (botDrive), so a
-      // buried bot record IS a violation. Human records are claims  - 
-      // a lagged claim under the surface is lag, not a bug.
-      // pos.y IS the eye point  -  "feet" would double-subtract the eye and
-      // phantom-bury every banded contact (a grounded heavy legally rides
-      // its eye ~0.5 under the floor in the snap window). Buried means
-      // the EYE itself is below the surface.
-      if (p.isBot) {inv('bot-below-ground', !Number.isFinite(terrain) || p.position.y >= terrain - 0.5,
-        { id: p.id, xz: `${p.position.x.toFixed(1)},${p.position.z.toFixed(1)}`, y: Number(p.position.y.toFixed(1)), eye, terrain: Number.isFinite(terrain) ? Number(terrain.toFixed(1)) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });}
-      if (!Number.isFinite(terrain) || p.position.y >= terrain - 0.5) {continue;}
-      // First rescues carry the autopsy at debug level  -  the 'unbury'
-      // health counter and the bot-scoped inv above are the loud signal;
-      // a warn per rescue reads as jank in soak asserts while routine
-      // claim wobble is legitimately rescued.
-      if (((this.unburyLogN += 1) - 1) < 30) {
-        logger.debug(`unbury ${p.id}: pos.y=${p.position.y.toFixed(1)} feet=${(p.position.y - eye).toFixed(1)} terrain=${terrain.toFixed(1)} bot=${p.isBot} ${this.moveSim.unburyDebug(p.id)}`);
-      }
-      p.position.y = terrain + eye;
-      p.velocity.y = Math.max(0, p.velocity.y);
-      this.moveSim.resync(p.id, p.position, p.rotation.yaw);
-      this.healthBump('unbury');
+      this.unburyCheck(p, includeUnreported);
     }
+  }
+
+  /** One body's ground-law check. Measure with the shadow's own eye when
+   *  one exists - the class capsule and the sim body disagree whenever a
+   *  refit left the sim at the default eye, and the record's view was the
+   *  stale one. Judge each body on the floor it sims on: bot shadows ride
+   *  the chord-augmented surface (what remotes draw), human shadows the
+   *  plain field - a field-grounded human in a gully is legitimately
+   *  under the drawn chord, and popping their claim is a phantom
+   *  correction. Remote-side render lift owns the visual clearance.
+   *  pos.y IS the eye point - "feet" would double-subtract the eye and
+   *  phantom-bury every banded contact (a grounded heavy legally rides
+   *  its eye ~0.5 under the floor in the snap window). Buried means the
+   *  EYE itself is below the surface. */
+  private unburyCheck(p: PlayerState, includeUnreported: boolean): void {
+    const field = this.field!;
+    if (p.isDead || (!p.isBot && !p.hasReceivedPosition && !includeUnreported)) {return;}
+    const eye = this.moveSim.eyeOf(p.id) ?? classCapsule(p.armorClass as ArmorClass).eye;
+    const terrain = p.isBot
+      ? Math.max(hmHeight(field, p.position.x, p.position.z), hmChord(field, p.position.x, p.position.z))
+      : hmHeight(field, p.position.x, p.position.z);
+    // The ground law as an invariant - scoped to sim-owned bodies.
+    // A bot's record mirrors its shadow every tick (botDrive), so a
+    // buried bot record IS a violation. Human records are claims -
+    // a lagged claim under the surface is lag, not a bug.
+    if (p.isBot) {inv('bot-below-ground', !Number.isFinite(terrain) || p.position.y >= terrain - 0.5,
+      { id: p.id, xz: `${p.position.x.toFixed(1)},${p.position.z.toFixed(1)}`, y: Number(p.position.y.toFixed(1)), eye, terrain: Number.isFinite(terrain) ? Number(terrain.toFixed(1)) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });}
+    if (!Number.isFinite(terrain) || p.position.y >= terrain - 0.5) {return;}
+    // First rescues carry the autopsy at debug level - the 'unbury'
+    // health counter and the bot-scoped inv above are the loud signal;
+    // a warn per rescue reads as jank in soak asserts while routine
+    // claim wobble is legitimately rescued.
+    if (((this.unburyLogN += 1) - 1) < 30) {
+      logger.debug(`unbury ${p.id}: pos.y=${p.position.y.toFixed(1)} feet=${(p.position.y - eye).toFixed(1)} terrain=${terrain.toFixed(1)} bot=${p.isBot} ${this.moveSim.unburyDebug(p.id)}`);
+    }
+    p.position.y = terrain + eye;
+    p.velocity.y = Math.max(0, p.velocity.y);
+    this.moveSim.resync(p.id, p.position, p.rotation.yaw);
+    this.healthBump('unbury');
   }
 
   spec: MapSpec; // mutable  -  admin hot-reload rewrites it live

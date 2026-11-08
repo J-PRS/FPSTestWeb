@@ -786,26 +786,29 @@ s[kind] += 1; this.propels.set(id, s);
     const body = this.room.players.getAllPlayers().get(botId);
     const hp = body?.health ?? 100;
     const picked = pickBotWeaponSafe(lo, distXZ, dist, hp, skill, s?.courage);
-    // Deploy artillery only draws feet-down. If the band picked a
-    // groundedOnly gun while the body is airborne/skiing, the bot's
-    // real answer is PLANT: firePhase reads deployWanted and parks, so
-    // the next think is feet-down and the artillery actually fires.
-    // While it can't plant instantly, the fallback slot keeps it
-    // shooting instead of dry-pulling.
-    if (getWeaponStats(picked).groundedOnly) {
-      const sim = this.room.moveSim.simOf(botId);
-      const plantable = !!sim?.state.onGround && !sim.input.skiHeld;
-      this.deployPick.set(botId, !plantable);
-      if (!plantable) {
-        const alt = [lo.far, lo.mid, lo.near, lo.side]
-          .find((w): boolean => !getWeaponStats(w).groundedOnly && classCanFire(body?.armorClass, w));
-        if (alt !== undefined) {return alt;}
-      }
-    } else {this.deployPick.delete(botId);}
+    const alt = this.deployPickFallback(botId, lo, picked, body?.armorClass);
+    if (alt !== undefined) {return alt;}
     // Same class gate players get in CombatHandler - the loadout tables
     // stay honest, but a pick is refused at fire time too, not assumed.
     if (classCanFire(body?.armorClass, picked)) {return picked;}
     return [lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(body?.armorClass, w)) ?? WeaponType.Disc;
+  }
+
+  /** Deploy artillery only draws feet-down. If the band picked a
+   *  groundedOnly gun while the body is airborne/skiing, the bot's
+   *  real answer is PLANT: firePhase reads deployWanted and parks, so
+   *  the next think is feet-down and the artillery actually fires.
+   *  While it can't plant instantly, the fallback slot keeps it
+   *  shooting instead of dry-pulling. Returns the fallback pick, or
+   *  undefined to continue the normal class gate. */
+  private deployPickFallback(botId: string, lo: BotLoadout, picked: number, armorClass: string | undefined): number | undefined {
+    if (!getWeaponStats(picked).groundedOnly) {this.deployPick.delete(botId); return undefined;}
+    const sim = this.room.moveSim.simOf(botId);
+    const plantable = Boolean(sim?.state.onGround) && !sim.input.skiHeld;
+    this.deployPick.set(botId, !plantable);
+    if (plantable) {return undefined;}
+    return [lo.far, lo.mid, lo.near, lo.side]
+      .find((w): boolean => !getWeaponStats(w).groundedOnly && classCanFire(armorClass, w));
   }
 
   /** Belt throw - a lobbed grenade at the hunt's last-seen spot. Same

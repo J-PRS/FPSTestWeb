@@ -41,6 +41,18 @@ interface RestoreRoom {
 
 interface RestoreState { v: 1; rooms: RestoreRoom[] }
 
+/** Ingest-fast-path message types: telemetry mutates no sim state (and
+ *  its transit stamps are arrival-time by design); position/inputMove/
+ *  teleport order through the shadow's own seq-gated machinery; jump/
+ *  jetpack are pure presence relays. Parking them in the command buffer
+ *  just adds 0-50ms of queue to every reply they send. Combat claims
+ *  stay parked: they adjudicate against sim state and must see this
+ *  window's earlier commands in wire order. */
+const FAST_MSG_TYPES = new Set([
+  'ping', 'pong', 'clientStats', 'tickNack',
+  'position', 'inputMove', 'teleport', 'jump', 'jetpack',
+]);
+
 export class GameServer {
   // One match's state per room - players land in 'default' unless the join
   // handshake names a room. Everything per-match (players, sockets, ball
@@ -868,22 +880,9 @@ this.ops.msgsIn += 1;
 this.ops.msgsRejected += 1;
       return;
     }
-    // Ingest-fast-path: messages whose ordering lives somewhere OTHER
-    // than the command buffer ride it for nothing - parking them just
-    // adds 0-50ms of queue to every reply they send. Telemetry mutates
-    // no sim state (and its transit stamps are arrival-time by design);
-    // position/inputMove/teleport order through the shadow's own seq-
-    // gated pending/setInput machinery - the outer buffer was only ever
-    // delaying p.position/p.lastSeen/corrections for the tick fanout.
-    // Combat claims stay parked: they adjudicate against sim state and
-    // must see this window's earlier commands in wire order.
+    // FAST_MSG_TYPES carries the ordering rationale - see its declaration.
     const fast = data.type;
-    if (fast === 'ping' || fast === 'pong' || fast === 'clientStats' || fast === 'tickNack'
-      || fast === 'position' || fast === 'inputMove' || fast === 'teleport'
-      // jump/jetpack are pure presence relays - nothing orders against
-      // them, so parking them in the command buffer just adds 0-50ms to
-      // every observer's jump-dust/jet FX.
-      || fast === 'jump' || fast === 'jetpack') {
+    if (FAST_MSG_TYPES.has(fast)) {
       try { room.messages.handleMessage(playerId, data, wallNow(), trusted); }
       catch (error) { logger.warn('Telemetry handler threw', { playerId, type: data.type, error }); }
       return;
