@@ -233,22 +233,36 @@ function aswAccrue(id: string, dead: boolean, alt: number, skiing: boolean, dt: 
 }
 
 // LOCOMOTION, not gait: a circling bot shows 80% ski and ~0 net travel.
-// loco = |pos - pos@30s| / 30 in m/s - a transiting player reads 20-40,
-// a bowl-parked bot reads <3 while "skiing" the whole time.
+// loco = displacement rate over 1s/5s/10s/15s windows - a bowl-circler
+// reads ~0 at every window (loops fool a single 30s mark); a real
+// transiting player stays high across all of them.
 const locoRing = new Map<string, { x: number; z: number; t: number }[]>();
+const LOCO_WINS = [1000, 5000, 10000, 15000];
 function locoNote(id: string, dead: boolean, x: number, z: number): void {
   const now = performance.now();
   if (dead) { locoRing.delete(id); return; }
   const ring = locoRing.get(id) ?? [];
   ring.push({ x, z, t: now });
-  while (ring.length > 1 && now - ring[0].t > 30000) {ring.shift();}
+  while (ring.length > 1 && now - ring[0].t > 16000) {ring.shift();}
   locoRing.set(id, ring);
 }
-function locoOf(id: string, x: number, z: number): number | undefined {
+/** 'm/s@1s/m/s@5s/m/s@10s/m/s@15s' or '-' while the ring fills. */
+function locoStr(id: string, x: number, z: number): string {
   const ring = locoRing.get(id);
-  if (!ring || ring.length < 2 || ring[0].t > performance.now() - 25000) {return undefined;}
-  const d = Math.hypot(x - ring[0].x, z - ring[0].z);
-  return d / ((performance.now() - ring[0].t) / 1000);
+  if (!ring || ring.length < 2) {return '-';}
+  const now = performance.now();
+  const parts: string[] = [];
+  for (const win of LOCO_WINS) {
+    const cutoff = now - win;
+    let anchor: { x: number; z: number; t: number } | undefined;
+    for (let i = ring.length - 1; i >= 0; i -= 1) {
+      if (ring[i].t <= cutoff) {anchor = ring[i]; break;}
+    }
+    if (!anchor || now - anchor.t < win * 0.5) {parts.push('-'); continue;}
+    const d = Math.hypot(x - anchor.x, z - anchor.z);
+    parts.push((d / ((now - anchor.t) / 1000)).toFixed(1));
+  }
+  return parts.join('/');
 }
 
 
@@ -448,8 +462,7 @@ function gameDumpRow(w: WorldState, id: string, rp: RemotePlayer, now: number): 
   // straight, no inference from fight outcomes. Offline bots expose
   // brain.skill through GameBot's getter; wire remotes don't carry it.
   const rsv = (rp as { skill?: { resolve?: number } }).skill?.resolve;
-  const lc = locoOf(id, rp.position.x, rp.position.z);
-  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${lc === undefined ? '-' : lc.toFixed(1).padStart(4)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
+  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${locoStr(id, rp.position.x, rp.position.z).padEnd(13)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}`;
 }
 if (typeof window !== 'undefined') {
   (window as { __aswDump?: () => string[] }).__aswDump = (): string[] => {
@@ -478,8 +491,7 @@ function gameDumpSelfRow(d: RemotesDeps, w: WorldState, now: number): string {
   const selfD = selfCount(w.deathCounts, localScoreId);
   const ss = aswStr(localId);
   const shown = d.lazyPlayerSheep?.().shown;
-  const lc = locoOf(localId, self.pos.x, self.pos.z);
-  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${' - '.padStart(4)} ${lc === undefined ? '-' : lc.toFixed(1).padStart(4)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
+  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${' - '.padStart(4)} ${locoStr(localId, self.pos.x, self.pos.z).padEnd(13)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
 }
 function gameDump(): string[] {
   const d = depsRef;
@@ -489,7 +501,7 @@ function gameDump(): string[] {
   // scoreboard path on the wall clock; mixing epochs prints garbage.
   const now = Date.now();
   const lines: string[] = [`  mode=${w.mode} map=${w.mapName ?? '-'} teams=${JSON.stringify(w.teamScores ?? {})}`];
-  lines.push('  name                 team      cls      F  D  score sheep alive rsv  loco ping net   asw(HA/A/S/W/ST/I)');
+  lines.push('  name                 team      cls      F  D  score sheep alive rsv  loco(1/5/10/15s) ping net   asw(HA/A/S/W/ST/I)');
   lines.push(gameDumpSelfRow(d, w, now));
   for (const [id, rp] of w.remotePlayers) {lines.push(gameDumpRow(w, id, rp, now));}
   return lines;
