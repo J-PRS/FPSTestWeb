@@ -23,6 +23,22 @@ bugs — verify before deleting anything knip flags.
 
 Two linters measure it differently; both agree it's the dominant debt.
 
+> **Campaign progress (same day, later):** ~55 functions extracted to
+> ≤15 across ~30 commits; tiers c16/c17/c18 fully cleared, c19-20 mostly
+> cleared. Headline offenders retired: `wireIn.binary` 160→0 (dispatch
+> table), `SessionManager.handle` 45→orchestrator, `checkStall` 45→5
+> helpers, `applyMapSnapshot` 35, `deployTicks` trio, `applyTerrain`
+> (also killed its max-params + promise warnings via a `TerrainReq`
+> options object). `world.ts` and `deployTicks.ts` are now
+> complexity-clean. What remains is the >20 authority core —
+> `tryPropel` 90, `pickDest` 77, `roomDemo.onBroadcast` 54,
+> `RoomMoveSim.tick` 50, `wireKnockback` 34, `applyMovement` 31,
+> `bakeSource` 26 — each needing a focused session with determinism
+> proof, not batch extraction. Pattern that worked: move whole comment
+> blocks with their code; the lintratchet blames the *whole function*
+> on any touched line, so editing a call site inside a monster forces
+> its decomposition in the same commit.
+
 - **eslint sonarjs/cognitive-complexity** (client only, cap 15): **212 warnings**
 - **oxlint `eslint(complexity)`** (cyclomatic, all src, cap 15): **319 warnings**
 
@@ -98,12 +114,19 @@ god-object and the highest-value split candidate.
 
 ## 5. Broken tooling
 
-- **Type-aware oxlint audit crashes**: `.oxlintrc.audit.json` enables
-  `typeAware`, but the installed `oxlint-tsgolint` panics on
-  `no-unsafe-enum-assignment` ("unknown rule") — version skew between
-  config and binary. The entire type-aware rule set
-  (`no-floating-promises`, `no-unsafe-*`, etc.) is currently dead.
-  Fix: align tsgolint version or drop the unknown rule, then re-run.
+- **Type-aware oxlint audit — FIXED same day**: root cause was path
+  resolution, not version skew — oxlint looks for `tsgolint` at
+  `<cwd>/node_modules/.bin/tsgolint`, but the toolchain only exists
+  under `client/`. `_tools/lintaudit.mjs` now runs the client-installed
+  oxlint from the repo root with `OXLINT_TSGOLINT_PATH` pointed at the
+  right `.bin` shim; `npm run lint:audit` works end-to-end (~1.7s).
+  First real census: **5,621 warnings** — ~3k type-assertion noise
+  (mapSpec JSON validation), 837 `no-unnecessary-condition`, **56
+  `no-floating-promises`** (transport/demo/debug fire-and-forget),
+  **44 `unbound-method`** (sampled: mostly factory-destructure +
+  static-class false positives). 11 floating promises fixed
+  (`.catch` honesty + `retryBinLane` extraction); the rest are
+  judgment calls, not mechanical.
 - **`_scratch/` = 29 MB** of session debris; `_tools/e2e/shots` = 65 MB
   (shotwebp sweep handles aging).
 
@@ -127,13 +150,30 @@ god-object and the highest-value split candidate.
   (`9662a69c`, `70951f78`).
 - dashWatch/perks/sizeWatch gate repairs (`08c16564`).
 - eslint namespace errors resolved (`9eef5499`).
+- **wireIn.ts oxlint-clean**: `binary()` 160→dispatch table +
+  `message`/`handleGameState`/`drainPendingWidEvents` extractions —
+  the repo's worst offender retired (`3f68ea39`, `18199127`).
+- **Type-aware lint revived** (`7df87faa`, `9af11f57`, `50b56a2c`).
+- **Wire codec fuzzing** (`df351fa0`): 18 codecs × truncation/random/
+  bit-flip — caught 3 real decoder holes (OOB reads + NaN/Inf poison).
+- **Parity canary** (`d66f12ad`, `96e90aed`): local+prod GLITCH census;
+  caught a real `parity-nugrest` divergence → `p.tacc = 0` fix
+  (`ff11b833`).
+- **~55 complexity extractions** (see §1 progress note): c16-c18 tiers
+  cleared; monsters `SessionManager.handle` 45, `checkStall` 45,
+  `applyMapSnapshot` 35, `deployTicks` trio, `applyTerrain` retired.
 
 ## Suggested order
 
 1. **Push the repo** — 4,492 commits is the only real emergency.
-2. `wireIn.ts` dispatch table (complexity 160, hot path).
-3. `Room.ts` split (god-object, authority core).
-4. Fix tsgolint version skew → revive type-aware lint.
+2. ~~`wireIn.ts` dispatch table~~ — DONE (`3f68ea39`).
+3. `Room.ts` split (god-object, authority core) — still open; now the
+   biggest remaining structural item.
+4. ~~Fix tsgolint version skew~~ — DONE differently: path wrapper, not
+   version alignment (`7df87faa`).
 5. Unused-vars sweep (31 eslint + 29 oxlint, verify against WIP first).
 6. knip verification pass → delete genuinely dead files/deps.
-7. Top-10 complexity extractions (same pattern as hudStats).
+7. ~~Top-10 complexity extractions~~ — DONE and then some (~55
+   functions; see §1). Remaining >20 tier needs focused sessions:
+   `tryPropel` 90, `pickDest` 77, `onBroadcast` 54, `RoomMoveSim.tick`
+   50, `wireKnockback` 34, `applyMovement` 31, `bakeSource` 26.
