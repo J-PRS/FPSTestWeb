@@ -4,7 +4,7 @@ import type { Player } from '../entities/Player.js';
 import type { HUD } from './hud.js';
 import { audio } from '../core/audio.js';
 import { buildKeysMenu } from './keysMenu.js';
-import { isCapturing } from '../core/keybinds.js';
+import { isCapturing, matchCode } from '../core/keybinds.js';
 import { wireLoadoutBar } from './loadoutMenu.js';
 import { wireLabButton } from '../lab/labView.js';
 
@@ -133,12 +133,12 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
     // menu/demo handling (its listener already stops propagation, this is
     // belt-and-braces for ordering across modules)
     if (isCapturing()) {return;}
-    if (e.code === 'Tab') {
+    if (matchCode('scoreboard', e.code)) {
       e.preventDefault();
       deps.lazyHud().setScoreboardVisible(true);
       return;
     }
-    if (e.code === 'KeyM' && deps.isGameStarted()) {
+    if (matchCode('commandMap', e.code) && deps.isGameStarted()) {
       deps.lazyHud().toggleCommandMap();
       return;
     }
@@ -153,7 +153,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
   });
 
   document.addEventListener('keyup', (e): void => {
-    if (e.code === 'Tab') {
+    if (matchCode('scoreboard', e.code)) {
       e.preventDefault();
       deps.lazyHud().setScoreboardVisible(false);
     }

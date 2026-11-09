@@ -13,6 +13,7 @@ import { vgsGate } from './vgs.ts';
 import { speakVgs, speakChat, chatTtsEnabled } from '../core/tts.js';
 import { botDisplayName, feedNames } from '../../../shared/botNames.js';
 import { settings } from '../core/settings.js';
+import { matchCode } from '../core/keybinds.js';
 
 export interface ChatDeps {
   send(text: string, team: boolean): void;
@@ -113,8 +114,8 @@ export class Chat {
     }
     // Don't steal T/Y while typing in menus/other inputs, or when a
     // chat-less surface owns the keyboard.
-    if ((e.code === 'KeyT' || e.code === 'KeyY') && !vgsGate.active && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
-      this.open(e.code === 'KeyY');
+    if ((matchCode('chatAll', e.code) || matchCode('chatTeam', e.code)) && !vgsGate.active && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+      this.open(matchCode('chatTeam', e.code));
       e.preventDefault();
       e.stopPropagation();
     }

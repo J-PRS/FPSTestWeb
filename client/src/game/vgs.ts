@@ -8,6 +8,7 @@
 
 import { audio } from '../core/audio.ts';
 import { settings } from '../core/settings.js';
+import { matchCode } from '../core/keybinds.js';
 
 import { TREE, type VgsNode } from './vgsTree.js';
 
@@ -88,7 +89,7 @@ export class Vgs {
 
   private onKey(e: KeyboardEvent): void {
     if (!this.active) {
-      if (e.code === 'KeyV' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+      if (matchCode('vgs', e.code) && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
         this.open();
         e.preventDefault();
         // stopImmediatePropagation — same-target window listeners (chat)

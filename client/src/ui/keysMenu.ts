@@ -72,11 +72,6 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
   // Hardcoded keys — shown for completeness, not rebindable. Context-only
   // keys (demo F6/space, dev Alt+*) are deliberately absent.
   const FIXED: [label: string, key: string][] = [
-    ['Scoreboard (hold)', 'TAB'],
-    ['Command map', 'M'],
-    ['Chat all', 'T'],
-    ['Chat team', 'Y'],
-    ['VGS menu', 'V'],
     ['Perf stats', '`'],
     ['Pixel mode', 'F4'],
     ['Menu', 'ESC'],

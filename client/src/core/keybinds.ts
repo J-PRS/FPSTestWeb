@@ -14,7 +14,8 @@ export type BindAction =
   | 'jump' | 'ski' | 'belt' | 'melee' | 'camera' | 'skill' | 'spectate' | 'respawn' | 'throwFlag' | 'dieSpectate'
   | 'sidearm'
   | 'deploy'
-  | 'slot0' | 'slot1' | 'slot2' | 'slot3';
+  | 'slot0' | 'slot1' | 'slot2' | 'slot3'
+  | 'scoreboard' | 'commandMap' | 'chatAll' | 'chatTeam' | 'vgs';
 
 export interface BindDef { action: BindAction; label: string; def: string }
 
@@ -42,6 +43,11 @@ export const BIND_DEFS: BindDef[] = [
   { action: 'slot1',   label: 'Weapon slot 2', def: 'Digit2' },
   { action: 'slot2',   label: 'Weapon slot 3', def: 'Digit3' },
   { action: 'slot3',   label: 'Weapon slot 4', def: 'Digit4' },
+  { action: 'scoreboard', label: 'Scoreboard (hold)', def: 'Tab' },
+  { action: 'commandMap', label: 'Command map',       def: 'KeyM' },
+  { action: 'chatAll',    label: 'Chat all',          def: 'KeyT' },
+  { action: 'chatTeam',   label: 'Chat team',         def: 'KeyY' },
+  { action: 'vgs',        label: 'VGS menu',          def: 'KeyV' },
 ];
 
 const DEFAULTS = Object.fromEntries(BIND_DEFS.map((d): [BindAction, string] => [d.action, d.def])) as Record<BindAction, string>;
