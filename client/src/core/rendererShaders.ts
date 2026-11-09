@@ -256,28 +256,9 @@ export const VIGNETTE_GLSL = /* glsl */ `
     }
   `;
 
-// Contrast-adaptive sharpening (FidelityFX CAS, simplified 5-tap).
-// Sharpen only where local contrast is low — flat areas stay flat, so
-// no halo ringing; pixel-upscaled frames get perceived detail back.
-// Fused into the grade pass: one extra quad of taps, zero new passes.
-export const CAS_GLSL = /* glsl */ `
-    void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-      vec2 px = resolution.zw; // postprocessing resolution: xy=size, zw=1/size
-      vec3 c = inputColor.rgb;
-      vec3 n = texture2D(inputBuffer, uv + vec2(0.0, -px.y)).rgb;
-      vec3 s = texture2D(inputBuffer, uv + vec2(0.0,  px.y)).rgb;
-      vec3 e = texture2D(inputBuffer, uv + vec2( px.x, 0.0)).rgb;
-      vec3 w = texture2D(inputBuffer, uv + vec2(-px.x, 0.0)).rgb;
-      vec3 avg = (n + s + e + w) * 0.25;
-      float lumC = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      float lumA = dot(avg, vec3(0.2126, 0.7152, 0.0722));
-      float contrast = abs(lumC - lumA);
-      float k = clamp((0.15 - contrast) * 3.0, 0.0, 0.45); // adapt: only sharpen soft areas
-      vec3 sharp = c + (c - avg) * k; // unsharp: energy-preserving, no global lift
-      outputColor = vec4(clamp(sharp, 0.0, 64.0), inputColor.a);
-    }
-  `;
-
+// CAS sharpen — REMOVED after two regressions (dark frame from a bad
+// texel fetch, then global lift). The idea is sound but unverifiable
+// blind; revisit against a reference implementation with a live A/B.
 // HDR sanitize — runs between RenderPass and the bloom/dirt chain.
 // The composer buffers are HalfFloat: an additive stack (EMIT_GAIN ×
 // overlapping trails/explosions, the sun disc) can push a texel past

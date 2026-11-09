@@ -17,7 +17,7 @@ import {
 import {
   TONE_MAPPING_EXPOSURE,
 } from './config.js';
-import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL, BLOOM_MERGE_GLSL, RETRO_GLSL, VIBRANCE_GLSL, VIGNETTE_GLSL, CAS_GLSL } from './rendererShaders.js';
+import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL, BLOOM_MERGE_GLSL, RETRO_GLSL, VIBRANCE_GLSL, VIGNETTE_GLSL } from './rendererShaders.js';
 import { setFxBufferHeight } from './fxViewport.js';
 
 export interface RendererSetup {
@@ -359,22 +359,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   // aces there too is the same "raw output" story.
   const vibranceEffect = new Effect('Vibrance', VIBRANCE_GLSL);
   const vignetteEffect = new Effect('Vignette', VIGNETTE_GLSL);
-  // CAS rides last — sharpening must see the finished frame. Fused, so
-  // it's still one buffer roundtrip; the toggle flips blend opacity
-  // (0 = passthrough — an Effect can't disable inside a fused pass).
-  const casEffect = new Effect('Sharpen', CAS_GLSL);
-  casEffect.blendMode.opacity.value = settings.get('fps-sharpen') ? 1 : 0;
-  const sharpenBtn = document.getElementById('sharpen-toggle');
-  if (sharpenBtn) {
-    sharpenBtn.classList.toggle('on', settings.get('fps-sharpen'));
-    sharpenBtn.addEventListener('click', (): void => {
-      const on = !settings.get('fps-sharpen');
-      settings.set('fps-sharpen', on);
-      casEffect.blendMode.opacity.value = on ? 1 : 0;
-      sharpenBtn.classList.toggle('on', on);
-    });
-  }
-  const gradePass = new EffectPass(camera, postBloomSanitize, dirtEffect, acesGradeEffect, new BrightnessContrastEffect({ contrast: 0.06 }), vibranceEffect, vignetteEffect, casEffect);
+  const gradePass = new EffectPass(camera, postBloomSanitize, dirtEffect, acesGradeEffect, new BrightnessContrastEffect({ contrast: 0.06 }), vibranceEffect, vignetteEffect);
   gradePass.name = 'GradePass';
   composer.addPass(gradePass);
 
