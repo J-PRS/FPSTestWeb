@@ -506,6 +506,16 @@ RibbonTrail.nanPushes += 1;
   /** Stop emitting - ribbon fades out where it is. */
   stop(): void { this.stopped = true; }
 
+  /** Sweep forensics: oldest + newest committed ring positions. A lit
+   *  buffer vert the ring never held means a write-path break; a ring
+   *  endpoint at the smear's far side means the commit itself jumped. */
+  smearForensics(): Record<string, unknown> {
+    if (this.count === 0 || this.head < 0) {return { count: 0 };}
+    const oldest = (this.head - this.count + 1 + MAX_SAMPLES) % MAX_SAMPLES;
+    const r3 = (i: number): number[] => [Math.round(this.px[i]! * 10) / 10, Math.round(this.py[i]! * 10) / 10, Math.round(this.pz[i]! * 10) / 10];
+    return { count: this.count, stopped: this.stopped, oldest: r3(oldest), head: r3(this.head), pushed: this.pushed };
+  }
+
   /** Drop all samples - call after a position discontinuity (teleport/respawn)
    *  so the ribbon doesn't stretch a streak across the jump. */
   clear(): void {
@@ -679,7 +689,12 @@ RibbonTrail.nanPushes += 1;
 
   private freshFromIndex(camMoved: boolean): number {
     if (this.billboard && camMoved) {return 0;}
-    if (this.stopped) {return this.count;}
+    // No stopped early-out: freshFrom=count assumes every sample's
+    // position was already written, but stop() can land before the first
+    // successful update - pending commits (pushed>0) then keep zeroed
+    // pos verts under lit colors (the arm:mortar origin-smear). The
+    // general formula already returns count when pushed=0, so dropping
+    // the branch costs nothing steady-state.
     // A full ring evicts the oldest sample on every push - every vert's
     // position assignment shifts, so all verts must rewrite; keeping the
     // old positions leaves lit stale verts that streak (v0 gap in dumps).

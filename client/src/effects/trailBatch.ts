@@ -426,6 +426,7 @@ export function sweepSmear(): void {
       // Per-rail gaps - a stale second rail twists the strip into a
       // chord a single-rail scan can't see.
       let px0 = 0, py0 = 0, pz0 = 0, px1 = 0, py1 = 0, pz1 = 0, hasPrev = false;
+      let prevI = -1, hitI = -1, ec: number[] = [];
       for (let i = 0; i < VERTS; i += 2) {
         const c = base + i * 3;
         if (b.col[c] === 0 && b.col[c + 1] === 0 && b.col[c + 2] === 0) {continue;}
@@ -436,13 +437,25 @@ export function sweepSmear(): void {
           const dx1 = x1 - px1, dy1 = y1 - py1, dz1 = z1 - pz1;
           const g0 = dx0 * dx0 + dy0 * dy0 + dz0 * dz0;
           const g1 = dx1 * dx1 + dy1 * dy1 + dz1 * dz1;
-          if (g0 > SMEAR_GAP_M * SMEAR_GAP_M || g1 > SMEAR_GAP_M * SMEAR_GAP_M) { smeared = true; gapSq = Math.max(g0, g1); break; }
+          if (g0 > SMEAR_GAP_M * SMEAR_GAP_M || g1 > SMEAR_GAP_M * SMEAR_GAP_M) {
+            smeared = true; gapSq = Math.max(g0, g1); prevI = hitI; hitI = i;
+            // Rail-midpoint endpoints: a sparse-chain smear shows two
+            // nearby buffer slots far apart in world; a stale-vert chord
+            // shows the same with a dark index run between them.
+            ec = [
+              Math.round(((px0 + px1) / 2) * 10) / 10, Math.round(((py0 + py1) / 2) * 10) / 10, Math.round(((pz0 + pz1) / 2) * 10) / 10,
+              Math.round(((x0 + x1) / 2) * 10) / 10, Math.round(((y0 + y1) / 2) * 10) / 10, Math.round(((z0 + z1) / 2) * 10) / 10,
+            ];
+            break;
+          }
         }
         px0 = x0; py0 = y0; pz0 = z0;
-        px1 = x1; py1 = y1; pz1 = z1; hasPrev = true;
+        px1 = x1; py1 = y1; pz1 = z1; hasPrev = true; hitI = i;
       }
       if (!smeared) {continue;}
       const owner = b.owners.get(s);
+      // Forensics BEFORE clear() - it resets the ring the dump reads.
+      const fore = (owner as { smearForensics?: () => Record<string, unknown> } | undefined)?.smearForensics?.();
       if (owner) {
         // Kill the writer, not just the chord - blacking the buffer left
         // the stale samples in the owner's ring and it repainted the
@@ -454,7 +467,8 @@ export function sweepSmear(): void {
         dirty = true;
       }
 smearCuts += 1;
-      glitch('trail-smear', { slot: s, tag: b.owners.get(s)?.tag ?? '?', gapM: Math.round(Math.sqrt(gapSq)) });
+      glitch('trail-smear', { slot: s, tag: b.owners.get(s)?.tag ?? '?', gapM: Math.round(Math.sqrt(gapSq)),
+        idx: `${prevI}>${hitI}`, ends: ec, own: fore });
     }
     if (dirty) {b.flush();}
   }

@@ -1269,6 +1269,7 @@ export class PlayerModel {
     let maxSq = 0, bi = -1, bj = -1;
     let maxMesh: THREE.SkinnedMesh | undefined;
     let minBoneY = Infinity;
+    let minMesh: THREE.SkinnedMesh | undefined;
     for (const sm of this.skinnedMeshes) {
       // Per-skeleton spread, not pooled: duplicate-armature rigs (polyart
       // ships 5) park their unused skeletons at bind pose far from the
@@ -1294,7 +1295,7 @@ export class PlayerModel {
         }
         if (Number.isFinite(minY)) {
           this._bbMin.set(0, minY, 0).applyMatrix4(sm.matrixWorld);
-          if (this._bbMin.y < minBoneY) {minBoneY = this._bbMin.y;}
+          if (this._bbMin.y < minBoneY) {minBoneY = this._bbMin.y; minMesh = sm;}
         }
       }
       const {bones} = sm.skeleton;
@@ -1332,7 +1333,8 @@ export class PlayerModel {
       // hip-cap's job; the canary hunts the 0.6-3m "marker at his feet" drift.
       if (!this.anim.transitioning && !ONESHOT_CLIPS.has(this.anim.currentClipName ?? '') && Math.abs(off) > 0.6 && Math.abs(off) < 50) {
         glitch('model-offset', { variant: this.variant, clip: this.anim.currentClipName ?? '?',
-          state: this.anim.currentState, rise: Math.round(off * 10) / 10 });
+          state: this.anim.currentState, rise: Math.round(off * 10) / 10,
+          mesh: minMesh?.name || minMesh?.uuid.slice(0, 8) || '?' });
       }
     }
     if (maxSq > 64) {
