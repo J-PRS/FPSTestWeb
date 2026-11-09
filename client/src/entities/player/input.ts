@@ -110,6 +110,16 @@ export interface PlayerInputHandlers {
 
 const aspect = (): number => window.innerWidth / Math.max(1, window.innerHeight);
 
+/* Numeric menu fields — inputmode only hints the mobile keyboard; strip
+   non-numeric chars on input so letters can't sit in the box (parsing
+   already ignores them, but a field full of junk reads broken). */
+const digitsOnly = (el: HTMLInputElement): void => {
+  el.addEventListener('input', (): void => {
+    const clean = el.value.replace(/[^\d.]/g, '');
+    if (clean !== el.value) {el.value = clean;}
+  });
+};
+
 export class PlayerInput {
 
   keys: Record<string, boolean> = {};
@@ -559,6 +569,9 @@ export class PlayerInput {
 
       // Click/focus selects the whole value so typing replaces it outright
 
+      digitsOnly(sensInput);
+      if (sensCm) {digitsOnly(sensCm);}
+
       sensInput.addEventListener('focus', (): void => sensInput.select());
 
       sensInput.addEventListener('input', (): void => {
@@ -619,6 +632,8 @@ export class PlayerInput {
       syncH();
 
       for (const el of [fovInput, fovHInput]) {
+
+        digitsOnly(el);
 
         el.addEventListener('focus', (): void => el.select());
 
