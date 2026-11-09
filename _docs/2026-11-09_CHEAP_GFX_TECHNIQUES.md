@@ -137,11 +137,12 @@ indistinguishable from per-pixel at our density.
    `heightFogAmount` + a `heightFog` term in the terrain shader blocks
    (plus `scene.fog` for base distance). Covered.
 5. **Channel-packed mask texture** wherever materials fetch >2 maps.
-7. ✅ **LANDED** — **CAS sharpen** (`CAS_GLSL` in `rendererShaders.ts`,
-   simplified FidelityFX 5-tap; adaptive — only soft areas sharpen, no
-   halo ringing). Rides last inside the fused grade pass; toggled by
-   `fps-sharpen` + the new SHARPEN tile in DISPLAY. Toggle flips
-   `blendMode.opacity` (an Effect can't disable inside a fused pass).
+7. ❌ **REVERTED** — **CAS sharpen** — landed then yanked same day:
+   a `resolution` `vec4`/`vec2` swizzle broke the fused pass (dark
+   frame), the Laplacian kernel lifted global brightness (bright
+   frame), and `blendMode.opacity` turned out not to be a real
+   passthrough — OFF wasn't off. Idea sound, implementation needed a
+   live A/B I couldn't run blind. Revisit with a reference impl.
 6. ✅ **LANDED (retune)** — **Speedlines** already existed
    (`effects/speedLines.ts`, world-space streak quads). Ramped the
    *right* way: intensity response curved `^1.5` so cruise stays a
