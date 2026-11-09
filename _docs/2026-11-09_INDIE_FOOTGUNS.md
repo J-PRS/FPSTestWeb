@@ -95,6 +95,29 @@ Watch-items we're flirting with:
   soak-attribution infrastructure exists precisely to adjudicate these
   instead of vibes.
 
+## Addendum — the camera-defect family (researched same-day)
+
+Follow-up search on VFX-specific footguns confirmed the two "cheap win"
+candidates I floated (film grain, chromatic aberration) are squarely in
+the trap family — demoted, not landed:
+
+- **Chromatic aberration**: worst offender on every list. Uniquely bad
+  because it covers *nothing* — it exists purely to simulate a lens
+  defect a real camera would be thrown out for. The community test is
+  damning: "if you can see the RGB fringe, it's already too much" —
+  i.e. the only acceptable dose is imperceptible.
+- **Film grain**: not pure garnish but a *compensating* trick — it
+  exists to mask unconverged lighting noise from undersampled rays.
+  We don't undersample; our noise/dither is already an authored
+  identity. For us grain is noise for noise's sake.
+- **The rule for the family**: a screen effect survives only if it is
+  *spatial or informational* — vignette (eye→reticle), rim light
+  (silhouette), damage vignette (state read). Camera-defect cosplay
+  (CA, grain, DoF, lens flare, motion blur) fails that test on arrival.
+  Retro/camera-defect flavor already has a better carrier: the pixel +
+  dither modes, which are *consistent authored style*, not a
+  dirty-lens overlay on a clean render.
+
 ## The one-line version
 
 Most indie footguns are **additions that can't multiply with the core
