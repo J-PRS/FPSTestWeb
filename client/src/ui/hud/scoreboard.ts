@@ -1,6 +1,6 @@
 /**
 
- * Scoreboard — the Tab-key roster overlay: visibility toggle, row data,
+ * Scoreboard - the Tab-key roster overlay: visibility toggle, row data,
 
  * and the 4Hz re-render that splits rows into team sections when any
 

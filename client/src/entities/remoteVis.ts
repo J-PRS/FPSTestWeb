@@ -1,7 +1,7 @@
 import { SHOOT_REVEAL_S } from '../../../shared/status.js';
 import type { RemotePlayer } from './RemotePlayer.js';
 
-// Visibility gate — who can currently see this remote. Two independent
+// Visibility gate - who can currently see this remote. Two independent
 // hides: staleness (socket stopped updating; backgrounded tabs keep the
 // socket but stop simulating, auto-reshow on resume) and the
 // server-authoritative cloak (separate flag: a decloak restores

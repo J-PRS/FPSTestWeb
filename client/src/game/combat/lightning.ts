@@ -14,7 +14,7 @@ import type { CombatDeps, FireArgs, ExplosionArgs } from '../combat.js';
 import type { BlastArgs } from '../blastForce.js';
 import type { Targetable } from '../../entities/balls.js';
 
-// Lightning beam scratch — rebuilt per trace, never retained
+// Lightning beam scratch - rebuilt per trace, never retained
 const _lgMuzzle = new THREE.Vector3(); // visual start — bottom-right of view
 const _lgBallC = new THREE.Vector3();  // emitter ball world center (anchor path)
 

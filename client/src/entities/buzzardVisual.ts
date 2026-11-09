@@ -4,8 +4,8 @@ import { getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart } from './swarm.js';
 
 const PART_BODY = 0;
-const PART_WING = 1;  // 2 per buzzard — one flattened membrane per side
-const PART_TAIL = 2;  // fan tail — the buzzard silhouette
+const PART_WING = 1;  // 2 per buzzard - one flattened membrane per side
+const PART_TAIL = 2;  // fan tail - the buzzard silhouette
 const WINGS_PER = 2;
 
 const _root = new THREE.Matrix4();
@@ -17,7 +17,7 @@ const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 
 // Body = plump torso + small head + hooked beak, fused into one part.
-// Buzzards read as dark heavy birds — bigger chest than a rakk, shorter
+// Buzzards read as dark heavy birds - bigger chest than a rakk, shorter
 // tail, broad wings.
 let _bodyGeo: THREE.BufferGeometry | null = null;
 function bodyGeo(): THREE.BufferGeometry {
@@ -36,7 +36,7 @@ function bodyGeo(): THREE.BufferGeometry {
   return _bodyGeo;
 }
 
-// Wing — one broad flat membrane per side, pivot at the shoulder. Simpler
+// Wing - one broad flat membrane per side, pivot at the shoulder. Simpler
 // than the rakk's two-joint arm+fan: a buzzard's wing is a single sail.
 const _wingGeo = new THREE.BoxGeometry(1.6, 0.03, 0.55);
 {
@@ -51,7 +51,7 @@ const _wingGeo = new THREE.BoxGeometry(1.6, 0.03, 0.55);
   _wingGeo.translate(0.8, 0, 0); // pivot at the shoulder
 }
 
-// Tail — short fan, flattened cone swept back.
+// Tail - short fan, flattened cone swept back.
 const _tailGeo = new THREE.ConeGeometry(0.34, 0.9, 4);
 {
   _tailGeo.scale(1.6, 0.4, 1);
@@ -64,7 +64,7 @@ let _wingMat: THREE.MeshLambertMaterial | null = null;
 
 export function buzzardParts(): SwarmPart[] {
   if (!_bodyMat) {_bodyMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
-  // Dark leather membrane — lighter than the hide so the wing reads
+  // Dark leather membrane - lighter than the hide so the wing reads
   // against a dark sky, same trick as the rakk wing.
   if (!_wingMat) {_wingMat = new THREE.MeshLambertMaterial({ color: 0x4A_3A_2A, side: THREE.DoubleSide });}
   return [
@@ -74,7 +74,7 @@ export function buzzardParts(): SwarmPart[] {
   ];
 }
 
-/** Flat fields the swarm write reads — Buzzard keeps them public. */
+/** Flat fields the swarm write reads - Buzzard keeps them public. */
 export interface BuzzardVisHost {
   hasSlots: boolean;
   swarmSlot: number;

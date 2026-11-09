@@ -21,7 +21,7 @@ const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 
-// Part indices into the grub swarm — order must match grubParts().
+// Part indices into the grub swarm - order must match grubParts().
 const PART_SEG = 0;   // six instances per grub: slot*6+i — segments animate independently
 const PART_EYE = 1;   // two per grub — tiny dark eyes on the head capsule
 const PART_LEG = 2;   // six per grub — 3 pairs of thoracic stubs behind the head

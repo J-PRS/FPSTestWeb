@@ -375,7 +375,7 @@ export const RAKK_CLAW_FORCE = 10;      // shove on hit
 export const RAKK_CLIMB_T = 2.2;        // the slow vulnerable climb-out
 export const RAKK_STUN = 0.5;
 
-// Buzzard — server-owned species (shared/species.ts 'buzzard', family
+// Buzzard - server-owned species (shared/species.ts 'buzzard', family
 // 'fly'): the ambient kettle made a real hazard. Map `creatures` pops
 // mint them; there is no local spawn path.
 export const BUZZARD_RADIUS = 1;

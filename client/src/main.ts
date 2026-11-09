@@ -1,7 +1,8 @@
 // oxlint-disable-next-line import/no-unassigned-import
 // oxlint-disable-next-line import/no-unassigned-import
 import pkg from '../package.json';
-import './core/polyfills.js'; // toSorted etc. — older engines
+// oxlint-disable-next-line import/no-unassigned-import
+import './core/polyfills.js'; // toSorted etc. - older engines
 import * as THREE from 'three';
 import { setInvariantSink } from '../../shared/invariants.js';
 import { glitch } from './core/fxDiag.js';

@@ -7,7 +7,7 @@ import { REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
 import type { Ball, Targetable } from '../entities/balls.js';
 import { ndcToClient } from './ndcScreen.js';
 
-// Scratch vectors — update() iterates bars sequentially, safe to share
+// Scratch vectors - update() iterates bars sequentially, safe to share
 const _cameraPos = new THREE.Vector3();
 const _cameraDir = new THREE.Vector3();
 const _targetPos = new THREE.Vector3();

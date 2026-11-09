@@ -16,6 +16,7 @@ describe('scenario: shotFired cosmetic relay', () => {
     const room = mkRoom({ bots: 2 });
     const [a, b] = twoPlayers(room);
     pin(room, a.id, { x: 0, y: 31, z: 0 });
+    a.armorClass = 'light'; // weaponType 12 (Lightning) is light-tier - the class-lock gate refuses medium/heavy
     const toA = wsSpy(room, a.id);
     const toB = wsSpy(room, b.id);
 

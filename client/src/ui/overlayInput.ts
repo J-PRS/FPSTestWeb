@@ -16,7 +16,7 @@ export interface OverlayInputDeps {
   logger: ChildLogger;
   isGameStarted: () => boolean;
   lazyPlayer: () => Player;
-  /** Online only — class picks get announced so the server banks the
+  /** Online only - class picks get announced so the server banks the
    *  same tier swap for respawn. Absent offline. */
   lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void; sendPerkUpdate(perk: string): void } | null;
 }

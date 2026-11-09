@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../../core/config.js';
 import { bodyMat, darkMat, boreMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, scaleRing, rotRing, resampleRing, notchRing } from './weaponKit.js';
 
-// Energy-weapon builders — plasma, railgun, lightning. Split from
+// Energy-weapon builders - plasma, railgun, lightning. Split from
 // weaponsGeo.ts; every builder returns an invisible group keyed into
 // MODEL_BUILDERS there.
 
-// Weapon 6 — plasma cannon: a fat energy projector, not a tube — heavy
+// Weapon 6 - plasma cannon: a fat energy projector, not a tube - heavy
 // finned emitter head up front, glowing core slats behind it, capacitor
 // bottle under the receiver. T2's plasma gun reads BULKY — the emitter
 // dish is the widest thing on the model.

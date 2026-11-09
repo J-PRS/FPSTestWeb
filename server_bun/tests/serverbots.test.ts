@@ -3,6 +3,7 @@ import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
+import { PERK_ORDER } from '../../shared/perks.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 
@@ -106,10 +107,11 @@ describe('ServerBots', () => {
 
   it('assigns each bot a loadout perk at spawn', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 4, mode: 'dm' }));
-    const perks = ['featherjets', 'bombardier', 'armored', 'overcharge', 'lifesteal'];
+    // rollBotPerk draws the full PERK_ORDER table (kitConsistent-filtered)
+    // - the pool grows with every new perk, so assert legality not a list.
     for (let i = 1; i <= 4; i++) {
       const p = room.players.getPlayer(`BOT-${BOT_NAMES[i - 1]}-0${i}`)!;
-      expect(perks).toContain(p.perk);
+      expect(PERK_ORDER as readonly string[]).toContain(p.perk);
       // assert the perk reached both the roster and the move shadow.
       expect(room.moveSim.simState(p.id)).not.toBeNull();
     }

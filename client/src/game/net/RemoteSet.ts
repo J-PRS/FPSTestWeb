@@ -1,5 +1,5 @@
 /**
- * Generic remote-entity set — ONE implementation of the networked-entity
+ * Generic remote-entity set - ONE implementation of the networked-entity
  * lifecycle (spawn-on-first-sight, stale hiding, roster pruning) shared by
  * every entity kind the server can own. Map-compatible so existing call
  * sites keep working; the value is the centralized gate, not the map.

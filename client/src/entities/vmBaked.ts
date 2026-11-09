@@ -6,7 +6,7 @@ import { urlParams } from '../core/params.js';
 import { bakeVertexAO, bakeWearOnly } from '../effects/vertexAO.js';
 import { Logger } from '../core/Logger.js';
 
-// Baked-weapon swap — the GLB+AO adoption pipeline for the viewmodel.
+// Baked-weapon swap - the GLB+AO adoption pipeline for the viewmodel.
 // When tools/vmdump has shipped w{id}_baked.glb/w{id}_ao.png, the baked
 // mesh replaces the procedural one part-by-part (glow parts stay
 // procedural). Kept off ViewModel so the load path isn't tangled with

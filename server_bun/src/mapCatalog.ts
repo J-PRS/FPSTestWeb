@@ -14,7 +14,7 @@ const MAPS_DIR = `${import.meta.dir}/../../maps`;
  *  source bookkeeping quick-join groups by. Kept off GameServer so it
  *  stays about sockets and seats. */
 export class MapCatalog {
-  /** Which maps/<X>.json spawned each room — lets quick-join group by
+  /** Which maps/<X>.json spawned each room - lets quick-join group by
    *  map rather than room name. */
   private roomMapName = new Map<string, string>();
   /** Maps carrying the `_t2`/`_t1` provenance marker — the lobby badges

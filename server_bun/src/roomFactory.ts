@@ -1,5 +1,5 @@
 /**
- * roomFactory — room resolve-or-create: spec resolution, Room wiring
+ * roomFactory - room resolve-or-create: spec resolution, Room wiring
  * (match journal, cheat kick, rotation, terrain), quick-join placement,
  * and the per-map heightfield cache. GameServer keeps the dispatcher +
  * ops surface; this owns "how a Room comes to exist".

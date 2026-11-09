@@ -17,7 +17,7 @@ import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 import { STATUS, shootRevealed } from '../../shared/status.ts';
 
-  /** Structure LOS for the gun scan — a sentry indoors shouldn't plink
+  /** Structure LOS for the gun scan - a sentry indoors shouldn't plink
    *  players outside through the wall. Target at chest height. */
 export function losClear(r: RoomDeployables, from: Vec3, to: Vec3, team?: string): boolean {
     const cols = r.room.ballSim.colliders;
@@ -31,7 +31,7 @@ export function losClear(r: RoomDeployables, from: Vec3, to: Vec3, team?: string
 
 
 
-// Per-kind deployable ticks — drone escort scan, proximity-mine fuse,
+// Per-kind deployable ticks - drone escort scan, proximity-mine fuse,
 // resupply-pad pulse, structure LOS, sentry fire. RoomDeployables owns
 // the item table + lifecycle; the behavior half lives here.
 

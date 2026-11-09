@@ -13,7 +13,7 @@ export enum LogLevel {
   ERROR = 3
 }
 
-/** Local-time ISO stamp (`2026-10-02T19:15:48.852+02:00`) — toISOString
+/** Local-time ISO stamp (`2026-10-02T19:15:48.852+02:00`) - toISOString
  *  is UTC-only, which made Alt+Q dumps read wrong vs wall clock. */
 const padN = (n: number, w = 2): string => String(n).padStart(w, '0');
 function tsLocal(d = new Date()): string {

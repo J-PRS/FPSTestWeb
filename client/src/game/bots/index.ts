@@ -26,9 +26,9 @@ import { decomposeTokens, heldBuffRates, type PickupKind } from '../../../../sha
 import { simRand } from '../../../../shared/simRand.js';
 
 /**
- * TeamBots — the mode referee. Bot brains/bodies live in botBrain.ts;
+ * TeamBots - the mode referee. Bot brains/bodies live in botBrain.ts;
  * this file owns roster, scoring, damage authority, and the CTF flags.
- * Nugget Wars bots — in-world fake players. A GameBot is a RemotePlayer
+ * Nugget Wars bots - in-world fake players. A GameBot is a RemotePlayer
  * registered in world.remotePlayers under `bot:<name>`, so every existing
  * funnel treats it as a real player: creatures hunt it (candidates()),
  * projectiles collide with it (remotePlayerPositions), explosions shove
@@ -862,24 +862,28 @@ bn += 1;
     const dx = bot.lastDest.x - bot.position.x, dz = bot.lastDest.z - bot.position.z;
     const dl = Math.hypot(dx, dz) || 1;
     switch (id) {
-      case 'dash':
+      case 'dash': {
         bot.velocity.x += (dx / dl) * 16; bot.velocity.y += 2; bot.velocity.z += (dz / dl) * 16;
         break;
-      case 'bounce':
+      }
+      case 'bounce': {
         bot.velocity.y += 10;
         break;
-      case 'slam':
+      }
+      case 'slam': {
         bot.velocity.y -= 16;
         for (const foe of this.senses.enemyList(bot)) {
           if (foe.pos.distanceTo(bot.position) < 8) {this.hit(foe.id, 70, bot.position, bot.playerId);}
         }
         break;
+      }
       case 'blink':
-      case 'warp':
+      case 'warp': {
         bot.position.x += (dx / dl) * 14;
         bot.position.z += (dz / dl) * 14;
         bot.position.y = (bot.terrain ? bot.terrain.getHeight(bot.position.x, bot.position.z) : bot.position.y) + 0.5;
         break;
+      }
     }
   }
 

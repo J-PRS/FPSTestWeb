@@ -1,4 +1,4 @@
-// Sentry mini-rockets — the friendly homing bolts deployables lob. A real
+// Sentry mini-rockets - the friendly homing bolts deployables lob. A real
 // flying body with mild homing, a smoke trail, and a proper little blast
 // on contact. Roughly the same DPS as the old hitscan snap, MUCH better
 // read. AoE lands on creatures and enemy bots — never on the owner or the

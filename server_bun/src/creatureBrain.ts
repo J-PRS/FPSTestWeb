@@ -1,10 +1,10 @@
 /**
- * CreatureBrain — the per-creature decision loop for CreatureSim:
+ * CreatureBrain - the per-creature decision loop for CreatureSim:
  * retarget cadence, cloak-ghost hunting, family step dispatch, edge
  * routing, and bite verification. Split out of CreatureSim so the sim
  * file owns lifecycle/spawn/roster while this owns "what does the being
  * do this tick". Deterministic: every choice rides sim-time and the
- * committed snapshot — no wall clock.
+ * committed snapshot - no wall clock.
  */
 import {
   type SimBeing, type CrawlerEvent,
@@ -19,7 +19,7 @@ import { SIM_TICK_DT } from '../../shared/wire.ts';
 
 const TICK_DT = SIM_TICK_DT;
 const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
-// Silence desyncs a wanderer just like a long-flying ball — force a
+// Silence desyncs a wanderer just like a long-flying ball - force a
 // resync edge (same committed snapshot) every few seconds.
 const RESYNC_INTERVAL = 4;
 const _snap: SimVec = { x: 0, y: 0, z: 0 };

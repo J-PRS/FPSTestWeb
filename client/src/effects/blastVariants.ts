@@ -3,7 +3,7 @@ import type { Terrain } from '../world/terrain.js';
 import { blastBurst, type BlastSpec } from './vfx.js';
 import type { ExplosionSparks } from './explosionSparks.js';
 
-// Per-weapon blast variants — the alternative recipes ExplosionLayers
+// Per-weapon blast variants - the alternative recipes ExplosionLayers
 // dispatches to (splash/punch/energy/kinetic/arc/bolt/flak) plus the
 // direct-hit bonus layers and the electric-spark helper they share.
 // The host owns the emission primitives (burst/tinted/shock/ring); this
@@ -22,7 +22,7 @@ export interface BurstLayer {
   kind: 'glow' | 'solid' | 'smoke';
   planar?: boolean;
   g1Var?: number; // random green-channel spread for organic fire variance
-  stagger?: number; // emission spread (s) — breathes instead of one-frame pop
+  stagger?: number; // emission spread (s) - breathes instead of one-frame pop
   spin?: number;    // billboard rotation ±rad/s (smoke/debris read organic)
 }
 

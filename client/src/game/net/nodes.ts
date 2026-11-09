@@ -1,7 +1,7 @@
-// Server-owned conquest lattice — dumb renderers: a ground ring +
+// Server-owned conquest lattice - dumb renderers: a ground ring +
 // light pillar per node recolored by owner, plus link lines between
 // same-owner 4-neighbors. The physical bases (katastand pedestals /
-// gendome cores) aren't drawn here — they arrive as 'kit' structures on
+// gendome cores) aren't drawn here - they arrive as 'kit' structures on
 // the wire echo and build/collide through the standard map pipeline.
 // All rules live in modeConquest.ts server-side; this file only paints
 // nodeUpdate rosters (same pattern as net/flags).
@@ -23,7 +23,7 @@ export interface NodeRow {
   owner: NodeOwner; hp: number; maxHp: number; build: number; buildBy?: string | null; core: boolean;
 }
 
-/** What a node layer needs — NetCtx['deps'] satisfies this structurally;
+/** What a node layer needs - NetCtx['deps'] satisfies this structurally;
  *  the offline bridge passes the same slots, so hosted and solo paint
  *  identically. */
 export interface NodeLayerDeps {

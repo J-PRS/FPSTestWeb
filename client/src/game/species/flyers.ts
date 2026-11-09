@@ -23,7 +23,7 @@ import type { Buzzard } from '../../entities/Buzzard.js';
 import type { SpeciesCtx } from './context.js';
 import { capFor } from './ambientCaps.js';
 
-// Air family — gnats (boid clouds), seekers (darting stingers), rakks
+// Air family - gnats (boid clouds), seekers (darting stingers), rakks
 // (swooping cliff-racers). Shared shape: ringPos spawn, one damage callback,
 // flyer aggro profile.
 export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
@@ -31,7 +31,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   const { rollUber, ringPos, hurtPlayer, bite, aggroFor, aggroVelFor, kickTrail, updateSpecies, atCap } = kit;
 
   const gnats: Gnat[] = [];
-  // Live gnat clouds — members share these objects; centers chase the player
+  // Live gnat clouds - members share these objects; centers chase the player
   const gnatClouds: { center: THREE.Vector3; nipGate: number }[] = [];
   const seekers: Seeker[] = [];
   const rakks: Rakk[] = [];

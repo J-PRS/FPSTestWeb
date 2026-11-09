@@ -12,7 +12,7 @@ import type { BlastRunner } from './combatBlast.ts';
 import { renderLagOf } from './rewind.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
 
-// AOE claim adjudication — what remains after the server took over
+// AOE claim adjudication - what remains after the server took over
 // projectiles: self-positioned skills (melee arc, slam, clear-of-
 // structures beams) whose "shot" has no shell to sim. Sanity-check the
 // swing point per skill contract, then hand the resolved stats to the
@@ -29,7 +29,7 @@ export interface AoeHost {
   notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void;
   friendly(shooterId: string, targetId: string): boolean;
   ddMult(shooter: PlayerState): number;
-  /** Seeded room rng — bomblet scatter must replay under scenario seeds. */
+  /** Seeded room rng - bomblet scatter must replay under scenario seeds. */
   rng(): number;
 }
 

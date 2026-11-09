@@ -16,10 +16,10 @@ export { buzzardParts } from './buzzardVisual.js';
 const _scratch = new THREE.Vector3();
 
 /**
- * Buzzard — the ambient kettle made a real creature. Server-owned only:
+ * Buzzard - the ambient kettle made a real creature. Server-owned only:
  * map `creatures` pops mint it, the wire carries species 'buzzard' down
  * the shared fly-family edge stream, and takeDamage sends a hit claim
- * instead of trusting local health. No local spawn path — the ambient
+ * instead of trusting local health. No local spawn path - the ambient
  * AmbientBirds flock stays pure decoration.
  */
 export class Buzzard implements Targetable, SwarmSlotOwner {
@@ -38,7 +38,7 @@ export class Buzzard implements Targetable, SwarmSlotOwner {
   readonly debrisKind = 'brush' as const; // feathers, not rock
   readonly ichor = 0x3A_2E_1E;
   scale = 1;
-  scoreless = true;  // wildlife fodder — kills don't pump the counter
+  scoreless = true;  // wildlife fodder - kills don't pump the counter
   lootless = true;
 
   swarmSlot = -1;
@@ -94,7 +94,7 @@ export class Buzzard implements Targetable, SwarmSlotOwner {
     this.id = nextTargetId();
     this.uber = uber;
     this.radius = uber ? BUZZARD_RADIUS * 1.6 : BUZZARD_RADIUS;
-    if (uber) {this.color.set(0x10_0C_08);} // elder — near-black silhouette
+    if (uber) {this.color.set(0x10_0C_08);} // elder - near-black silhouette
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + BUZZARD_ORBIT_ALT;
     this.vel = new THREE.Vector3();

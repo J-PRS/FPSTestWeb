@@ -1,8 +1,8 @@
 /**
- * Lobby — room browser as a self-contained DOM module (chat.ts pattern:
+ * Lobby - room browser as a self-contained DOM module (chat.ts pattern:
  * own elements, own key routing, textContent-only).
  *
- * Joining a room first tries an in-place hop — the server's switchRoom
+ * Joining a room first tries an in-place hop - the server's switchRoom
  * re-seats the live session and answers with a fresh gameState the normal
  * reconnect path rebuilds from. Offline/degraded clients fall back to the
  * /s/NAME reload — the path is the shareable link either way.

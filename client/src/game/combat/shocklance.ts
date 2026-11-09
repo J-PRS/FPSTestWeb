@@ -12,10 +12,10 @@ import { lgTrace, _lgHit, _lgD } from './lightningTrace.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { LightningHooks } from './lightning.js';
 
-// Shocklance — the melee-key pull-out zap. One shot per cycle: the honest
+// Shocklance - the melee-key pull-out zap. One shot per cycle: the honest
 // lgTrace ray at LANCE_RANGE, then THREE jagged strands converging on the
 // hitpoint (fat violet main + blue whip + gold arc), a layered discharge
-// burst at the contact ONLY when the bolt lands — a max-range miss arcs
+// burst at the contact ONLY when the bolt lands - a max-range miss arcs
 // into air and shows nothing (the LG rule).
 const _lanceMuzzle = new THREE.Vector3();
 const _tip = new THREE.Vector3();
