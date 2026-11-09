@@ -224,6 +224,38 @@ export const ACES_GLSL = /* glsl */ `
     }
   `;
 
+// Vibrance (CeeJay.dk / SweetFX formulation) — Photoshop-style: the boost
+// scales by (1 - saturation), so muted colors get pushed and already-hot
+// pixels (muzzle flashes, sky) barely move. Uniform saturation can't do
+// that — it neon-signs everything equally.
+export const VIBRANCE_GLSL = /* glsl */ `
+    void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+      vec3 c = inputColor.rgb;
+      vec3 lum = vec3(dot(c, vec3(0.2126, 0.7152, 0.0722)));
+      float mx = max(c.r, max(c.g, c.b));
+      float mn = min(c.r, min(c.g, c.b));
+      float sat = mx - mn;
+      float k = 1.0 + 0.06 * (1.0 - sat);
+      outputColor = vec4(mix(lum, c, k), inputColor.a);
+    }
+  `;
+
+// Permanent subtle vignette — ~0 cost inside the fused grade pass.
+// Edge-dim + light desat reads as "lens" and keeps the eye on the
+// reticle; deliberately weaker than #dmg-vignette's damage feedback
+// band so it never reads as a hit tell.
+export const VIGNETTE_GLSL = /* glsl */ `
+    void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+      float d = distance(uv, vec2(0.5));
+      // gentle 12% dim at corners, desaturating slightly with it
+      float k = smoothstep(0.42, 0.82, d);
+      vec3 c = inputColor.rgb * (1.0 - 0.12 * k);
+      float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(c, vec3(lum), 0.15 * k);
+      outputColor = vec4(c, inputColor.a);
+    }
+  `;
+
 // HDR sanitize — runs between RenderPass and the bloom/dirt chain.
 // The composer buffers are HalfFloat: an additive stack (EMIT_GAIN ×
 // overlapping trails/explosions, the sun disc) can push a texel past

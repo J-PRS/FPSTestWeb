@@ -17,7 +17,7 @@ import {
 import {
   TONE_MAPPING_EXPOSURE,
 } from './config.js';
-import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL, BLOOM_MERGE_GLSL, RETRO_GLSL } from './rendererShaders.js';
+import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL, BLOOM_MERGE_GLSL, RETRO_GLSL, VIBRANCE_GLSL, VIGNETTE_GLSL } from './rendererShaders.js';
 import { setFxBufferHeight } from './fxViewport.js';
 
 export interface RendererSetup {
@@ -353,11 +353,13 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     ]),
   });
   // One fused grade pass - EffectPass compiles all its effects into a
-  // single fullscreen shader, so sanitize+dirt+aces+contrast cost ONE
-  // buffer roundtrip instead of four. Shed-at-deep-tier disables the
+  // single fullscreen shader, so sanitize+dirt+aces+grade cost ONE
+  // buffer roundtrip instead of five. Shed-at-deep-tier disables the
   // whole pass, which was already the intent for dirt+contrast; losing
   // aces there too is the same "raw output" story.
-  const gradePass = new EffectPass(camera, postBloomSanitize, dirtEffect, acesGradeEffect, new BrightnessContrastEffect({ contrast: 0.06 }));
+  const vibranceEffect = new Effect('Vibrance', VIBRANCE_GLSL);
+  const vignetteEffect = new Effect('Vignette', VIGNETTE_GLSL);
+  const gradePass = new EffectPass(camera, postBloomSanitize, dirtEffect, acesGradeEffect, new BrightnessContrastEffect({ contrast: 0.06 }), vibranceEffect, vignetteEffect);
   gradePass.name = 'GradePass';
   composer.addPass(gradePass);
 

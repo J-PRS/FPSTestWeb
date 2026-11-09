@@ -55,7 +55,15 @@ function makeAtlasMat(): THREE.MeshStandardMaterial {
       .replace('float roughnessFactor = roughness;', 'float roughnessFactor = vRough;')
       // Retro armor is matte, not metallic — clamp spec sheen so panels
       // read as painted steel plates, not polished plastic.
-      .replace('float metalnessFactor = metalness;', 'float metalnessFactor = min(vMetal, 0.15);');
+      .replace('float metalnessFactor = metalness;', 'float metalnessFactor = min(vMetal, 0.15);')
+      // Fresnel rim on top of emissive — one dot product; silhouette
+      // separation is functional on low-detail armor (CHEAP_GFX #4).
+      // Cool tint stays neutral so team rims still own the hue read.
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        {
+          float fr = pow(1.0 - saturate(dot(normalize(vNormal), normalize(vViewPosition))), 3.0);
+          totalEmissiveRadiance += vec3(0.35, 0.55, 0.85) * fr * 0.10;
+        }`);
   };
   m.customProgramCacheKey = (): string => 'atlasbody';
   return m;

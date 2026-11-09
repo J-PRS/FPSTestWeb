@@ -117,10 +117,17 @@ indistinguishable from per-pixel at our density.
 
 ## Recommended next wins (ordered)
 
-1. **Subtle permanent vignette** in the fused grade — ~0 cost, biggest
-   "lens" feel per line of GLSL.
-2. **Rim light** on character/deployable materials — silhouette
-   readability in low-detail scenes, one dot product.
+1. ✅ **LANDED** — **Subtle permanent vignette** in the fused grade.
+   `VIGNETTE_GLSL` in `rendererShaders.ts`, appended to `gradePass` in
+   `renderer.ts` — 12% corner dim + 15% desat inside `smoothstep(0.42,
+   0.82)`. Kept deliberately weaker than `#dmg-vignette`'s damage band
+   so it reads as lens, never as a hit tell. One fused pass still.
+2. ✅ **LANDED** — **Fresnel rim** on the shared atlas body material
+   (`PlayerModel.ts makeAtlasMat` `onBeforeCompile`, inside
+   `<emissivemap_fragment>`): `pow(1-NdotV, 3)` at 10% cool-neutral
+   strength — silhouette separation on low-detail armor, hue left to
+   the existing team rims (the `setRim` path is emissive team-tint +
+   inverted-hull outline; this layer is view-dependent shape read).
 3. **Ramp-toon on a test material** — see if the art direction wants
    banding; the ramp-texture version is a 20-line shader + one 4px PNG.
 4. **Height-fog in terrain/structure shaders** — vertex-interpolated,
