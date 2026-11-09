@@ -221,6 +221,9 @@ body.menu-open #frag-msg { display: none !important; }
 }
 #overlay .field-row .sens-pair { display: flex; gap: 6px; align-items: center; }
 #overlay .field-row .sens-pair input { width: 52px; }
+/* Raw sens unit hidden - the cm/360 input writes the same stored value;
+   the engine-scale number means nothing to a player. */
+#overlay .field-row .sens-pair #sens-input { display: none; }
 #overlay .field-row .sens-pair #sens-cm { width: 64px; }
 #overlay .field-row .sens-unit { font-size: 0.58rem; color: rgba(157,178,196,0.6); letter-spacing: 0.05em; white-space: nowrap; }
 #overlay .field-row .seg-row { display: flex; gap: 0px; }
