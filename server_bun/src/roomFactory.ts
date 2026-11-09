@@ -86,6 +86,10 @@ export class RoomFactory {
       room.ballSim.attachField(f);
       room.moveSim.attachField(f, (pid) => room.players.getPlayer(pid)?.position);
       room.projectiles.attachField(f);
+      // Creatures sweep the same field — without this their step()
+      // early-returns forever on spec.terrain rooms (the GameServer
+      // default-field fallback only covers rooms with no spec terrain).
+      room.creatureSim.attachField(f);
       // Flag homes were snapped in the ctor against whatever field the
       // host had then (often null) — re-snap now that the real one is in.
       room.refreshFlagHomes();

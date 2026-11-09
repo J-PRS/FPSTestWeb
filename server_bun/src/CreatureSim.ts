@@ -315,6 +315,7 @@ export class CreatureSim {
     const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
     const dead = SPECIES_FAMILY[c.family].damage(c, dmg);
     if (dead) {this.kill(c, playerId);}
+    else {this.brain.noteHit(c.id, playerId);} // the shooter owns the grudge
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
     return { killed: dead };

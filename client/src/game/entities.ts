@@ -493,7 +493,7 @@ export function createEntities(deps: EntitiesDeps) {
 
   const { crawlers, scarabs, grubs, snakes, rollers } = melee;
 
-  const { gnats, seekers, rakks, strifers } = flyers;
+  const { gnats, seekers, rakks, strifers, buzzards } = flyers;
 
   const { turrets, overlords, mines, banelings, totems } = siege;
 
@@ -509,7 +509,7 @@ export function createEntities(deps: EntitiesDeps) {
 
   const { serverBalls, netBallSpawn, netBallSegment, netBallDie, netBallRoster, netTargetPosFor } = netBalls;
 
-  const netCrawlers = createNetCrawlers(deps, { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, totems, targets });
+  const netCrawlers = createNetCrawlers(deps, { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, totems, buzzards, targets });
 
   const { netCrawlSpawn, netCrawlEvt, netCrawlDie, netCrawlRoster } = netCrawlers;
 
@@ -645,7 +645,7 @@ nuggetsCollected += 1;
 
   return {
 
-    balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, strifers, targets, nuggets, banelings,
+    balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, strifers, buzzards, targets, nuggets, banelings,
 
     spawnNuggetsAt,
 
@@ -685,7 +685,7 @@ nuggetsCollected += 1;
 
     updateGrubs: melee.updateGrubs, updateSnakes: melee.updateSnakes,
 
-    updateGnats: flyers.updateGnats, updateSeekers: flyers.updateSeekers, updateRakks: flyers.updateRakks, updateStrifers: flyers.updateStrifers,
+    updateGnats: flyers.updateGnats, updateSeekers: flyers.updateSeekers, updateRakks: flyers.updateRakks, updateStrifers: flyers.updateStrifers, updateBuzzards: flyers.updateBuzzards,
 
     updateRollers: melee.updateRollers,
 
@@ -705,7 +705,7 @@ nuggetsCollected += 1;
 
       melee.updateSnakes(dt); melee.updateRollers(dt);
 
-      flyers.updateGnats(dt); flyers.updateSeekers(dt); flyers.updateRakks(dt); flyers.updateStrifers(dt);
+      flyers.updateGnats(dt); flyers.updateSeekers(dt); flyers.updateRakks(dt); flyers.updateStrifers(dt); flyers.updateBuzzards(dt);
 
       siege.updateTurrets(dt); siege.updateOverlords(dt); siege.updateTotems(dt);
 

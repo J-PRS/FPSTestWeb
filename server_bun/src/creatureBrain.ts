@@ -63,6 +63,10 @@ export class CreatureBrain {
   private retargetAcc = new Map<number, number>();
   private confuseGhosts = new Map<number, { x: number; y: number; z: number; until: number }>();
   private resyncAcc = new Map<number, number>();
+  /** Shooter's-grudge list: creatures prefer their last damager while the
+   *  grudge is fresh — a shot bird shouldn't peel off to the nearest bystander. */
+  private grudges = new Map<number, { by: string; until: number }>();
+  private static readonly GRUDGE_S = 6;
 
   constructor(private host: BrainHost) {}
 
@@ -84,6 +88,15 @@ export class CreatureBrain {
     this.confuseGhosts.delete(id);
     this.retargetAcc.delete(id);
     this.resyncAcc.delete(id);
+    this.grudges.delete(id);
+  }
+
+  /** A hit lands — the shooter owns the creature's attention until the
+   *  grudge expires. Forces the next step's retarget so the turn happens
+   *  now, not on the 2s cadence. */
+  noteHit(id: number, by: string): void {
+    this.grudges.set(id, { by, until: this.host.simTime() + CreatureBrain.GRUDGE_S });
+    this.retargetAcc.set(id, RETARGET_INTERVAL);
   }
 
   stepAll(crawlers: Iterable<SimBeing>, alive: { id: string; pos: SimVec }[]): void {
@@ -106,6 +119,22 @@ export class CreatureBrain {
     const ra = (this.retargetAcc.get(c.id) ?? 0) + TICK_DT;
     if (ra < RETARGET_INTERVAL) { this.retargetAcc.set(c.id, ra); return false; }
     this.retargetAcc.set(c.id, 0);
+    // Grudge beats proximity: a fresh damager is the prey until the
+    // grudge expires — checked before the nearest-player scan.
+    const g = this.grudges.get(c.id);
+    if (g) {
+      if (g.until <= this.host.simTime()) {this.grudges.delete(c.id);}
+      else {
+        const st = this.host.playerState(g.by);
+        if (st && !st.isDead) {
+          c.targetId = g.by;
+          this.confuseGhosts.delete(c.id);
+          this.host.snapTarget(c);
+          return true;
+        }
+        this.grudges.delete(c.id);
+      }
+    }
     const t = this.host.nearestPlayer(c, alive);
     if (t) {
       c.targetId = t.id;

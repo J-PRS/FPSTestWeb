@@ -112,7 +112,7 @@ function makePlaybackRig(): {
     targets,
     crawlers: [], scarabs: [], gnats: [], snakes: [], banelings: [],
     turrets: [], rollers: [], seekers: [],
-    overlords: [], mines: [], totems: [], rakks: [],
+    overlords: [], mines: [], totems: [], rakks: [], buzzards: [],
     world,
     overlay: null as unknown as HTMLElement,
     rendererCanvas: null as unknown as HTMLCanvasElement,

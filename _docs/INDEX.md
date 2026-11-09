@@ -114,6 +114,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-08_AGENT_GATE_SOTA.md` | Agent-gate tooling survey — machine-readable verdicts (verdict.json + hint, strict exit codes), affected-test scoping, latency-layered gate stack vs our check.sh/pre-commit/sweep |
 | `_docs/2026-11-08_WEAPON_MODEL_REVIEW.md` | All 27 weapon viewmodels ranked best→worst from gunsheet 4-up sheets — Revolver/Railgun/Chaingun top, Pistol/Mortar/Disc bottom; fast-disc groove+liner fixes, gunlab Implodisc filter, mkWeaponSel `.keys()` bug, rework shortlist |
 | `_docs/2026-11-08_VIEWMODEL_AND_MARKER_FIXES.md` | Session changelog for the viewmodel batch + runtime bugs — Blaster/Pistol reworks (pistol_v1 archived), 512² sheets + bounding-box cell fit, IFF marker flicker (duplicate headhuntBadges writer), frozen-corpse `process.env` crash in shared/botGoals |
+| `_docs/2026-11-09_BUZZARD.md` | Buzzard port report — ambient decor made a server-owned fly-family creature: `creatures` pops, shared `stepFlyer` both ends, 6s shooter-grudge brain, `attachField` fix that un-dead creature spawns on terrain maps, stat-fidelity audit + gaps |
 
 ## Agent memory (append-only, one line each)
 

@@ -19,6 +19,7 @@ import { Gnat } from '../../entities/Gnat.js';
 import { Seeker } from '../../entities/Seeker.js';
 import { Rakk } from '../../entities/Rakk.js';
 import { Strifer } from '../../entities/Strifer.js';
+import type { Buzzard } from '../../entities/Buzzard.js';
 import type { SpeciesCtx } from './context.js';
 import { capFor } from './ambientCaps.js';
 
@@ -34,7 +35,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   const gnatClouds: { center: THREE.Vector3; nipGate: number }[] = [];
   const seekers: Seeker[] = [];
   const rakks: Rakk[] = [];
-  const strifers: Strifer[] = [];
+  const strifers: Strifer[] = []; const buzzards: Buzzard[] = []; // wire-owned — server `creatures` pops mint them; no ambient spawn
   const _gnatTarget = new THREE.Vector3();
 
   // ---- Gnats (boid harasser cloud — orbits you, darts for nips) ----
@@ -160,9 +161,11 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   };
   function updateStrifers(dt: number): void { updateSpecies(striferSpecies, dt); }
 
+  const buzzardSpecies: Species<Buzzard> = { list: buzzards, interval: Number.POSITIVE_INFINITY, t: 0, spawn: (): void => undefined, tick: (b, dt): void => { b.update(dt, deps.lazyTerrain(), aggroFor(b, b.pos, dt, PROFILES.flyer)); } }; // wire owns it — never ambient
+  function updateBuzzards(dt: number): void { updateSpecies(buzzardSpecies, dt); }
   return {
-    gnats, gnatClouds, seekers, rakks, strifers,
+    gnats, gnatClouds, seekers, rakks, strifers, buzzards,
     spawnGnatCloud, spawnSeeker, spawnRakk, spawnStrifer,
-    updateGnats, updateSeekers, updateRakks, updateStrifers,
+    updateGnats, updateSeekers, updateRakks, updateStrifers, updateBuzzards,
   };
 }

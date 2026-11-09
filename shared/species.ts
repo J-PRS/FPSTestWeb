@@ -31,6 +31,10 @@ export const SPECIES: Record<string, SpeciesRow> = {
   scarab:  { family: 'hop',      speed: 1.35, health: 40,  bite: 15, aggro: 55 * 55, pounceD: 20 * 20 },
   rakk:    { family: 'fly',      speed: 1,  health: 50,  bite: 18 },
   gnat:    { family: 'fly',      speed: 1.5,  health: 20,  bite: 8,  orbitR: 10, orbitAlt: 8 },
+  // Buzzard - the ambient kettle made real: high lazy orbit, fast fold-
+  // dive, peck contact. Map-spawned via `creatures` pops; the wire species
+  // name rides the same fly-family edges as rakk/gnat.
+  buzzard: { family: 'fly',      speed: 1.25, health: 80,  bite: 20, orbitR: 20, orbitAlt: 16 },
   roller:  { family: 'roll',     speed: 1,  health: 120, bite: 30 },
   snake:   { family: 'slither',  speed: 1,  health: 45,  bite: 14 },
   baneling:{ family: 'baneling', speed: 1,  health: 15,  bite: 18, blast: 5 },

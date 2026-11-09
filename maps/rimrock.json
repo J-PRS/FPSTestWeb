@@ -58,6 +58,10 @@
   "terrain": "rimrock.bin",
   "heightScale": 1.2,
   "terrainPreset": 5,
+  "creatures": {
+    "buzzard": 4
+  },
+  "_creatures_notes": "Buzzard kettle - the ambient birds made real: they orbit high, fold-dive the nearest live player, and hold a grudge on whoever shot them. Hazards, not the match.",
   "fog": {
     "color": [
       0.78,

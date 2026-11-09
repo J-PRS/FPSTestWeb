@@ -46,6 +46,7 @@ import type { Overlord } from '../entities/Overlord.js';
 import type { Mine } from '../entities/Mine.js';
 import type { Totem } from '../entities/Totem.js';
 import type { Rakk } from '../entities/Rakk.js';
+import type { Buzzard } from '../entities/Buzzard.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
@@ -75,6 +76,7 @@ export interface DemoLifecycleDeps {
   mines: Mine[];
   totems: Totem[];
   rakks: Rakk[];
+  buzzards: Buzzard[];
   world: WorldState;
   overlay: HTMLElement;
   rendererCanvas: HTMLCanvasElement;

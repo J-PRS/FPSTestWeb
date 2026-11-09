@@ -8,6 +8,7 @@ import { Gnat } from '../entities/Gnat.js';
 import { Snake } from '../entities/Snake.js';
 import { Baneling } from '../entities/Baneling.js';
 import { Totem } from '../entities/Totem.js';
+import { Buzzard } from '../entities/Buzzard.js';
 import type { Targetable } from '../entities/balls.js';
 import { finiteVec as finite, SIM_TICK_DT } from '../../../shared/wire.js';
 import { seedReplicaState } from './netMelee.js';
@@ -27,10 +28,11 @@ export interface NetCrawlersCtx {
   snakes: Snake[];
   banelings: Baneling[];
   totems: Totem[];
+  buzzards: Buzzard[];
   targets: Targetable[];
 }
 
-type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake | Baneling | Totem;
+type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake | Baneling | Totem | Buzzard;
 
 // Fallback species name when the wire omits one (older servers).
 function speciesOf(c: NetBeing): string {
@@ -46,7 +48,7 @@ function speciesOf(c: NetBeing): string {
 /** Wire-species registry - entity class, the ctx list that owns it,
  *  and its default spawn state. SPECIES below and demoLifecycle's
  *  playback pairs both derive here; a new wire species = one row. */
-export const WIRE_SPECIES: Record<string, { Klass: typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake | typeof Baneling | typeof Totem; ctxKey: keyof NetCrawlersCtx; state: string }> = {
+export const WIRE_SPECIES: Record<string, { Klass: typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake | typeof Baneling | typeof Totem | typeof Buzzard; ctxKey: keyof NetCrawlersCtx; state: string }> = {
   crawler:  { Klass: Crawler,  ctxKey: 'crawlers',  state: 'wander'  },
   scarab:   { Klass: Scarab,   ctxKey: 'scarabs',   state: 'wander'  },
   rakk:     { Klass: Rakk,     ctxKey: 'rakks',     state: 'orbit'   },
@@ -55,10 +57,11 @@ export const WIRE_SPECIES: Record<string, { Klass: typeof Crawler | typeof Scara
   snake:    { Klass: Snake,    ctxKey: 'snakes',    state: 'slither' },
   baneling: { Klass: Baneling, ctxKey: 'banelings', state: 'chase'   },
   totem:    { Klass: Totem,    ctxKey: 'totems',    state: 'aim'     },
+  buzzard:  { Klass: Buzzard,  ctxKey: 'buzzards',  state: 'orbit'   },
 };
 
 export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
-  const { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, totems, targets } = ctx;
+  const { targets } = ctx; // species lists resolve through ctx[ctxKey] in SPECIES below
   const netCrawlerById = new Map<number, NetBeing>();
   const appliedSkips = new Map<number, number>();
   // Stamp order per creature: emit order IS stamp order, so an edge with
@@ -78,7 +81,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   // the class only decides the visuals. bindNet's signature is uniform
   // across classes, so the whole spawn path is one table lookup.
   interface SpeciesEntry {
-    Klass: typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake | typeof Baneling | typeof Totem;
+    Klass: typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake | typeof Baneling | typeof Totem | typeof Buzzard;
     list: NetBeing[];
     state: string;
   }

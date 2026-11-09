@@ -19,6 +19,7 @@ import { Mine, mineParts } from '../../entities/Mine.js';
 import { Overlord, overlordParts } from '../../entities/Overlord.js';
 import { Baneling, banelingParts } from '../../entities/Baneling.js';
 import { Totem, totemParts } from '../../entities/Totem.js';
+import { Buzzard, buzzardParts } from '../../entities/Buzzard.js';
 import { Turretter, turretterParts } from '../../entities/Turretter.js';
 import { ballParts } from '../../entities/balls.js';
 import { Tumbleweed, weedParts } from '../../entities/Tumbleweed.js';
@@ -42,6 +43,7 @@ export const SWARM_SPECS: Record<string, SwarmSpec> = {
   overlord:  { parts: overlordParts,  capacity: 64, max: 2,  spawn: (s, t, p): Overlord => new Overlord(s, t, p) },
   baneling:  { parts: banelingParts,  capacity: 128, max: 12, spawn: (s, t, p): Baneling => new Baneling(s, t, p) },
   totem:     { parts: totemParts,     capacity: 64, max: 2,  spawn: (s, t, p): Totem => new Totem(s, t, p) },
+  buzzard:   { parts: buzzardParts,   capacity: 64, max: 6,  spawn: (s, t, p): Buzzard => new Buzzard(s, t, p) },
   turretter: { parts: turretterParts, capacity: 64, bake: true, // gunmetal - same pipeline as viewmodel weapons
                spawn: (s, t, p): Turretter => new Turretter(s, t, p) },
   ball:      { parts: ballParts,      capacity: 512 },
