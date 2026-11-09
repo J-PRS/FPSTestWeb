@@ -357,7 +357,7 @@ export class P2PHost {
     if (pos) {this.trusted(playerId, pos);}
   }
 
-  /** Binary-decoded frames were shape+range-checked at the byte boundary —
+  /** Binary-decoded frames were shape+range-checked at the byte boundary:
    *  same trusted dispatch the dedicated socket path gives them. */
   private trusted(playerId: string, msg: Parameters<MessageHandler['handleMessage']>[1]): void {
     try {

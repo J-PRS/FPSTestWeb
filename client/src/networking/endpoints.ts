@@ -134,7 +134,7 @@ async function hostConfig(host: string, serverPath: string | null): Promise<{ ho
   let out = host;
   try {
     const cfg = await fetch('/server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean; servers?: Record<string, string> }> => r.json());
-    // ?server=/saved pick is the stronger source — server.json only fills
+    // ?server=/saved pick is the stronger source: server.json only fills
     // a host nobody asked for. Unconditionally overwriting here silently
     // re-routed every ?server= link (and every e2e stack) to the deploy's
     // public box the moment public/server.json gained a "server" field.
