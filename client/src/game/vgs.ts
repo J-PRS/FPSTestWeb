@@ -9,6 +9,7 @@
 import { audio } from '../core/audio.ts';
 import { settings } from '../core/settings.js';
 import { matchCode } from '../core/keybinds.js';
+import { hudRegion } from '../ui/hud/regions.js';
 
 import { TREE, type VgsNode } from './vgsTree.js';
 
@@ -70,10 +71,10 @@ export class Vgs {
   constructor(private deps: VgsDeps) {
     this.menu = document.createElement('div');
     this.menu.style.cssText =
-      'position:fixed;left:12px;bottom:var(--z-bl-2);z-index:60;display:none;' +
+      'display:none;order:1;' +
       'font:13px/1.5 monospace;color:#fff;background:rgba(0,0,0,.65);' +
       'border:1px solid #555;padding:6px 10px;min-width:220px;pointer-events:none;';
-    document.body.append(this.menu);
+    hudRegion('bl').append(this.menu);
     window.addEventListener('keydown', (e): void => this.onKey(e), true);
     // While the menu is up the keys belong to it entirely — keyup too,
     // so a release can't reach game handlers that never saw the press.

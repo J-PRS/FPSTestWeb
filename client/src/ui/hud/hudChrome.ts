@@ -1,6 +1,7 @@
 import { WeaponType } from '../../../../shared/weapons.js';
 import { botDisplayName } from '../../../../shared/botNames.js';
 import type { HUD } from '../hud.js';
+import { hudRegion } from './regions.js';
 
 // HUD chrome family — kill feed, match clock + flag chips, death
 // vignette/countdown, spectator hint, status-effect chip+vignette.
@@ -144,7 +145,7 @@ export function setSpectatorHint(h: HUD, on: boolean): void {
       const d = document.createElement('div');
       d.id = 'spectate-hint';
       d.textContent = 'SPECTATING';
-      document.body.append(d);
+      hudRegion('tc').append(d);
       h.spectateHint = d;
     } else if (!on && h.spectateHint) {
       h.spectateHint.remove();
@@ -163,7 +164,8 @@ export function setStatusFx(h: HUD, kind: 'cloak' | 'shield' | 'mend', label: st
       const hint = document.createElement('div');
       hint.className = `status-hint ${kind}`;
       hint.textContent = label;
-      document.body.append(vig, hint);
+      document.body.append(vig);
+      hudRegion('tc').append(hint);
       h.statusFx.set(kind, { hint, vig });
     } else if (!on && fx) {
       fx.hint.remove();

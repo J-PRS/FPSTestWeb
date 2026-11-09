@@ -80,6 +80,7 @@ import { createDemoLifecycle } from './game/demoLifecycle.js';
 import { createEntities } from './game/entities.js';
 import { createGameLoop, noteLocalSnap } from './game/gameLoop.js';
 import { setBootVeil } from './ui/hud/hudChrome.js';
+import { hudRegion } from './ui/hud/regions.js';
 import { PlayerSheep } from './game/playerSheep.js';
 import { wireNetworkHandlers } from './game/netHandlers.js';
 import { createRemotes } from './game/remotes.js';
@@ -1282,10 +1283,10 @@ const paintStaleBadge = (): void => {
     staleBadge = document.createElement('div');
     staleBadge.id = 'stale-badge';
     staleBadge.style.cssText =
-      'position:fixed;bottom:8px;right:10px;z-index:9999;pointer-events:none;' +
+      'pointer-events:none;' +
       'font:11px/1.4 monospace;color:#ffb84d;opacity:0.85;text-shadow:0 1px 2px #000;' +
       'background:rgba(0,0,0,0.35);padding:3px 7px;border-radius:4px;';
-    document.body.append(staleBadge);
+    hudRegion('br').append(staleBadge);
   }
   staleBadge.textContent = `⟳ ${stale} file${stale === 1 ? '' : 's'} changed`;
   staleBadge.style.display = stale ? '' : 'none'; // a 0 badge is noise

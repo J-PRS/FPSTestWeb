@@ -1,6 +1,7 @@
 // Kill-feed-style battle log for auto-saved cool shots — top-right stack,
 // newest on top, entries fade after a few seconds. CS feed, but the
 // "weapon icon" is the shot airtime and the timestamp is when it happened.
+import { hudRegion } from './hud/regions.js';
 
 const MAX_ENTRIES = 5;
 const ENTRY_LIFE_MS = 8000;
@@ -10,9 +11,9 @@ let feedEl: HTMLDivElement | null = null;
 function feed(): HTMLDivElement {
   if (!feedEl) {
     feedEl = document.createElement('div');
-    feedEl.id = 'shot-feed'; // id so hud.css can re-anchor it above the log panel
-    feedEl.style.cssText = 'position:fixed;bottom:var(--z-br-2);right:16px;display:flex;flex-direction:column-reverse;gap:4px;align-items:flex-end;z-index:99990;pointer-events:none;';
-    document.body.append(feedEl);
+    feedEl.id = 'shot-feed'; // order 3 in the BR region stack (hud.css)
+    feedEl.style.cssText = 'display:flex;flex-direction:column-reverse;gap:4px;align-items:flex-end;pointer-events:none;';
+    hudRegion('br').append(feedEl);
   }
   return feedEl;
 }

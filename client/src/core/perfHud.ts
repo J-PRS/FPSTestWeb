@@ -1,4 +1,5 @@
 import type { WebGLRenderer } from 'three';
+import { hudRegion } from '../ui/hud/regions.js';
 
 // Live perf readout — per-phase frame ms (EMA-smoothed) + renderer.info
 // (draw calls, tris, programs, geometries) + entity counts. Toggled with
@@ -9,16 +10,15 @@ export function createPerfHud() {
   const el = document.createElement('pre');
   el.id = 'perf-hud';
   el.style.cssText =
-    // Sits directly above the stats.js chart row — both offsets are
-    // reserved debug zones in hud.css (--z-br-3/-4) so the panel can't
-    // land on the entity-counts or shot-feed rows.
-    'position:fixed;bottom:var(--z-br-4);right:20px;z-index:10000;display:none;' +
-    // Height cap keeps the table inside the debug band — an uncapped pre
-    // on a short window towers over the top-right rows (hud-fps/timer).
-    'max-height:calc(100vh - var(--z-br-4) - 130px);overflow:hidden;' +
+    // Topmost slot in the BR region stack — the debug row order map in
+    // hud.css keeps it above the stats row, shot feed, census, and log.
+    'display:none;' +
+    // Height cap keeps the table from towering over the top-right rows
+    // (hud-fps/timer) on short windows.
+    'max-height:55vh;overflow:hidden;' +
     'color:#8f8;background:rgba(0,0,0,0.55);padding:4px 8px;font:11px/1.35 monospace;' +
     'margin:0;pointer-events:none;text-align:right;';
-  document.body.append(el);
+  hudRegion('br').append(el);
 
   const phases = new Map<string, number>(); // EMA ms
   const cur = new Map<string, number>();    // raw ms, current frame

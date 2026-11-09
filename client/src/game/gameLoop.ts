@@ -73,6 +73,7 @@ const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 // fires on a real snap.
 const _posPrev = new THREE.Vector3();
 import { isPosPrimed, setPosPrimed, noteLocalSnap } from './posPrimed.js';
+import { hudRegion } from '../ui/hud/regions.js';
 
 /** Authoritative reseats (respawn, correction, gameState restore, journal
  *  rewind) teleport the body by design - the frame-jump watch must not
@@ -690,16 +691,18 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
 // toggled with ` (backquote). stats.js only renders one panel per
 // instance, so use one per metric; panels are 80px wide + 8px gap.
 function makeStatsPanels(): Stats[] {
+  // One row in the BR region stack (order 2, hud.css) — panels flow
+  // left-to-right inside it; hidden/display toggles reflow the column.
+  const row = document.createElement('div');
+  row.id = 'stats-row';
+  hudRegion('br').append(row);
   return [0, 1, 2].map((panel, i): Stats => {
     const s = new Stats();
     s.showPanel(panel);
     const dom = s.dom as HTMLElement;
     dom.id = `stats-${i}`;
-    // bottom:40 - above the "⟳ files changed" badge strip (bottom:8, ~24px tall)
-    // --z-br-3: reserved debug row in hud.css - hardcoding an offset here
-    // is what parked the charts on top of the entity-counts row.
-    dom.style.cssText = `position:fixed;bottom:var(--z-br-3);right:${20 + (2 - i) * 88}px;left:auto;top:auto;z-index:10000;display:none;`;
-    document.body.append(dom);
+    dom.style.cssText = 'position:static;display:none;';
+    row.append(dom);
     return s;
   });
 }

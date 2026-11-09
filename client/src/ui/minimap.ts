@@ -33,7 +33,7 @@ export class Minimap {
   private cross: boolean;
   private readonly _map: [number, number] = [0, 0];
 
-  constructor(parent: HTMLElement) {
+  constructor(private parent: HTMLElement) {
     this.cross = settings.get('fps-minimap') === 1;
 
     this.canvas = document.createElement('canvas');
@@ -42,8 +42,7 @@ export class Minimap {
     const dpr = Math.min(window.devicePixelRatio, 2);
     this.canvas.height = SIZE * dpr;
     this.canvas.width = this.canvas.height;
-    this.applyMode();
-    parent.append(this.canvas);
+    this.applyMode(); // owns canvas placement (TR region vs HUD anchor)
     this.ctx = this.canvas.getContext('2d')!;
     this.ctx.scale(dpr, dpr);
 
@@ -64,10 +63,14 @@ export class Minimap {
   private applyMode(): void {
     // Crosshair mode: bare dots around the reticle, no dish, no hazards —
     // reading it must cost zero eye movement.
+    // Dish mode rides the TR region stack; crosshair mode must anchor to
+    // the HUD box itself (region-relative 50% would center on the stack).
+    const host = this.cross ? this.parent : (document.getElementById('hud-reg-tr') ?? this.parent);
+    if (this.canvas.parentElement !== host) {host.append(this.canvas);}
     this.canvas.style.cssText = this.cross
       ? `position: absolute; top: 50%; left: 50%; width: ${SIZE}px; height: ${SIZE}px;
          transform: translate(-50%, -50%); pointer-events: none;`
-      : `position: absolute; top: var(--z-tr-4); right: 20px; width: ${SIZE}px; height: ${SIZE}px;
+      : `width: ${SIZE}px; height: ${SIZE}px;
          border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
          background: rgba(8,12,18,0.55); pointer-events: none;`;
   }

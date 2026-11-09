@@ -1,4 +1,5 @@
 import { FRAG_MESSAGE_DURATION, FRAG_MESSAGE_FADE } from '../core/config.js';
+import { hudRegion } from './hud/regions.js';
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
@@ -10,13 +11,12 @@ export class FragMessages {
     this.scoreDiv = document.createElement('div');
     this.scoreDiv.id = 'frag-msg'; // hidden with the rest of the HUD via body.menu-open
     this.scoreDiv.style.cssText = `
-      position:absolute; top:25%; left:50%; transform:translate(-50%,-50%);
       font-family:Rajdhani,'Segoe UI',sans-serif; color:#fff;
       text-transform:uppercase; letter-spacing:0.08em;
       pointer-events:none; text-align:center; line-height:1.3;
       opacity:0; transition:opacity ${FRAG_MESSAGE_FADE}ms ease;
     `;
-    document.body.append(this.scoreDiv);
+    hudRegion('uc').append(this.scoreDiv);
   }
 
   show(msg: string): void {

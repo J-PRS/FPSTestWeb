@@ -1,6 +1,7 @@
 // HUD DOM: the whole stylesheet + element tree + selector wiring lives
 // here so hud.ts holds only behavior. Everything needed by the class is
 // returned in one bag — field names match the old private members.
+import { hudRegion } from './regions.js';
 export interface HudDom {
   el: HTMLDivElement;
   health: HTMLSpanElement;
@@ -53,11 +54,25 @@ export function createHudDom(): HudDom {
     const el = document.createElement('div');
     el.id = 'hud';
     el.innerHTML = `
-      <div id="player-list"></div>
-      <div id="hud-tr">
-        <span id="state-lbl">GROUND</span> &nbsp; Ping: <span id="ping">0</span>ms &nbsp; Loss: <span id="loss">0</span>% &nbsp; Jitter: <span id="jitter">0</span>ms
+      <div id="hud-reg-tl">
+        <div id="killfeed"></div>
+        <div id="player-list"></div>
       </div>
-      <div id="hud-fps"><span id="fps">0</span></div>
+      <div id="hud-reg-tr">
+        <div id="hud-tr">
+          <span id="state-lbl">GROUND</span> &nbsp; Ping: <span id="ping">0</span>ms &nbsp; Loss: <span id="loss">0</span>% &nbsp; Jitter: <span id="jitter">0</span>ms
+        </div>
+        <div id="hud-fps"><span id="fps">0</span></div>
+        <div id="hud-timer">00:00</div>
+      </div>
+      <div id="hud-reg-tc">
+        <div id="team-score"><span class="a">ALPHA <b id="ts-a">0</b></span><span class="sep">vs</span><span class="b"><b id="ts-b">0</b> BRAVO</span></div>
+        <div id="classic-score"><div id="cs-line">0 - 0</div><div id="cs-time">0.00</div></div>
+        <div id="match-status"><span class="fchip a" id="flag-a">⚑</span><span class="clock" id="match-clock"></span><span class="fchip b" id="flag-b">⚑</span></div>
+        <div id="conn-banner"></div>
+      </div>
+      <div id="hud-reg-bc">
+        <div id="held-count"><b id="held-n">0</b></div>
       <div id="hud-bc">
         <div id="hud-weapons">
           <span class="wslot" data-w="0"></span>
@@ -83,25 +98,21 @@ export function createHudDom(): HudDom {
         <div class="bar-wrap thin"><div class="bar-fill" id="energy-bar"></div></div>
         <div id="buffs"></div>
       </div>
+      </div>
       <div id="crosshair"></div>
       <div id="bloom-arms"><div class="ba ba-n"></div><div class="ba ba-e"></div><div class="ba ba-s"></div><div class="ba ba-w"></div></div>
-      <div id="sheep-readout"></div>
-      <div id="energy-readout"></div>
-      <div id="ground-readout"></div>
-      <div id="wammo-readout"></div>
-      <div id="wammo-regen"><div id="wammo-regen-fill"></div></div>
+      <div id="hud-reg-ret">
+        <div id="sheep-readout"></div>
+        <div id="energy-readout"></div>
+        <div id="ground-readout"></div>
+        <div id="wammo-readout"></div>
+        <div id="wammo-regen"><div id="wammo-regen-fill"></div></div>
+      </div>
       <div id="hit-marker"></div>
       <div id="dmg-vignette"></div>
       <div id="dmg-edge"><div class="wedge"></div><div class="grit"></div></div>
       <div id="dmg-dir"><div class="arc"></div></div>
       <div id="ent-counts"></div>
-      <div id="hud-timer">00:00</div>
-      <div id="team-score"><span class="a">ALPHA <b id="ts-a">0</b></span><span class="sep">vs</span><span class="b"><b id="ts-b">0</b> BRAVO</span></div>
-      <div id="held-count"><b id="held-n">0</b></div>
-      <div id="classic-score"><div id="cs-line">0 - 0</div><div id="cs-time">0.00</div></div>
-      <div id="match-status"><span class="fchip a" id="flag-a">⚑</span><span class="clock" id="match-clock"></span><span class="fchip b" id="flag-b">⚑</span></div>
-      <div id="killfeed"></div>
-      <div id="conn-banner"></div>
       <div id="scoreboard">
         <div id="sb-title"></div>
         <div id="sb-teams"><span class="a" id="sb-ts-a">0</span><span class="sep">–</span><span class="b" id="sb-ts-b">0</span></div>
@@ -162,6 +173,10 @@ export function createHudDom(): HudDom {
     const timerEl = el.querySelector('#hud-timer')! as HTMLDivElement;
     const killFeed = el.querySelector('#killfeed')! as HTMLDivElement;
     const connBanner = el.querySelector('#conn-banner')! as HTMLDivElement;
+
+    // The debug census docks in the body-level BR region alongside the
+    // other debug panels, not inside the HUD box.
+    hudRegion('br').append(ballCountEl);
 
   // Nugget counter — starts at 0, updated via setNuggets
   ammo.textContent = '0';

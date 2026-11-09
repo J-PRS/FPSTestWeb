@@ -4,45 +4,64 @@
 
 /* HUD LAYOUT CONTRACT
    ==================
-   Elements never hardcode a top/bottom offset. Every chrome piece claims
-   a numbered slot in exactly ONE corner zone below; a slot's px value is
-   (previous slot's offset + that element's rendered height + gap).
-   To add HUD chrome: pick a free slot number in the right zone — never
-   nudge someone else's px. Two elements may share a slot ONLY when
-   they're mutually exclusive (e.g. status hint vs spectate hint).
-   Zones are on :root so inline-styled pieces (minimap dish, chat feed,
-   VGS menu, shotFeed) resolve the same variables. */
-:root {
-  /* Top-center: score, match strip, then status/spectate hints */
-  --z-tc-1: 12px;   /* team score strip */
-  --z-tc-2: 58px;   /* match-status (clock + flag chips) */
-  --z-tc-3: 78px;   /* status hint row 1 · spectate hint */
-  --z-tc-4: 94px;   /* status hint row 2 */
-  --z-tc-5: 110px;  /* status hint row 3 */
-  /* Top-right: net strip, FPS, timer, minimap dish (160px) */
-  --z-tr-1: 14px;
-  --z-tr-2: 44px;
-  --z-tr-3: 84px;
-  --z-tr-4: 110px;
-  /* Top-left: killfeed (classic CS spot), battle log sits below it */
-  --z-tl-1: 14px;
-  --z-tl-2: 180px;  /* feed is 6 rows ≈ 150px tall at most */
-  /* Bottom-left: chat feed, VGS menu */
-  --z-bl-1: 12px;
-  --z-bl-2: 140px;
-  /* Bottom-right: entity counts, shot feed */
-  --z-br-1: 24px;
-  --z-br-2: 96px;
-  /* Debug rows (backquote): reserved ABOVE a full-height shot feed so the
-   * fixed-position panels can't land inside gameplay rows. The shot feed
-   * tops out near ~200px; debug starts past it. */
-  --z-br-3: 214px;  /* stats.js chart row (3 panels side by side) */
-  --z-br-4: 268px;  /* perfHud <pre> — grows UPWARD from here */
-  /* Log panel docked in the corner — corner tenants re-anchor above it
-   * via body:has(#log-panel.show) rules, so the height must live up here
-   * where sibling rules can read it (custom props don't reach siblings). */
-  --lp-h: min(190px, 30vh);
+   Chrome never positions itself. Every piece lives inside exactly ONE
+   region stack; the region owns the anchor and the flow order, so two
+   pieces can't land on the same pixels. To add chrome: append it to the
+   right region — in-#hud regions are declared in dom.ts markup, body-
+   level regions come from hudRegion() in regions.ts — and give it a
+   flex `order` if row position matters (see the #hud-reg-br map below).
+   World-anchored + screen-edge FX stay absolute; everything else stacks. */
+
+/* In-#hud regions — absolute against the HUD box (inset:0). */
+#hud-reg-tc {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
+#hud-reg-tr {
+  position: absolute; top: 14px; right: 20px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+}
+#hud-reg-tl {
+  position: absolute; top: 14px; left: 20px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+}
+#hud-reg-bc {
+  position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+/* Below-reticle readout column — hangs off the crosshair, hidden rows
+   collapse instead of burning a slot. */
+#hud-reg-ret {
+  position: absolute; top: calc(50% + 16px); left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+
+/* Body-level regions — fixed; their tenants are created outside the HUD
+   element (chat/VGS/frag messages/debug panels) and outlive it. */
+#hud-reg-uc {
+  position: fixed; top: 22%; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  pointer-events: none;
+}
+#hud-reg-bl {
+  position: fixed; bottom: 12px; left: 12px; z-index: 8;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: flex-start; gap: 8px; pointer-events: none;
+}
+#hud-reg-br {
+  position: fixed; bottom: 12px; right: 16px; z-index: 60;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: flex-end; gap: 8px; pointer-events: none;
+}
+/* BR stack order — screen top→bottom. The stack reflows on show/hide, so
+   the old per-element re-anchor :has() rules are gone entirely. */
+#hud-reg-br > #perf-hud    { order: 1; }
+#hud-reg-br > #stats-row   { order: 2; }
+#hud-reg-br > #shot-feed   { order: 3; }
+#hud-reg-br > #ent-counts  { order: 4; }
+#hud-reg-br > #log-panel   { order: 5; }
+#hud-reg-br > #stale-badge { order: 6; }
+#stats-row { display: flex; gap: 8px; }
 
 #hud {
   position: absolute; inset: 0; pointer-events: none;
@@ -51,8 +70,6 @@
   text-shadow: 0 0 4px #000, 1px 1px 0 #000;
 }
 #hud-bc {
-  position: absolute; bottom: 24px; left: 50%;
-  transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 5px;
   width: 300px;
   font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
@@ -132,12 +149,10 @@
 #buffs .buff.hoard { color: #c8f; background: rgba(180,120,240,0.15); border: 1px solid rgba(180,120,240,0.4); }
 #buffs .buff.shield { color: #8cf; background: rgba(80,180,240,0.15); border: 1px solid rgba(80,180,240,0.4); }
 #hud-tr {
-  position: absolute; top: var(--z-tr-1); right: 20px;
   font-size: 0.75rem; color: #8cf; text-align: right;
   line-height: 1.7;
 }
 #hud-fps {
-  position: absolute; top: var(--z-tr-2); right: 20px;
   font-size: 2.2rem; font-weight: bold; color: #8cf;
   text-align: right; line-height: 1;
 }
@@ -145,11 +160,10 @@
   /* Debug census — hidden until the ` (backquote) debug row is toggled on,
    * same toggle as the stats.js charts + perfHud. */
   display: none;
-  position: fixed; bottom: var(--z-br-1); right: 24px; text-align: right;
-  /* The census owns the band below --z-br-3 — taller and it collides with
-   *  the stats.js chart row; wider and it nicks the center readouts on
-   *  small windows. The overlap audit guards both. */
-  max-height: calc(var(--z-br-3) - var(--z-br-1) - 10px);
+  text-align: right;
+  /* Capped so a long census can't crowd the rows stacked above it in
+   *  the BR region or nick the center readouts on small windows. */
+  max-height: 180px;
   max-width: 340px; overflow: hidden;
   font-size: 0.78rem; color: #ccc; line-height: 1.55;
   font-variant-numeric: tabular-nums; white-space: pre;
@@ -158,40 +172,18 @@
 #ent-counts .dim { color: #777; }
 #ent-counts .hot { color: #fc8; font-weight: bold; }
 
-/* In-game log mirror — docked in the bottom-right CORNER: fixed height so
- * the rows it would cover (entity census, kill feed) can be bumped above
- * its top edge via the :has() rules below. perfHud/stats charts already
- * live at --z-br-3/-4, clear of it. Shows with the backquote debug view,
- * the DEBUG menu toggle, or an Alt+Q peek. */
+/* In-game log mirror — docked at the bottom of the BR region stack;
+ * the siblings above it reflow automatically while it's on screen.
+ * Shows with the backquote debug view, the DEBUG menu toggle, or an
+ * Alt+Q peek. */
 #log-panel {
   display: none;
-  position: fixed; right: 24px; bottom: 12px;
-  width: min(520px, 42vw); height: var(--lp-h);
+  width: min(520px, 42vw); height: min(190px, 30vh);
   flex-direction: column;
   background: rgba(8,11,16,0.88); border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 6px; z-index: 40; overflow: hidden;
+  border-radius: 6px; overflow: hidden;
   font-family: 'Courier New', monospace; text-shadow: none;
 }
-/* Corner tenants re-anchor above the panel only while it's on screen.
- * With the debug view on too, the whole stack rides up in order: log →
- * census → stats row → perfHud (each band clears the one below it). */
-body:has(#log-panel.show) #ent-counts { bottom: calc(12px + var(--lp-h) + 8px); }
-/* stats panels + perf-hud are inline-styled (cssText) — the :has()
- * re-anchors need !important to beat the inline `bottom`, same as
- * #stale-badge below. */
-body:has(#log-panel.show) #stats-0,
-body:has(#log-panel.show) #stats-1,
-body:has(#log-panel.show) #stats-2 { bottom: calc(12px + var(--lp-h) + 8px + 58px + 8px) !important; }
-body:has(#log-panel.show) #perf-hud {
-  bottom: calc(12px + var(--lp-h) + 8px + 58px + 8px + 56px) !important;
-  /* Re-anchored higher means less headroom — shrink the cap so the table
-   *  stays under the top-right rows (timer ends ~120px from the top). */
-  max-height: calc(100vh - (12px + var(--lp-h) + 8px + 58px + 8px + 56px) - 120px) !important;
-}
-body:has(#log-panel.show) #shot-feed { bottom: calc(12px + var(--lp-h) + 12px) !important; } /* inline-styled in shotFeed.ts — same !important case as #stale-badge */
-/* The stale-code badge is inline-styled in main.ts — the override needs
- * !important to beat the cssText, same as any inline style. */
-body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) !important; }
 #log-panel .lp-body {
   /* Thin styled scrollbar — the default gutter bar was chunky chrome. */
   scrollbar-width: thin;
@@ -223,7 +215,6 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 #log-panel .lp-line.err { color: #f77; }
 #hud-timer {
   /* Top-right stack under FPS — top-center belongs to the team score. */
-  position: absolute; top: var(--z-tr-3); right: 20px;
   font-size: 1.1rem; font-weight: bold; color: #ffd9a0;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 6px rgba(0,0,0,0.8), 1px 1px 0 #000;
@@ -269,8 +260,6 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 /* Own sheep meter — small readout under the crosshair, same coloring
    * as the indicator badges so sheepish reads the same everywhere. */
 #sheep-readout {
-  position: absolute; top: calc(50% + 18px); left: 50%;
-  transform: translateX(-50%);
   font: 600 13px 'Rajdhani', 'Segoe UI', sans-serif;
   letter-spacing: 0.5px;
   text-shadow: 0 0 6px rgba(0,0,0,0.9), 1px 1px 0 #000;
@@ -279,8 +268,6 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 /* Own total energy — mechanical E under the sheep meter, same units as
    * the speedo so height↔speed conversion reads intuitively. */
 #energy-readout {
-  position: absolute; top: calc(50% + 34px); left: 50%;
-  transform: translateX(-50%);
   font: 600 12px 'Rajdhani', 'Segoe UI', sans-serif;
   letter-spacing: 0.5px;
   color: #8fd3ff;
@@ -288,8 +275,6 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   pointer-events: none;
 }
 #ground-readout {
-  position: absolute; top: calc(50% + 48px); left: 50%;
-  transform: translateX(-50%);
   font: 600 12px 'Rajdhani', 'Segoe UI', sans-serif;
   letter-spacing: 0.5px;
   color: #a8e6a3;
@@ -299,8 +284,6 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 /* Weapon pool ammo — under the crosshair readout column, plasma cyan.
    Empty textContent = hidden (unlimited weapons paint nothing). */
 #wammo-readout {
-  position: absolute; top: calc(50% + 62px); left: 50%;
-  transform: translateX(-50%);
   font: 600 13px 'Rajdhani', 'Segoe UI', sans-serif;
   letter-spacing: 0.5px;
   color: #66ccff;
@@ -310,8 +293,6 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 /* Pool regen - 2px fill under the counter, tracks the fractional
    accrue toward the next round. Hidden when empty text (unlimited). */
 #wammo-regen {
-  position: absolute; top: calc(50% + 78px); left: 50%;
-  transform: translateX(-50%);
   width: 36px; height: 2px;
   background: rgba(255,255,255,0.15);
   border-radius: 1px;
@@ -399,10 +380,6 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
    the pickups; size grows with the hoard. */
 #held-count {
   display: none;
-  position: absolute;
-  bottom: 192px;
-  left: 50%;
-  transform: translateX(-50%);
   color: #bb66ff;
   font: 700 14px/1 monospace;
   text-shadow: 0 0 6px #000;
@@ -514,7 +491,7 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 }
 /* End-of-match banner (#frag-msg) sits above the centered scoreboard
    instead of overlapping its top rows — the board grows from center. */
-body:has(#hud.sb-open) #frag-msg { top: 12% !important; }
+body:has(#hud.sb-open) #hud-reg-uc { top: 12%; }
 /* Healthbars have the same problem one level up: #healthbar-container is
    appended to body AFTER #hud, so it paints over the board/map. */
 body:has(#hud.sb-open) #healthbar-container,
@@ -617,7 +594,6 @@ body:has(#hud.cm-open) #healthbar-container {
   border-radius: 0;
 }
 #player-list {
-  position: absolute; top: var(--z-tl-2); left: 20px;
   font-size: 0.75rem; color: #ccc; line-height: 1.7;
   text-align: left;
 }
@@ -716,7 +692,6 @@ body:has(#hud.cm-open) #healthbar-container {
 #scoreboard .asw-st { color: #ff9a3c; }
 #scoreboard .asw-i { color: #ff5a5a; }
 #team-score {
-  position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
   display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;
   text-shadow: 0 0 8px #000; pointer-events: none; white-space: nowrap;
 }
@@ -724,7 +699,6 @@ body:has(#hud.cm-open) #healthbar-container {
 #team-score .sep { color: #8899aa; margin: 0 10px; font-weight: 400; font-size: 13px; }
 /* Classic mode's Unity-style top-center: "score - kills" over seconds. */
 #classic-score {
-  position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
   display: none; text-align: center; pointer-events: none; white-space: nowrap;
   font: 700 18px/1.3 monospace; letter-spacing: 0.08em; color: #cdd9e5;
   font-variant-numeric: tabular-nums;
@@ -733,7 +707,6 @@ body:has(#hud.cm-open) #healthbar-container {
 /* Match meta strip under the score — clock + flag chips. Only shows
    in matches that declare them (same gate as the score strip). */
 #match-status {
-  position: fixed; top: var(--z-tc-2); left: 50%; transform: translateX(-50%);
   display: none; align-items: center; gap: 12px;
   font-size: 12px; letter-spacing: 0.12em; color: #cdd9e5;
   font-variant-numeric: tabular-nums;
@@ -748,7 +721,6 @@ body:has(#hud.cm-open) #healthbar-container {
 /* Connection-loss banner — live elapsed timer while down, short 'was
    down' flash after reconnect so even sub-second drops are visible. */
 #conn-banner {
-  position: fixed; top: calc(var(--z-tc-2) + 26px); left: 50%; transform: translateX(-50%);
   display: none; font: 700 15px/1 Rajdhani, sans-serif; letter-spacing: 0.18em;
   padding: 5px 14px; border-radius: 4px; pointer-events: none; white-space: nowrap;
 }
@@ -859,25 +831,23 @@ body.underwater #gl {
               inset 0 0 5vmax rgba(150,255,190,0.25);
 }
 .status-hint {
-  position: absolute; left: 50%; transform: translateX(-50%);
   pointer-events: none; z-index: 5;
   font: 600 13px/1 monospace; letter-spacing: 0.2em; text-shadow: 0 1px 3px #000;
 }
-.status-hint.cloak { top: var(--z-tc-3); color: #b9c8ff; opacity: 0.75; }
-.status-hint.shield { top: var(--z-tc-4); color: #9adcf9; opacity: 0.8; }
-.status-hint.mend { top: var(--z-tc-5); color: #8ff5ae; opacity: 0.8; }
+.status-hint.cloak { color: #b9c8ff; opacity: 0.75; }
+.status-hint.shield { color: #9adcf9; opacity: 0.8; }
+.status-hint.mend { color: #8ff5ae; opacity: 0.8; }
 
 /* Spectator hint — only chrome shown while flying */
 #spectate-hint {
-  position: absolute; top: var(--z-tc-3); left: 50%; transform: translateX(-50%);
   pointer-events: none; z-index: 5; color: #cfe8ff; opacity: 0.7;
   font: 600 13px/1 monospace; letter-spacing: 0.15em; text-shadow: 0 1px 3px #000;
 }
 
 /* Kill feed — top-left (classic CS spot), newest at bottom, timed fade */
 #killfeed {
-  position: fixed; top: var(--z-tl-1); left: 20px; display: flex; flex-direction: column;
-  align-items: flex-start; gap: 4px; pointer-events: none; z-index: 6;
+  display: flex; flex-direction: column;
+  align-items: flex-start; gap: 4px; pointer-events: none;
   font: 600 12px/1.2 monospace; letter-spacing: 0.06em;
 }
 .kf-row {

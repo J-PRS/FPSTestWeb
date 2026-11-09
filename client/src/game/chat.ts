@@ -14,6 +14,7 @@ import { speakVgs, speakChat, chatTtsEnabled } from '../core/tts.js';
 import { botDisplayName, feedNames } from '../../../shared/botNames.js';
 import { settings } from '../core/settings.js';
 import { matchCode } from '../core/keybinds.js';
+import { hudRegion } from '../ui/hud/regions.js';
 
 export interface ChatDeps {
   send(text: string, team: boolean): void;
@@ -70,7 +71,7 @@ export class Chat {
     // z 8: above the world render, below EVERY UI chrome — the menu
     // overlay sits at 10, HUD panels at 40. Ambient text never paints
     // over menus or panels.
-    root.style.cssText = 'position:fixed;left:12px;bottom:var(--z-bl-1);z-index:8;font:13px/1.4 monospace;color:#fff;pointer-events:none;max-width:min(420px, calc(50vw - 170px));';
+    root.style.cssText = 'font:13px/1.4 monospace;color:#fff;pointer-events:none;max-width:min(420px, calc(50vw - 170px));order:2;';
 
     this.feed = document.createElement('div');
     root.append(this.feed);
@@ -83,7 +84,7 @@ export class Chat {
     this.input.style.cssText = 'width:100%;background:rgba(0,0,0,.65);border:1px solid #444;color:#fff;font:inherit;padding:3px 6px;outline:none;';
     this.inputWrap.append(this.input);
     root.append(this.inputWrap);
-    document.body.append(root);
+    hudRegion('bl').append(root);
 
     // Capture phase: while composing, keys are ours alone.
     window.addEventListener('keydown', (e): void => this.onKey(e), true);

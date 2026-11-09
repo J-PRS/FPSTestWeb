@@ -7,6 +7,7 @@
 // show so storms never do DOM work nobody can see.
 
 import { Logger, LogLevel } from '../core/Logger.js';
+import { hudRegion } from './hud/regions.js';
 
 const MAX_LINES = 150;
 
@@ -81,7 +82,7 @@ function ensurePanel(): void {
   });
 
   panel.append(head, body);
-  document.body.append(panel);
+  hudRegion('br').append(panel);
 }
 
 /** Backquote debug overlay — same visibility contract as stats/perfHud. */
