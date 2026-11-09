@@ -224,12 +224,12 @@ body.menu-open #frag-msg { display: none !important; }
 /* Raw sens unit hidden - the cm/360 input writes the same stored value;
    the engine-scale number means nothing to a player. */
 #overlay .field-row .sens-pair #sens-input { display: none; }
-#overlay .field-row .sens-pair #sens-cm { width: 64px; }
+#overlay .field-row .sens-pair #sens-cm { width: 64px; flex: 1; }
 #overlay .field-row .sens-unit { font-size: 0.58rem; color: rgba(157,178,196,0.6); letter-spacing: 0.05em; white-space: nowrap; line-height: 1.25; display: inline-block; text-align: left; }
 /* INVERT Y lives inside the sens row - compact .tog for the pair. */
 #overlay .field-row .sens-pair .tog {
   font-size: 0.58rem; font-weight: 600; letter-spacing: 0.08em;
-  padding: 4px 8px; margin-left: 8px;
+  padding: 4px 8px; margin-left: 8px; flex: 1;
   background: rgb(var(--ui-black-rgb) / 0.3);
   color: #9db2c4;
   border: 1px solid rgb(var(--ui-white-rgb) / 0.14);
