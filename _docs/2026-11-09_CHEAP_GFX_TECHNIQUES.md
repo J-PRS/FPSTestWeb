@@ -130,8 +130,9 @@ indistinguishable from per-pixel at our density.
    inverted-hull outline; this layer is view-dependent shape read).
 3. **Ramp-toon on a test material** — see if the art direction wants
    banding; the ramp-texture version is a 20-line shader + one 4px PNG.
-4. **Height-fog in terrain/structure shaders** — vertex-interpolated,
-   makes valleys read as atmosphere layers for free.
+4. ~~Height-fog~~ — **already shipped**: `terrainPresets.ts` runs
+   `heightFogAmount` + a `heightFog` term in the terrain shader blocks
+   (plus `scene.fog` for base distance). Covered.
 5. **Channel-packed mask texture** wherever materials fetch >2 maps.
 
 ## Sources
