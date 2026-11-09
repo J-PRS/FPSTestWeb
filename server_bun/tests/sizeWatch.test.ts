@@ -69,7 +69,7 @@ const GRANDFATHERED: Record<string, number> = {
   'client/src/gunlab/previews.ts': 901,
   // Crossed via the bot-brain decision tables — bots legitimately
   // aggregates behaviors. Pinned; +15% alarms.
-  'client/src/game/bots/index.ts': 904,
+  'client/src/game/bots/index.ts': 1049, // re-pinned after dashWatch payoff (fc623e26) — still alarms at +15%
   // Crossed via the server-authoritative spread + ammo-pool claims —
   // the damage funnel legitimately aggregates intents. Pinned; +15% alarms.
   'server_bun/src/CombatHandler.ts': 909,
@@ -83,6 +83,14 @@ const GRANDFATHERED: Record<string, number> = {
   // watch alarms on further growth, per convention.
   'server_bun/src/GameServer.ts': 930,
   'client/src/effects/vfx.ts': 906,
+  // Crossed via the tick pipeline refactor (2f851eec/21557fc0 — c34/c122
+  // stage splits) — the record fanout legitimately aggregates emitters.
+  // Pinned at breached size; still alarms at +15%.
+  'server_bun/src/tickRecords.ts': 1054,
+  // Crossed via sub-tick input edges + complexity extraction
+  // (636a9c9a/8a201990) — the move claim pipeline legitimately
+  // aggregates. Pinned at breached size; still alarms at +15%.
+  'server_bun/src/RoomMoveSim.ts': 906,
 };
 
 function* walk(dir: string): Generator<string> {

@@ -50,10 +50,11 @@ describe('scenario: LG charge economy vs players', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
     const [a, b] = twoPlayers(room);
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
+    a.armorClass = 'light'; // Lightning is light-tier - the class-lock gate refuses medium/heavy
     freeze(room, b.id, { x: 30, y: 31, z: 0 });
     expect(b.charge).toBe(0);
 
-    for (let i = 0; i < 10; i++) beamTick(room, a, b);
+    for (let i = 0; i < 10; i++) {beamTick(room, a, b);}
     // Ticks 1-4 pay full damage (bank 0); 5-9 bank (4-3)x2=2 each,
     // 10+ bank (4-2)x2=4 — 10 + 4 = 14 gross, minus tiny drain.
     expect(b.charge).toBeGreaterThan(10);
@@ -64,9 +65,10 @@ describe('scenario: LG charge economy vs players', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
     const [a, b] = twoPlayers(room);
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
+    a.armorClass = 'light'; // Lightning is light-tier - the class-lock gate refuses medium/heavy
     freeze(room, b.id, { x: 10, y: 31, z: 0 });
 
-    for (let i = 0; i < 12; i++) beamTick(room, a, b);
+    for (let i = 0; i < 12; i++) {beamTick(room, a, b);}
     const banked = b.charge;
     const dmg = getWeaponStats(WeaponType.Chaingun).directDamage;
 
@@ -84,12 +86,13 @@ describe('scenario: LG charge economy vs players', () => {
     const [a, b] = twoPlayers(room);
     const c = [...room.players.getAllPlayers().values()].find((p) => p.id !== a.id && p.id !== b.id)!;
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
+    a.armorClass = 'light'; // Lightning is light-tier - the class-lock gate refuses medium/heavy
     // Close range: a real flight step lets the bank drain before impact,
     // so the corpse test fires from inside the detonation window.
     freeze(room, b.id, { x: 6, y: 31, z: 0 });
     freeze(room, c.id, { x: 8, y: 31, z: 0 }); // inside the pop radius
 
-    for (let i = 0; i < 12; i++) beamTick(room, a, b);
+    for (let i = 0; i < 12; i++) {beamTick(room, a, b);}
     expect(b.charge).toBeGreaterThan(0);
     const hpC = c.health;
     b.health = 30; // ensure the rocket kill lands
@@ -105,9 +108,10 @@ describe('scenario: LG charge economy vs players', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
     const [a, b] = twoPlayers(room);
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
+    a.armorClass = 'light'; // Lightning is light-tier - the class-lock gate refuses medium/heavy
     freeze(room, b.id, { x: 30, y: 31, z: 0 });
 
-    for (let i = 0; i < 12; i++) beamTick(room, a, b);
+    for (let i = 0; i < 12; i++) {beamTick(room, a, b);}
     const banked = b.charge;
     room.messages.botAttack(a.id, b.id, WeaponType.Chaingun);
     expect(b.charge).toBeLessThan(banked);

@@ -126,7 +126,8 @@ describe('botBrain', () => {
   it('the belt never lobs at knife range or past its arc', () => {
     botRng(() => 0.9);
     const close = new BotBrain(origin);
-    const c = ctx({ enemies: [foe({ pos: { x: 6, y: 0, z: 0 } })] });
+    // Belt window is 5-45m since 7b68f96cd - knife range is sub-5m now.
+    const c = ctx({ enemies: [foe({ pos: { x: 4, y: 0, z: 0 } })] });
     const o1 = untilOut(close, c, (o) => o.belt === true, 30);
     expect(o1.belt ?? false).toBeFalsy();
     const far = new BotBrain(origin);

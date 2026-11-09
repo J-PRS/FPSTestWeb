@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, step, pin, freeze, watch } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
-import { BOT_LOADOUTS } from '../../../shared/botLoadouts.ts';
+import { BOT_LOADOUTS, botClassForLoadout } from '../../../shared/botLoadouts.ts';
 import type { Vec3 } from '../../src/types.ts';
 
 // Bots fire REAL shells through RoomProjectiles — this suite pins the
@@ -86,6 +86,9 @@ describe('scenario: bot shells hit creatures like player shots', () => {
       loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
     };
     bots.loadouts.set(b.id, BOT_LOADOUTS[8]!);
+    // The kit is light-tier (Lightning) - arsenal.fireAt class-gates on
+    // armorClass, so the forced kit needs its honest class too.
+    b.armorClass = botClassForLoadout(BOT_LOADOUTS[8]!);
     // Face the aim: shots launch along the body's facing now, and this
     // test drives fireAt without ticking the room — nothing else turns
     // the body (same convention as faceLaunch: pitch aims from muzzle).

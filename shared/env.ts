@@ -12,6 +12,8 @@ export interface SharedEnv {
   traceId?: string;
   /** Skip the muzzle-clearance probe in botHunt (FPS_NOMUZZLE). */
   noMuzzle?: boolean;
+  /** Goal-pick decision trace in botGoals (BOTGOALS_DEBUG). */
+  botGoalsDebug?: boolean;
   /** Wall perf clock for opt-in profiling inside shared sims — NOT the
    *  sim clock; seeded alongside setSharedNow where a real clock exists
    *  (FPS_THINK_PROF). */

@@ -170,5 +170,5 @@ export const CONFIG = {
 // Seed the shared/ env seam once — shared modules read sharedEnv/sharedNow,
 // never process.env or Date.now directly (the client compiles this file
 // too; in a browser these stay the pure defaults or bind Date.now fine).
-setSharedEnv({ traceId: ENV?.FPS_TRACE, noMuzzle: ENV?.FPS_NOMUZZLE !== undefined });
+setSharedEnv({ traceId: ENV?.FPS_TRACE, noMuzzle: ENV?.FPS_NOMUZZLE !== undefined, botGoalsDebug: ENV?.BOTGOALS_DEBUG !== undefined });
 setSharedNow(wallNow);

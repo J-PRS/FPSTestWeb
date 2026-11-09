@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { BotSenses, type SenseHost } from '../game/bots/botSenses.js';
 import { NOISE_TTL_MS } from '../../../shared/wire.js';
+import { WeaponType } from '../../../shared/weaponTable.js';
 import type { GameBot } from '../game/bots/botBrain.js';
 import type { Targetable } from '../entities/balls.js';
 
@@ -16,7 +17,7 @@ interface Rig {
   teamOf: Map<string, string>;
   worldState: { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number }>;
                 explosions: { pos: THREE.Vector3; age: number }[];
-                projectiles: { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
+                projectiles: { pos: THREE.Vector3; vel: THREE.Vector3; config?: { weaponType?: number } }[] };
   playerState: { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number; health: number; maxHealth: number };
   targets: Targetable[];
   state: { modeId: string };
@@ -25,7 +26,7 @@ interface Rig {
 const mkRig = (): Rig => {
   const bots: GameBot[] = [];
   const teamOf = new Map<string, string>();
-  const worldState = { remotePlayers: new Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number }>(), explosions: [] as { pos: THREE.Vector3; age: number }[], projectiles: [] as { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
+  const worldState = { remotePlayers: new Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number }>(), explosions: [] as { pos: THREE.Vector3; age: number }[], projectiles: [] as { pos: THREE.Vector3; vel: THREE.Vector3; config?: { weaponType?: number } }[] };
   const playerState = { pos: v(), vel: v(), isDead: false, isCloaked: false, lastFireAt: -Infinity, health: 100, maxHealth: 100 };
   const targets: Targetable[] = [];
   const state = { modeId: 'ctf' };
@@ -73,10 +74,14 @@ describe('recentNoises', (): void => {
 describe('incomingNear', (): void => {
   it('a round inside 12m only counts while closing', (): void => {
     const r = mkRig();
+    // config pinned to a no-splash gun: an unset weaponType falls back
+    // to BoltLauncher stats, whose aoeRadius trips the parked-bomb
+    // exemption and would count the receding "shell" as a threat.
+    const cg = { weaponType: WeaponType.Chaingun };
     r.worldState.projectiles.push(
-      { pos: v(5, 0, 0), vel: v(-1, 0, 0) },  // closing on the origin
-      { pos: v(5, 0, 0), vel: v(1, 0, 0) },   // flying away — no threat
-      { pos: v(20, 0, 0), vel: v(-1, 0, 0) }, // closing but out of range
+      { pos: v(5, 0, 0), vel: v(-1, 0, 0), config: cg },  // closing on the origin
+      { pos: v(5, 0, 0), vel: v(1, 0, 0), config: cg },   // flying away — no threat
+      { pos: v(20, 0, 0), vel: v(-1, 0, 0), config: cg }, // closing but out of range
     );
     const out = r.senses.incomingNear(v());
     expect(out).toHaveLength(1);

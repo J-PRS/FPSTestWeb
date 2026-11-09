@@ -9,6 +9,7 @@
  * fields stay private to the brain while the ordering lives here.
  */
 import { botRand } from './botRand.ts';
+import { sharedEnv } from './env.ts';
 import { BOT_EYE } from './botHunt.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
 import { distSq } from './botVec.ts';
@@ -61,6 +62,7 @@ export class BotGoals {
 
   /** Idle-goal selection, in priority order: revenge > rally > objective >
    *  pickup > heard fight > wander. */
+  // oxlint-disable-next-line complexity -- the priority ladder is tuned as one surface
   pick(ctx: BrainCtx, pos: BotVec): void {
     const s = this.s();
     if (s.revengeT > 0) {
@@ -254,9 +256,10 @@ export class BotGoals {
       // instantly to the next best thing.
       const incScore = incumbent ? incumbent.score : s.goalScore;
       const incGoal = incumbent ? incumbent.goal : s.goal;
-      // shared/ runs in the browser too - bare process.env throws there
-      // (and killed the whole bot tick mid-loop, freezing corpses).
-      if (typeof process !== 'undefined' && process.env?.BOTGOALS_DEBUG) {console.log('PICK', JSON.stringify({cands: cands.map((c): { g: BotVec; s: number } => ({g: c.goal, s: +c.score.toFixed(2)})), inc: incumbent?.goal, incScore, cost: +cost(incGoal).toFixed(2), best: best.goal, bestScore: +best.score.toFixed(2)}));}
+      // shared/ runs in the browser too - the debug flag arrives through
+      // the sharedEnv seam (server seeds BOTGOALS_DEBUG; browser: off).
+      // oxlint-disable-next-line no-console -- env-gated decision trace, same as botBrain's FPS_TRACE line
+      if (sharedEnv.botGoalsDebug) {console.log('PICK', JSON.stringify({cands: cands.map((c): { g: BotVec; s: number } => ({g: c.goal, s: Number(c.score.toFixed(2))})), inc: incumbent?.goal, incScore, cost: Number(cost(incGoal).toFixed(2)), best: best.goal, bestScore: Number(best.score.toFixed(2))}));}
       if (incScore * (1 + cost(incGoal)) > best.score) {
         s.goal = incGoal;
         s.goalScore = incScore;
