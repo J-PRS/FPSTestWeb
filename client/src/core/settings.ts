@@ -15,7 +15,7 @@ type Schema = {
   'fps-bloom': boolean;
   'fps-invert-y': boolean;
   'fps-sens': number;
-  'fps-minimap': number;      // 0 = corner radar, 1 = crosshair threat overlay
+  'fps-minimap': number;      // 0 = corner radar, 1 = crosshair threat overlay, 2 = off
   'fps-loadout': string;      // "0,2,6,7" - weapon id per slot (active class's kit)
   'fps-loadout-light': string;  // remembered kit per armor tier - '' = never set
   'fps-loadout-medium': string;

@@ -44,9 +44,9 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
   const keysMenu = keysOpen && keysModal ? buildKeysMenu(keysOpen, keysModal) : null;
 
   // Section expanders: a label folds its rows until the next label.
-  // PROFILE (name/play) stays open - the core row never collapses.
+  // PROFILE (name) and GAME (PLAY) stay open — the core rows never collapse.
   document.querySelectorAll('#menu-side .section-label').forEach((label): void => {
-    if (label.textContent === 'PROFILE') {return;}
+    if (label.textContent === 'PROFILE' || label.textContent === 'GAME') {return;}
     label.classList.add('expandable');
     label.addEventListener('click', (): void => {
       const off = label.classList.toggle('collapsed');

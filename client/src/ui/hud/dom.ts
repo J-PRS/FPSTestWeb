@@ -80,19 +80,15 @@ export function createHudDom(): HudDom {
           <span class="wslot" data-w="2"></span>
           <span class="wslot" data-w="3"></span>
         </div>
-        <div id="hud-speedo">
-          <span class="spd-cell"><i>A</i><b id="spd">0</b></span>
-          <span class="spd-cell"><i>H</i><b id="spd-h">0</b></span>
-          <span class="spd-cell"><i>V</i><b id="spd-v">0</b></span>
-        </div>
         <div class="labels">
-          <span>HEALTH<span class="v" id="hp">100</span></span>
-          <span>ARMOR<span class="v" id="armor">0</span></span>
-          <span>NUGGETS<span class="v" id="ammo">0</span></span>
-        </div>
-        <div class="labels">
-          <span>ENERGY<span class="v" id="nrg">60</span></span>
-          <span>KILLS<span class="v" id="kills">0</span></span>
+          <span class="vpair"><span class="v" id="hp">100</span><span class="v" id="armor">0</span></span>
+          <div id="hud-speedo">
+            <span class="spd-cell"><i>A</i><b id="spd">0</b></span>
+            <span class="spd-cell"><i>H</i><b id="spd-h">0</b></span>
+            <span class="spd-cell"><i>V</i><b id="spd-v">0</b></span>
+          </div>
+          <span class="vpair"><span class="v" id="ammo">0</span><span class="v" id="nrg">60</span></span>
+          <span hidden><span class="v" id="kills">0</span></span>
         </div>
         <div class="bar-wrap hp"><div class="bar-ghost" id="health-ghost"></div><div class="bar-fill" id="health-bar"></div><div class="bar-fill armor-fill" id="armor-bar"></div></div>
         <div class="bar-wrap thin"><div class="bar-fill" id="energy-bar"></div></div>

@@ -374,7 +374,6 @@ export class Lobby {
     if (rooms.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.style.cssText = 'color:rgba(58,167,255,0.5);padding:6px 2px;';
       empty.textContent = '— no matches — host one from the HOST tab';
       this.rows.append(empty);
     }

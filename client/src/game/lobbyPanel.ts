@@ -843,7 +843,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     botsRow.append(botsInput);
 
-    hostBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgba(58,167,255,0.4);';
+    hostBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgb(var(--ui-accent-rgb) / 0.4);';
 
     hostBtn.addEventListener('click', async (): Promise<void> => {
 
@@ -1044,7 +1044,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
         const lobs = await h.deps.listP2pLobbies();
 
-        if (lobs.length === 0) { lobRows.textContent = '— none open —'; lobRows.style.color = 'rgba(58,167,255,0.5)'; return; }
+        if (lobs.length === 0) { lobRows.textContent = '— none open —'; lobRows.style.color = 'rgb(var(--ui-accent-rgb) / 0.5)'; return; }
 
         lobRows.style.color = '';
 
@@ -1160,7 +1160,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     const soloBtn = btn('PLAY');
 
-    soloBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgba(58,167,255,0.4);';
+    soloBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgb(var(--ui-accent-rgb) / 0.4);';
 
     soloBtn.addEventListener('click', (): void => {
 

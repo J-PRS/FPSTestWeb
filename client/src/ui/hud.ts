@@ -274,10 +274,10 @@ export class HUD {
 
   /** Headhunt held tokens — the prominent counter above the stat block.
    *  Font grows with the pile: your number inflating IS the warning
-   *  that you're becoming the lobby's target. null hides it. */
+   *  that you're becoming the lobby's target. null or 0 hides it. */
   private lastHeldKey = '';
   setHeld(n: number | null): void {
-    if (n === null) {
+    if (n === null || n <= 0) {
       if (this.lastHeldKey !== 'off') { this.lastHeldKey = 'off'; this.heldCount.style.display = 'none'; }
       return;
     }

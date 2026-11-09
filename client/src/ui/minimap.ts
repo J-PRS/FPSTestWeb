@@ -30,11 +30,11 @@ interface MapBasis { pos: THREE.Vector3; sin: number; cos: number; k: number; mi
 export class Minimap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private cross: boolean;
+  private mode: number; // 0 corner radar, 1 crosshair threats, 2 off
   private readonly _map: [number, number] = [0, 0];
 
   constructor(private parent: HTMLElement) {
-    this.cross = settings.get('fps-minimap') === 1;
+    this.mode = Math.min(2, Math.max(0, settings.get('fps-minimap')));
 
     this.canvas = document.createElement('canvas');
     // Backing store at device pixels — CSS size stays SIZE, draw space
@@ -46,14 +46,15 @@ export class Minimap {
     this.ctx = this.canvas.getContext('2d')!;
     this.ctx.scale(dpr, dpr);
 
-    // Settings-panel toggle — applies live, no reload
+    // Settings-panel toggle — cycles corner → crosshair → off, applies live
     const btn = document.querySelector('#minimap-toggle');
     if (btn) {
-      const label = (): void => { btn.textContent = this.cross ? 'MINIMAP: CROSSHAIR' : 'MINIMAP: CORNER'; };
+      const MODE_NAMES = ['MINIMAP: CORNER', 'MINIMAP: CROSSHAIR', 'MINIMAP: OFF'];
+      const label = (): void => { btn.textContent = MODE_NAMES[this.mode]; };
       label();
       btn.addEventListener('click', (): void => {
-        this.cross = !this.cross;
-        settings.set('fps-minimap', this.cross ? 1 : 0);
+        this.mode = (this.mode + 1) % 3;
+        settings.set('fps-minimap', this.mode);
         this.applyMode();
         label();
       });
@@ -65,17 +66,23 @@ export class Minimap {
     // reading it must cost zero eye movement.
     // Dish mode rides the TR region stack; crosshair mode must anchor to
     // the HUD box itself (region-relative 50% would center on the stack).
-    const host = this.cross ? this.parent : (document.getElementById('hud-reg-tr') ?? this.parent);
+    const cross = this.mode === 1;
+    const host = cross ? this.parent : (document.getElementById('hud-reg-tr') ?? this.parent);
     if (this.canvas.parentElement !== host) {host.append(this.canvas);}
-    this.canvas.style.cssText = this.cross
-      ? `position: absolute; top: 50%; left: 50%; width: ${SIZE}px; height: ${SIZE}px;
-         transform: translate(-50%, -50%); pointer-events: none;`
-      : `width: ${SIZE}px; height: ${SIZE}px;
+    if (this.mode === 2) {
+      this.canvas.style.cssText = 'display:none;';
+    } else if (cross) {
+      this.canvas.style.cssText = `position: absolute; top: 50%; left: 50%; width: ${SIZE}px; height: ${SIZE}px;
+         transform: translate(-50%, -50%); pointer-events: none;`;
+    } else {
+      this.canvas.style.cssText = `width: ${SIZE}px; height: ${SIZE}px;
          border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
          background: rgba(8,12,18,0.55); pointer-events: none;`;
+    }
   }
 
   update(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<MinimapPlayer>, nodes?: Iterable<MinimapNode>): void {
+    if (this.mode === 2) {return;}
     const c = this.ctx;
     const mid = SIZE / 2;
     c.clearRect(0, 0, SIZE, SIZE);
@@ -85,7 +92,7 @@ export class Minimap {
     const t = { pos, sin, cos, k, mid };
 
     // Crosshair mode is threats-only — pickups and hazards aren't threats.
-    if (!this.cross) {this.drawNuggets(nuggets, t);}
+    if (this.mode === 0) {this.drawNuggets(nuggets, t);}
     this.drawNodes(nodes, t);
     this.drawTargets(targets, t);
     this.drawPlayers(players, t);
@@ -93,7 +100,7 @@ export class Minimap {
 
     // Center wedge = the player facing up (crosshair mode: the reticle
     // already occupies the center)
-    if (!this.cross) {
+    if (this.mode === 0) {
       c.fillStyle = '#e8f4ff';
       c.beginPath();
       c.moveTo(mid, mid - 6);
@@ -178,7 +185,7 @@ export class Minimap {
       // radar. Buzzards still get their own debug rings below.
       if (e.scoreless) {continue;}
       // Crosshair mode is threats-only — but an enraged ball IS a threat
-      if (this.cross && e instanceof Ball && !e.isEnraged) {continue;}
+      if (this.mode === 1 && e instanceof Ball && !e.isEnraged) {continue;}
       this.toMap(e.pos.x - t.pos.x, e.pos.z - t.pos.z, t.sin, t.cos, t.k, t.mid);
       // Enraged balls are actively hunting you — promote cyan hazard to
       // red threat so an incoming dash pings radar like a real enemy.

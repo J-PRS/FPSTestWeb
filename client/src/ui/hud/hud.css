@@ -2,6 +2,16 @@
    element map stay in TS; presentation lives here. resumePulse is defined
    in chrome.css (global overlay keyframes). */
 
+/* Oxanium — variable techno face (wght 200-800), elegant at light
+   weights and solid at bold. Single variable file covers the range. */
+@font-face {
+  font-family: 'Oxanium';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/oxanium-var.woff2') format('woff2');
+}
+
 /* HUD LAYOUT CONTRACT
    ==================
    Chrome never positions itself. Every piece lives inside exactly ONE
@@ -72,18 +82,28 @@
 #hud-bc {
   display: flex; flex-direction: column; gap: 5px;
   width: 300px;
-  font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Oxanium', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 }
 #hud-bc .labels {
-  display: flex; justify-content: space-between;
+  display: flex; justify-content: space-between; column-gap: 12px;
   font-size: 0.7rem; letter-spacing: 0.15em;
   color: rgba(200,220,240,0.75); font-weight: 600;
 }
 #hud-bc .labels .v {
-  color: #fff; font-weight: 700; font-size: 1.0rem;
+  color: #fff; font-weight: 700; font-size: 1.15rem;
   margin-left: 5px; font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
+/* Bare-number readouts — hue carries the stat, matching its bar below
+   (health red, armor amber, energy cyan; nuggets stays gold inline). */
+#hud-bc #hp { color: #f77; }
+#hud-bc #armor { color: #fc6; }
+#hud-bc #nrg { color: #7df; }
+/* Vitals split into two clusters — status (hp+armor) left, resources
+   (nuggets+energy) right. */
+#hud-bc .labels .vpair { display: flex; align-items: baseline; gap: 10px; }
+#hud-bc .labels .vpair .v { margin-left: 0; }
 #hud-bc .bar-wrap {
   width: 100%; height: 8px;
   background: rgba(10,14,20,0.55);
@@ -93,15 +113,15 @@
 #hud-bc .bar-wrap.thin { height: 5px; }
 /* Tuck the energy bar under health — reads as the classic HP/MP pair. */
 #hud-bc .bar-wrap.hp + .bar-wrap.thin { margin-top: -6px; }
-/* Speedo row — three fixed cells so a growing value never shifts its
-   neighbours: label sits left, number pinned right with tabular nums. */
+/* Speedo cells — three equal shares of the row's free space; label+number
+   centered on each cell's tick with tabular nums. */
 #hud-speedo {
-  display: flex; gap: 14px;
+  display: flex; gap: 14px; flex: 1; min-width: 0;
   font-size: 0.65rem; letter-spacing: 0.12em;
   color: rgba(160,180,200,0.45); font-weight: 600;
 }
 #hud-speedo .spd-cell {
-  flex: 1; display: flex; align-items: baseline; justify-content: space-between;
+  flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 6px;
   border-bottom: 1px solid rgba(255,255,255,0.10);
   padding-bottom: 1px;
 }
@@ -109,7 +129,7 @@
 #hud-speedo .spd-cell b {
   color: #fff; font-size: 1.05rem; font-weight: 700;
   font-variant-numeric: tabular-nums;
-  min-width: 3ch; text-align: right;
+  min-width: 3ch; text-align: center;
 }
 #hud-weapons {
   display: flex; justify-content: center; gap: 14px;
