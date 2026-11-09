@@ -46,7 +46,7 @@ const _q = new THREE.Quaternion();
 
 
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number]; dirTint?: boolean; ramp?: [number, number, number, number][] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number]; dirTint?: boolean; ramp?: [number, number, number, number][]; mistAnim?: boolean }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
 
 
 
@@ -97,6 +97,7 @@ export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
         .toSorted((a, b): number => a.t - b.t)
     : null;
   ctx.deps.lazyTerrain().setFogRamp(rampStops);
+  ctx.deps.lazyTerrain().setMistAnim(fog?.mistAnim !== false);
 }
 
 /** Per-map ambient particles - weather intensity per kind. Absent = the

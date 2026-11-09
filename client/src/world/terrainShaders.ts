@@ -137,6 +137,8 @@ export const terrainFrag = /* glsl */`
   // color. xyz = stop color, w = position t in [0,1]. fogRampN = 0 → flat.
   uniform vec4 fogRamp[6];
   uniform int fogRampN;
+  uniform float mistTime;  // elapsed s — scrolls the mist density field
+  uniform float mistAnim;  // 0 = static mist (spec.fog.mistAnim:false)
   uniform float innerHalfSize;
   uniform vec2 innerGridOrigin;
   uniform float edgeHalf; // outermost level only: world-edge fade radius (0=off)
@@ -205,6 +207,15 @@ export const terrainFrag = /* glsl */`
     if (dist < 1.0) return 0.0;
     float rdy = delta.y / dist;
     float a = HF_D0 * exp(-HF_K * max(ro.y - HF_FLOOR, 0.0));
+    if (mistAnim > 0.5) {
+      // Drifting density — two scrolling noise octaves sampled mid-ray so
+      // banks vary across the screen; wind-matched drift (~2.5m/s) shares
+      // direction with the ground-mist cards and cloud decks.
+      vec3 mid = ro + delta * (dist * 0.5);
+      vec2 np = mid.xz * 0.008 + vec2(1.0, 0.1) * mistTime * 0.02;
+      float n = noise(np) * 0.7 + noise(np * 2.7 + vec2(0.0, mistTime * 0.013)) * 0.3;
+      a *= 0.55 + 0.9 * n;
+    }
     float od = abs(rdy) < 1e-3
       ? a * dist
       : a * (1.0 - exp(-HF_K * rdy * dist)) / (HF_K * rdy);
