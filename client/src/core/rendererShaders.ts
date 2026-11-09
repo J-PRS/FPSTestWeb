@@ -262,7 +262,7 @@ export const VIGNETTE_GLSL = /* glsl */ `
 // Fused into the grade pass: one extra quad of taps, zero new passes.
 export const CAS_GLSL = /* glsl */ `
     void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-      vec2 px = vec2(1.0) / resolution;
+      vec2 px = resolution.zw; // postprocessing resolution: xy=size, zw=1/size
       vec3 c = inputColor.rgb;
       vec3 n = texture2D(inputBuffer, uv + vec2(0.0, -px.y)).rgb;
       vec3 s = texture2D(inputBuffer, uv + vec2(0.0,  px.y)).rgb;
