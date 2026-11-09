@@ -217,12 +217,12 @@
 #log-panel .lp-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.32); }
 #log-panel.show { display: flex; }
 #log-panel .lp-head {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; justify-content: flex-start; align-items: center;
   padding: 3px 8px; font-size: 0.6rem; letter-spacing: 0.2em;
   color: rgba(140,170,195,0.7); border-bottom: 1px solid rgba(255,255,255,0.08);
   flex: none;
 }
-#log-panel .lp-head { justify-content: flex-start; }#log-panel .lp-body {
+#log-panel .lp-body {
   overflow-y: auto; padding: 4px 8px 6px;
   font-size: 10.5px; line-height: 1.45;
   /* pre-wrap so long forensic lines fold instead of scrolling sideways */
@@ -393,7 +393,6 @@
   background: rgba(255,120,100,0.65);
   transition: none;
 }
-#hud-bc .bar-wrap { position: relative; }
 
 /* Headhunt held counter — sits right above the bottom-center stat
    block (weapons/labels), the personal-UI neighborhood. Violet like
@@ -482,10 +481,6 @@
   font: 700 12px/1 monospace;
   text-shadow: 0 0 4px #000;
   white-space: nowrap;
-}
-.player-indicator-offscreen {
-  width: 12px !important;
-  height: 12px !important;
 }
 /* Offscreen: collapse to a hollow ring — the clipped silhouette would
    render nothing with a transparent fill, and direction is all the rim
