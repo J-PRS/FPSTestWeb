@@ -241,6 +241,13 @@ body.menu-open #frag-msg { display: none !important; }
 /* Tribes-style state box — no checkmark: a hollow square OFF, filled
    accent square ON, docked on the right of the toggle tile. */
 #overlay .btn-row button.tog { display: flex; align-items: center; justify-content: space-between; }
+/* Label span truncates with a fade (mask), never ellipsis — the ::after
+   state square is flex:none so it can't be pushed out by long labels. */
+#overlay .btn-row button.tog > span {
+  flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+}
 /* State squares shared by .tog and .cs-toggle — margin differs per tile. */
 #overlay .btn-row button.tog::after,
 #cool-shot-toggles .cs-toggle::after {
