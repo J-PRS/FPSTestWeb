@@ -113,9 +113,10 @@ const aspect = (): number => window.innerWidth / Math.max(1, window.innerHeight)
 /* Numeric menu fields — inputmode only hints the mobile keyboard; strip
    non-numeric chars on input so letters can't sit in the box (parsing
    already ignores them, but a field full of junk reads broken). */
-const digitsOnly = (el: HTMLInputElement): void => {
+const digitsOnly = (el: HTMLInputElement, decimal = true): void => {
+  const re = decimal ? /[^\d.]/g : /\D/g;
   el.addEventListener('input', (): void => {
-    const clean = el.value.replace(/[^\d.]/g, '');
+    const clean = el.value.replace(re, '');
     if (clean !== el.value) {el.value = clean;}
   });
 };
@@ -633,7 +634,7 @@ export class PlayerInput {
 
       for (const el of [fovInput, fovHInput]) {
 
-        digitsOnly(el);
+        digitsOnly(el, false); // FOV is rounded to whole degrees anyway
 
         el.addEventListener('focus', (): void => el.select());
 
@@ -641,13 +642,15 @@ export class PlayerInput {
 
       }
 
+      const FOV_MIN = 50, FOV_MAX = 160; // 160v ≈ 172°h @16:9 — the fisheye wall
+
       fovInput.addEventListener('input', (): void => {
 
         const v = Number.parseFloat(fovInput.value);
 
         if (!Number.isFinite(v)) {return;}
 
-        settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(v))));
+        settings.set('fps-fov', Math.max(FOV_MIN, Math.min(FOV_MAX, Math.round(v))));
 
         syncH();
 
@@ -659,11 +662,20 @@ export class PlayerInput {
 
         if (!Number.isFinite(h)) {return;}
 
-        settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(hToV(h)))));
+        settings.set('fps-fov', Math.max(FOV_MIN, Math.min(FOV_MAX, Math.round(hToV(h)))));
 
         fovInput.value = String(settings.get('fps-fov'));
 
       });
+
+      // Repaint the clamped value on blur — the box shouldn't show a
+      // number the setting silently refused.
+      for (const el of [fovInput, fovHInput]) {
+        el.addEventListener('blur', (): void => {
+          fovInput.value = String(settings.get('fps-fov'));
+          syncH();
+        });
+      }
 
     }
 
