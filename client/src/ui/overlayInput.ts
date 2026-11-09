@@ -42,6 +42,21 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
   const keysOpen = document.getElementById('keys-open');
   const keysModal = document.getElementById('keys-modal');
   const keysMenu = keysOpen && keysModal ? buildKeysMenu(keysOpen, keysModal) : null;
+
+  // Section expanders: a label folds its rows until the next label.
+  // PROFILE (name/play) stays open - the core row never collapses.
+  document.querySelectorAll('#menu-side .section-label').forEach((label): void => {
+    if (label.textContent === 'PROFILE') {return;}
+    label.classList.add('expandable');
+    label.addEventListener('click', (): void => {
+      const off = label.classList.toggle('collapsed');
+      let el = label.nextElementSibling;
+      while (el && !el.classList.contains('section-label')) {
+        (el as HTMLElement).hidden = off;
+        el = el.nextElementSibling;
+      }
+    });
+  });
   wireLabButton();
 
   // Single source of truth for menu visibility — sets overlay display AND

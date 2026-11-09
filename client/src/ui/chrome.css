@@ -11,14 +11,16 @@
   --ui-black-rgb: 0 0 0;
   --ui-dim-rgb: 140 170 195;
   --ui-faint-rgb: 160 190 215;
-  /* semantic hues - the leftovers that stayed rgba() during the sweep */
+  /* semantic hues — channels that appear at more than one alpha */
   --ui-ok-rgb: 111 207 143;
   --ui-warn-rgb: 255 184 107;
   --ui-danger-rgb: 255 90 90;
+  --ui-mist-rgb: 200 220 240;
+  --ui-moss-rgb: 76 175 109;
   /* ink */
   --ui-ink: #dde8f2;
   --ui-ink-2: #cdd9e5;
-  --ui-ink-dim: #9db2c4;
+  --ui-ink-dim-rgb: 157 178 196;
   --ui-ink-faint: #8fa2b3;
   /* surfaces — dark glass, deepest → lightest */
   --ui-bg-veil: #060a10;
@@ -113,7 +115,7 @@ body.menu-open #frag-msg { display: none !important; }
   position: fixed; inset: 0; z-index: 100;
   display: flex; align-items: center; justify-content: center;
   background: var(--ui-bg-veil);
-  color: rgb(var(--ui-faint-rgb) / 0.8);
+  color: rgb(var(--ui-mist-rgb) / 0.8);
   font-family: inherit; font-size: 1rem; font-weight: 600;
   letter-spacing: 0.35em; text-transform: uppercase;
   pointer-events: none;
@@ -134,7 +136,6 @@ body.menu-open #frag-msg { display: none !important; }
 #client-ver { position: fixed; bottom: 10px; right: 0; width: min(400px, 100vw);
   text-align: center; opacity: 0.4; font: 10px monospace; pointer-events: none; }
 /* Keybind rows — click a chip to capture the next input */
-.keys-rows { display: flex; flex-direction: column; gap: 4px; }
 .keys-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 4px 8px;
@@ -192,16 +193,16 @@ body.menu-open #frag-msg { display: none !important; }
 }
 #keys-modal .keys-close:hover { color: #fff; }
 .keys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
-.keys-subhead {
-  margin: 12px 0 4px;
-  font-size: 0.58rem; font-weight: 600; letter-spacing: 0.2em;
-  color: rgb(var(--ui-dim-rgb) / 0.6);
-}
 /* Fixed-key rows: read-only chips — dimmer, no hover, no cursor bait. */
 .keys-fixed .keys-row { opacity: 0.55; }
 .keys-chip.fixed { cursor: default; }
 .keys-chip.fixed:hover { background: rgb(var(--ui-white-rgb) / 0.07); border-color: rgb(var(--ui-white-rgb) / 0.16); }
 #overlay .btn-row { display: flex; flex-direction: column; gap: 6px; }
+/* Collapsible sections: expandable labels get a caret hint + cursor;
+   the collapsed state shows just the label row. */
+#overlay .section-label.expandable { cursor: pointer; user-select: none; }
+#overlay .section-label.expandable::after { content: ' ▾'; opacity: 0.5; }
+#overlay .section-label.expandable.collapsed::after { content: ' ▸'; }
 #overlay .btn-row button {
   padding: 9px 14px; text-align: left;
   background: rgb(var(--ui-white-rgb) / 0.07);
@@ -267,14 +268,14 @@ body.menu-open #frag-msg { display: none !important; }
    the engine-scale number means nothing to a player. */
 #overlay .field-row .sens-pair #sens-input { display: none; }
 #overlay .field-row .sens-pair #sens-cm { width: 64px; flex: 1; }
-#overlay .field-row .sens-unit { font-size: 0.58rem; color: rgb(var(--ui-faint-rgb) / 0.6); letter-spacing: 0.05em; white-space: nowrap; line-height: 1.25; display: inline-block; text-align: left; }
+#overlay .field-row .sens-unit { font-size: 0.58rem; color: rgb(var(--ui-ink-dim-rgb) / 0.6); letter-spacing: 0.05em; white-space: nowrap; line-height: 1.25; display: inline-block; text-align: left; }
 /* INVERT Y sits in the same btn-pair as the sens field-row - the
    shared .btn-pair flex already equalizes the two cells. */
 #overlay .field-row .seg-row { display: flex; gap: 0px; }
 #overlay .field-row .seg-row button {
   padding: 4px 6px;
   background: rgb(var(--ui-black-rgb) / 0.3);
-  color: var(--ui-ink-dim);
+  color: rgb(var(--ui-ink-dim-rgb));
   border: 1px solid rgb(var(--ui-white-rgb) / 0.14);
   border-radius: var(--ui-r-sm);
   font-family: inherit; font-size: 0.64rem; font-weight: 600;
@@ -291,13 +292,13 @@ body.menu-open #frag-msg { display: none !important; }
 #overlay .field-row .seg-row button:disabled {
   opacity: 0.35; cursor: default;
 }
-#overlay .field-row .seg-row button:disabled:hover { color: var(--ui-ink-dim); }
+#overlay .field-row .seg-row button:disabled:hover { color: rgb(var(--ui-ink-dim-rgb)); }
 #overlay .field-row .seg-row button.active:disabled:hover { color: #fff; }
 #overlay .field-row input:focus { border-color: var(--ui-accent); }
 #overlay .vol-wrap { display: flex; align-items: center; gap: 8px; }
 #overlay .vol-val {
   width: 30px; text-align: right; font-size: 0.66rem;
-  color: var(--ui-ink-dim); letter-spacing: 0.05em;
+  color: rgb(var(--ui-ink-dim-rgb)); letter-spacing: 0.05em;
 }
 /* Custom slider: accent-filled track + square thumb to match the .tog
    state boxes — the stock accent-color widget leaves the level ambiguous. */
@@ -489,8 +490,8 @@ body.lobby-open #overlay-center { display: none; }
   transition: background 0.12s, border-color 0.12s;
 }
 .cool-shot-item:hover { background: rgb(var(--ui-accent-rgb) / 0.12); border-left-color: var(--ui-accent); }
-.cool-shot-item.recent { border-left-color: #4caf6d; }
-.cool-shot-item.recent:hover { background: rgb(var(--ui-ok-rgb) / 0.12); border-left-color: rgb(var(--ui-ok-rgb)); }
+.cool-shot-item.recent { border-left-color: rgb(var(--ui-moss-rgb)); }
+.cool-shot-item.recent:hover { background: rgb(var(--ui-moss-rgb) / 0.12); border-left-color: rgb(var(--ui-ok-rgb)); }
 /* Matches the settings-page .tog convention: a normal button off —
    hollow state square; accent-filled square on. No grayed look, off
    is as clickable as on. */
@@ -569,8 +570,8 @@ body.lobby-open #overlay-center { display: none; }
   color: rgb(var(--ui-dim-rgb) / 0.6); margin-bottom: 6px;
 }
 .lb-label + .lb-label, .lb-spaced { margin-top: 12px; }
-.lb-here { color: #6fcf8f; font-size: 0.62rem; margin-bottom: 8px; letter-spacing: 0.1em; }
 .lb-rows { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.lb-empty { color: rgb(var(--ui-accent-rgb) / 0.5); padding: 6px 2px; }
 .lb-field {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; padding: 7px 10px;
@@ -621,8 +622,6 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   padding: 2px 5px; margin-right: 6px; white-space: nowrap;
 }
 .lb-room .meta { color: rgb(var(--ui-faint-rgb) / 0.7); font-variant-numeric: tabular-nums; }
-.lb-room .meta .lb-score { color: rgb(var(--ui-accent-rgb) / 0.95); font-weight: 600; }
-.lb-fav { color: #ffd76f; margin-right: 8px; cursor: pointer; }
 /* Tab bar reads as one segmented control, not four identical buttons —
    inactive segments are borderless text, active gets the fill. */
 .lb-tabs { display: flex; gap: 2px; margin-bottom: 12px;
