@@ -43,7 +43,11 @@ function hopExpr(room: string): string {
     const tick = () => { const n = performance.now(); const g = n - last; if (g > maxGap) maxGap = g; last = n; frames += 1; raf = requestAnimationFrame(tick); };
     raf = requestAnimationFrame(tick);
     const t0 = performance.now();
-    const sent = t.networkManager.switchRoom(${JSON.stringify(room)});
+    // A hop that fires while the socket is mid-reconnect returns false and
+    // never leaves the client - the whole wait then measures nothing. Retry
+    // the send once after a beat instead of scoring a phantom timeout.
+    let sent = t.networkManager.switchRoom(${JSON.stringify(room)});
+    if (!sent) { await new Promise((r) => setTimeout(r, 2000)); sent = t.networkManager.switchRoom(${JSON.stringify(room)}); }
     let timedOut = false;
     await Promise.race([
       applied,
@@ -77,7 +81,7 @@ try {
     const hop = await client.page.evaluate(hopExpr(CHAIN[i]!)) as Hop;
     hops.push(hop);
     const flag = !hop.ok || hop.timedOut ? 'FAIL' : hop.ms > BUDGET_MS ? 'SLOW' : 'ok  ';
-    console.log(`  ${flag} ${hop.before ?? '?'} -> ${hop.room.padEnd(9)} state@${String(hop.ms).padStart(5)}ms  field=${String(hop.appliedFile).padEnd(10)} frames=${hop.frames} maxGap=${hop.maxGapMs}ms`);
+    console.log(`  ${flag} ${hop.before ?? '?'} -> ${hop.room.padEnd(9)} state@${String(hop.ms).padStart(5)}ms  field=${String(hop.appliedFile).padEnd(10)} frames=${hop.frames} maxGap=${hop.maxGapMs}ms${hop.sent ? '' : ' UNSENT'}`);
     if (!hop.ok || hop.timedOut || hop.ms > BUDGET_MS || hop.maxGapMs > STALL_MS) failed += 1;
     // Space the hops out — the server's join-flood guard drops rapid re-joins.
     await new Promise((r) => setTimeout(r, 1500));
@@ -87,6 +91,10 @@ try {
   const median = ms.length ? ms[Math.floor(ms.length / 2)] : -1;
   const max = ms.length ? ms[ms.length - 1] : -1;
   console.log(`\n  ${hops.length} hops · median ${median}ms · max ${max}ms · ${hops.length - failed} ok, ${failed} failed\n`);
+  if (failed && process.env.MAPSWITCH_DEBUG) {
+    console.log('--- server log tail ---');
+    console.log(stack.serverLog().split('\n').slice(-80).join('\n'));
+  }
 } finally {
   await closeClient(client);
   stack.down();
