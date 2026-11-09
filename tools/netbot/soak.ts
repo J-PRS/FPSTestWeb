@@ -84,7 +84,11 @@ for (const { nc } of bots) {
     `intent=${t.fireIntents} blocked=[${blocked}] ` +
     `k/d=${t.kills}/${t.deaths} rejects=[${rejects}] corr=${t.corrections} dedup=${t.dedupDrops} ` +
     `hops=${t.hops} gs=${t.gameStates} rtt=${nc.pingMs}ms${nc.closed ? ` CLOSED[${nc.closeInfo}]` : ''}`);
-  const totalRejects = [...t.rejects.values()].reduce((a, b) => a + b, 0);
+  // 'shooter dead' is a legal verdict, not wire loss - the fire intent
+  // races the death edge under jitter (same exclusion as bigSoak/harshWan).
+  const totalRejects = [...t.rejects.entries()]
+    .filter(([r]) => !r.endsWith('shooter dead'))
+    .reduce((a, [, n]) => a + n, 0);
   if (totalRejects > 0) {fails++;}
 }
 const totShots = bots.reduce((a, b) => a + b.nc.tel.shots, 0);

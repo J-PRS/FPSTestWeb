@@ -17,7 +17,7 @@ const SHEEP_JETPCT = 0.05;
 const SHEEP_SPEED = 6;
 const SHEEP_COVER_M = 40;
 
-interface StuckState { x: number; z: number; since: number; warned: boolean }
+interface StuckState { x: number; z: number; since: number; warned: boolean; boostAt: number }
 interface SheepState { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number; wasSheep?: boolean; sheepStreak?: number }
 
 /** One tick of mobility evidence for checkSheep. */
@@ -58,7 +58,7 @@ export class MobilityWatchdog {
   checkStuck(id: string, pos: Vec3, brain: BotBrain, carryingFlag: boolean, now: number): void {
     const w = this.stuck.get(id);
     if (!w) {
-      this.stuck.set(id, { x: pos.x, z: pos.z, since: now, warned: false });
+      this.stuck.set(id, { x: pos.x, z: pos.z, since: now, warned: false, boostAt: 0 });
       return;
     }
     const dx = pos.x - w.x, dz = pos.z - w.z;
@@ -79,6 +79,7 @@ export class MobilityWatchdog {
     const leash = carryingFlag ? STUCK_MS_FLAG : STUCK_MS;
     if (!w.warned && now - w.since > leash) {
       w.warned = true;
+      w.boostAt = now;
       this.unstickPending = true; // caller applies the impulse (owns moveSim)
       logger.warn('Bot stuck', {
         room: this.roomName, bot: id,
@@ -90,6 +91,14 @@ export class MobilityWatchdog {
         dest: { x: Number(brain.lastDest.x.toFixed(1)), y: Number(brain.lastDest.y.toFixed(1)), z: Number(brain.lastDest.z.toFixed(1)) },
         diag: brain.stuckDiag,
       });
+    }
+    // The one-shot impulse can lose to pocket geometry (wedged on a lip,
+    // boxed in by friends): a bot that stays put 13h is a real prod
+    // sighting. Re-boost every 30s while the leash holds; silent, the
+    // initial warn already named the stall.
+    if (w.warned && now - w.boostAt > 30_000) {
+      w.boostAt = now;
+      this.unstickPending = true;
     }
   }
 
