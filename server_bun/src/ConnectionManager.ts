@@ -74,7 +74,7 @@ const VOLATILE_TTL_MS = 3000;
 /** FPS_WIRESPY=1 -- emit-time wire forensics (which pids a keepalive/
  *  broadcast actually targets). Hoisted once: env reads on a per-frame
  *  hot path cost a map lookup every send. */
-const WIRESPY = Boolean(process.env.FPS_WIRESPY);
+const WIRESPY = typeof process !== 'undefined' && Boolean(process.env.FPS_WIRESPY);
 
 export class ConnectionManager {
   /** uWS native fanout: identical payloads (reliable broadcasts, ball
