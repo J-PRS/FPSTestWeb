@@ -848,6 +848,10 @@ async function init(): Promise<void> {
       const { httpUrl } = await serverEndpoints;
       const q = new URLSearchParams(window.location.search);
       q.set('humans', '1');
+      // /quickplay/<mode> scopes the seat pick — the matchmaker filters
+      // lobby rows by mode and mints <mode>-N when none have room.
+      const mode = window.location.pathname.split('/')[2] ?? '';
+      if (mode) {q.set('mode', mode);}
       const res = await fetch(`${httpUrl}/join?${q}`, { cache: 'no-cache' });
       if (res.ok) {
         const { room } = (await res.json()) as { room: string };
