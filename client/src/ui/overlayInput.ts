@@ -52,7 +52,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
       const off = label.classList.toggle('collapsed');
       let el = label.nextElementSibling;
       while (el && !el.classList.contains('section-label')) {
-        (el as HTMLElement).hidden = off;
+        (el as HTMLElement).style.display = off ? 'none' : '';
         el = el.nextElementSibling;
       }
     });
