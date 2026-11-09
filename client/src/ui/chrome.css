@@ -1,5 +1,47 @@
 /* Page chrome — menu overlay, keybinds, loadout bar, cool-shots panel.
    Imported once by main.ts. */
+
+/* Design tokens — every menu color/alpha/radius/motion reads from this
+   block. Restyle = edit here; selectors below hold vars, not literals. */
+:root {
+  /* accent + alpha ramps (hue once, opacity per use) */
+  --ui-accent: #3aa7ff;
+  --ui-accent-rgb: 58 167 255;
+  --ui-white-rgb: 255 255 255;
+  --ui-black-rgb: 0 0 0;
+  --ui-dim-rgb: 140 170 195;
+  --ui-faint-rgb: 160 190 215;
+  /* semantic hues - the leftovers that stayed rgba() during the sweep */
+  --ui-ok-rgb: 111 207 143;
+  --ui-warn-rgb: 255 184 107;
+  --ui-danger-rgb: 255 90 90;
+  /* ink */
+  --ui-ink: #dde8f2;
+  --ui-ink-2: #cdd9e5;
+  --ui-ink-dim: #9db2c4;
+  --ui-ink-faint: #8fa2b3;
+  /* surfaces — dark glass, deepest → lightest */
+  --ui-bg-veil: #060a10;
+  --ui-scrim: rgb(4 7 12 / 0.45);
+  --ui-scrim-deep: rgb(4 7 12 / 0.55);
+  --ui-bg-panel: rgb(8 11 16 / 0.75);
+  --ui-bg-panel-solid: rgb(8 11 16 / 0.97);
+  --ui-bg-raised: rgb(10 14 20 / 0.96);
+  --ui-bg-sheet: rgb(10 16 26 / 0.85);
+  --ui-bg-list: rgb(13 20 32 / 0.97);
+  --ui-bg-menu: rgb(14 18 26 / 0.96);
+  --ui-bg-feed: rgb(8 14 24 / 0.6);
+  --ui-bg-feed-meta: rgb(6 10 18 / 0.55);
+  --ui-bg-feed-empty: rgb(6 10 18 / 0.35);
+  /* geometry — xs state squares, sm wells, tiles, lg windows */
+  --ui-r-xs: 2px;
+  --ui-r-sm: 4px;
+  --ui-r: 6px;
+  --ui-r-lg: 8px;
+  /* motion — the standard color/border hover transition */
+  --ui-trans: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
     /* Rajdhani Bold — damage numbers / sci-fi numerals (15KB, local, SIL OFL) */
 @font-face {
   font-family: 'Rajdhani';
@@ -71,7 +113,7 @@ body.menu-open #frag-msg { display: none !important; }
   position: fixed; inset: 0; z-index: 100;
   display: flex; align-items: center; justify-content: center;
   background: var(--ui-bg-veil);
-  color: rgba(200,220,240,0.8);
+  color: rgb(var(--ui-faint-rgb) / 0.8);
   font-family: inherit; font-size: 1rem; font-weight: 600;
   letter-spacing: 0.35em; text-transform: uppercase;
   pointer-events: none;
@@ -122,7 +164,7 @@ body.menu-open #frag-msg { display: none !important; }
   font-size: 0.6rem; font-weight: 600; letter-spacing: 0.14em;
   cursor: pointer;
 }
-.keys-reset:hover { background: rgba(255,90,90,0.15); color: #ffb0b0; }
+.keys-reset:hover { background: rgb(var(--ui-danger-rgb) / 0.15); color: #ffb0b0; }
 /* Central keybinds popup — opened from the side menu's KEYBINDS button */
 #keys-modal {
   position: absolute; inset: 0;
@@ -184,20 +226,20 @@ body.menu-open #frag-msg { display: none !important; }
 /* #dev-tools wraps two btn-pair rows — as one flex child of .btn-row its
    inner rows stacked flush; re-column it with the same 6px gap. */
 #overlay .btn-row #dev-tools:not([hidden]) { display: flex; flex-direction: column; gap: 6px; }
-#overlay .btn-row button.active {
-  border-color: var(--ui-accent); color: #fff;
-  background: rgb(var(--ui-accent-rgb) / 0.22);
-  box-shadow: 0 0 10px rgb(var(--ui-accent-rgb) / 0.2);
-}
 /* Tribes-style state box — no checkmark: a hollow square OFF, filled
    accent square ON, docked on the right of the toggle tile. */
 #overlay .btn-row button.tog { display: flex; align-items: center; justify-content: space-between; }
-#overlay .btn-row button.tog::after {
-  content: ''; width: 9px; height: 9px; flex: none; margin-left: 12px;
+/* State squares shared by .tog and .cs-toggle — margin differs per tile. */
+#overlay .btn-row button.tog::after,
+#cool-shot-toggles .cs-toggle::after {
+  content: ''; width: 9px; height: 9px; flex: none;
   border: 1px solid rgb(var(--ui-faint-rgb) / 0.5); border-radius: var(--ui-r-xs);
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
-#overlay .btn-row button.tog.on::after {
+#overlay .btn-row button.tog::after { margin-left: 12px; }
+#cool-shot-toggles .cs-toggle::after { margin-left: 8px; }
+#overlay .btn-row button.tog.on::after,
+#cool-shot-toggles .cs-toggle.on::after {
   background: var(--ui-accent); border-color: var(--ui-accent);
   box-shadow: 0 0 6px rgb(var(--ui-accent-rgb) / 0.55);
 }
@@ -225,26 +267,9 @@ body.menu-open #frag-msg { display: none !important; }
    the engine-scale number means nothing to a player. */
 #overlay .field-row .sens-pair #sens-input { display: none; }
 #overlay .field-row .sens-pair #sens-cm { width: 64px; flex: 1; }
-#overlay .field-row .sens-unit { font-size: 0.58rem; color: rgba(157,178,196,0.6); letter-spacing: 0.05em; white-space: nowrap; line-height: 1.25; display: inline-block; text-align: left; }
-/* INVERT Y lives inside the sens row - compact .tog for the pair. */
-#overlay .field-row .sens-pair .tog {
-  font-size: 0.58rem; font-weight: 600; letter-spacing: 0.08em;
-  padding: 4px 8px; margin-left: 8px; flex: 1;
-  background: rgb(var(--ui-black-rgb) / 0.3);
-  color: #9db2c4;
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.14);
-  border-radius: var(--ui-r-sm);
-  font-family: inherit; cursor: pointer; text-transform: uppercase;
-}
-#overlay .field-row .sens-pair .tog::after {
-  content: ''; width: 8px; height: 8px; margin-left: 8px;
-  display: inline-block; vertical-align: -1px;
-  border: 1px solid rgb(var(--ui-faint-rgb) / 0.5); border-radius: 2px;
-}
-#overlay .field-row .sens-pair .tog.on::after {
-  background: var(--ui-accent); border-color: var(--ui-accent);
-  box-shadow: 0 0 6px rgb(var(--ui-accent-rgb) / 0.55);
-}
+#overlay .field-row .sens-unit { font-size: 0.58rem; color: rgb(var(--ui-faint-rgb) / 0.6); letter-spacing: 0.05em; white-space: nowrap; line-height: 1.25; display: inline-block; text-align: left; }
+/* INVERT Y sits in the same btn-pair as the sens field-row - the
+   shared .btn-pair flex already equalizes the two cells. */
 #overlay .field-row .seg-row { display: flex; gap: 0px; }
 #overlay .field-row .seg-row button {
   padding: 4px 6px;
@@ -378,10 +403,6 @@ body.lobby-open #overlay-center { display: none; }
   cursor: pointer; transition: var(--ui-trans);
 }
 #loadout-bar .lo-tile:hover { background: rgb(var(--ui-accent-rgb) / 0.15); color: #fff; }
-#loadout-bar .lo-tile.sel {
-  background: rgb(var(--ui-accent-rgb) / 0.25); border-color: var(--ui-accent); color: #fff;
-  box-shadow: 0 0 12px rgb(var(--ui-accent-rgb) / 0.25);
-}
 #loadout-bar .lo-chip {
   padding: 6px 11px;
   background: rgb(var(--ui-white-rgb) / 0.06);
@@ -393,6 +414,9 @@ body.lobby-open #overlay-center { display: none; }
   transition: var(--ui-trans);
 }
 #loadout-bar .lo-chip:hover { background: rgb(var(--ui-accent-rgb) / 0.15); color: #fff; }
+/* Selected tile/chip share one accent treatment (.sel ≡ .active) —
+   stays after both :hover rules so selection wins the tie. */
+#loadout-bar .lo-tile.sel,
 #loadout-bar .lo-chip.active {
   background: rgb(var(--ui-accent-rgb) / 0.25); border-color: var(--ui-accent); color: #fff;
   box-shadow: 0 0 12px rgb(var(--ui-accent-rgb) / 0.25);
@@ -466,7 +490,7 @@ body.lobby-open #overlay-center { display: none; }
 }
 .cool-shot-item:hover { background: rgb(var(--ui-accent-rgb) / 0.12); border-left-color: var(--ui-accent); }
 .cool-shot-item.recent { border-left-color: #4caf6d; }
-.cool-shot-item.recent:hover { background: rgba(76,175,109,0.12); border-left-color: #6fcf8f; }
+.cool-shot-item.recent:hover { background: rgb(var(--ui-ok-rgb) / 0.12); border-left-color: rgb(var(--ui-ok-rgb)); }
 /* Matches the settings-page .tog convention: a normal button off —
    hollow state square; accent-filled square on. No grayed look, off
    is as clickable as on. */
@@ -481,26 +505,21 @@ body.lobby-open #overlay-center { display: none; }
   transition: var(--ui-trans);
 }
 #cool-shot-toggles .cs-toggle:hover { background: rgb(var(--ui-white-rgb) / 0.14); color: #fff; }
-#cool-shot-toggles .cs-toggle::after {
-  content: ''; width: 9px; height: 9px; flex: none; margin-left: 8px;
-  border: 1px solid rgb(var(--ui-faint-rgb) / 0.5); border-radius: var(--ui-r-xs);
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
-}
+/* Accent-on treatment — shared by seg/state buttons (.active) and the
+   cool-shot toggles (.on). Lives down here so it wins the :hover tie
+   for BOTH families (specificity is equal, source order decides). */
+#overlay .btn-row button.active,
 #cool-shot-toggles .cs-toggle.on {
   border-color: var(--ui-accent); color: #fff;
   background: rgb(var(--ui-accent-rgb) / 0.22);
   box-shadow: 0 0 10px rgb(var(--ui-accent-rgb) / 0.2);
-}
-#cool-shot-toggles .cs-toggle.on::after {
-  background: var(--ui-accent); border-color: var(--ui-accent);
-  box-shadow: 0 0 6px rgb(var(--ui-accent-rgb) / 0.55);
 }
 .cool-shot-item .rank { font-size: 0.7rem; font-weight: 700; color: rgb(var(--ui-dim-rgb) / 0.7); min-width: 16px; }
 .cool-shot-item .lifetime { font-size: 0.85rem; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
 .cool-shot-item .shot-meta { font-size: 0.65rem; color: rgb(var(--ui-dim-rgb) / 0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cool-shot-item .fmt { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.06em; padding: 1px 4px; border-radius: var(--ui-r-xs); }
 .cool-shot-item .fmt-demo { color: #9fd4ff; background: rgb(var(--ui-accent-rgb) / 0.15); }
-.cool-shot-item .fmt-mp4 { color: #ffb86b; background: rgba(255,184,107,0.15); }
+.cool-shot-item .fmt-mp4 { color: rgb(var(--ui-warn-rgb)); background: rgb(var(--ui-warn-rgb) / 0.15); }
 .cool-shot-item .time-ago { font-size: 0.65rem; color: rgb(var(--ui-dim-rgb) / 0.55); margin-left: auto; }
 .cool-shot-item.empty { color: rgb(var(--ui-dim-rgb) / 0.4); cursor: default; text-align: center; justify-content: center; }
 .cool-shot-item.empty:hover { background: rgb(var(--ui-white-rgb) / 0.04); border-left-color: rgb(var(--ui-white-rgb) / 0.1); }
@@ -589,7 +608,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   transition: background 0.12s;
 }
 .lb-room:hover { background: rgb(var(--ui-accent-rgb) / 0.12); }
-.lb-room.current { background: rgba(111,207,143,0.14); opacity: 0.95; }
+.lb-room.current { background: rgb(var(--ui-ok-rgb) / 0.14); opacity: 0.95; }
 .lb-room.full { opacity: 0.45; }
 .lb-room:disabled { cursor: default; }
 .lb-room .lb-name { font-weight: 600; color: #eef4fb; }
