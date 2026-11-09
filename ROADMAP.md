@@ -267,6 +267,10 @@ surface. Detailed research lives in `_docs/reports/`; this file is the current t
 - Client/anim/tooling (2026-10-31 → 11-08): clip-strip migration wired
   (scout pack/kevdev/UAL maps; named unclosed gap: scifisoldier/vexa/
   polyart have no non-loco bone map — `_docs/2026-11-07_CLIP_STRIP_MIGRATION.md`).
+  NOTE (2026-11-09): this gap is LEGACY DEBT ONLY. Shipped body rigs are
+  scout/brawler/brute (M2M trio) which ride scout's 32-clip set; the three
+  legacy rigs are not user-facing. Do not prioritize this as a player-facing
+  bug.
   **model-stretch root-caused + fixed** (11-08): non-unit bone quats
   self-amplified into 1e10m skeleton stretch on extreme aim pitch —
   `.normalize()` after procedural quat writes; trap doc

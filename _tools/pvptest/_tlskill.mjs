@@ -49,7 +49,7 @@ ws.on('message', (d, isBinary) => {
   }
 });
 await new Promise((res, rej) => {ws.on('open', res); ws.on('error', rej);});
-ws.send(JSON.stringify({ type: 'join', playerId: PID, room: 'tlskill', transport: 'ws', armorClass: 'light', perk: 'none' }));
+ws.send(JSON.stringify({ type: 'join', playerId: PID, room: process.argv[3] ?? 'tlskill', transport: 'ws', armorClass: 'light', perk: 'none' }));
 await new Promise(r => setTimeout(r, 2500));
 ws.send(JSON.stringify({ type: 'ready' }));
 await new Promise(r => setTimeout(r, 4000));

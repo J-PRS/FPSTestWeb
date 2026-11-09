@@ -34,6 +34,8 @@ let myKill = false, myRespawn: any = null;
 const sock: Sock = await new Promise((res, rej) => {
   openSocket(WS_URL, 'ws').then((s: any) => {
     s.onmessage = (ev: any) => {
+      const raw = ev?.data ?? ev;
+      if (typeof raw === 'string' && /respawn/i.test(raw)) {console.log('RAW-RESPAWN', raw.slice(0, 300));}
       for (const m of msgsOf(ev)) {
         seen[m.type] = (seen[m.type] ?? 0) + 1;
         if (m.type === 'playerKill' && m.targetId === PID) {myKill = true; console.log('MY KILL', JSON.stringify(m));}
