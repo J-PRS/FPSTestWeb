@@ -48,6 +48,9 @@
           <span>NAME</span>
           <input id="name-input" type="text" maxlength="24" placeholder="display name" autocomplete="off" spellcheck="false" />
         </div>
+        <div class="section-label">GAME</div>
+        <button id="lobby-open">PLAY</button>
+        <button id="leave-server" style="display:none">LEAVE SERVER</button>
         <div class="section-label">PERFORMANCE</div>
         <div class="btn-pair">
           <button id="autoq-toggle" class="tog">AUTO QUALITY</button>
@@ -90,9 +93,13 @@
           </div>
         </div>
         <div class="field-row">
-          <span>FOV V/H</span>
-          <input id="fov-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
-          <input id="fov-h-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <span>FOV</span>
+          <span class="sens-pair">
+            <input id="fov-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" title="vertical FOV — canonical value" />
+            <span class="sens-unit">v°</span>
+            <input id="fov-h-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" title="horizontal FOV at current aspect — derived from vertical" />
+            <span class="sens-unit">h°</span>
+          </span>
         </div>
         <div class="section-label">CONTROLS</div>
         <div class="btn-pair">
@@ -119,13 +126,13 @@
           <button id="tts-chat-toggle" class="tog">CHAT TTS</button>
           <button id="minimap-toggle">MINIMAP: CORNER</button>
         </div>
-        <div class="section-label">GAME</div>
-        <button id="lobby-open">PLAY</button>
-        <button id="leave-server" style="display:none">LEAVE SERVER</button>
         <!-- Labs — player-facing on every host (gunlab/maplab/sims run on prod too). -->
+        <div class="section-label">LABS</div>
         <div class="btn-pair">
           <button id="lab-open">SIM LAB</button>
           <button id="gunlab-open">GUN LAB</button>
+        </div>
+        <div class="btn-pair">
           <button id="gunstats-open">GUN STATS</button>
           <button id="maplab-open">MAP LAB</button>
         </div>
@@ -137,8 +144,10 @@
             <button id="debug-toggle" class="tog">DEBUG</button>
           </div>
         </div>
-        <div id="client-ver"></div>
       </div>
+      <!-- Outside .btn-row so section expanders can't fold it away —
+           it's fixed-position chrome, not a control. -->
+      <div id="client-ver"></div>
     </div>
     <div id="keys-modal"></div>
   </div>
