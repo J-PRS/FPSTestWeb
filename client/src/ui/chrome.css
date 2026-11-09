@@ -35,6 +35,10 @@
   --ui-bg-feed: rgb(8 14 24 / 0.6);
   --ui-bg-feed-meta: rgb(6 10 18 / 0.55);
   --ui-bg-feed-empty: rgb(6 10 18 / 0.35);
+  /* standard control chrome — every menu push-button + field row reads
+     these two; the tile skeleton rule below consumes them once */
+  --ui-tile-bg: rgb(var(--ui-white-rgb) / 0.07);
+  --ui-tile-line: rgb(var(--ui-white-rgb) / 0.14);
   /* geometry — xs state squares, sm wells, tiles, lg windows */
   --ui-r-xs: 2px;
   --ui-r-sm: 4px;
@@ -71,6 +75,26 @@ body { background: #000; overflow: hidden; font-family: 'Segoe UI', 'Helvetica N
    innerWidth, which grows the canvas: runaway 4× oversizing. */
 html { overflow: hidden; }
 canvas { display: block; }
+
+/* Tile skeleton — shared chrome for every menu push-button (.btn-row
+   buttons, keybind chips, loadout tiles/chips, cool-shot toggles, lobby
+ *  buttons). Family rules below carry only their deltas: padding, font
+ *  metrics, color, layout. Restyle the button material here, once. */
+#overlay .btn-row button,
+.keys-chip,
+.keys-reset,
+.lb-btn,
+#loadout-bar .lo-chip,
+#loadout-bar .lo-tile,
+#cool-shot-toggles .cs-toggle {
+  background: var(--ui-tile-bg);
+  border: 1px solid var(--ui-tile-line);
+  border-radius: var(--ui-r);
+  color: var(--ui-ink-2);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--ui-trans);
+}
 #overlay {
   position: absolute; inset: 0;
   display: none;
@@ -144,13 +168,9 @@ body.menu-open #frag-msg { display: none !important; }
 }
 .keys-chip {
   min-width: 74px; padding: 5px 10px;
-  background: rgb(var(--ui-white-rgb) / 0.07);
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.16);
-  border-radius: var(--ui-r);
-  color: #fff; font-family: inherit;
+  color: #fff;
   font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em;
-  text-align: center; cursor: pointer; text-transform: uppercase;
-  transition: background 0.12s, border-color 0.12s;
+  text-align: center; text-transform: uppercase;
 }
 .keys-chip:hover { background: rgb(var(--ui-accent-rgb) / 0.18); border-color: var(--ui-accent); }
 .keys-chip.capturing {
@@ -159,11 +179,8 @@ body.menu-open #frag-msg { display: none !important; }
 }
 .keys-reset {
   width: 100%; margin-top: 8px; padding: 7px 12px;
-  background: rgb(var(--ui-white-rgb) / 0.05);
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.12); border-radius: var(--ui-r);
-  color: rgb(var(--ui-dim-rgb) / 0.8); font-family: inherit;
+  color: rgb(var(--ui-dim-rgb) / 0.8);
   font-size: 0.6rem; font-weight: 600; letter-spacing: 0.14em;
-  cursor: pointer;
 }
 .keys-reset:hover { background: rgb(var(--ui-danger-rgb) / 0.15); color: #ffb0b0; }
 /* Central keybinds popup — opened from the side menu's KEYBINDS button */
@@ -196,7 +213,7 @@ body.menu-open #frag-msg { display: none !important; }
 /* Fixed-key rows: read-only chips — dimmer, no hover, no cursor bait. */
 .keys-fixed .keys-row { opacity: 0.55; }
 .keys-chip.fixed { cursor: default; }
-.keys-chip.fixed:hover { background: rgb(var(--ui-white-rgb) / 0.07); border-color: rgb(var(--ui-white-rgb) / 0.16); }
+.keys-chip.fixed:hover { background: var(--ui-tile-bg); border-color: var(--ui-tile-line); }
 #overlay .btn-row { display: flex; flex-direction: column; gap: 6px; }
 /* Collapsible sections: expandable labels get a caret hint + cursor;
    the collapsed state shows just the label row. */
@@ -205,19 +222,13 @@ body.menu-open #frag-msg { display: none !important; }
 #overlay .section-label.expandable.collapsed::after { content: ' ▸'; }
 #overlay .btn-row button {
   padding: 9px 14px; text-align: left;
-  background: rgb(var(--ui-white-rgb) / 0.07);
-  color: var(--ui-ink-2);
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.14);
-  border-radius: var(--ui-r);
-  font-family: inherit;
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.72rem; font-weight: 600;
   letter-spacing: 0.1em;
-  cursor: pointer;
   text-transform: uppercase;
-  transition: var(--ui-trans);
 }
-#overlay .btn-row button:hover { background: rgb(var(--ui-white-rgb) / 0.14); color: #fff; }
+/* Shared tile hover — cs-toggle rides the same material. */
+#overlay .btn-row button:hover,
+#cool-shot-toggles .cs-toggle:hover { background: rgb(var(--ui-white-rgb) / 0.14); color: #fff; }
 /* Two toggles per row — short labels only (ON/OFF state pairs). */
 #overlay .btn-row .btn-pair { display: flex; gap: 6px; }
 /* min-width:0 lets the flex children shrink below label width — without
@@ -247,8 +258,8 @@ body.menu-open #frag-msg { display: none !important; }
 #overlay .field-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; padding: 9px 14px;
-  background: rgb(var(--ui-white-rgb) / 0.07);
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.14);
+  background: var(--ui-tile-bg);
+  border: 1px solid var(--ui-tile-line);
   border-radius: var(--ui-r);
   font-size: 0.72rem; font-weight: 600;
   letter-spacing: 0.1em; color: var(--ui-ink-2);
@@ -269,14 +280,16 @@ body.menu-open #frag-msg { display: none !important; }
 #overlay .field-row .sens-pair #sens-input { display: none; }
 #overlay .field-row .sens-pair #sens-cm { width: 64px; flex: 1; }
 #overlay .field-row .sens-unit { font-size: 0.58rem; color: rgb(var(--ui-ink-dim-rgb) / 0.6); letter-spacing: 0.05em; white-space: nowrap; line-height: 1.25; display: inline-block; text-align: left; }
-/* INVERT Y sits in the same btn-pair as the sens field-row - the
-   shared .btn-pair flex already equalizes the two cells. */
+/* INVERT Y sits in the same btn-pair as the sens field-row — sens takes
+   two thirds of the row, the toggle the remaining third. */
+#overlay .btn-pair:has(#invert-y-toggle) .field-row { flex: 2; }
+#overlay #invert-y-toggle { flex: 1; }
 #overlay .field-row .seg-row { display: flex; gap: 0px; }
 #overlay .field-row .seg-row button {
   padding: 4px 6px;
   background: rgb(var(--ui-black-rgb) / 0.3);
   color: rgb(var(--ui-ink-dim-rgb));
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.14);
+  border: 1px solid var(--ui-tile-line);
   border-radius: var(--ui-r-sm);
   font-family: inherit; font-size: 0.64rem; font-weight: 600;
   letter-spacing: 0.06em; cursor: pointer;
@@ -398,21 +411,13 @@ body.lobby-open #overlay-center { display: none; }
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   flex: 1; min-width: 0;
   padding: 7px 12px;
-  background: rgb(var(--ui-white-rgb) / 0.06);
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.14); border-radius: var(--ui-r);
-  color: var(--ui-ink-2); font-size: 0.82rem; font-weight: 600; letter-spacing: 0.08em;
-  cursor: pointer; transition: var(--ui-trans);
+  font-size: 0.82rem; font-weight: 600; letter-spacing: 0.08em;
 }
 #loadout-bar .lo-tile:hover { background: rgb(var(--ui-accent-rgb) / 0.15); color: #fff; }
 #loadout-bar .lo-chip {
   padding: 6px 11px;
-  background: rgb(var(--ui-white-rgb) / 0.06);
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.14);
-  border-radius: var(--ui-r);
-  color: var(--ui-ink-2); font-family: inherit;
   font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em;
-  cursor: pointer; text-transform: uppercase;
-  transition: var(--ui-trans);
+  text-transform: uppercase;
 }
 #loadout-bar .lo-chip:hover { background: rgb(var(--ui-accent-rgb) / 0.15); color: #fff; }
 /* Selected tile/chip share one accent treatment (.sel ≡ .active) —
@@ -499,13 +504,9 @@ body.lobby-open #overlay-center { display: none; }
 #cool-shot-toggles .cs-toggle {
   flex: 1; display: flex; align-items: center; justify-content: space-between;
   padding: 6px 10px;
-  background: rgb(var(--ui-white-rgb) / 0.07); color: var(--ui-ink-2);
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.14); border-radius: var(--ui-r);
-  font-family: inherit; font-size: 0.65rem; font-weight: 600;
-  letter-spacing: 0.1em; cursor: pointer;
-  transition: var(--ui-trans);
+  font-size: 0.65rem; font-weight: 600;
+  letter-spacing: 0.1em;
 }
-#cool-shot-toggles .cs-toggle:hover { background: rgb(var(--ui-white-rgb) / 0.14); color: #fff; }
 /* Accent-on treatment — shared by seg/state buttons (.active) and the
    cool-shot toggles (.on). Lives down here so it wins the :hover tie
    for BOTH families (specificity is equal, source order decides). */
@@ -547,12 +548,9 @@ body.lobby-open #overlay-center { display: none; }
 
 /* Lobby panel — floats bottom-right, mirrors the ESC overlay palette */
 .lb-btn {
-  background: rgb(var(--ui-white-rgb) / 0.07); color: var(--ui-ink-2);
-  border: 1px solid rgb(var(--ui-white-rgb) / 0.14); border-radius: var(--ui-r);
-  font-family: inherit; font-size: 0.72rem; font-weight: 600;
-  letter-spacing: 0.1em; cursor: pointer; text-transform: uppercase;
+  font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
   padding: 8px 10px;
-  transition: background 0.12s, color 0.12s;
 }
 .lb-btn:hover { background: rgb(var(--ui-accent-rgb) / 0.18); color: #fff; }
 .lb-btn:disabled { opacity: 0.5; cursor: default; }
@@ -575,7 +573,7 @@ body.lobby-open #overlay-center { display: none; }
 .lb-field {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; padding: 7px 10px;
-  background: rgb(var(--ui-white-rgb) / 0.07); border: 1px solid rgb(var(--ui-white-rgb) / 0.14);
+  background: var(--ui-tile-bg); border: 1px solid var(--ui-tile-line);
   border-radius: var(--ui-r); font-size: 0.68rem; font-weight: 600;
   letter-spacing: 0.1em; color: var(--ui-ink-2);
 }
