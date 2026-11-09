@@ -46,7 +46,7 @@ const _q = new THREE.Quaternion();
 
 
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number]; dirTint?: boolean; ramp?: [number, number, number, number][] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
 
 
 
@@ -85,6 +85,18 @@ export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
   sceneFog.near = fog?.distance ?? FOG_START;
 
   sceneFog.far = Math.max(fog?.visible ?? FOG_END, sceneFog.near + 1);
+
+  ctx.deps.lazyTerrain().setFogDir(fog?.dirTint === true);
+
+  // Distance-gradient haze stops [t, r, g, b] — sRGB like fog.color,
+  // sorted by t, capped at the shader's 6-stop array.
+  const rampIn = fog?.ramp;
+  const rampStops = rampIn && rampIn.length >= 2
+    ? rampIn.slice(0, 6)
+        .map(([t, r, g, b]): { t: number; color: THREE.Color } => ({ t, color: new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace) }))
+        .toSorted((a, b): number => a.t - b.t)
+    : null;
+  ctx.deps.lazyTerrain().setFogRamp(rampStops);
 }
 
 /** Per-map ambient particles - weather intensity per kind. Absent = the

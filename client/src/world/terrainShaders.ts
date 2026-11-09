@@ -131,6 +131,12 @@ export const terrainFrag = /* glsl */`
   uniform vec3 fogColor;
   uniform float fogStart;
   uniform float fogEnd;
+  uniform float fogDir; // 1 = directional sunward/away haze tint (spec.fog.dirTint)
+  // Distance-gradient haze — FireWatch/COZY style: fog color rides a 1D
+  // ramp of up to 6 stops keyed by normalized distance instead of one flat
+  // color. xyz = stop color, w = position t in [0,1]. fogRampN = 0 → flat.
+  uniform vec4 fogRamp[6];
+  uniform int fogRampN;
   uniform float innerHalfSize;
   uniform vec2 innerGridOrigin;
   uniform float edgeHalf; // outermost level only: world-edge fade radius (0=off)
@@ -213,6 +219,33 @@ export const terrainFrag = /* glsl */`
   float terrainFogFactor(float dist) {
     float t = clamp((dist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0);
     return min((1.0 - exp(-t * t * 4.0)) * 1.05, 1.0);
+  }
+
+  // Directional haze tint — GLSL port of directionalFog.ts fogTint(): the
+  // fogged fraction warms toward the sun and cools away, approximating the
+  // sky's own directional variation so fogged terrain doesn't read as a
+  // flat cutout against it. fogDir uniform gates it per-map.
+  vec3 fogViewColor(vec3 base, vec3 rd, vec3 sun) {
+    float fwd = length(rd.xz);
+    if (fwd < 1e-6) {return base;}
+    float d = dot(rd.xz, sun.xz) / fwd;
+    vec3 c = mix(base, vec3(1.0, 0.82, 0.55), pow(max(d, 0.0), 2.0) * 0.42);
+    return mix(c, vec3(0.3, 0.55, 0.92), pow(max(-d, 0.0), 2.0) * 0.18);
+  }
+
+  // Ramp lookup: piecewise-linear over authored stops; clamps to the end
+  // colors outside the authored range. Stops sorted by w on the CPU side.
+  vec3 fogRampColor(float t) {
+    if (fogRampN <= 0) {return fogColor;}
+    if (t <= fogRamp[0].w) {return fogRamp[0].xyz;}
+    for (int i = 1; i < 6; i += 1) {
+      if (i >= fogRampN) {break;}
+      if (t <= fogRamp[i].w) {
+        float f = (t - fogRamp[i - 1].w) / max(fogRamp[i].w - fogRamp[i - 1].w, 1e-5);
+        return mix(fogRamp[i - 1].xyz, fogRamp[i].xyz, clamp(f, 0.0, 1.0));
+      }
+    }
+    return fogRamp[fogRampN - 1].xyz;
   }
 
   // --- Derivative erosion FBM (suppresses detail on steep slopes) ---
@@ -548,7 +581,9 @@ export const terrainFrag = /* glsl */`
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
-      gl_FragColor = vec4(bloomGuard(ungradeColor(mix(col, fogColor, fogFactor))), edgeA);
+      vec3 fogCol = fogRampColor(clamp((fogDist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0));
+      if (fogDir > 0.5) {fogCol = fogViewColor(fogCol, fogDelta / max(length(fogDelta), 1e-3), sunDir);}
+      gl_FragColor = vec4(bloomGuard(ungradeColor(mix(col, fogCol, fogFactor))), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
@@ -632,7 +667,9 @@ export const terrainFrag = /* glsl */`
       // 1 detail, 2 decals, 3 lit, 4 glows, 5 seaTint, 6+ full (fog);
       // 7/8/9 isolate lit components (sun*diff² / ambient+rim / shadowMask).
       if (dbgStage < 0 || dbgStage == 6 || dbgStage > 9) {
-        col = mix(col, fogColor, fogFactor);
+        vec3 fogCol = fogRampColor(clamp((fogDist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0));
+        if (fogDir > 0.5) {fogCol = fogViewColor(fogCol, fogDelta / max(length(fogDelta), 1e-3), sunDir);}
+        col = mix(col, fogCol, fogFactor);
       } else if (dbgStage == 7) {
         col = sPal * (sunColor * shadow);
       } else if (dbgStage == 8) {
@@ -829,7 +866,9 @@ export const terrainFrag = /* glsl */`
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
-      col = mix(col, fogColor, fogFactor);
+      vec3 fogCol = fogRampColor(clamp((fogDist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0));
+      if (fogDir > 0.5) {fogCol = fogViewColor(fogCol, fogDelta / max(length(fogDelta), 1e-3), sunDir);}
+      col = mix(col, fogCol, fogFactor);
       gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -918,7 +957,9 @@ ${TERRAIN_PRESET_GLSL}
                      * smoothstep(0.3, 0.8, height);
     float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
     fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
-    col = mix(col, fogColor, fogFactor);
+    vec3 fogCol = fogRampColor(clamp((dist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0));
+    if (fogDir > 0.5) {fogCol = fogViewColor(fogCol, fogDelta / max(length(fogDelta), 1e-3), sunDir);}
+    col = mix(col, fogCol, fogFactor);
     gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
