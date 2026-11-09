@@ -511,7 +511,10 @@ function wireSegRow(id: string, current: () => number,
   const mark = (v: number): void => {
     for (const b of btns) {b.classList.toggle('active', Number(b.dataset['v']) === v);}
   };
-  btns.forEach((b, i): void => b.addEventListener('click', (): void => pick(Number(b.dataset['v'] ?? i))));
+  btns.forEach((b, i): void => b.addEventListener('click', (): void => {
+    pick(Number(b.dataset['v'] ?? i));
+    mark(current()); // re-light from the picked state, not the raw index
+  }));
   mark(current());
   return mark;
 }
@@ -525,8 +528,8 @@ function wireAARow(applyAA: (v: number) => void, onChange?: (v: number) => void)
   if (aaMode >= 3) {aaMode = 2;}
   applyAA(aaMode);
   onChange?.(aaMode);
-  const mark = wireSegRow('aa-row', (): number => aaMode,
-    (v): void => { aaMode = v; settings.set('fps-aa', v); applyAA(v); onChange?.(v); mark(v); });
+  wireSegRow('aa-row', (): number => aaMode,
+    (v): void => { aaMode = v; settings.set('fps-aa', v); applyAA(v); onChange?.(v); });
 }
 
 // ESC-menu toggles: seed the toggle labels from resolved modes and
