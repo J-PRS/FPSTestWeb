@@ -243,6 +243,10 @@ export class PlayerInput {
 
     if (h.isSpectating()) {return;}
 
+    if (matchCode('fire', e.code)) {this.firePending = true; this.mouseHeld = true; this.needsRelease = false;}
+
+    if (matchCode('jet', e.code)) {this.jetPending = true;}
+
     if (matchCode('sidearm', e.code)) {h.secondaryDown(h.sidearmWid());}
 
     if (matchCode('belt', e.code)) {this.beltHeld = true;}
@@ -333,6 +337,10 @@ export class PlayerInput {
 
       if (matchCode('jump', e.code)) {this.jumpHeld = false;}
 
+      if (matchCode('fire', e.code)) {this.mouseHeld = false;}
+
+      if (matchCode('jet', e.code)) {this.jetPending = false;}
+
       if (matchCode('skill', e.code)) {h.skillRelease();}
 
       if (matchCode('belt', e.code)) {this.beltHeld = false;}
@@ -351,11 +359,11 @@ export class PlayerInput {
 
       if (h.isDead()) { this.deadMouseDown(e); return; }
 
-      if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
+      if (matchCode('fire', `Mouse${e.button}`)) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
 
       if (e.button === 1) { this.midHeld = !this.midHeld; e.preventDefault(); }
 
-      if (e.button === 2) { this.jetPending = true; }
+      if (matchCode('jet', `Mouse${e.button}`)) { this.jetPending = true; }
 
       // Buttons bound to key actions (keybinds allow Mouse0-4) need the
 
@@ -385,9 +393,9 @@ export class PlayerInput {
 
       this.keys[`Mouse${e.button}`] = false;
 
-      if (e.button === 0) {this.mouseHeld = false;}
+      if (matchCode('fire', `Mouse${e.button}`)) {this.mouseHeld = false;}
 
-      if (e.button === 2) { this.jetPending = false; }
+      if (matchCode('jet', `Mouse${e.button}`)) { this.jetPending = false; }
 
       if (matchCode('jump', `Mouse${e.button}`)) {this.jumpHeld = false;}
 

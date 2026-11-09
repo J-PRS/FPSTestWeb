@@ -9,6 +9,7 @@
 import { settings } from './settings.js';
 
 export type BindAction =
+  | 'fire' | 'jet'
   | 'forward' | 'back' | 'left' | 'right'
   | 'jump' | 'ski' | 'belt' | 'melee' | 'camera' | 'skill' | 'spectate' | 'respawn' | 'throwFlag' | 'dieSpectate'
   | 'sidearm'
@@ -18,6 +19,8 @@ export type BindAction =
 export interface BindDef { action: BindAction; label: string; def: string }
 
 export const BIND_DEFS: BindDef[] = [
+  { action: 'fire',    label: 'Fire',          def: 'Mouse0' },
+  { action: 'jet',     label: 'Jet',           def: 'Mouse2' },
   { action: 'forward', label: 'Move forward',  def: 'KeyW' },
   { action: 'back',    label: 'Move back',     def: 'KeyS' },
   { action: 'left',    label: 'Strafe left',   def: 'KeyA' },
