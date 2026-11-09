@@ -85,7 +85,11 @@ describe.skipIf(!process.env.FPS_SOAK)('session lifecycle conformance fuzz', () 
         // Seat uniqueness across rooms.
         const where = new Map<string, { room: string; kind: 'player' | 'spec' }>();
         for (const [, room] of peek.rooms) {
-          for (const [id] of room.players.getAllPlayers()) {
+          for (const [id, p] of room.players.getAllPlayers()) {
+            // Server bots are roster players with no session - botFill
+            // tops up once a human seats, and they hold no socket,
+            // registry entry, or token by design.
+            if (p.isBot) {continue;}
             const prev = where.get(id);
             if (prev) violations.push(`${ctx()}: ${id} in two player rosters (${prev.room}, ${room.name}) after ${opDesc}`);
             else where.set(id, { room: room.name, kind: 'player' });
@@ -150,6 +154,14 @@ describe.skipIf(!process.env.FPS_SOAK)('session lifecycle conformance fuzz', () 
         gs!.onMessage(sock as never, JSON.stringify({ type: 'join', playerId: id, room, ...extra }));
       };
 
+      // Deferred seats (terrainReady) legitimately sit at 'connecting' with
+      // a sessionToken but no roster entry until the field lands - the
+      // stores disagree ON PURPOSE inside that window. Settle waits it out
+      // before checkAll asserts agreement.
+      const settle = async (id: string): Promise<void> => {
+        for (let i = 0; i < 50 && peek.registry.state(id) === 'connecting'; i++) {await sleep(10);}
+      };
+
       const OPS = 260;
       for (let op = 0; op < OPS; op++) {
         const r = rng();
@@ -168,6 +180,7 @@ describe.skipIf(!process.env.FPS_SOAK)('session lifecycle conformance fuzz', () 
           const token = realRoom && rng() < 0.5 ? realRoom.sessionTokens.get(id) : (rng() < 0.2 ? 'forged' : undefined);
           join(sock, id, roomName, { spectate: spec || undefined, token, resumeSeq: rng() < 0.4 ? Math.floor(rng() * 50) : undefined });
           opDesc = `join ${id}@${roomName}${spec ? ' spec' : ''}${token ? ' tok' : ''}`;
+          await settle(id);
           // Track whichever socket actually owns the seat post-join —
           // a rejected steal attempt leaves the incumbent registered.
           const seated = (peek.playerRoom.get(id) ?? peek.specRooms.get(id))?.connections.getConnection(id) as FakeSock | undefined;
@@ -195,6 +208,7 @@ describe.skipIf(!process.env.FPS_SOAK)('session lifecycle conformance fuzz', () 
             const target = rooms[Math.floor(rng() * rooms.length)]!;
             gs!.onMessage(sock as never, JSON.stringify({ type: 'switchRoom', room: target }));
             opDesc = `switch ${id}→${target}`;
+            await settle(id);
             if (peek.registry.state(id) === 'active') sockets.set(id, sock);
           }
         } else if (r < 0.74) {
