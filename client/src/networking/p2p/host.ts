@@ -21,7 +21,7 @@ import { MessageHandler, type RoomInfo } from '../../../../server_bun/src/Messag
 import { RateLimiter } from '../../../../server_bun/src/RateLimiter.js';
 import { validateMessage } from '../../../../server_bun/src/wire.js';
 import { validatePlayerId } from '../../../../server_bun/src/validation.js';
-import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame , type WirePosition } from '../../../../shared/wire.js';
+import { isWireFrame, decodePosition, decodeInputMove, decodeWireJson, decodePosClaim, decodeShot, encodeTickPlayer, encodeTickFrame, WIRE_INPUTMOVE, WIRE_JSON, WIRE_JUMP, WIRE_JETPACK, WIRE_SHOT , type WirePosition } from '../../../../shared/wire.js';
 import { wallMs } from '../../../../shared/clockBrand.js';
 import type { ServerMessage } from '../../../../shared/protocol.js';
 import { ChildLogger } from '../../core/Logger.js';
@@ -257,16 +257,9 @@ export class P2PHost {
     logger.info('Guest DataChannels attached');
   }
 
-  /** A peer's outbound message (JSON string or binary position frame). */
+  /** A peer's outbound message (JSON string or binary wire frame). */
   onData(link: P2PLink, data: string | Uint8Array): void {
-    if (typeof data !== 'string') {
-      if (!isWireFrame(data)) {return;}
-      const playerId = this.links.get(link);
-      if (!playerId) {return;} // binary before join — ignore
-      const pos = decodePosition(data, this.decodeScratch.get(link) ?? this.freshPosSlot(link));
-      if (pos) {this.dispatch(playerId, pos);}
-      return;
-    }
+    if (typeof data !== 'string') {this.onBinary(link, data); return;}
 
     // oxlint-disable-next-line init-declarations -- assigned later
     let raw!: unknown;
@@ -330,6 +323,49 @@ export class P2PHost {
     // mutually authenticated by the room code, so a static token suffices.
     this.messageHandler.handleHandshake(playerId, 'p2p', false);
     logger.info('P2P peer joined', { playerId });
+  }
+
+  /** Binary lane: same opcode fan-out the dedicated socket path runs
+   *  (GameServer.onBinary). Without it every FAST_LANE claim - teleport,
+   *  shots, aoeShot, deploy, skillUse, inputMove edges - would decode as
+   *  a position, fail, and drop silently. */
+  private onBinary(link: P2PLink, data: Uint8Array): void {
+    if (!isWireFrame(data)) {return;}
+    const playerId = this.links.get(link);
+    if (!playerId) {return;} // binary before join — ignore
+    if (data[1] === WIRE_JSON) {
+      const text = decodeWireJson(data);
+      if (text !== null) {this.onData(link, text);}
+      return;
+    }
+    if (data[1] === WIRE_JUMP || data[1] === WIRE_JETPACK) {
+      const c = decodePosClaim(data, data[1]!);
+      if (c) {this.trusted(playerId, { type: data[1] === WIRE_JUMP ? 'jump' : 'jetpack', position: c.position });}
+      return;
+    }
+    if (data[1] === WIRE_SHOT) {
+      const s = decodeShot(data);
+      if (s) {this.trusted(playerId, { type: 'shotFired', weaponType: s.weaponType, pos: s.pos, dir: s.dir, shotId: s.shotId, fireAt: s.fireAt });}
+      return;
+    }
+    if (data[1] === WIRE_INPUTMOVE) {
+      const im = decodeInputMove(data);
+      if (im) {this.trusted(playerId, im);}
+      return;
+    }
+    const pos = decodePosition(data, this.decodeScratch.get(link) ?? this.freshPosSlot(link));
+    if (pos) {this.trusted(playerId, pos);}
+  }
+
+  /** Binary-decoded frames were shape+range-checked at the byte boundary —
+   *  same trusted dispatch the dedicated socket path gives them. */
+  private trusted(playerId: string, msg: Parameters<MessageHandler['handleMessage']>[1]): void {
+    try {
+      this.messageHandler.handleMessage(playerId, msg, undefined, true);
+    } catch (error) {
+      logger.error('Handler failed', { playerId, type: (msg as { type?: string })?.type ?? '?', err: error instanceof Error ? error.stack ?? error.message : String(error) });
+      this.byPlayer.get(playerId)?.close();
+    }
   }
 
   private dispatch(playerId: string, raw: unknown): void {
