@@ -106,11 +106,13 @@ function savedHost(): string {
   return urlParams.get('server')?.trim() || (publicPool ? '' : settings.get('fps-server').trim());
 }
 
-/** Local endpoints from the page hostname: tunnel origin = same-origin
- *  API, else the dev port. */
+/** Local endpoints from the page hostname: same-origin API on any https
+ *  page (tunnels/proxies route /ws - host keeps the :port, hostname drops
+ *  it and funnels land on the wrong listener; ws://host:8000 is a
+ *  dev-page guess - on https it's unreachable AND mixed-content poison). */
 function localEp(hn: string): ServerEndpoints {
-  return hn.endsWith('.trycloudflare.com')
-    ? { wsUrl: `wss://${hn}/ws`, httpUrl: `https://${hn}` }
+  return window.location.protocol === 'https:'
+    ? { wsUrl: `wss://${window.location.host}/ws`, httpUrl: `https://${window.location.host}` }
     : { wsUrl: `ws://${hn}:8000/ws`, httpUrl: `http://${hn}:8000` };
 }
 
@@ -130,7 +132,12 @@ function lanHost(host: string): boolean {
  *  (?server=, saved pick) and used for ?serverPath named routes. */
 async function hostConfig(host: string, serverPath: string | null): Promise<{ host: string; fleet: boolean }> {
   let fleet = false;
-  if (!host && !serverPath) {return { host, fleet };}
+  // Fetch /server.json whenever a host is still needed: cfg.server is the
+  // documented prod fallback ("prefer dev server; prod is the fallback")
+  // and the fleet flag/servers table ride the same file. Early-returning
+  // on empty host left cfg.server dead - a tunnel page with no explicit
+  // server fell to same-host:8000 guessing instead of its real backend.
+  if (host && !serverPath) {return { host, fleet };}
   let out = host;
   try {
     const cfg = await fetch('/server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean; servers?: Record<string, string> }> => r.json());

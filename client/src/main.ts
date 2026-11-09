@@ -659,7 +659,11 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
       if (alias && window.location.pathname.startsWith('/s/')) {
         history.replaceState(null, '', `/${alias}${window.location.pathname.slice(2)}${search}`);
       } else if (!alias) {
-        if (!serverParam) {q.set('server', `${u.protocol}//${u.host}`);}
+        // A ws:// pin on an https: page is always poison - the later
+        // re-resolves (mapAssets/lobby/world) downgrade httpUrl to
+        // http:// and every API fetch dies as mixed content. LAN pins
+        // are for http: pages; here the fallback just stays unpinned.
+        if (!serverParam && !(window.location.protocol === 'https:' && u.protocol === 'ws:')) {q.set('server', `${u.protocol}//${u.host}`);}
         history.replaceState(null, '', `${window.location.pathname}${q.size > 0 ? `?${q}` : ''}`);
       }
     }
@@ -831,11 +835,14 @@ async function init(): Promise<void> {
   // moment instead of being rejected mid-protocol by a drifted wire.
   networkManager.onPreConnect = checkDeployNow;
   networkManager.armWireQueue();
+  // Captured BEFORE the quickplay block rewrites the path to /s/<room> -
+  // the mirror below must still know this boot came through the pool.
+  const publicPoolBoot = /^\/(quickplay|quickjoin)\b/.test(window.location.pathname);
   // /quickjoin — ask the matchmaker for a seat before anything reads
   // urlParams; the picked room lands as the canonical /s/<room> path, so
   // the whole boot below just sees an ordinary online join. Failure
   // leaves the path alone → normal menu boot.
-  if (/^\/(quickjoin|quickplay)\/?$/.test(window.location.pathname)) {
+  if (publicPoolBoot) {
     try {
       const { httpUrl } = await serverEndpoints;
       const q = new URLSearchParams(window.location.search);
@@ -854,7 +861,12 @@ async function init(): Promise<void> {
   // invite. An explicit ?server= link already carries it and wins; an
   // empty setting is the default host (a public deploy's server.json
   // resolves identically for the recipient — nothing to carry).
-  if (!urlParams.get('server') && settings.get('fps-server').trim()) {
+  // Public-pool paths exempt the saved host (savedHost() above) - mirroring
+  // it back in would re-poison every later resolveServerEndpoints() call
+  // (mapAssets/lobby/world re-resolve per use) with a ws:// host that
+  // downgrades httpUrl to http:// and dies as mixed content on the funnel.
+  // publicPoolBoot, not the current path: quickplay already rewrote it to /s/.
+  if (!publicPoolBoot && !urlParams.get('server') && settings.get('fps-server').trim()) {
     const q = new URLSearchParams(window.location.search);
     q.set('server', settings.get('fps-server').trim());
     history.replaceState(null, '', `${window.location.pathname}?${q}`);
