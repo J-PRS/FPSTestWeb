@@ -13,6 +13,7 @@ type Schema = {
   'fps-dots': boolean;       // ballTrailDots point trails - third trail kind, toggled alone
   'fps-wpos': boolean;       // worldpos pin trails (debugPins) - shows pins/connectors without F1
   'fps-bloom': boolean;
+  'fps-sharpen': boolean;
   'fps-invert-y': boolean;
   'fps-sens': number;
   'fps-minimap': number;      // 0 = corner radar, 1 = crosshair threat overlay, 2 = off
@@ -82,6 +83,7 @@ const DEFAULTS: Schema = {
   'fps-dots': true,
   'fps-wpos': false,
   'fps-bloom': true,
+  'fps-sharpen': true,
   'fps-invert-y': false,
   'fps-sens': 0.8, // menu shows 8 → ~12.5cm/360 @800dpi - casual flick default; tuners drop it
   'fps-minimap': 0,

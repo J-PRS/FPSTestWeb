@@ -256,6 +256,27 @@ export const VIGNETTE_GLSL = /* glsl */ `
     }
   `;
 
+// Contrast-adaptive sharpening (FidelityFX CAS, simplified 5-tap).
+// Sharpen only where local contrast is low — flat areas stay flat, so
+// no halo ringing; pixel-upscaled frames get perceived detail back.
+// Fused into the grade pass: one extra quad of taps, zero new passes.
+export const CAS_GLSL = /* glsl */ `
+    void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+      vec2 px = vec2(1.0) / resolution;
+      vec3 c = inputColor.rgb;
+      vec3 n = texture2D(inputBuffer, uv + vec2(0.0, -px.y)).rgb;
+      vec3 s = texture2D(inputBuffer, uv + vec2(0.0,  px.y)).rgb;
+      vec3 e = texture2D(inputBuffer, uv + vec2( px.x, 0.0)).rgb;
+      vec3 w = texture2D(inputBuffer, uv + vec2(-px.x, 0.0)).rgb;
+      float lumC = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      float lumN = dot(n + s + e + w, vec3(0.0531, 0.1789, 0.01805)); // avg luma /4
+      float contrast = abs(lumC - lumN);
+      float k = clamp((0.18 - contrast) * 4.0, 0.0, 0.5); // adapt: only sharpen soft areas
+      vec3 sharp = c + (c * 4.0 - n - s - e - w) * k;
+      outputColor = vec4(clamp(sharp, 0.0, 64.0), inputColor.a);
+    }
+  `;
+
 // HDR sanitize — runs between RenderPass and the bloom/dirt chain.
 // The composer buffers are HalfFloat: an additive stack (EMIT_GAIN ×
 // overlapping trails/explosions, the sun disc) can push a texel past
