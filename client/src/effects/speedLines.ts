@@ -9,7 +9,7 @@ import { markProbe } from '../core/fxDiag.js';
 //
 // Camera-attached screen overlays fail at this — they can't converge on
 // the true velocity vanishing point and read as static wallpaper.
-const MAX_STREAKS = 20;
+const MAX_STREAKS = 28;
 const MIN_SPEED = 30;    // m/s — no lines below this
 const FULL_SPEED = 85;   // full intensity
 const DISC_AHEAD_MIN = 3;   // spawn disc sits ahead along -vel
@@ -148,11 +148,14 @@ export class SpeedLines {
     _x.crossVectors(velDir, _toCam); // local X — thin edge
     _m.makeBasis(_x, velDir, _toCam);
     s.mesh.quaternion.setFromRotationMatrix(_m);
-    s.mesh.scale.y = STREAK_LEN_MIN + Math.random() * (STREAK_LEN_MAX - STREAK_LEN_MIN);
+    // Length scales with intensity — cruise gets short ticks, top-end
+    // speed stretches streaks ~2x longer (the "whip" read, not density).
+    const stretch = 1 + this.intensity * 1.2;
+    s.mesh.scale.y = (STREAK_LEN_MIN + Math.random() * (STREAK_LEN_MAX - STREAK_LEN_MIN)) * stretch;
 
-    // Slight backward drift so streaks linger mid-frame instead of
-    // instantly exiting — mostly stationary though, that's the point
-    s.drift.copy(velDir).multiplyScalar(-2 - Math.random() * 3);
+    // Backward drift scales with intensity too — at cruise they linger,
+    // at speed they streak out of frame, which is the whole effect.
+    s.drift.copy(velDir).multiplyScalar(-(2 + this.intensity * 5) - Math.random() * 3);
     s.maxLife = LIFE_MIN + Math.random() * (LIFE_MAX - LIFE_MIN);
     s.life = s.maxLife;
     this.streaks.push(s);
@@ -161,7 +164,11 @@ export class SpeedLines {
   /** Per-frame: camera position + player velocity (world space). */
   update(dt: number, camPos: THREE.Vector3, vel: THREE.Vector3): void {
     const speed = vel.length();
-    const target = Math.min(Math.max((speed - MIN_SPEED) / (FULL_SPEED - MIN_SPEED), 0), 1);
+    // Response curve weighted to the top: cruise speeds stay faint
+    // (subtle presence), only genuinely fast flight goes dramatic —
+    // "ramped but not annoying" = the drama belongs to real speed.
+    const linear = Math.min(Math.max((speed - MIN_SPEED) / (FULL_SPEED - MIN_SPEED), 0), 1);
+    const target = Math.pow(linear, 1.5);
     this.intensity += (target - this.intensity) * Math.min((target > this.intensity ? 10 : 5) * dt, 1);
 
     // Burst flare — spikes effective intensity past 1 briefly, decays fast
@@ -179,7 +186,9 @@ export class SpeedLines {
       }
       const t = s.life / s.maxLife;
       s.mesh.position.addScaledVector(s.drift, dt);
-      s.mat.opacity = effective * t * 0.28;
+      // Peak opacity also scales with intensity — dim whisper at
+      // cruise, a real rush at cap. Never a solid line.
+      s.mat.opacity = effective * t * (0.20 + this.intensity * 0.28);
     }
 
     if (effective <= 0.01) {return;}

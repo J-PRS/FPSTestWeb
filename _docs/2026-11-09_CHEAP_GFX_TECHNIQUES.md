@@ -137,6 +137,12 @@ indistinguishable from per-pixel at our density.
    `heightFogAmount` + a `heightFog` term in the terrain shader blocks
    (plus `scene.fog` for base distance). Covered.
 5. **Channel-packed mask texture** wherever materials fetch >2 maps.
+6. ✅ **LANDED (retune)** — **Speedlines** already existed
+   (`effects/speedLines.ts`, world-space streak quads). Ramped the
+   *right* way: intensity response curved `^1.5` so cruise stays a
+   whisper and only real speed goes dramatic; streak length, backward
+   drift, and peak opacity all scale with intensity — the drama lives
+   in the whip, not density. MAX_STREAKS 20→28 for the top end.
 
 ## Sources
 
