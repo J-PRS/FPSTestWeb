@@ -128,8 +128,11 @@ indistinguishable from per-pixel at our density.
    strength — silhouette separation on low-detail armor, hue left to
    the existing team rims (the `setRim` path is emissive team-tint +
    inverted-hull outline; this layer is view-dependent shape read).
-3. **Ramp-toon on a test material** — see if the art direction wants
-   banding; the ramp-texture version is a 20-line shader + one 4px PNG.
+3. ~~Ramp-toon~~ — **already shipped**: `balls.ts` runs
+   `MeshToonMaterial` + gradientMap, and `gunlab/previews.ts` has a
+   full ramp family (duotone/halftone variants via `ramp()` helpers).
+   Covered — what remains is optional *expansion* to more materials,
+   not a new technique.
 4. ~~Height-fog~~ — **already shipped**: `terrainPresets.ts` runs
    `heightFogAmount` + a `heightFog` term in the terrain shader blocks
    (plus `scene.fog` for base distance). Covered.
