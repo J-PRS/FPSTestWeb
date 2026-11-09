@@ -10,6 +10,7 @@ import {
   isCapturing, cancelCapture,
   type BindAction,
 } from '../core/keybinds.js';
+import { isDevHost } from '../core/params.js';
 
 export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(): void } {
   host.innerHTML = `
@@ -19,7 +20,6 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
         <button class="keys-close">✕</button>
       </div>
       <div class="keys-grid"></div>
-      <div class="keys-subhead">FIXED KEYS</div>
       <div class="keys-grid keys-fixed"></div>
       <button class="keys-reset">RESET KEYS</button>
     </div>`;
@@ -71,9 +71,9 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
 
   // Hardcoded keys — shown for completeness, not rebindable. Context-only
   // keys (demo F6/space, dev Alt+*) are deliberately absent.
+  // Perf stats + pixel mode are dev tools - prod doesn't list them.
   const FIXED: [label: string, key: string][] = [
-    ['Perf stats', '`'],
-    ['Pixel mode', 'F4'],
+    ...(isDevHost() ? [['Perf stats', '`'] as [string, string], ['Pixel mode', 'F4'] as [string, string]] : []),
     ['Menu', 'ESC'],
   ];
   const fixedGrid = host.querySelector<HTMLElement>('.keys-fixed')!;
