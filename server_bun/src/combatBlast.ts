@@ -286,6 +286,10 @@ export class BlastRunner {
    *  is usually a bot, which is why victim-gating missed them). */
   private refuse(gate: string, ctx: BlastCtx, targetId: string, dist: number, isBot?: boolean, tpos?: Vec3, live?: Vec3): void {
     if (isBot && ctx.bot) {return;} // bot-on-bot sweep noise - the parity-miss population is human-involved
+    // 'env' far-misses are routine "the shell went off elsewhere" sweeps -
+    // bot spam made thousands/min. Only envelope-edge disputes can be a
+    // client/server parity miss; 15m covers rewind + position divergence.
+    if (gate === 'env' && dist - ctx.radius > 15) {return;}
     // Volume cap: a soak room of human clients sweeping splash produces
     // thousands of refusals a second (seen: ~67k/50s) - keep the first
     // few per shooter+gate each window with full forensics, count the
