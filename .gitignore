@@ -34,6 +34,14 @@ maps/t2/
 # Extracted Tribes 1 assets — same rule (albedo.webp / sky cube / terrain.bin
 # are ripped from the T1 install); the maps/<name>_t1.json specs stay tracked
 maps/t1/
+
+# Quake-family port source dumps — GPL pk3/map sources, local-only inputs
+# for _tools/q3conv.ts. The maps/*_q3.json specs stay tracked; terrain .bin
+# regenerates from these (maps/*.bin already ignored).
+_reference/oacmpvol1/
+_reference/oacmpvol2/
+_reference/openarena/
+_reference/xonotic-maps/
 _tools/dif2glb_in/
 
 # Unity Asset Store bodies — licensed, not owned; stay out of git

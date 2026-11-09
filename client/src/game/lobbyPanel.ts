@@ -26,9 +26,9 @@ export interface LobbyPanelHost {
 
   fillMapSelect(): void;
 
-  mapFamOn(kind: 't2' | 'custom'): boolean;
+  mapFamOn(kind: 't2' | 'q3' | 'custom'): boolean;
 
-  toggleMapFam(kind: 't2' | 'custom'): void;
+  toggleMapFam(kind: 't2' | 'q3' | 'custom'): void;
 
   join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): void;
 
@@ -711,13 +711,13 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     const modeBtns = modeToggleRow(modeSelect);
 
-    // Map-family toggles — T2 ports vs our own arenas. Both on = full
+    // Map-family toggles — T2 ports, Quake ports, our own arenas. All on
 
     // list; each can be dropped to shrink the picker. HOST and OFFLINE
 
     // each get a row; clicks resync every button so the tabs can't drift.
 
-    const famBtns: { b: HTMLButtonElement; kind: 't2' | 'custom' }[] = [];
+    const famBtns: { b: HTMLButtonElement; kind: 't2' | 'q3' | 'custom' }[] = [];
 
     const famToggles = (): HTMLDivElement => {
 
@@ -727,7 +727,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
       row.style.marginBottom = '2px';
 
-      for (const [kind, text] of [['t2', 'T2'], ['custom', 'CUSTOM']] as const) {
+      for (const [kind, text] of [['t2', 'T2'], ['q3', 'Q3'], ['custom', 'CUSTOM']] as const) {
 
         const b = btn(text);
 

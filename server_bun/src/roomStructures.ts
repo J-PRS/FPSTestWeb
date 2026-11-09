@@ -19,10 +19,13 @@ export function hullBoxes(mapSrc: string): StructureSpec[] {
     try {
       const p = `${import.meta.dir}/../../maps/t2/${mapSrc}/hullboxes.json`;
       if (existsSync(p)) {
-        boxes = (JSON.parse(readFileSync(p, 'utf8')) as { min: number[]; max: number[] }[]).map((b) => ({
+        boxes = (JSON.parse(readFileSync(p, 'utf8')) as { min: number[]; max: number[]; yaw?: number }[]).map((b) => ({
           kind: 'hull' as const,
           pos: { x: ((b.min[0] ?? 0) + (b.max[0] ?? 0)) / 2, y: b.min[1] ?? 0, z: ((b.min[2] ?? 0) + (b.max[2] ?? 0)) / 2 },
           size: { x: (b.max[0] ?? 0) - (b.min[0] ?? 0), y: (b.max[1] ?? 0) - (b.min[1] ?? 0), z: (b.max[2] ?? 0) - (b.min[2] ?? 0) },
+          // yaw entries (q3conv ports): min/max are the LOCAL-frame bounds,
+          // pos=(min+max)/2 is the box center, yaw→rotY spins it about Y.
+          rotY: typeof b.yaw === 'number' ? b.yaw : undefined,
         }));
       }
     } catch { boxes = null; }

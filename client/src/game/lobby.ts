@@ -47,7 +47,21 @@ export interface MapRow {
   t2?: boolean;
   /** Tribes 1 port — same ported family, own badge. */
   t1?: boolean;
+  /** Quake-family port (OACMP/Xonotic .map conversions) — own badge. */
+  q3?: boolean;
 }
+
+/** Any ported map (Tribes or Quake) — procedural modes want native specs. */
+const isPort = (m: MapRow): boolean => Boolean(m.t2 || m.t1 || m.q3);
+const mapFamOf = (m: MapRow): 't2' | 'q3' | 'custom' => {
+  if (m.t2 || m.t1) {return 't2';}
+  return m.q3 ? 'q3' : 'custom';
+};
+const mapBadge = (m: MapRow): string => {
+  if (m.t2) {return '[T2] ';}
+  if (m.t1) {return '[T1] ';}
+  return m.q3 ? '[Q3] ' : '';
+};
 
 export interface LobbyDeps {
   /** GETs {name, mode?, players, maxPlayers}[]; throws when offline. */
@@ -88,9 +102,9 @@ export class Lobby {
   private els: LobbyPanelEls;
   private maps: MapRow[] = [];
   private mapsFailed = false;
-  // MAP picker family filter — the [T2] badge marks Tribes 2 ports;
-  // 'custom' is our own spec. Both on = the full list.
-  private mapFam = { t2: true, custom: true };
+  // MAP picker family filter — [T2]/[T1]/[Q3] badges mark ports;
+  // 'custom' is our own spec. All on = the full list.
+  private mapFam = { t2: true, q3: true, custom: true };
   private timer: ReturnType<typeof setInterval> | null = null;
   /** SOLO tab's pickers — same fill rules as HOST's, bound from the
    *  panel builder once it exists. */
@@ -225,8 +239,8 @@ export class Lobby {
     const catalogModes = new Set(this.maps.flatMap(modesOf));
     const procedural = Boolean(mode) && !catalogModes.has(mode);
     const rows = this.maps.filter((m): boolean =>
-      this.mapFam[(m.t2 || m.t1) ? 't2' : 'custom'] &&
-      (!procedural || !(m.t2 || m.t1)) &&
+      this.mapFam[mapFamOf(m)] &&
+      (!procedural || !isPort(m)) &&
       (!mode || procedural ||
         (m.modes.length > 0 ? m.modes : [m.mode]).includes(mode)));
     if (rows.length === 0) {
@@ -243,13 +257,13 @@ export class Lobby {
       // No ruleset tag on the name — maps are mode-agnostic geometry; a
       // bare name with ANY picked still boots the map's default mode via
       // dataset.mode, the mode row owns the override.
-      o.textContent = `${m.t2 ? '[T2] ' : m.t1 ? '[T1] ' : ''}${m.name.toUpperCase()}`;
+      o.textContent = `${mapBadge(m)}${m.name.toUpperCase()}`;
       mapSelect.append(o);
     }
     if ([...mapSelect.options].some((o): boolean => o.value === keep)) {mapSelect.value = keep;}
   }
 
-  mapFamOn(kind: 't2' | 'custom'): boolean {
+  mapFamOn(kind: 't2' | 'q3' | 'custom'): boolean {
     return this.mapFam[kind];
   }
 
@@ -275,7 +289,7 @@ export class Lobby {
     this.els.refreshLobs();
   }
 
-  toggleMapFam(kind: 't2' | 'custom'): void {
+  toggleMapFam(kind: 't2' | 'q3' | 'custom'): void {
     this.mapFam[kind] = !this.mapFam[kind];
     this.fillMapSelect();
   }
@@ -333,7 +347,6 @@ export class Lobby {
       return favs.has(r.name) ? 1 : 2;
     };
     rooms.sort((a, b): number => rank(a) - rank(b) || a.name.localeCompare(b.name));
-    const online = this.online();
     // Diff, don't rebuild: append() moves an existing row, so walking the
     // sorted list both inserts new tiles and re-sorts without a repaint.
     const seen = new Set<string>();

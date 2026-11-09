@@ -21,6 +21,7 @@ export class MapCatalog {
    *  them so players can tell a port from a native arena. */
   private t2Flags = new Set<string>();
   private t1Flags = new Set<string>();
+  private q3Flags = new Set<string>();
 
   mapNameOf(room: string): string | undefined { return this.roomMapName.get(room); }
   /** Room → map name, never cleared on room dispose — a switchRoom
@@ -95,9 +96,12 @@ export class MapCatalog {
       : parseMapSpecJson(readFileSync(path, 'utf8'));
     const isT2 = (parsed as { _t2?: unknown })._t2 !== undefined;
     const isT1 = (parsed as { _t1?: unknown })._t1 !== undefined;
-    if ((isT2 || isT1) && CONFIG.publicBeta) {throw new Error('ported spec excluded by FPS_PUBLIC_BETA');}
+    const isQ3 = (parsed as { _q3?: unknown })._q3 !== undefined;
+    // Q3 ports are GPLv2 assets — same dev-only gate as T2/T1 ports.
+    if ((isT2 || isT1 || isQ3) && CONFIG.publicBeta) {throw new Error('ported spec excluded by FPS_PUBLIC_BETA');}
     if (isT2) {this.t2Flags.add(name);}
     if (isT1) {this.t1Flags.add(name);}
+    if (isQ3) {this.q3Flags.add(name);}
     const spec = resolveMapSpec(parsed);
     // Fail loud on coerced/dropped fields — a typo in the JSON shouldn't
     // silently play as a different map than the author wrote.
@@ -244,6 +248,7 @@ export class MapCatalog {
             bots: spec?.bots ?? spec?.botFill ?? 0,
             t2: this.t2Flags.has(name),
             t1: this.t1Flags.has(name),
+            q3: this.q3Flags.has(name),
             hidden: spec?.hidden === true,
           };
         })
