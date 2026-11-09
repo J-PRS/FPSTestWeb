@@ -268,11 +268,12 @@ export const CAS_GLSL = /* glsl */ `
       vec3 s = texture2D(inputBuffer, uv + vec2(0.0,  px.y)).rgb;
       vec3 e = texture2D(inputBuffer, uv + vec2( px.x, 0.0)).rgb;
       vec3 w = texture2D(inputBuffer, uv + vec2(-px.x, 0.0)).rgb;
+      vec3 avg = (n + s + e + w) * 0.25;
       float lumC = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      float lumN = dot(n + s + e + w, vec3(0.0531, 0.1789, 0.01805)); // avg luma /4
-      float contrast = abs(lumC - lumN);
-      float k = clamp((0.18 - contrast) * 4.0, 0.0, 0.5); // adapt: only sharpen soft areas
-      vec3 sharp = c + (c * 4.0 - n - s - e - w) * k;
+      float lumA = dot(avg, vec3(0.2126, 0.7152, 0.0722));
+      float contrast = abs(lumC - lumA);
+      float k = clamp((0.15 - contrast) * 3.0, 0.0, 0.45); // adapt: only sharpen soft areas
+      vec3 sharp = c + (c - avg) * k; // unsharp: energy-preserving, no global lift
       outputColor = vec4(clamp(sharp, 0.0, 64.0), inputColor.a);
     }
   `;
