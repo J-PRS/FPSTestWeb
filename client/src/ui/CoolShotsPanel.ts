@@ -40,6 +40,28 @@ export class CoolShotsPanel {
     // the buttons only mirror it.
     bind('cs-toggle-demo', (): boolean => this.demoManager.coolShotDemo, (v): void => { this.demoManager.coolShotDemo = v; });
     bind('cs-toggle-mp4', (): boolean => this.demoManager.coolShotMp4, (v): void => { this.demoManager.coolShotMp4 = v; });
+    // Dev tool: manual .demo capture - REC flips to STOP, stopping
+    // downloads demo_<ts>.demo for offline inspection.
+    const recBtn = document.getElementById('cs-demo-rec');
+    recBtn?.addEventListener('click', (): void => {
+      if (this.demoManager.isRecording) {
+        this.demoManager.stopRecording();
+        this.demoManager.saveDemo();
+      } else {
+        this.demoManager.startRecording();
+      }
+      recBtn.textContent = this.demoManager.isRecording ? 'STOP' : 'REC';
+      recBtn.classList.toggle('on', this.demoManager.isRecording);
+    });
+    // autoDemo means recording is usually ALREADY live when the panel
+    // opens - mirror the real state, don't default to REC.
+    const syncRec = (): void => {
+      if (!recBtn) {return;}
+      recBtn.textContent = this.demoManager.isRecording ? 'STOP' : 'REC';
+      recBtn.classList.toggle('on', this.demoManager.isRecording);
+    };
+    syncRec();
+    setInterval(syncRec, 1000);
     
     // Refresh "time ago" labels every second — but only while the panel
     // is actually up: a closed overlay re-render is a 1Hz DOM rebuild
