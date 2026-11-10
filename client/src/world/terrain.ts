@@ -261,7 +261,7 @@ export class Terrain {
         // TERRAIN_PRESET picks the palette at COMPILE time - a runtime
         // uniform meant every program compiled all six preset branches.
         defines: { TERRAIN_PRESET: 1 },
-        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },fogDir:          { value: this.fogDirOn ? 1 : 0 },fogRamp:         { value: this.fogRampVecs },fogRampN:        { value: this.fogRampN },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },scorchY:         { value: this.scorchYArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },mistTime:       { value: 0 },mistAnim:       { value: this.mistAnimOn ? 1 : 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
+        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },fogDir:          { value: this.fogDirOn ? 1 : 0 },fogRamp:         { value: this.fogRampVecs },fogRampN:        { value: this.fogRampN },fogVolC:         { value: this.fogVolCVecs },fogVolD:        { value: this.fogVolDArr },fogVolN:         { value: this.fogVolN },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },scorchY:         { value: this.scorchYArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },mistTime:       { value: 0 },mistAnim:       { value: this.mistAnimOn ? 1 : 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
       });
 
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
@@ -739,6 +739,33 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 
   private mistAnimOn = true;
+
+  // Authored fog pockets (spec.fog.volumes) — centers resolved against the
+  // heightfield so authors only give x/z/r/d; y defaults to a dome sitting
+  // on the terrain. Arrays are padded to the shader's declared size (4).
+  private readonly fogVolCVecs = Array.from({ length: 4 }, (): THREE.Vector4 => new THREE.Vector4());
+  private readonly fogVolDArr = new Float32Array(4);
+  private fogVolN = 0;
+
+  setFogVolumes(vols: { x: number; z: number; r: number; d: number; y?: number }[] | null): void {
+    const list = vols?.slice(0, 4) ?? [];
+    this.fogVolN = list.length;
+    for (let i = 0; i < 4; i += 1) {
+      const v = list[i];
+      const c = this.fogVolCVecs[i];
+      if (v) {
+        const ground = v.y ?? (sampleHeight(v.x, v.z) + v.r * 0.4);
+        c.set(v.x, ground, v.z, v.r);
+        this.fogVolDArr[i] = v.d;
+      } else {
+        c.set(0, -1e9, 0, 0); // parked underground — ray-sphere misses
+        this.fogVolDArr[i] = 0;
+      }
+    }
+    for (const level of this.levels) {
+      level.material.uniforms.fogVolN.value = this.fogVolN;
+    }
+  }
 
   setMistAnim(on: boolean): void {
     this.mistAnimOn = on;

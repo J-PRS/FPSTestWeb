@@ -46,7 +46,7 @@ const _q = new THREE.Quaternion();
 
 
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number]; dirTint?: boolean; ramp?: [number, number, number, number][]; mistAnim?: boolean }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number]; dirTint?: boolean; ramp?: [number, number, number, number][]; mistAnim?: boolean; volumes?: { x: number; z: number; r: number; d: number; y?: number }[] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
 
 
 
@@ -88,16 +88,19 @@ export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
 
   ctx.deps.lazyTerrain().setFogDir(fog?.dirTint === true);
 
-  // Distance-gradient haze stops [t, r, g, b] — sRGB like fog.color,
-  // sorted by t, capped at the shader's 6-stop array.
-  const rampIn = fog?.ramp;
-  const rampStops = rampIn && rampIn.length >= 2
+  ctx.deps.lazyTerrain().setFogRamp(parseFogRamp(fog?.ramp));
+  ctx.deps.lazyTerrain().setMistAnim(fog?.mistAnim !== false);
+  ctx.deps.lazyTerrain().setFogVolumes(fog?.volumes ?? null);
+}
+
+// Distance-gradient haze stops [t, r, g, b] — sRGB like fog.color,
+// sorted by t, capped at the shader's 6-stop array. <2 stops = flat.
+function parseFogRamp(rampIn: [number, number, number, number][] | undefined): { t: number; color: THREE.Color }[] | null {
+  return rampIn && rampIn.length >= 2
     ? rampIn.slice(0, 6)
         .map(([t, r, g, b]): { t: number; color: THREE.Color } => ({ t, color: new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace) }))
         .toSorted((a, b): number => a.t - b.t)
     : null;
-  ctx.deps.lazyTerrain().setFogRamp(rampStops);
-  ctx.deps.lazyTerrain().setMistAnim(fog?.mistAnim !== false);
 }
 
 /** Per-map ambient particles - weather intensity per kind. Absent = the

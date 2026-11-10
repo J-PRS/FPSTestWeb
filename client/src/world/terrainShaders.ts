@@ -139,6 +139,12 @@ export const terrainFrag = /* glsl */`
   uniform int fogRampN;
   uniform float mistTime;  // elapsed s — scrolls the mist density field
   uniform float mistAnim;  // 0 = static mist (spec.fog.mistAnim:false)
+  // Authored local fog pockets (spec.fog.volumes) — analytic ray-sphere
+  // extinction, the smooth version of T2's fog bands. xyz=center, w=radius;
+  // fogVolD = extinction per meter. fogVolN=0 → skip.
+  uniform vec4 fogVolC[4];
+  uniform float fogVolD[4];
+  uniform int fogVolN;
   uniform float innerHalfSize;
   uniform vec2 innerGridOrigin;
   uniform float edgeHalf; // outermost level only: world-edge fade radius (0=off)
@@ -220,6 +226,28 @@ export const terrainFrag = /* glsl */`
       ? a * dist
       : a * (1.0 - exp(-HF_K * rdy * dist)) / (HF_K * rdy);
     return min(1.0 - exp(-max(od, 0.0)), HF_CAP);
+  }
+
+  // Local fog volumes — each is a uniform-density sphere; the ray's chord
+  // through it contributes Beer-Lambert optical depth. Hard edge is fine
+  // at these densities; the ambient height mist hides the silhouette.
+  float localFogAmount(vec3 ro, vec3 delta, float dist) {
+    if (fogVolN <= 0 || dist < 1.0) return 0.0;
+    vec3 rd = delta / dist;
+    float od = 0.0;
+    for (int i = 0; i < 4; i += 1) {
+      if (i >= fogVolN) break;
+      vec3 co = ro - fogVolC[i].xyz;
+      float tca = dot(co, rd);
+      float r2 = fogVolC[i].w * fogVolC[i].w;
+      float d2 = dot(co, co) - tca * tca;
+      if (d2 >= r2) continue;
+      float thc = sqrt(r2 - d2);
+      float enter = max(-tca - thc, 0.0);
+      float exit = min(-tca + thc, dist);
+      if (exit > enter) { od += fogVolD[i] * (exit - enter); }
+    }
+    return min(1.0 - exp(-od), 0.85);
   }
 
   // Exp² distance fog on the spec's linear start/end: near field stays
@@ -590,7 +618,8 @@ export const terrainFrag = /* glsl */`
       // (edgeHalf=0 on inner levels => edgeA stays 1).
       float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
-      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta))
+                   + localFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       vec3 fogCol = fogRampColor(clamp((fogDist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0));
       if (fogDir > 0.5) {fogCol = fogViewColor(fogCol, fogDelta / max(length(fogDelta), 1e-3), sunDir);}
@@ -672,7 +701,8 @@ export const terrainFrag = /* glsl */`
       // (edgeHalf=0 on inner levels => edgeA stays 1).
       float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
-      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta))
+                   + localFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       // dbgStage: freeze the pipeline at a named stage — 0 palette,
       // 1 detail, 2 decals, 3 lit, 4 glows, 5 seaTint, 6+ full (fog);
@@ -875,7 +905,8 @@ export const terrainFrag = /* glsl */`
       // (edgeHalf=0 on inner levels => edgeA stays 1).
       float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
-      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta))
+                   + localFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       vec3 fogCol = fogRampColor(clamp((fogDist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0));
       if (fogDir > 0.5) {fogCol = fogViewColor(fogCol, fogDelta / max(length(fogDelta), 1e-3), sunDir);}
@@ -966,7 +997,8 @@ ${TERRAIN_PRESET_GLSL}
     // Height-augmented fog: tall terrain at distance gets extra fog
     float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, dist)
                      * smoothstep(0.3, 0.8, height);
-    float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+    float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta))
+                   + localFogAmount(vCameraPos, fogDelta, length(fogDelta));
     fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
     vec3 fogCol = fogRampColor(clamp((dist - fogStart) / max(fogEnd - fogStart, 1.0), 0.0, 1.0));
     if (fogDir > 0.5) {fogCol = fogViewColor(fogCol, fogDelta / max(length(fogDelta), 1e-3), sunDir);}
