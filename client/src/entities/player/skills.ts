@@ -2,11 +2,16 @@ import * as THREE from 'three';
 
 import type { Terrain } from '../../world/terrain.js';
 import { ENERGY } from '../../../../shared/movement.js';
+import { segSolidHit } from '../../../../shared/solidWorld.js';
+import { Projectile } from '../../projectiles/Projectile.js';
 import type { SkillId } from '../Player.js';
 import { SkillChannels } from './skillChannels.js';
 import { WarpBeacon } from './skillBeacon.js';
 
 // ---- Skill tuning ----
+const _blinkA = new THREE.Vector3(); // blink march scratch — no per-press alloc
+const _blinkB = new THREE.Vector3();
+
 const BLINK_RANGE = 20;      // metres along the crosshair
 const BLINK_TIME = 0.16;     // lerp duration — reads as a flash, not a slide
 // Cooldowns are a spam-breaker, not the economy — the ENERGY.skillCost
@@ -167,6 +172,14 @@ export class PlayerSkills {
       const pz = pos.z + dir.z * d;
       if (py < terrain.getHeight(px, pz) + 0.5) {break;}
       dist = d;
+    }
+    // Structures too — the terrain-only march let a blink phase through
+    // base walls. Same swept-segment test the beams and shells use.
+    if (dist >= 2 && Projectile.solidColliders.length > 0) {
+      _blinkA.copy(pos);
+      _blinkB.copy(dir).multiplyScalar(dist).add(pos);
+      const hit = segSolidHit(_blinkA, _blinkB, Projectile.solidColliders, Projectile.solidIndex ?? undefined);
+      if (hit) {dist = Math.max(0, hit.t * dist - 0.5);}
     }
     if (dist < 2) {return;} // wall in the face — fizzle, no cooldown
     if (!this.paySkill()) {return;} // dry tank — the trick costs real mobility
