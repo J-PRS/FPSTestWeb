@@ -1,5 +1,5 @@
 /**
- * net/playerKill — the kill wire: feed rows, death overlay, frag
+ * net/playerKill - the kill wire: feed rows, death overlay, frag
  * headlines + streaks, and the victim gib (ragdoll impulse + team-color
  * capsule shards + HUD marker strip). players.ts keeps hit/knockback/
  * correction/lifecycle handlers.
@@ -23,7 +23,7 @@ import type { ChildLogger } from '../../core/Logger.js';
 
 const _gibBlack = new THREE.Color(0x11_11_11); // reads black without being a void on dark ground
 
-/** Minimal deps the gib path needs — NetDeps and RemotesDeps both
+/** Minimal deps the gib path needs - NetDeps and RemotesDeps both
  *  satisfy it, so the kill wire and the roster-mirror death share one
  *  hide+debris implementation. */
 export interface GibBodyDeps {
@@ -36,7 +36,7 @@ export interface GibBodyDeps {
   logger: ChildLogger;
 }
 
-/** UT-style streak ladder — one title per 5 kills since your last death.
+/** UT-style streak ladder - one title per 5 kills since your last death.
  *  Ordered high→low; matched with `===` so each announces once. */
 const STREAK_NAMES: [number, string][] = [
   [30, 'WICKED SICK'], [25, 'GODLIKE'], [20, 'UNSTOPPABLE'], [15, 'DOMINATING'],
@@ -44,14 +44,14 @@ const STREAK_NAMES: [number, string][] = [
 ];
 
 /** Full-gib budget: the mesh path (bakeDeathParts) is ~20 unique geos +
- *  matrix writes — one kill costs ~7ms on a hot frame, and a dogpile of
+ *  matrix writes - one kill costs ~7ms on a hot frame, and a dogpile of
  *  chained kills stacks them into a visible hitch. Space the heavy path
  *  to one per 250ms; kills inside the window fall back to the ragdoll
  *  (which still plays regardless) + a light shard puff. */
 let lastFullGibAt = 0;
 const FULL_GIB_GAP_MS = 250;
 
-/** Victim fx: ragdoll with the blast's impulse + a shard burst — unless a
+/** Victim fx: ragdoll with the blast's impulse + a shard burst - unless a
  *  power weapon connected point-blank, then the body full-gibs instead. */
 function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer): void {
   const { deps, nm } = ctx;
@@ -62,7 +62,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   // Play death animation (ragdoll physics with explosion impulse)
   remotePlayer.playDeath(explosionPos, explosionForce);
   // Loot scatters at wire truth but this corpse fell at the RENDERED
-  // pos — pickups.ts flings its nuggets from here to the server rest
+  // pos - pickups.ts flings its nuggets from here to the server rest
   // spots so the drop reads as bursting out of the body you saw die.
   noteCorpseFling(remotePlayer.position);
 
@@ -82,10 +82,10 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   }
   const team = nm().getPlayers().get(targetId)?.team
     ?? (remotePlayer as { team?: TeamId }).team;
-  // Gibs are best-effort — a degenerate model must never take the kill
+  // Gibs are best-effort - a degenerate model must never take the kill
   // handler down with it (generic chunks still spawn on null). Past
   // ~120m real body parts are indistinguishable from primitive shards,
-  // so far kills take the instanced path — mesh-path gibs are ~20
+  // so far kills take the instanced path - mesh-path gibs are ~20
   // unique materials and matrix writes each (~7ms spikes under throttle).
   gibBurst(ctx.deps, remotePlayer, team, impulseDir, centerY);
 
@@ -98,7 +98,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
 // near, instanced shards far, hide-first so a ctor throw can't leave a
 // standing body.
 export function gibBurst(deps: GibBodyDeps, remotePlayer: RemotePlayer, team: TeamId | undefined, impulseDir: THREE.Vector3 | undefined, centerY: number): void {
-  // One gib per death — the roster mirror can fire this before a
+  // One gib per death - the roster mirror can fire this before a
   // wid-queued kill event lands; the event's own call must not double it.
   if (remotePlayer.deathGibbed) {return;}
   remotePlayer.deathGibbed = true;
@@ -113,7 +113,7 @@ export function gibBurst(deps: GibBodyDeps, remotePlayer: RemotePlayer, team: Te
     try { parts = remotePlayer.model.deathParts() ?? undefined; }
     catch { /* fall through to generic shards */ }
   }
-  // Hide FIRST — the corpse disappearing is the guaranteed outcome. A
+  // Hide FIRST - the corpse disappearing is the guaranteed outcome. A
   // PlayerDebris ctor throw (degenerate part geo, NaN verts) used to
   // leave the body standing in its last pose.
   remotePlayer.hide();
@@ -129,7 +129,7 @@ export function gibBurst(deps: GibBodyDeps, remotePlayer: RemotePlayer, team: Te
   } catch (error) { deps.logger.warn('PlayerDebris spawn failed', { err: String(error) }); }
 }
 
-/** Roster-mirror death — the isDead tick can beat a wid-queued playerKill
+/** Roster-mirror death - the isDead tick can beat a wid-queued playerKill
  *  by ~1.5s (or outlive a dropped event). Same hide+gib outcome as the
  *  kill wire; feed/score/loot stay event-owned, so a late kill still
  *  lands its full context on top of the already-gibbed body. */
@@ -166,7 +166,7 @@ function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<
     : shooterId === targetId ? 'YOU DIED\nfragged yourself'
       : `YOU DIED\nfragged by ${displayName(shooterId, roster)}`;
   deps.fragMessages.show(deathMsg);
-  // Kill-cam: follow the killer's replica for ~4s — informational
+  // Kill-cam: follow the killer's replica for ~4s - informational
   // closure, not intel (you're dead; they know you're dead). A spectate
   // press or the timeout drops to the normal teammate cycle / ghost.
   if (shooterId !== 'environment' && shooterId !== targetId) {
@@ -180,7 +180,7 @@ function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<
   }
 }
 
-// Local-fragger streak announce — only on the crossing kill (`>=`
+// Local-fragger streak announce - only on the crossing kill (`>=`
 // repeated the title on every frag past the threshold). A frag that
 // rode real airtime earns the booth's 'precision kill'.
 function noteOwnStreak(ctx: NetCtx, targetId: string, roster: Map<string, { name?: string }>, air?: number): void {
@@ -189,7 +189,7 @@ function noteOwnStreak(ctx: NetCtx, targetId: string, roster: Map<string, { name
   const name = displayName(targetId, roster);
   deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
   sfx.killConfirm();
-  // The rainbow lob — a frag that rode real airtime earns the booth's
+  // The rainbow lob - a frag that rode real airtime earns the booth's
   // 'precision kill' (threshold above the casual-hop band).
   if ((air ?? 0) >= 1.5) {speakAnnounce('PRECISION KILL', 'announce_precision');}
 }
@@ -206,7 +206,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   if (targetId === localId) {ownDeath(ctx, shooterId, targetId, roster); return;}
 
   // Streak counts run-kills since your last death (reset above) and
-  // match boundaries (match.ts) — a new match never continues the count.
+  // match boundaries (match.ts) - a new match never continues the count.
   if (shooterId === localId) {noteOwnStreak(ctx, targetId, roster, air);}
   applyKillWorld(ctx, shooterId, targetId, localId, steal);
 }
@@ -218,7 +218,7 @@ function noteKillEdge(ctx: NetCtx, shooterId: string, targetId: string, weapon?:
   deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
   deps.world.deathCounts.set(targetId, (deps.world.deathCounts.get(targetId) ?? 0) + 1);
   const localId = nm().getLocalPlayerId();
-  // Demo kill marker — victim pos from the replica (or local body when
+  // Demo kill marker - victim pos from the replica (or local body when
   // the victim is us). Recorded before the early-return branches.
   const victimPos = deps.world.remotePlayers.get(targetId)?.position
     ?? (targetId === localId ? deps.lazyPlayer().pos : null);
@@ -245,7 +245,7 @@ function applyKillWorld(ctx: NetCtx, shooterId: string, targetId: string, localI
     logger.info(`Player ${targetId} killed by ${shooterId}`);
   }
 
-  // Lifesteal edge — server flags `steal` only when the heal actually
+  // Lifesteal edge - server flags `steal` only when the heal actually
   // paid; the red implode lands on the KILLER (own face in first person,
   // chest on a remote body).
   if (steal) {

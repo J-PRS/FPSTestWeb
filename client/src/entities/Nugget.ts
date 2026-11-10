@@ -12,7 +12,7 @@ import { NUG_TUMBLE, type PickupKind } from '../../../shared/pickups.js';
 import { getHeightfield } from '../world/heightmap.js';
 import { hmSettleWalkable } from '../../../shared/heightfield.js';
 
-// Tighter falloff than the shared glow: hot core, fast edge fade — the
+// Tighter falloff than the shared glow: hot core, fast edge fade - the
 // halo marks the item at range without washing a big blob over it.
 const getNuggetTex = (): THREE.Texture<unknown, THREE.TextureEventMap> => getGlowTexture(32, 0.12, 0.5);
 
@@ -28,11 +28,11 @@ const TRAIL_INTERVAL = 0.035;
 const LIFETIME = 30;          // despawn if never picked up
 
 const NUGGET_GEO = new THREE.IcosahedronGeometry(NUGGET_RADIUS, 0);
-// Borderlands-style sky beam for tokens — a tall additive shaft the
+// Borderlands-style sky beam for tokens - a tall additive shaft the
 // size doesn't change with distance, so a dropped pile reads at range.
 export const BEAM_GEO = new THREE.CylinderGeometry(0.18, 0.3, 16, 6, 1, true);
 // Vertical alpha ramp (v=0 bottom → v=1 top): solid shaft, dissolving
-// crown — a hard sky cutoff reads as a UI rod, not a light beam.
+// crown - a hard sky cutoff reads as a UI rod, not a light beam.
 export const BEAM_ALPHA = ((): THREE.Texture => {
   const cv = document.createElement('canvas');
   cv.width = 1; cv.height = 64;
@@ -56,7 +56,7 @@ const BEAM_MAT = new THREE.MeshBasicMaterial({
 const _target = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
-// Nugget bodies/accents draw from shared InstancedMeshes per shape — a
+// Nugget bodies/accents draw from shared InstancedMeshes per shape - a
 // busy fight drops 15-20 gems and each real Mesh was 2 draws + a sprite.
 // Kind tint rides instanceColor so one pool serves every drop color.
 const POOL_CAP = 256;
@@ -69,7 +69,7 @@ const _s = new THREE.Vector3();
 const _beamPos = new THREE.Vector3();
 let _beamPool: PartPool | null = null;
 let _glowBatch: GlowBatch | null = null;
-/** Same trick as the beam pool — a Sprite + SpriteMaterial per gem was
+/** Same trick as the beam pool - a Sprite + SpriteMaterial per gem was
  *  a draw + material apiece; one instanced quad batch serves all live
  *  halos. */
 function glowBatch(scene: THREE.Scene): GlowBatch {
@@ -79,7 +79,7 @@ function glowBatch(scene: THREE.Scene): GlowBatch {
   }
   return _glowBatch;
 }
-/** One shared beam pool — each nugget's shaft was a cloned Mesh +
+/** One shared beam pool - each nugget's shaft was a cloned Mesh +
  *  material (a draw + a material per gem). Same geometry, tint rides
  *  instanceColor; the collect fade lives in scale.y, not opacity. */
 function beamPool(scene: THREE.Scene): PartPool {
@@ -117,18 +117,18 @@ export class Nugget {
   /** Display-only position: for serverOwned nuggets the sim pos only
    *  advances in 50ms parity cells, so painting it raw staircases at
    *  ~20Hz while falling. renderPos lerps between the last two grid
-   *  states by the leftover accumulator fraction — the standard
+   *  states by the leftover accumulator fraction - the standard
    *  fixed-timestep render interpolation (bounded: no overshoot through
    *  terrain the way an extrapolation could clip mid-cell clamps). */
   private readonly renderPos = new THREE.Vector3();
   private readonly prevPos = new THREE.Vector3();
   collected = false; // pickup radius reached
   collectNotified = false; // set by caller once pickup effects/score are applied
-  dead = false;      // fully finished — safe to remove + dispose
-  /** Server-owned gem (MP): no magnet, no local collect, no local TTL —
+  dead = false;      // fully finished - safe to remove + dispose
+  /** Server-owned gem (MP): no magnet, no local collect, no local TTL -
    *  the wire decides when it's picked up; we just run the same physics. */
   serverOwned = false;
-  /** Pickup identity/value — 'token' in headhunt, val = the coin's
+  /** Pickup identity/value - 'token' in headhunt, val = the coin's
    *  denomination. Collectors read these to route the grab reward. */
   kind: PickupKind = 'gem';
   val = 1;
@@ -139,7 +139,7 @@ export class Nugget {
   private spinX = 0;
   private spinY = 0;
   private visScale = 1;
-  /** Denomination size — token 9s/27s dwarf the 1-coins so a scattered
+  /** Denomination size - token 9s/27s dwarf the 1-coins so a scattered
    *  hoard reads its value at a glance. */
   private sizeMul = 1;
   private pulseColor = new THREE.Color();
@@ -154,8 +154,8 @@ export class Nugget {
   private baseColor: THREE.Color;
   private emitColor: THREE.Color;
 
-  /** tint: pickup kind sells itself by color — gold gems, green heals,
-   *  red tags — no marquee iconography needed. `parts` swaps the plain
+  /** tint: pickup kind sells itself by color - gold gems, green heals,
+   *  red tags - no marquee iconography needed. `parts` swaps the plain
    *  gem for a diegetic shape: dark body + accent part in the tint. */
   constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3, tint = 0xFF_D5_4A, parts: { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number; beam?: boolean } | null = null, sizeMul = 1) {
     this.scene = scene;
@@ -180,7 +180,7 @@ export class Nugget {
     this.slot = takeSlot(this.pools.body);
     this.writeInstance();
 
-    // Billboarded glow halo rides the shared quad batch — a Sprite per
+    // Billboarded glow halo rides the shared quad batch - a Sprite per
     // gem was a draw + material each. Same texture, same depth bias
     // (batch material carries the polygonOffset), alpha/color/size are
     // per-instance writes in updateVisuals.
@@ -190,7 +190,7 @@ export class Nugget {
       this.beamSlot = takeSlot(beamPool(scene));
     }
 
-    // Gold sparkle trail — one slot in the shared dot batch (was a
+    // Gold sparkle trail - one slot in the shared dot batch (was a
     // Sprite + SpriteMaterial per dot, one draw call each).
     this.trailFx = new BallTrailDots(scene, { interval: TRAIL_INTERVAL, sizeMul: 0.5 });
   }
@@ -209,7 +209,7 @@ export class Nugget {
 
     if (this.scatterTimer > 0) {this.scatterTimer -= dt;}
 
-    // playerPos is the eye position (camera) — aim below it at belt height so
+    // playerPos is the eye position (camera) - aim below it at belt height so
     // pickups sweep into the torso instead of flying into your face
     _target.copy(playerPos).setY(playerPos.y - 0.6);
     const dist = this.pos.distanceTo(_target);
@@ -220,7 +220,7 @@ export class Nugget {
       if (this.serverOwned) {this.serverTumble(dt, terrain);} else {this.ballisticStep(dt, terrain);}
     }
 
-    // serverTumble integrates internally (server ordering) — the shared
+    // serverTumble integrates internally (server ordering) - the shared
     // pos+vel*dt line would double-step it.
     if (!this.serverOwned) {this.pos.addScaledVector(this.vel, dt);}
     this.renderPos.copy(this.pos);
@@ -268,7 +268,7 @@ export class Nugget {
 
   private ballisticStep(dt: number, terrain: Terrain): void {
     this.vel.y += GRAVITY * dt;
-    // Rest on the drawn surface, not the smooth field — the flat
+    // Rest on the drawn surface, not the smooth field - the flat
     // triangles dip under bilinear on convex ground and a field rest
     // reads as a nugget hanging midair.
     const gy = terrain.getRenderedHeight(this.pos.x, this.pos.z);
@@ -290,7 +290,7 @@ export class Nugget {
     }
   }
 
-  // Forceable — explosions scatter nuggets. Light objects: full force plus an
+  // Forceable - explosions scatter nuggets. Light objects: full force plus an
   // up-kick so they pop off the dirt instead of skidding. Knocked loose from
   // the settle state; magnet is suppressed for a beat so the blast actually
   // throws them instead of being lerped straight back at the player.
@@ -319,27 +319,27 @@ export class Nugget {
     this.scatterTimer = 0.4;
   }
 
-  /** RoomPickups.tick order: integrate, gravity, floor, bleed, settle —
+  /** RoomPickups.tick order: integrate, gravity, floor, bleed, settle -
    *  in ONE step per server tick with measured elapsed, not per frame.
    *  The server runs a single dt≈tick step (TickLoop passes elapsed,
    *  clamped ≤1s); per-frame stepping multiplies bleed/clamp N× more and
    *  settles ~0.5-1m off the server's rest (the nugrest spam). */
   private tumbleAcc = 0;
   /** Recent frozen-tab burst: a >0.3s frame dt means the client didn't
-   *  run tumble cells the server ran in real time — rests WILL diverge
+   *  run tumble cells the server ran in real time - rests WILL diverge
    *  by design, so the nugrest anomaly shouldn't count them. */
   private throttleBurst = false;
   private lastTickMs = 0;
   private serverTumble(dt: number, terrain: Terrain): void {
     // Wall-clock gap, not frame dt: a fully-hidden tab runs ZERO frames,
-    // and a clamped dt never reaches the 0.3s trip — rests WILL diverge
+    // and a clamped dt never reaches the 0.3s trip - rests WILL diverge
     // by design after any stall, so the anomaly shouldn't count them.
     const nowMs = performance.now();
     if (dt > 0.3 || (this.lastTickMs !== 0 && nowMs - this.lastTickMs > 300)) {this.throttleBurst = true;}
     this.lastTickMs = nowMs;
     this.tumbleAcc += dt;
     if (this.settled) {this.tumbleAcc = 0; return;}
-    // Fixed 50ms cells — the server steps the same grid (RoomPickups),
+    // Fixed 50ms cells - the server steps the same grid (RoomPickups),
     // so friction bleed composes identically. A variable chunk size made
     // the bleed partition-sensitive: rests landed meters apart = nugrest.
     while (this.tumbleAcc >= 0.05) {
@@ -349,7 +349,7 @@ export class Nugget {
       this.prevPos.copy(this.pos);
       this.pos.addScaledVector(this.vel, step);
       this.vel.y += GRAVITY * step;
-      // Same chord the server's tumble uses — getHeight is the fixed 5m
+      // Same chord the server's tumble uses - getHeight is the fixed 5m
       // lattice (shared hmChord; hmHeight is the same function in shared
       // code, verified by nuggetTumble.test.ts). getRenderedHeight is
       // camera-dependent LOD, so mirroring against it diverged rests by
@@ -366,7 +366,7 @@ export class Nugget {
         this.settled = true;
         this.tumbleAcc = 0;
         // Mirror RoomPickups.settleReachable: the server slides rests off
-        // unclimbable grades before broadcasting — skipping it here left
+        // unclimbable grades before broadcasting - skipping it here left
         // the wire rest ~10-16m downhill of the predicted one (nugrest).
         const f = getHeightfield();
         if (f) {hmSettleWalkable(f, this.pos);}
@@ -375,7 +375,7 @@ export class Nugget {
     }
   }
 
-  /** Server truth for a knocked-around gem's rest spot — a correction,
+  /** Server truth for a knocked-around gem's rest spot - a correction,
    *  not a teleport: only snap when the local tumble diverged for real. */
   serverRest(p: { x: number; y: number; z: number }): void {
     if (this.collected || this.dead || !Number.isFinite(p.x + p.y + p.z)) {return;}
@@ -383,13 +383,13 @@ export class Nugget {
     const dx = this.pos.x - p.x, dy = this.pos.y - p.y, dz = this.pos.z - p.z;
     const dSq = dx * dx + dy * dy + dz * dz;
     if (dSq < 0.5 * 0.5) {return;}
-    // The predicted tumble overshot the server's rest — the "knocked it
+    // The predicted tumble overshot the server's rest - the "knocked it
     // and it snapped back" report. Drift under ~7m is the knock edge
-    // landing mid-tumble under latency/loss (WAN runs produced ≤6.1m —
+    // landing mid-tumble under latency/loss (WAN runs produced ≤6.1m -
     // the headless-throttled client is the wide end). A mirror-math bug
-    // diverges past that — only that class is the anomaly.
+    // diverges past that - only that class is the anomaly.
     // Throttle class: a frozen tab steps no tumble cells while the
-    // server's real-time tumble ran to rest — the leftover backlog is
+    // server's real-time tumble ran to rest - the leftover backlog is
     // the signature (the snap itself is the designed correction).
     if (dSq > 7 * 7 && !this.throttleBurst) {parityMiss('nugrest', { dM: Math.round((dSq) ** 0.5 * 10) / 10 });}
     this.throttleBurst = false;
@@ -412,7 +412,7 @@ export class Nugget {
 
   get atRest(): boolean { return this.settled; }
 
-  /** Server said someone banked it — fade out where it lies; the wire
+  /** Server said someone banked it - fade out where it lies; the wire
    *  burst + rewards are the caller's job. */
   serverCollect(): void {
     if (this.collected || this.dead) {return;}
@@ -457,7 +457,7 @@ export class Nugget {
       return;
     }
     this.writeInstance();
-    // Halo stays welded to the nugget — the polygonOffset bias handles the
+    // Halo stays welded to the nugget - the polygonOffset bias handles the
     // terrain-graze clip, so no visual lift needed.
     this.writeGlow(this.renderPos.y, 0.85);
     this.writeBeam(this.renderPos.y);

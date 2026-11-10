@@ -77,6 +77,9 @@ export interface BrainCtx {
   /** skill.movement - times the hop-descent tap: skilled bots jet only the
    *  falling arc; undefined reads as skilled (hosts without a skill matrix). */
   moveSkill?: number;
+  /** skill.thrift 0..1 — vetoes wasteful grounded burns in botMoves;
+   *  undefined reads as 0 (hosts without a skill matrix stay thirsty). */
+  thrift?: number;
   enemies: BotEnemy[];
   /** Objective anchor (CTF flag/base) - outranks pickup and wander. */
   objective?: BotVec | null;
@@ -767,26 +770,30 @@ export class BotBrain {
     const hurt = (ctx.healthFrac ?? 1) < 0.4;
     const press = (): string => { this.skillT = 4; return id; };
     switch (id) {
-      case 'dash':
+      case 'dash': {
         // Gap-closer: a committed chase at reach, or a scared bot
         // breaking contact - both are the human "Q to move faster".
         if ((hunting && d > 10 && d < 70) || (fearing && hurt)) {return press();}
         break;
-      case 'slam':
+      }
+      case 'slam': {
         // Dive on the fight you're landing on: a close hunt with the
         // drop to make the dive pay.
         if (hunting && d < 18) {return press();}
         break;
+      }
       case 'blink':
-      case 'warp':
+      case 'warp': {
         // Get-there or get-out: infiltrating toward the objective from
         // reach, or a hurt bot escaping - the beacon answers both.
         if ((ctx.infiltrating && ctx.objective && dist3(pos, ctx.objective) > 50) || (fearing && hurt)) {return press();}
         break;
-      case 'bounce':
+      }
+      case 'bounce': {
         // Hop: the mobility habit on any approach or scramble.
         if (hunting || fearing) {return press();}
         break;
+      }
     }
     return undefined;
   }

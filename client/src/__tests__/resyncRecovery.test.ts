@@ -5,7 +5,7 @@ import { RemoteInterp, type InterpHost } from '../entities/remoteInterp.js';
 import { Nugget } from '../entities/Nugget.js';
 
 // The 2026-11-10 diagnostics dump: reconnect replayed remote seats and
-// nugget rests that were CORRECT by design — the detectors misfired on
+// nugget rests that were CORRECT by design - the detectors misfired on
 // the recovery path. These pin the three fixes.
 
 const mkHost = (): InterpHost => ({
@@ -19,7 +19,7 @@ const mkHost = (): InterpHost => ({
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-describe('remoteInterp reseat — reconnect purge must not flag or freeze', (): void => {
+describe('remoteInterp reseat - reconnect purge must not flag or freeze', (): void => {
   it('post-reseat push at new seat: no teleport GLITCH, no out-of-order drop', (): void => {
     const err = vi.spyOn(console, 'error').mockImplementation((): void => undefined);
     const ri = new RemoteInterp(mkHost());
@@ -30,7 +30,7 @@ describe('remoteInterp reseat — reconnect purge must not flag or freeze', (): 
     }
     expect(ri.wirePosition.x).toBeGreaterThan(0);
     // Reconnect: purgeStaleRemotes teleports the body to the new room's
-    // seat 100m away — this is a DECLARED move, not a wire anomaly.
+    // seat 100m away - this is a DECLARED move, not a wire anomaly.
     const B = new THREE.Vector3(100, 60, 0);
     ri.reseat(B);
     // First push from the new room: small step from B, serverMs REWOUND
@@ -44,10 +44,10 @@ describe('remoteInterp reseat — reconnect purge must not flag or freeze', (): 
   });
 });
 
-describe('nugget nugrest — hidden-tab stalls are designed divergence', (): void => {
+describe('nugget nugrest - hidden-tab stalls are designed divergence', (): void => {
   it('wall-clock gap >300ms arms throttleBurst: serverRest divergence is not a parity miss', (): void => {
     const err = vi.spyOn(console, 'error').mockImplementation((): void => undefined);
-    // Bare prototype instance — the pooled-mesh ctor needs WebGL; only
+    // Bare prototype instance - the pooled-mesh ctor needs WebGL; only
     // the tumble fields matter here.
     const n = Object.create(Nugget.prototype) as any;
     n.pos = new THREE.Vector3(0, 10, 0);
@@ -61,14 +61,14 @@ describe('nugget nugrest — hidden-tab stalls are designed divergence', (): voi
     n.dead = false;
     const terrain = { getHeight: (): number => 0 } as any;
 
-    // Simulate: ticking normally, then a fully-hidden stretch — ZERO
+    // Simulate: ticking normally, then a fully-hidden stretch - ZERO
     // frames ran, so no dt spike ever trips the old dt>0.3 check.
     n.serverTumble(0.05, terrain);
     n.lastTickMs = performance.now() - 1000; // wall clock says 1s stalled
     n.serverTumble(0.05, terrain);
     expect(n.throttleBurst).toBe(true);
 
-    // The server's real-time rest lands >7m off the stalled prediction —
+    // The server's real-time rest lands >7m off the stalled prediction -
     // designed divergence, must NOT parity-miss.
     n.serverRest({ x: 20, y: 0, z: 0 });
     expect(err).not.toHaveBeenCalled();

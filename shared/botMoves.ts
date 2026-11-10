@@ -841,6 +841,15 @@ export class BotMoves {
     else if (tap) {why = 'tap';}
     else if (boost) {why = 'boost';}
     if (why === '-') {return false;}
+    // Energy thrift (skill.thrift): the Tribes loop is jet-on-ascent,
+    // never-on-descent — a burn while the slope is pumping buys energy
+    // gravity gives free. Thrifty bots refuse discretionary burns
+    // exactly on pumpable descents (the travelDescent probe): boost/
+    // hop/runIn/tap all get refused; climbs, altitude purchases, and
+    // combat/mission jets stay (skyBank is itself an altitude buy).
+    // Deterministic draw per gate like the jetHold roll.
+    if ((why === 'boost' || why === 'hop' || why === 'runIn' || why === 'tap')
+        && botRand() < (ctx.thrift ?? 0) && this.travelDescent(ctx, pos, s.speed)) { this.jetWhy = '-'; return false; }
     // Bank leg owns the whole tank: outside the strike window only a real
     // climb (or a live prey chase) earns a burn. `boost`/`tap` were
     // vetoed here but the hop chain and `destHigh` kept spending the same

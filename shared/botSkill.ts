@@ -97,6 +97,13 @@ export interface BotSkill {
    *  cautious ones swap to a safe slot before the splash does them in.
    *  Personality draw like beltPull, so duels end differently per bot. */
   courage: number;
+  /** Energy thrift 0..1 - share of WASTEFUL grounded burns (flat
+   *  boost/hop/runIn: friction-eaten forward thrust) the bot refuses.
+   *  Efficient airborne spends (tap/skyBank/tail/apex) and mission
+   *  burns (climb/mount/prey/escape) are exempt - conserving the tank
+   *  is the point, not never spending. Personality draw like courage.
+   *  The evo hook for "preserve kinetic+potential energy". */
+  thrift: number;
   /** The spec this roll was drawn from — hunt/brain reads the resolved
    *  mods for reaction delay, jitter and cadence. */
   readonly spec: BotSkillSpec;
@@ -143,6 +150,7 @@ export function rollSkill(spawn: BotVec, spec: BotSkillSpec = 'medium'): BotSkil
     form: 1,
     beltPull: rng() < 0.45,
     courage: rng(),
+    thrift: rng(),
     spec,
     mods: Object.assign({}, mods),
     rng,

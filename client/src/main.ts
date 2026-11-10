@@ -104,7 +104,7 @@ const profiler = new LoadProfiler();
 
 // ---- Camera ----
 const camera = new THREE.PerspectiveCamera(settings.get('fps-fov') || CAMERA_FOV, GAME_ASPECT, CAMERA_NEAR, CAMERA_FAR);
-// Menu FOV field — live via the settings event, no reload needed.
+// Menu FOV field - live via the settings event, no reload needed.
 window.addEventListener('fps:set', (e): void => {
   const { key, value } = (e as CustomEvent).detail;
   if (key === 'fps-fov') { camera.fov = value; camera.updateProjectionMatrix(); }
@@ -114,15 +114,15 @@ window.addEventListener('fps:set', (e): void => {
 const sceneSetup = createScene();
 const { scene, sun } = sceneSetup;
 
-// World-space speed lines — streak quads spawn around the camera along
+// World-space speed lines - streak quads spawn around the camera along
 // the actual velocity vector; flying through them gives real relative motion
 const speedLines = new SpeedLines(scene);
 
-// Ambient particle weather — one owner for the dust/embers/ash/snow layers;
+// Ambient particle weather - one owner for the dust/embers/ash/snow layers;
 // the room's map spec picks which drift (absent = the default trio).
 const ambientWeather = new AmbientWeather(scene);
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
-let groundMist!: GroundMist; // needs terrain — created in init()
+let groundMist!: GroundMist; // needs terrain - created in init()
 const ambientBirds = new AmbientBirds(scene); // kettle of buzzards on a thermal
 
 // ---- Renderer ----
@@ -130,7 +130,7 @@ const rendererSetup = createRenderer(camera, scene);
 const { renderer } = rendererSetup;
 renderer.setClearColor(FOG_COLOR);
 
-// Environment probe — one-time PMREM bake of the scene's sky/atmosphere
+// Environment probe - one-time PMREM bake of the scene's sky/atmosphere
 // so MeshStandardMaterial has real reflections. Without it metal armor
 // reflects void and reads dead-black; the bake is a few ms at boot, then
 // every standard material picks it up free (no per-frame cost).
@@ -159,10 +159,10 @@ let damageNumberManager!: DamageNumberManager;
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
 let networkManager!: NetworkManager;
 /** Room-join sockets open at boot start (before the handler deps bind)
- *  so the handshake overlaps init — connectPhase awaits this instead of
+ *  so the handshake overlaps init - connectPhase awaits this instead of
  *  connecting late. Null for classic/solo/p2p paths. */
 let earlyConnP: Promise<void> | null = null;
-// All shared mutable entity collections live in world — see game/worldState.ts
+// All shared mutable entity collections live in world - see game/worldState.ts
 const world = createWorldState();
 const {remotePlayers} = world;
 let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
@@ -182,7 +182,7 @@ const fragMessages = new FragMessages();
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
 let combat!: ReturnType<typeof createCombat>;
 let teamBots: TeamBots | null = null; // ?mode=nuggets
-let soloConquest: SoloConquest | null = null; // ?mode=conquest — the offline lattice
+let soloConquest: SoloConquest | null = null; // ?mode=conquest - the offline lattice
 const _conqSpawn = new THREE.Vector3();
 
 // ---- Remote player lifecycle (game/remotes.ts); created in init() ----
@@ -207,12 +207,12 @@ let gameLoop!: ReturnType<typeof createGameLoop>;
 
 // ---- Boot ----
 const serverEndpoints = resolveServerEndpoints();
-// Ranked-solo challenge — minted by the backend so runSeed isn't self-
+// Ranked-solo challenge - minted by the backend so runSeed isn't self-
 // chosen. Entity boot awaits it with a bound so ranked runs bind
 // deterministically; a dead backend degrades to local mint (unranked).
 const challengeReady = serverEndpoints.then(ep => fetchChallenge(ep.httpUrl)).catch(() => {});
 /** SOLO tab's ?map= pick, resolved client-side before init's heightmap
- *  step — module scope because connectPhase consumes it after init's
+ *  step - module scope because connectPhase consumes it after init's
  *  locals are gone. */
 let soloSpec: { spec: MapSpec; map: MapSnapshot } | null = null;
 
@@ -282,7 +282,7 @@ function wireNetworkLocal(): void {
     }
     return out;
   };
-  // Own-corpse gib — the same burst remote victims get. Fires on every
+  // Own-corpse gib - the same burst remote victims get. Fires on every
   // death edge; in FP it's mostly hidden, but the kill-cam dwells on the
   // spot and a chase-cam death needs it to not freeze mid-pose.
   player.onLocalDeath = (): void => {
@@ -308,7 +308,7 @@ function wireNetworkLocal(): void {
     },
     // Dead press = revive once the deadline lapsed (the only dead state
     // past 3s is a held corpse); inside the countdown it just releases
-    // a die+spectate hold and the timer revives on schedule — the server
+    // a die+spectate hold and the timer revives on schedule - the server
     // refuses to skip the pending timer, so offline must not either.
     respawn: (): void => {
       if (!player.isDead) {killLocal('respawned'); return;}
@@ -319,10 +319,10 @@ function wireNetworkLocal(): void {
       player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
     },
   };
-  // Fall damage — the sim's T1 impact read. Dressing fires in MP too
+  // Fall damage - the sim's T1 impact read. Dressing fires in MP too
   // (the land thud's -vel.y scale can't see slope/wall slams; cover the
   // gap or a 20%-bar splat sounds like a footstep). The featherfall
-  // soak runs everywhere so the local tank mirrors the shadow's drain —
+  // soak runs everywhere so the local tank mirrors the shadow's drain -
   // only the health write is offline-only (wire owns it in MP).
   player.onFallDamage = (impact, vImp): void => {
     const gap = Math.max(0, impact - vImp);
@@ -337,7 +337,7 @@ function wireNetworkLocal(): void {
       raw -= covered;
       if (covered > 0.01) {sfx.shieldHit();} // the tank took the punch
     }
-    // Under a tenth of the bar the landing is a shrug, not a wound —
+    // Under a tenth of the bar the landing is a shrug, not a wound -
     // the dust/thud above already sold the impact.
     if (raw < player.maxHealth * MOVEMENT_CONFIG.fallDamageAbsorbFrac) {return;}
     if (player.isDead || (player.serverOwnsHealth?.() ?? false)) {return;}
@@ -354,7 +354,7 @@ function wireNetworkLocal(): void {
   // playing yet (class-locked rejects until respawn).
   networkManager.joinPerk = () => player.appliedPerk;
   networkManager.joinClass = (): "light" | "medium" | "heavy" => player.appliedClass;
-  // Kill zone — the body dropped below the map's floor. Predicted locally
+  // Kill zone - the body dropped below the map's floor. Predicted locally
   // so the death lands on the crossing frame; the server's shadow owns
   // the actual kill and the respawn.
   player.onKillZone = (): void => {
@@ -367,14 +367,14 @@ function wireNetworkLocal(): void {
 
 // Player→HUD/viewmodel status hooks + the wildlife truce table.
 function wirePlayerStatusHooks(): void {
-  // Ambient buzzards are decor only — the REAL buzzards are server-owned
+  // Ambient buzzards are decor only - the REAL buzzards are server-owned
   // creatures (species 'buzzard', map `creatures` pops) that hunt whoever
   // shot them. This kettle stays out of entities.targets on purpose: two
   // shootable flocks would double the population and resurrect the
   // self-only aggro bug the creature sim fixes.
 
   wirePlayerHooks({ player, combat, effects, viewModel, speedLines, world, scene, terrain });
-  // Arm the viewmodel to the persisted kit's active slot — resetLifeState
+  // Arm the viewmodel to the persisted kit's active slot - resetLifeState
   // re-arms on every respawn, but the FIRST life would otherwise open on
   // the default bolt model while the HUD reads the recalled loadout.
   viewModel?.switchWeapon(weaponDef(player.loadout[player.weaponIndex]).weaponType);
@@ -382,7 +382,7 @@ function wirePlayerStatusHooks(): void {
   // Spectator fly: strip the combat HUD, leave only a "SPECTATING" hint
   player.onSpectate = (on): void => {
     if (on) { hud.hide(); hud.setSpectatorHint(true); }
-    // Died mid-flight: the death path owns the HUD — don't resurface it
+    // Died mid-flight: the death path owns the HUD - don't resurface it
     else { hud.setSpectatorHint(false); if (!player.isDead) {hud.show();} }
   };
   player.onCloak = (on): void => { hud.setCloak(on); viewModel.setGhost(on); };
@@ -437,7 +437,7 @@ function makeCombat(): ReturnType<typeof createCombat> {
 
 
 function makeEntities(): ReturnType<typeof createEntities> {
-  // One seed per run — simRand drives all sim-truth dice (wave picks,
+  // One seed per run - simRand drives all sim-truth dice (wave picks,
   // spawn placement, spread, bomblets); botRand gets a sibling stream so
   // offline bots replay identically too. The demo header stamps the seed
   // so a verifier can walk the identical dice sequence.
@@ -459,14 +459,14 @@ function makeEntities(): ReturnType<typeof createEntities> {
     logger,
     world,
     updateBallsPlayback: (dt): void => demoLifecycle.updateBallsPlayback(dt),
-    // Team mode sweeps gems toward whoever's nearest — set once bots spawn.
+    // Team mode sweeps gems toward whoever's nearest - set once bots spawn.
     nuggetCollectors: (): { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number; }[] => teamBots?.collectors() ?? [],
     onNuggetCollect: (id, kind, val): void | undefined => teamBots?.collect(id, kind, val),
     lazyCombat: () => combat,
     deployEnemyBots: (): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; }[] => teamBots?.enemyBotsForLocal() ?? [],
     deployBotFoes: (team) => teamBots?.enemyBotsForTeam(team) ?? [],
     deployDamageBot: (id, dmg, from): boolean => teamBots?.hit(id, dmg, from, 'local') ?? false,
-    // Offline base grid — a shelled generator drops its team's gate
+    // Offline base grid - a shelled generator drops its team's gate
     // panes (colliders + visuals), revive puts them back.
     deployBasePower: (team, on): void => setTeamGridDown(team, !on),
     deployDamageNumbers: (): DamageNumberManager => damageNumberManager,
@@ -476,7 +476,7 @@ function makeEntities(): ReturnType<typeof createEntities> {
 
 
 
-// ?mode=<mode> offline-vs-bots roster — no server, so the TeamBots
+// ?mode=<mode> offline-vs-bots roster - no server, so the TeamBots
 // sim drives both teams and world.localTeam marks the player's side
 // (normally roomInfo.team, which never arrives offline).
 function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
@@ -519,7 +519,7 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
           if (n.collected || n.dead) {continue;}
           const d = n.pos.distanceToSquared(pos);
           if (d >= bd) {continue;}
-          // Headhunt: value out-pulls proximity — a purple spill shrinks
+          // Headhunt: value out-pulls proximity - a purple spill shrinks
           // its effective distance up to 70%, so fat coins draw the
           // lobby while 1-coins stay opportunism. Plain nuggets (val 1)
           // price out essentially unchanged.
@@ -547,7 +547,7 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
       botDeploy: (kind, pos, owner): void =>
         entities.deployables.plantFor(kind as DeployKind, pos, owner),
       botRepairJob: (team, pos, botId): { key: string; pos: THREE.Vector3; frac: number; } | null => entities.deployables.repairJob(botId, team, pos),
-      // ~50hp/s at think cadence — the same heal a human trigger hold does.
+      // ~50hp/s at think cadence - the same heal a human trigger hold does.
       botWeld: (key): boolean => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
       hostileGear: (team, pos, range) => entities.deployables.hostileGear(team, pos, range),
     },
@@ -556,17 +556,17 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
     mode as ModeId,
     mapSpec,
   );
-  // Flag Run starts you beside the nearest enemy flag — the ring is
+  // Flag Run starts you beside the nearest enemy flag - the ring is
   // built around your spawn pos, so the first grab is one hop away.
   const spot = teamBots.flagrun?.spawnPoint();
   if (spot) {
-    player.resetLifeState(); // banked class + HP pool — was default-100 bug
+    player.resetLifeState(); // banked class + HP pool - was default-100 bug
     player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
     noteLocalSnap();
     player.syncMovement();
     player.markTeleport();
   }
-  // Conquest — the same ConquestSim the Room hosts, driven by local
+  // Conquest - the same ConquestSim the Room hosts, driven by local
   // state. Bots were seated at authored spawns before the lattice knew
   // its rings, so reseat them at their cores (Room's initial seating).
   if (mode === 'conquest') {
@@ -600,25 +600,25 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
 
 
 /** Connect to server (non-blocking for offline mode). Classic is a solo
- *  ruleset — connecting would hand ball ownership to the server sim,
+ *  ruleset - connecting would hand ball ownership to the server sim,
  *  which enrages and spawns the full roster behind your back.
  *  MODE=OFF is solo too: the picker labels it "(solo)", but the empty
  *  mode still joined the default room and the server's move judge kept
- *  correcting the player — the warp complaints. Only a ?room= link or a
+ *  correcting the player - the warp complaints. Only a ?room= link or a
  *  ?p2p= code pulls a no-mode session online. flagrun is the same kind
  *  of solo ruleset (local circuit + optional offline bot cappers): an
- *  explicit ?room/?p2p still wins, otherwise it must not connect —
+ *  explicit ?room/?p2p still wins, otherwise it must not connect -
  *  connecting joined the server's default room and the player spawned
  *  into a live nuggets match instead of the lap. */
 async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classicMode: boolean, mode: string | undefined): Promise<void> {
   // No ?room and no ?p2p = solo, full stop. A mode pick alone must NOT
-  // connect — the SOLO tab's whole job is an offline match, and the old
+  // connect - the SOLO tab's whole job is an offline match, and the old
   // mode-means-online rule silently dropped solo players into the
   // server's default room.
   const soloMode = !urlParams.room && !urlParams.p2p;
-  // The probed saved map was already primed as boot terrain — apply its
+  // The probed saved map was already primed as boot terrain - apply its
   // structures/arena/interiors/sky now that the net ctx exists. Solo's
-  // own spec takes the same path so a SOLO-picked map is identical —
+  // own spec takes the same path so a SOLO-picked map is identical -
   // including seatKits, which the server normally runs before broadcast:
   // without it every piece stands at authored y and dirt pokes through
   // decks (bastion terrain varies ~15m under a genhouse footprint).
@@ -631,7 +631,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   logger.info(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   // Pin a resolved remote server into the URL so refresh can't drop back
   // to localhost. Named servers get the pretty /<alias>/<room> path;
-  // anything else falls back to ?server=. Local hosts stay unpinned —
+  // anything else falls back to ?server=. Local hosts stay unpinned -
   // a shared link must never hardcode ws://127.0.0.1 for its opener.
   {
     // Pin the ENTRY host, not the seat: on a fleet, wsUrl is the assigned
@@ -670,10 +670,10 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     }
   }
   // F5 with a stored session token = the server may hand back our old
-  // body — but only a LIVE host earns the restore veil. Dead server
+  // body - but only a LIVE host earns the restore veil. Dead server
   // means the offline world owns the first frames outright; a "restoring"
   // curtain over a connect that can never land is the wrong order.
-  // Room-join sockets already flew at boot start (earlyConnP) — the
+  // Room-join sockets already flew at boot start (earlyConnP) - the
   // veil probe kicked alongside them and arms whenever it lands.
   if (earlyConnP) {
     await earlyConnP;
@@ -686,20 +686,20 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     await connectServer({
       serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler,
       bootMap: soloSpec?.spec ?? soloSpec?.map ?? savedMap,
-      // Fleet reconnects re-ask the matchmaker for a live worker — retrying
+      // Fleet reconnects re-ask the matchmaker for a live worker - retrying
       // the dead worker's direct URL forever would never land anywhere.
       resolveUrl: ep.fleet && ep.lobbyUrl ? (): Promise<string | null> => fleetWorkerUrl(ep.lobbyUrl!) : undefined,
     });
   }
   player.serverOwnsHealth = (): boolean => networkManager.isConnected();
 
-  // Offline start waits on stable frames — the player spawn anchor,
+  // Offline start waits on stable frames - the player spawn anchor,
   // deploys, balls and demo recording all land after warmup instead of
   // mid-compile-hitch (the online path gates on the session veil).
   if (!networkManager.isConnected()) {await gameLoop.whenStable();}
   if (classicMode || soloMode) {player.unfreezeInput(); viewModel.draw();}
   // Spec maps spawn you at an authored anchor (team spawn > generic
-  // spawn > own base) — origin on a T2 port can be kilometers from play.
+  // spawn > own base) - origin on a T2 port can be kilometers from play.
   if (soloMode && soloSpec) {
     const s = soloSpec.spec;
     const anchor = s.teamSpawns?.alpha?.[0] ?? s.spawns?.[0] ?? s.bases?.alpha;
@@ -714,9 +714,9 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     if (s.name) {world.mapName = s.name;}
     else {world.mapName = urlParams.soloMap ?? undefined;}
     world.mode = mode ?? s.mode;
-    // Deploys — generators/sentries are server-seeded in rooms; offline
+    // Deploys - generators/sentries are server-seeded in rooms; offline
     // they spawn as remote items (same visuals + repair/weld paths).
-    // pos.y rides the lowest structure top above authored Y within 12m —
+    // pos.y rides the lowest structure top above authored Y within 12m -
     // Room.deployFloor's rule, so the generator lands on the vault deck.
     const cols = structureColliders(s.structures);
     let depId = 9000;
@@ -739,13 +739,13 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     }
   }
 
-  // Initial balls — offline only. In a room the wire owns the ball
+  // Initial balls - offline only. In a room the wire owns the ball
   // population; boot-time locals were duplicate spam on the default map.
   if (!networkManager.isConnected()) {
     for (let i = 0; i < 4; i += 1) {entities.spawnBall();} // OG startingSpawnCount
   }
 
-  // Auto-start demo recording so cool shots are captured seamlessly —
+  // Auto-start demo recording so cool shots are captured seamlessly -
   // the clip feed never records (it only replays).
   if (!feedMode.on) {demoManager?.startRecording();}
   demoLifecycle.snapshotExistingBallsForRecording(entities.recordBallKeyframes);
@@ -753,23 +753,23 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
 
 
 
-/** Demo recorder + cool-shots panel + playback lifecycle — everything
+/** Demo recorder + cool-shots panel + playback lifecycle - everything
  *  capture-related hangs off this one wiring pass. */
 async function initDemo(): Promise<void> {
   demoManager = new DemoManager();
   const {httpUrl} = (await serverEndpoints);
   Logger.initShipping(httpUrl); // WARN+ lines stream to logs/client.log
   demoManager.setServerUrl(httpUrl);
-  // The recorder needs the REAL render canvas — the DOM carries ~13
+  // The recorder needs the REAL render canvas - the DOM carries ~13
   // canvases (atlases, shadow buffers); "largest" picks a black texture.
   demoManager.video.setCanvas(renderer.domElement);
-  // Audio rides the post-compressor mix — null until the first gesture
+  // Audio rides the post-compressor mix - null until the first gesture
   // unlocks the AudioContext, so early clips just stay video-only.
   demoManager.video.setAudioSource((): { ctx: AudioContext; node: AudioNode; } | null =>
     audio.context instanceof AudioContext && audio.mixNode
       ? { ctx: audio.context as AudioContext, node: audio.mixNode }
       : null);
-  // Silently re-arm the previously-picked clips folder (no prompt — the
+  // Silently re-arm the previously-picked clips folder (no prompt - the
   // handle reuses its stored permission until Chrome asks for a re-grant,
   // which happens inside the next F9 gesture via pickClipsDir).
   import('./demo/clipSink.js').then((m): Promise<boolean> => m.restoreClipsDir()).catch((): void => undefined);
@@ -791,7 +791,7 @@ async function initDemo(): Promise<void> {
 
 
 /** SOLO map pick: fetch maps/<name>.json off the static route and resolve
- *  it locally — the same spec the server would load for a hosted room.
+ *  it locally - the same spec the server would load for a hosted room.
  *  Returns null on any miss; the boot falls back to the default field. */
 async function loadSoloSpec(name: string): Promise<{ spec: MapSpec; map: MapSnapshot } | null> {
   if (!/^[\w-]{1,32}$/.test(name)) {return null;}
@@ -800,7 +800,7 @@ async function loadSoloSpec(name: string): Promise<{ spec: MapSpec; map: MapSnap
     const res = await fetch(`${httpUrl}/maps/${name}.json`, { cache: 'no-cache' });
     if (!res.ok) {return null;}
     const spec = resolveMapSpec(parseMapSpecJson(await res.text()));
-    // The wire sends the resolved spec's world fields verbatim — a solo
+    // The wire sends the resolved spec's world fields verbatim - a solo
     // boot applies the same subset (spawns/bases feed TeamBots instead).
     return { spec, map: spec };
   } catch { return null; }
@@ -810,13 +810,13 @@ async function loadSoloSpec(name: string): Promise<{ spec: MapSpec; map: MapSnap
 
 async function init(): Promise<void> {
   profiler.markTime('initStart');
-  // Invariant violations land in the glitch census — a named truth
+  // Invariant violations land in the glitch census - a named truth
   // breaking shows in the alt+q dump, never crashes the match.
   setInvariantSink(glitch);
-  // Defer a deploy reload to the only real break: the intermission —
+  // Defer a deploy reload to the only real break: the intermission -
   // match clock expired, scoreboard up, next match not started.
   // Menu/death are still live play. Grace cap inside bounds the wait.
-  // Version footer — /build.txt (content hash + stamp, written by the
+  // Version footer - /build.txt (content hash + stamp, written by the
   // dist-size plugin every build). version.txt is the deploy watcher’s
   // stamp; build.txt is WHICH bundle this is.
   fetch('/build.txt', { cache: 'no-cache' })
@@ -826,11 +826,11 @@ async function init(): Promise<void> {
       const [hash, stamp] = v.trim().split(/\s+/);
       el.textContent = `v${pkg.version} · ${hash ?? 'dev'}${stamp ? ` · ${stamp}` : ''}`;
     })
-    .catch((): void => { /* no build.txt on a bare dev serve — fine */ });
+    .catch((): void => { /* no build.txt on a bare dev serve - fine */ });
   watchDeployVersion({ whenIdle: (): boolean =>
     world.matchEndsAt !== null && world.matchEndsAt <= Date.now() });
   networkManager = new NetworkManager();
-  // Deploy admission gate — every join/reconnect (initial dial, stall
+  // Deploy admission gate - every join/reconnect (initial dial, stall
   // retries) first checks version.txt; a new build reloads BEFORE this
   // client is admitted, so stale tabs migrate at their natural join
   // moment instead of being rejected mid-protocol by a drifted wire.
@@ -839,7 +839,7 @@ async function init(): Promise<void> {
   // Captured BEFORE the quickplay block rewrites the path to /s/<room> -
   // the mirror below must still know this boot came through the pool.
   const publicPoolBoot = /^\/(quickplay|quickjoin)\b/.test(window.location.pathname);
-  // /quickjoin — ask the matchmaker for a seat before anything reads
+  // /quickjoin - ask the matchmaker for a seat before anything reads
   // urlParams; the picked room lands as the canonical /s/<room> path, so
   // the whole boot below just sees an ordinary online join. Failure
   // leaves the path alone → normal menu boot.
@@ -848,7 +848,7 @@ async function init(): Promise<void> {
       const { httpUrl } = await serverEndpoints;
       const q = new URLSearchParams(window.location.search);
       q.set('humans', '1');
-      // /quickplay/<mode> scopes the seat pick — the matchmaker filters
+      // /quickplay/<mode> scopes the seat pick - the matchmaker filters
       // lobby rows by mode and mints <mode>-N when none have room.
       const mode = window.location.pathname.split('/')[2] ?? '';
       if (mode) {q.set('mode', mode);}
@@ -857,15 +857,15 @@ async function init(): Promise<void> {
         const { room } = (await res.json()) as { room: string };
         if (room) {history.replaceState(null, '', `/s/${encodeURIComponent(room)}${window.location.search}`);}
       }
-    } catch { /* offline or matchmaker down — menu boot owns it */ }
+    } catch { /* offline or matchmaker down - menu boot owns it */ }
   }
   // Invite completeness: a room joined via the lobby's saved fps-server
-  // pick carries no ?server= in the URL — sharing /s/<room> would land
+  // pick carries no ?server= in the URL - sharing /s/<room> would land
   // friends on THEIR default host, where the room doesn't exist. Mirror
   // the saved host into the search so the address bar is always the full
   // invite. An explicit ?server= link already carries it and wins; an
   // empty setting is the default host (a public deploy's server.json
-  // resolves identically for the recipient — nothing to carry).
+  // resolves identically for the recipient - nothing to carry).
   // Public-pool paths exempt the saved host (savedHost() above) - mirroring
   // it back in would re-poison every later resolveServerEndpoints() call
   // (mapAssets/lobby/world re-resolve per use) with a ws:// host that
@@ -876,13 +876,13 @@ async function init(): Promise<void> {
     q.set('server', settings.get('fps-server').trim());
     history.replaceState(null, '', `${window.location.pathname}?${q}`);
   }
-  // Boot resume: a bare '/' load with a remembered room rejoins it — the
+  // Boot resume: a bare '/' load with a remembered room rejoins it - the
   // canonical /s/<room> path is written BEFORE anything reads urlParams,
   // so every downstream consumer (early wire, join payload, lobby) sees
   // the resumed identity. Explicit leaves clear fps-last-room, so its
   // presence means "was in a match and never left". A solo pick
-  // (fps-solo) suppresses the resume — the player chose offline.
-  // Bare '/' ONLY — a public-pool path (/quickplay|/quickjoin) whose
+  // (fps-solo) suppresses the resume - the player chose offline.
+  // Bare '/' ONLY - a public-pool path (/quickplay|/quickjoin) whose
   // matchmaker call didn't land must NOT resume a stale last-room
   // (that hijack is exactly 'quickplay puts me in arena-1').
   if (window.location.pathname === '/' && !urlParams.room && !urlParams.p2p && !urlParams.solo && settings.get('fps-last-room')) {
@@ -894,24 +894,24 @@ async function init(): Promise<void> {
     settings.set('fps-last-room', urlParams.room);
     settings.set('fps-solo', 0);
   }
-  // The veil probe and the socket flight are pure network — kick both
+  // The veil probe and the socket flight are pure network - kick both
   // now so they overlap ALL of init instead of stacking after it.
   // wireIn queues inbound until wireNetworkHandlers binds the deps
   // (markWireReady right after it returns). p2p/classic keep the late
-  // connectServer path — they need machinery that isn't built yet.
-  // Classic is a solo ruleset — its connect veto only holds offline.
+  // connectServer path - they need machinery that isn't built yet.
+  // Classic is a solo ruleset - its connect veto only holds offline.
   // A persisted fps-mode=classic must not survive an explicit /s/ join.
   const classicBlocksWire = urlParams.mode === 'classic' && !urlParams.room && !urlParams.p2p;
   const earlyWire = Boolean(urlParams.room) && !urlParams.p2p && !classicBlocksWire;
   // Cold QUIC first-dial costs ~2.5-3.2s and only a COMPLETED handshake
-  // unlocks resumption — a boot-time warm dial finishes after the real
+  // unlocks resumption - a boot-time warm dial finishes after the real
   // probe already started, so the cap raise (4.5s) is the actual fix.
   // A racing warm dial was measured to just contend.
   if (onlineBoot && !classicBlocksWire && settings.get('fps-session-token')) {
     serverEndpoints
       .then((ep): Promise<boolean> => pingServer(ep.httpUrl))
       .then((live): void => { if (live) {armSessionVeil('RECONNECTING', (): void => networkManager.sendReady()); profiler.markTime('veilProbed');} return; })
-      .catch((): void => { /* dead-host probe — the offline world owns first frames */ });
+      .catch((): void => { /* dead-host probe - the offline world owns first frames */ });
   }
   earlyConnP = earlyWire
     ? serverEndpoints.then(async (ep): Promise<void> => {
@@ -923,17 +923,17 @@ async function init(): Promise<void> {
         } catch (error) { logger.error('Failed to connect to server', error); }
       return; })
     : null;
-  // The veil covers EVERY online boot, not just token restores — a
+  // The veil covers EVERY online boot, not just token restores - a
   // fresh join renders frames from the unspawned player position during
   // connect→gameState→spawnAssign, and that gap reads as a flash under
   // the terrain. Drop path is identical (gameState + terrain + stable
   // frames; 8s escape on connect failure).
   if (onlineBoot && urlParams.mode !== 'classic') {
-    // The server holds the body off-spawn until 'ready' — the veil-drop
+    // The server holds the body off-spawn until 'ready' - the veil-drop
     // callback IS the release (stable frames or the 8s force timer).
     armSessionVeil(settings.get('fps-session-token') ? 'RECONNECTING' : 'JOINING', (): void => networkManager.sendReady());
   }
-  // Warm the class-body GLB into the HTTP cache — the loader's fetch at
+  // Warm the class-body GLB into the HTTP cache - the loader's fetch at
   // playerCtor then hits cache instead of a cold fetch starting ~1.5s
   // into init. Saved class pick wins, else the medium default. Remotes
   // may differ but share the manifest's small set.
@@ -944,8 +944,8 @@ async function init(): Promise<void> {
   }
   // Probe the saved last-room BEFORE the boot heightmap: when it pings
   // live, its terrain loads as the boot field and the default map is
-  // never resident — no default-field flash on F5.
-  // Solo-with-a-map: ?map= without a room is the SOLO tab's pick — fetch
+  // never resident - no default-field flash on F5.
+  // Solo-with-a-map: ?map= without a room is the SOLO tab's pick - fetch
   // the spec JSON off the same static /maps route the wire path uses and
   // resolve it client-side (resolveMapSpec is shared/, pure).
   soloSpec = !onlineBoot && urlParams.soloMap
@@ -955,10 +955,10 @@ async function init(): Promise<void> {
     ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch((): boolean => false)
     : false;
   // Fresh-join terrain prime: ?room=X learns its map from the public
-  // /rooms lobby list — the heightfield fetch then rides the dial
+  // /rooms lobby list - the heightfield fetch then rides the dial
   // instead of serializing inside the veil (the ~2.7s
   // gameState→terrainSwapped gap). fieldLoaded marks it resident so
-  // applyTerrain skips the refetch. Only heights are primed — tex/sky/
+  // applyTerrain skips the refetch. Only heights are primed - tex/sky/
   // interiors still apply at gameState as before.
   let roomPrimed = false;
   if (!soloPrimed && !bootSaved && onlineBoot && urlParams.room) {
@@ -986,28 +986,28 @@ async function init(): Promise<void> {
 
   terrain = new Terrain(scene, sun.position.clone().normalize());
   // A primed field (solo ?map= / saved-room probe) already carries its
-  // gain in hmScale — the fresh Terrain built its uniforms at 1x.
+  // gain in hmScale - the fresh Terrain built its uniforms at 1x.
   applyHeightfieldScale(terrain);
-  // Seed the primed map's palette BEFORE the tick-60 warmup compile —
+  // Seed the primed map's palette BEFORE the tick-60 warmup compile -
   // the boot program then IS the map's preset, so applyTerrain's
   // setPreset never recompiles (~1s serial stall inside the veil).
   const primedP = bootPrimedPreset();
   if (primedP !== null) {terrain.setPreset(primedP);}
   profiler.markTime('terrainCreated');
 
-  // Instanced enemy rendering — one draw call per species-part. Species
+  // Instanced enemy rendering - one draw call per species-part. Species
   // register their part tables here; slots alloc lazily on first spawn.
   initSwarms(scene, terrain, SWARM_SPECS);
 
   effects = new EffectsManager(scene);
-  initVfx(scene); // quarks batch renderer — one draw call per material
+  initVfx(scene); // quarks batch renderer - one draw call per material
   effects.setTerrain(terrain);
   groundMist = new GroundMist(scene, terrain); // valley fog banks
   profiler.markTime('effectsCreated');
 
   player = new Player(terrain, camera, scene);
   profiler.markTime('playerCtor');
-  // Solo spec anchor up front — the camera renders warmup frames from the
+  // Solo spec anchor up front - the camera renders warmup frames from the
   // real spawn point instead of the origin, so connectPhase's post-stable
   // placement is a same-spot reassert, not a visible jump.
   if (!onlineBoot && soloSpec) {
@@ -1021,7 +1021,7 @@ async function init(): Promise<void> {
     }
   }
   // The GLB is a ~0.4-0.6s fetch+parse the first-person camera never
-  // draws — kicking it at construction overlaps it with the rest of
+  // draws - kicking it at construction overlaps it with the rest of
   // init and the connect handshake instead of serializing it before
   // connectPhase. setVisible(false) still applies in the same
   // microtask the load resolves, so it can never flash rendered.
@@ -1033,13 +1033,13 @@ async function init(): Promise<void> {
   ({viewModel} = vmSetup);
   profiler.markTime('viewmodel');
 
-  // Ranked-solo: give the minted seed a bounded window to land — a run
+  // Ranked-solo: give the minted seed a bounded window to land - a run
   // that started before it arrived would verify nothing anyway.
   await Promise.race([challengeReady, new Promise((r): void => { setTimeout(r, 1500); })]);
   entities = makeEntities();
   profiler.markTime('entities');
 
-  // Hybrid wave director — scripted beats + a credit pool spent on an
+  // Hybrid wave director - scripted beats + a credit pool spent on an
   // unlocking roster. Lives beside entities, drives its spawn fns.
   waveDirector = createWaveDirector({ entities, lazyPlayer: (): Player => player, lazyTerrain: (): Terrain => terrain, logger });
 
@@ -1047,45 +1047,45 @@ async function init(): Promise<void> {
   wirePlayerStatusHooks();
   profiler.markTime('playerCreated');
 
-  // ?mode=nuggets|ctf|dm — offline-vs-bots modes. Bots live in
+  // ?mode=nuggets|ctf|dm - offline-vs-bots modes. Bots live in
   // world.remotePlayers so creatures hunt them and projectiles hit them
   // like real players.
   const mode = urlParams.mode ?? undefined;
-  // ?mode=classic — the original solo ruleset: bouncy balls only, lost balls
+  // ?mode=classic - the original solo ruleset: bouncy balls only, lost balls
   // teleport back instead of raging (enrage was layered on top later)
   const classicMode = mode === 'classic' && !urlParams.room && !urlParams.p2p;
   if (classicMode) {setBallEnrage(false);}
-  // Bot roster waits on the first terrain decision — a room's map spec
+  // Bot roster waits on the first terrain decision - a room's map spec
   // arrives a few seconds after connect, and bots seeded on the boot
   // heightmap first would spawn → re-seat in the same breath. Offline
   // (no gameState ever) falls back to the boot field after 8s.
   if (mode || soloSpec) {
     world.onTerrainApplied = (): void | undefined => teamBots?.reseatAll();
     Promise.race([firstTerrain, new Promise((r): NodeJS.Timeout => setTimeout(r, 8000))])
-      // Hold the roster kick-off until frames stabilize — spawning a full
+      // Hold the roster kick-off until frames stabilize - spawning a full
       // bot match mid-compile-hitch seeds bad sim from frame one.
-      // A ?room/?p2p link must NEVER spawn the local roster — isConnected()
+      // A ?room/?p2p link must NEVER spawn the local roster - isConnected()
       // is transiently false through every transport reprobe, and a stall
       // coinciding with this gate would seed offline bots into a live
       // online room that no gameState ever retires again.
       .then(async (): Promise<void> => { await gameLoop?.whenStable(); if (!teamBots && !networkManager.isConnected() && mode && !urlParams.room && !urlParams.p2p) {setupOfflineMode(mode, soloSpec?.spec);} return; }).catch((): void => undefined);
   }
 
-  // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts.
+  // ?yaw/?pitch/?dummy headless-screenshot hooks - see game/debugHooks.ts.
   // Dev hosts only: on a public deploy these are a scriptable aim/spawn
   // surface for anyone who reads the bundle.
   if (isDevHost()) {
     dummyUpdate = applyDebugHooks({ scene, player, terrain, remotePlayers, logger });
   }
 
-  // Initialize networking — NetworkManager owns the WebSocket transport
+  // Initialize networking - NetworkManager owns the WebSocket transport
   profiler.markTime('networkInit');
   wireNetworkLocal();
 
   await initDemo();
 
   hud = new HUD();
-  // Team-score strip only in team modes — dm painted a permanent
+  // Team-score strip only in team modes - dm painted a permanent
   // ALPHA 0 : 0 BRAVO badge over free-for-all play.
   if (mode === 'nuggets' || mode === 'ctf' || mode === 'flagrun' || mode === 'conquest') {hud.setTeamScore(0, 0);}
   healthBarSystem = new HealthBarSystem(camera);
@@ -1109,7 +1109,7 @@ async function init(): Promise<void> {
   });
   playerSheep = new PlayerSheep((): string => networkManager.getLocalPlayerId());
 
-  // The model load was kicked at playerCtor — it resolves in the
+  // The model load was kicked at playerCtor - it resolves in the
   // background through the connect handshake.
 
 
@@ -1137,17 +1137,17 @@ async function init(): Promise<void> {
     retireOfflineBots: (): void => { teamBots?.dispose(); teamBots = null; },
     hearLocalChat: (t, tm, v): void | undefined => teamBots?.hearLocal(t, tm, v),
   });
-  // Deps bound — inbound that queued during the early socket flight
+  // Deps bound - inbound that queued during the early socket flight
   // flushes through the normal dispatch now, in wire order.
   networkManager.markWireReady();
 
-  // Frame loop — everything mutable is passed via deps getters. The
+  // Frame loop - everything mutable is passed via deps getters. The
   // loop starts BEFORE the handshake completes: first frames + shader
   // compile overlap the connect/worldstate flight instead of stacking
   // after it (the terrain-swap machinery already runs mid-game).
   gameLoop = makeGameLoop();
   profiler.markTime('initComplete');
-  // Offline boots hold the player out of play during warmup — input
+  // Offline boots hold the player out of play during warmup - input
   // frozen from first frame until whenStable() releases him in
   // connectPhase (online paths gate on the session veil instead).
   if (classicMode || (!urlParams.room && !urlParams.p2p)) {player.freezeInput(); setBootVeil(true);}
@@ -1199,25 +1199,25 @@ function makeDemoLifecycle(): ReturnType<typeof createDemoLifecycle> {
 
 
 
-// Offline death path — the server's kill+respawn round-trip replicated
+// Offline death path - the server's kill+respawn round-trip replicated
 // locally. Shared by bot frags and creature/environment damage.
-// True once the 3s respawn deadline has fired — same "pending timer is
+// True once the 3s respawn deadline has fired - same "pending timer is
 // NOT skippable" gate the server applies in respawnNow.
 let respawnLapsed = false;
 
-/** Offline revive — the mirror of the server's respawnPlayer path. */
+/** Offline revive - the mirror of the server's respawnPlayer path. */
 function reviveLocal(): void {
   // Predicted-death un-brick can revive us before the killLocal timer
-  // fires — a teleport on a living player is worse than a missed revive.
+  // fires - a teleport on a living player is worse than a missed revive.
   if (!player.isDead) {return;}
   player.resetLifeState();
-  // Conquest respawns on owned territory — the node-linked rule the
+  // Conquest respawns on owned territory - the node-linked rule the
   // server's teamSpawns mint applies here too (cores always count).
   const conqSpot = (world.localTeam === 'alpha' || world.localTeam === 'bravo')
     ? soloConquest?.spawnSpot(world.localTeam, _conqSpawn) : undefined;
   const spot = teamBots?.flagrun?.spawnPoint() ?? conqSpot;
   // Spec maps respawn at authored anchors (team spawn > generic spawn >
-  // own base) — same priority as the solo boot spawn.
+  // own base) - same priority as the solo boot spawn.
   const specAnchor = soloSpec?.spec.teamSpawns?.alpha?.[0] ?? soloSpec?.spec.spawns?.[0] ?? soloSpec?.spec.bases?.alpha;
   if (spot) {
     player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
@@ -1239,7 +1239,7 @@ function reviveLocal(): void {
 
 function killLocal(source: string): void {
   if (player.isDead) {return;}
-  // Any death is a flag event — carried flags drop; in rabbit the
+  // Any death is a flag event - carried flags drop; in rabbit the
   // first corpse is what spawns the flag at all. Idempotent for the
   // bot-frag path, which already ran localDied() before the banner.
   teamBots?.localDied();
@@ -1252,7 +1252,7 @@ function killLocal(source: string): void {
   fragMessages.show(`YOU DIED\n${source}`);
   setTimeout((): void => {
     respawnLapsed = true;
-    // L's die+spectate parks the corpse offline too — the deadline lapses
+    // L's die+spectate parks the corpse offline too - the deadline lapses
     // and the player stays dead until a dead-state respawn press revives.
     if (!player.respawnHeld) {reviveLocal();}
   }, 3000);
@@ -1274,9 +1274,9 @@ const { requestLock } = wireOverlayInput({
 });
 
 // Stale-code badge (noreload dev mode): the vite plugin swallows reloads
-// and pushes 'stale:changed' events — we count them so you know how much
+// and pushes 'stale:changed' events - we count them so you know how much
 // new code is waiting behind Ctrl+R.
-// The literal `import.meta.hot` token is required — vite's HMR inject
+// The literal `import.meta.hot` token is required - vite's HMR inject
 // (createHotContext) only fires when the source spells it out; a
 // destructured `const {hot} = import.meta` leaves it undefined and the
 // listener silently never registers.
@@ -1296,11 +1296,11 @@ const paintStaleBadge = (): void => {
   staleBadge.style.display = stale ? '' : 'none'; // a 0 badge is noise
 };
 // Preview/prod badge: the vite 'stale-probe' plugin serves /dev/stale
-// (files newer than the dist build stamp) — localhost-only so the same
+// (files newer than the dist build stamp) - localhost-only so the same
 // bundle on a tunneled https URL stays clean. Count is absolute vs
-// build, not cumulative — feed the delta into the accumulator.
+// build, not cumulative - feed the delta into the accumulator.
 if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]')) {
-  // Alt+R = rebuild + reload — the loop the preview badge makes visible.
+  // Alt+R = rebuild + reload - the loop the preview badge makes visible.
   let rebuildDiv: HTMLDivElement | null = null;
   const rebuild = (): void => {
     if (!rebuildDiv) {
@@ -1340,7 +1340,7 @@ if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostn
     fetch('/dev/stale')
       .then((r) => r.ok ? r.json() : null)
       .then(applyStale)
-      .catch((): void => { /* endpoint absent on real prod — stay silent */ });
+      .catch((): void => { /* endpoint absent on real prod - stay silent */ });
   };
   poll();
   // Push when the preview exposes it (fs.watch → SSE); fall back to a
@@ -1362,14 +1362,14 @@ if (hot) {
   });
 
   // dev-watch restart countdown: the watcher exposes the armed restart on
-  // the seat-handoff port (server http port + 1) — its save debounce +
+  // the seat-handoff port (server http port + 1) - its save debounce +
   // drain is otherwise invisible until the socket dies mid-fight.
   {
     let rbadge: HTMLDivElement | null = null;
     let restartAt = 0;
     const paint = (): void => {
       const left = restartAt - Date.now();
-      if (left <= -15_000) {restartAt = 0;} // countdown passed and we're still alive — drop it
+      if (left <= -15_000) {restartAt = 0;} // countdown passed and we're still alive - drop it
       if (!restartAt) {if (rbadge) {rbadge.style.display = 'none';} return;}
       if (!rbadge) {
         rbadge = document.createElement('div');
@@ -1388,7 +1388,7 @@ if (hot) {
         const r = await fetch(url, { cache: 'no-store' });
         restartAt = r.ok ? Number((await r.json() as { restartAt?: number }).restartAt ?? 0) : 0;
         return true;
-      } catch { restartAt = 0; return false; } // bare `bun src/server.ts` — no watcher to announce
+      } catch { restartAt = 0; return false; } // bare `bun src/server.ts` - no watcher to announce
     };
     const armRestartPoll = async (): Promise<void> => {
       const ep = await serverEndpoints;
@@ -1397,7 +1397,7 @@ if (hot) {
       u.port = String(Number(u.port) + 1);
       const url = `${u.origin}/restart`;
       let fails = 0;
-      // pending window is ~3s — coarse polling would miss it. Spawned test
+      // pending window is ~3s - coarse polling would miss it. Spawned test
       // servers and prod have no dev-watch: refused forever, so a few straight
       // failures stop the poll instead of spamming console for the session.
       const t = setInterval(async (): Promise<void> => {
@@ -1431,11 +1431,11 @@ init().then(async (): Promise<void> => {
     demoManager?.toggleVideoRecord();
   });
 
-  // Desync debugging (snapshot/hash comparison + window debug functions) —
+  // Desync debugging (snapshot/hash comparison + window debug functions) -
   // dev-only or ?debug, dynamically imported so it stays out of the prod
-  // bundle (and out of main.ts — the file is size-pinned). Runs at boot
+  // bundle (and out of main.ts - the file is size-pinned). Runs at boot
   // when the flag is set, and again if the menu DEBUG toggle flips on
-  // mid-session (fps:set event) — no reload needed.
+  // mid-session (fps:set event) - no reload needed.
   // devtoolsOn is the STATIC half of the gate: a runtime isDevHost()
   // alone still emits the chunk into dist/. Prod builds drop devTools
   // entirely (window.__test lives there - e2e always runs npm run dev);
@@ -1444,17 +1444,17 @@ init().then(async (): Promise<void> => {
   const wireDebugTools = (): Promise<void> => import('./dev/devTools.js').then(m =>
     m.wireDebugTools({ networkManager, player, world, entities, terrain, viewModel, demoManager,
       rendererSetup, demoLifecycle, scene, remotes, teamBots, logger, hud }));
-  // Debug wiring (window.__test, __playRec, stateDebug) — dev hosts only.
+  // Debug wiring (window.__test, __playRec, stateDebug) - dev hosts only.
   if (devtoolsOn && isDevHost() && (import.meta.env.DEV || urlParams.debug)) {await wireDebugTools();}
-  // In-game log mirror — subscribes to Logger once so every later line
+  // In-game log mirror - subscribes to Logger once so every later line
   // (and the Alt+Q/backquote/DEBUG-toggle reveals) has a live feed.
   initLogPanel();
-  // Same feed drives the conn-banner complaint slot — dev hosts only:
+  // Same feed drives the conn-banner complaint slot - dev hosts only:
   // parity/ghost-shell jargon means nothing on the public deploy, where
   // the banner should only ever read CONNECTED / CONNECTION LOST.
   if (isDevHost()) {Logger.setComplaintListener((line): void => { hud.complaint(line); });}
   installOverlapAudit();
-  // Revealing the log panel reshuffles the corner stack — audit the
+  // Revealing the log panel reshuffles the corner stack - audit the
   // layout once the reveal frame lands.
   window.addEventListener('fps:altq', (): number =>
     requestAnimationFrame((): number => requestAnimationFrame(reportHudOverlap)));

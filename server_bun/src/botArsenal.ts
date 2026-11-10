@@ -371,6 +371,7 @@ s[kind] += 1; this.propels.set(id, s);
       const recoil0 = getWeaponStats(wt0).recoilImpulse ?? 0;
       if (recoil0 > 0) {this.room.moveSim.applyImpulse(p.id, { x: -cdx / cdist * recoil0, y: -cdy / cdist * recoil0, z: -cdz / cdist * recoil0 }, 3);}
       weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
+      this.room.events.emit({ type: 'botShot', id: p.id, weapon: wt0 });
       if (wt0 === WeaponType.Melee) {
         const stats = getWeaponStats(WeaponType.Melee);
         const bug = this.room.creatureSim.crawlerAt(Number(targetId.slice(2)));
@@ -506,6 +507,7 @@ s[kind] += 1; this.propels.set(id, s);
       this.room.moveSim.applyImpulse(p.id, { x: -(aim.x - p.position.x) / dl * recoil, y: -(aim.y - (p.position.y + 1.4)) / dl * recoil, z: -(aim.z - p.position.z) / dl * recoil }, 3);
     }
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
+    this.room.events.emit({ type: 'botShot', id: p.id, weapon: wt });
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing - combat funnels it identically,
       // and the broadcast swing lets observers see the melee. Speed is 0
@@ -617,6 +619,7 @@ s[kind] += 1; this.propels.set(id, s);
     const wt = this.pickWeapon(lo, Math.hypot(dx, dz), dist, p.id);
     if (!this.rateOk(p.id, wt)) {return;}
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
+    this.room.events.emit({ type: 'botShot', id: p.id, weapon: wt });
     const dir = { x: dx / dist + j(), y: dy / dist + j(), z: dz / dist + j() };
     const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
     dir.x /= l; dir.y /= l; dir.z /= l;

@@ -1,12 +1,12 @@
 /**
 
- * PlayerInput — owns the DOM listeners and raw input state Player used to
+ * PlayerInput - owns the DOM listeners and raw input state Player used to
 
  * carry inline. Player drives game semantics through the handlers object;
 
  * this class just translates key/mouse events into flags + callbacks.
 
- * The ESC-menu fields (invert-Y, sensitivity, volume) live here too —
+ * The ESC-menu fields (invert-Y, sensitivity, volume) live here too -
 
  * they're input plumbing, not gameplay.
 
@@ -30,21 +30,21 @@ const LOADOUT_SLOTS = 4;
 
 
 
-/** Actions a press can trigger — Player supplies the implementations. */
+/** Actions a press can trigger - Player supplies the implementations. */
 
 export interface PlayerInputHandlers {
 
   isSpectating(): boolean;
 
-  /** Dead body — clicks mean spectate/respawn, not weapons or jets. */
+  /** Dead body - clicks mean spectate/respawn, not weapons or jets. */
 
   isDead(): boolean;
 
-  /** Corpse-cam is orbiting a teammate — mouse steers the boom, not the aim. */
+  /** Corpse-cam is orbiting a teammate - mouse steers the boom, not the aim. */
 
   isDeadSpectating(): boolean;
 
-  /** Click while dead: enter teammate orbit / cycle targets — dir=1 next,
+  /** Click while dead: enter teammate orbit / cycle targets - dir=1 next,
 
    *  dir=-1 previous. Cycling off an end lands on ghost free-fly. */
 
@@ -60,17 +60,17 @@ export interface PlayerInputHandlers {
 
   skillRelease(): void;
 
-  /** The loadout-chosen sidearm's slot-space weapon id — resolved at
+  /** The loadout-chosen sidearm's slot-space weapon id - resolved at
 
    *  press time so a mid-match loadout change takes effect immediately. */
 
   sidearmWid(): number;
 
-  /** Hold-out sidearm bind — wid is the loadout-space weapon id. */
+  /** Hold-out sidearm bind - wid is the loadout-space weapon id. */
 
   secondaryDown(wid: number): void;
 
-  /** Releases whatever sidearm is currently held — no arg, the held wid is
+  /** Releases whatever sidearm is currently held - no arg, the held wid is
 
    *  the player's state (loadout may have changed while the key was down). */
 
@@ -82,7 +82,7 @@ export interface PlayerInputHandlers {
 
   deploy(): void;
 
-  /** Deliberate respawn — a server claim, not a local state flip. */
+  /** Deliberate respawn - a server claim, not a local state flip. */
 
   respawn(): void;
 
@@ -92,7 +92,7 @@ export interface PlayerInputHandlers {
 
   dieSpectate(): void;
 
-  /** Hurl the carried flag along the aim — a claim the server resolves. */
+  /** Hurl the carried flag along the aim - a claim the server resolves. */
 
   throwFlag(): void;
 
@@ -100,7 +100,7 @@ export interface PlayerInputHandlers {
 
   look(dx: number, dy: number): void;
 
-  /** Mouse deltas while the orbit bind is held — swings the camera, not the aim. */
+  /** Mouse deltas while the orbit bind is held - swings the camera, not the aim. */
 
   orbitLook(dx: number, dy: number): void;
 
@@ -110,7 +110,7 @@ export interface PlayerInputHandlers {
 
 const aspect = (): number => window.innerWidth / Math.max(1, window.innerHeight);
 
-/* Numeric menu fields — inputmode only hints the mobile keyboard; strip
+/* Numeric menu fields - inputmode only hints the mobile keyboard; strip
    non-numeric chars on input so letters can't sit in the box (parsing
    already ignores them, but a field full of junk reads broken). */
 const digitsOnly = (el: HTMLInputElement, decimal = true): void => {
@@ -129,7 +129,7 @@ export class PlayerInput {
 
   firePending = false;
 
-  // Railgun kill-refund zeroes the cooldown — but the shot is still held,
+  // Railgun kill-refund zeroes the cooldown - but the shot is still held,
 
   // so without this the same click re-fires the gun on kill. Require a
 
@@ -139,7 +139,7 @@ export class PlayerInput {
 
   /** Middle mouse toggles free-look orbit: mouse-look swings the camera
 
-   *  around the body instead of steering aim — model inspection cam. */
+   *  around the body instead of steering aim - model inspection cam. */
 
   midHeld = false;
 
@@ -162,10 +162,10 @@ export class PlayerInput {
   private lockSettleUntil = 0; // phantom-delta blackout right after pointer lock
 
   private phantomDrops = 0;   // dropped isolated-spike deltas since last report
-  private lastMoveX = 0;      // previous event delta — phantom spikes are
+  private lastMoveX = 0;      // previous event delta - phantom spikes are
   private lastMoveY = 0;      // isolated, real flicks have ramp-up neighbors
 
-  private phantomLogAt = 0;   // report throttle — a sick mouse spams otherwise
+  private phantomLogAt = 0;   // report throttle - a sick mouse spams otherwise
 
 
 
@@ -216,7 +216,7 @@ export class PlayerInput {
 
     // Chords with modifiers belong to the browser/dev shortcuts, not the
 
-    // game — Alt+Q copies logs but matchCode only saw 'KeyQ' and toggled
+    // game - Alt+Q copies logs but matchCode only saw 'KeyQ' and toggled
 
     // whatever skill was equipped (cloak → transparent gun).
 
@@ -224,13 +224,13 @@ export class PlayerInput {
 
     if (matchCode('spectate', e.code) && !e.repeat) {h.toggleSpectator();}
 
-    // Die+spectate works from the ghost cam too — suicide flips isDead,
+    // Die+spectate works from the ghost cam too - suicide flips isDead,
 
     // which owns the cam and drops the spectating flag on its own.
 
     if (matchCode('dieSpectate', e.code) && !e.repeat) {h.dieSpectate();}
 
-    // Dead: respawn and the corpse cam only — weapons/skills/jets while
+    // Dead: respawn and the corpse cam only - weapons/skills/jets while
 
     // dead do nothing but queue junk for the first frame back alive
 
@@ -248,7 +248,7 @@ export class PlayerInput {
 
     // Spectating: only the spectate toggle and raw movement keys (tracked
 
-    // above for the fly cam) respond — no weapons, skills, camera flips
+    // above for the fly cam) respond - no weapons, skills, camera flips
 
     if (matchCode('jump', e.code)) {this.jumpHeld = true;}
 
@@ -300,7 +300,7 @@ export class PlayerInput {
 
 
 
-  // Corpse clicks are spectate/respawn — queuing fire/jet here would
+  // Corpse clicks are spectate/respawn - queuing fire/jet here would
   // fire a shot or burn fuel the first frame back alive.
   private deadMouseDown(e: MouseEvent): void {
     const { h } = this;
@@ -420,7 +420,7 @@ export class PlayerInput {
 
     // Chrome's pointer-lock quirk: mousemoves queued before lock fire after
 
-    // it, each carrying a delta from the old cursor position — up to a full
+    // it, each carrying a delta from the old cursor position - up to a full
 
     // screen of phantom movement per event (~50-120° spinout warns). It isn't
 
@@ -436,7 +436,7 @@ export class PlayerInput {
 
       // Lock dropped (ESC menu, alt-tab, OS dialog): any held key/button's
 
-      // release may never reach the page — a missed mouseup leaves jets
+      // release may never reach the page - a missed mouseup leaves jets
 
       // burning till the tank empties, the classic phantom launch.
 
@@ -455,11 +455,11 @@ export class PlayerInput {
       if (performance.now() < this.lockSettleUntil) {return;}
 
       // Phantom deltas arrive as one huge ISOLATED event bracketed by
-      // stillness; a real flick always ramps — the previous event is
+      // stillness; a real flick always ramps - the previous event is
       // already large. unadjustedMovement kills most of the bug upstream;
       // this catches what leaks through without ever eating a legit
       // swipe at any DPI (magnitude thresholds can't tell 4m/s@1600dpi
-      // from the bug — neighbors can).
+      // from the bug - neighbors can).
       const mx = e.movementX;
 
       const my = e.movementY;
@@ -476,7 +476,7 @@ export class PlayerInput {
           this.phantomLogAt = now + 2000;
 
           // WARN so dev hosts flash it in the conn-banner (complaint feed)
-          // — visible proof the clamp fired, for swipe testing.
+          // - visible proof the clamp fired, for swipe testing.
           logger.warn(`phantom delta dropped x${this.phantomDrops} (${mx},${my})`);
 
           this.phantomDrops = 0;
@@ -498,7 +498,7 @@ export class PlayerInput {
 
   private bindMenuControls(): void {
 
-    // Display name — cosmetic tag the join handshake ships; lives in the
+    // Display name - cosmetic tag the join handshake ships; lives in the
 
     // menu-side profile block, not the lobby (it's an identity, not a
 
@@ -520,7 +520,7 @@ export class PlayerInput {
 
 
 
-    // ESC-menu invert-Y toggle — .tog markup carries the state box;
+    // ESC-menu invert-Y toggle - .tog markup carries the state box;
 
     // the label writer flips .on (the box IS the state readout).
 
@@ -556,7 +556,7 @@ export class PlayerInput {
 
       sensInput.value = (this.sensitivity * 10).toString();
 
-      // Two synced fields: the raw sens number AND cm/360 — the universal
+      // Two synced fields: the raw sens number AND cm/360 - the universal
       // FPS unit (players know "13cm", not "0.8"). Edit either; they stay
       // locked. cm/360 @800DPI: 360 / (sens*0.002rad*deg*314.96c/cm).
       const sensCm = document.querySelector('#sens-cm') as HTMLInputElement | null;
@@ -609,7 +609,7 @@ export class PlayerInput {
 
 
 
-    // FOV fields — vertical is the stored/canonical value (camera.fov);
+    // FOV fields - vertical is the stored/canonical value (camera.fov);
 
     // horizontal is derived via aspect and edits back-solve to vertical.
 
@@ -642,7 +642,7 @@ export class PlayerInput {
 
       }
 
-      const FOV_MIN = 50, FOV_MAX = 160; // 160v ≈ 172°h @16:9 — the fisheye wall
+      const FOV_MIN = 50, FOV_MAX = 160; // 160v ≈ 172°h @16:9 - the fisheye wall
 
       fovInput.addEventListener('input', (): void => {
 
@@ -668,7 +668,7 @@ export class PlayerInput {
 
       });
 
-      // Repaint the clamped value on blur — the box shouldn't show a
+      // Repaint the clamped value on blur - the box shouldn't show a
       // number the setting silently refused.
       for (const el of [fovInput, fovHInput]) {
         el.addEventListener('blur', (): void => {
@@ -723,12 +723,12 @@ export class PlayerInput {
 
     // Dev-tools row: hidden markup unless this is an operator's host
 
-    // (vite dev / localhost / LAN). A public deploy never reveals it —
+    // (vite dev / localhost / LAN). A public deploy never reveals it -
 
     // the buttons' own wiring still runs harmlessly if absent.
 
     // #dev-tools stays hidden for now (spawn-mode + DEBUG live behind
-    // other entry points) — restore the isDevHost reveal here to resurface.
+    // other entry points) - restore the isDevHost reveal here to resurface.
 
 
 
@@ -782,7 +782,7 @@ export class PlayerInput {
 
 
 
-    // Read live per message — no reload needed.
+    // Read live per message - no reload needed.
 
     const ttsBtn = document.querySelector('#tts-chat-toggle') as HTMLButtonElement | null;
 
@@ -806,7 +806,7 @@ export class PlayerInput {
 
     // VGS chord letters: layout (typed letters, matches the printed chord)
 
-    // vs physical QWERTY positions (classic Tribes muscle memory). Live —
+    // vs physical QWERTY positions (classic Tribes muscle memory). Live -
 
     // vgs.ts reads the setting per keypress.
 

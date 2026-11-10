@@ -82,6 +82,9 @@ describe('scenario: rabbit mode', () => {
   it('open season while no rabbit exists — hunters can kill each other', () => {
     const { room, players } = mkRabbit();
     const [h1, h2] = players as [PlayerState, PlayerState];
+    // Park everyone else — a bot left mid-lane can eat the bolt (any
+    // skill-roll rng draw shifts the whole room stream; don't depend on it).
+    scatter(room, [h1, h2]);
     freeze(room, h1.id, { x: 40, y: 32, z: 0 });
     expect(shoot(room, h1, h2, { x: 60, y: 32, z: 0 })).toBeGreaterThan(0);
   });

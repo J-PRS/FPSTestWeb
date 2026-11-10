@@ -569,6 +569,7 @@ bn += 1;
       : null;
     ctx.flagPos = flagTeam ? this.ctf!.flagPos(flagTeam, false) ?? null : null;
     ctx.moveSkill = bot.skill?.movement;
+    ctx.thrift = bot.skill?.thrift;
     ctx.skill = bot.skillId;
     ctx.beltItem = bot.loadout?.belt;
     ctx.pickupVal = ctx.nugget?.val;

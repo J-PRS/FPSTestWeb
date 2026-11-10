@@ -195,6 +195,8 @@ interface BotThinkCtx {
   flagPos?: { x: number; y: number; z: number } | null;
   /** skill.movement - times the hop-descent jet. */
   moveSkill?: number;
+  /** skill.thrift - vetoes wasteful grounded burns (shared/botMoves). */
+  thrift?: number;
   /** Chased pickup's denomination (headhunt 1/3/9/27). */
   pickupVal?: number;
   /** Score deficit x endgame pressure, ~0..2 - team modes only. */
@@ -353,7 +355,7 @@ export class GameBot extends RemotePlayer {
    *  right now: steered dest, hunt target, equipped skill, pending
    *  intents. Compact enough to paste in a bug report. */
   get aiDump(): string {
-    const hunt = this.brain.h.hunt;
+    const {hunt} = this.brain.h;
     const intents = [this.wantSkill, this.wantBelt ? 'belt' : '', this.wantDeploy ? 'deploy' : '', this.wantHook ? 'hook' : ''].filter(Boolean).join(',') || '-';
     return `ai[dest=${this.lastDest.x.toFixed(0)},${this.lastDest.z.toFixed(0)} hunt=${hunt ? hunt.id.slice(0, 8) : '-'} skill=${this.skillId ?? '-'} intents=${intents}]`;
   }

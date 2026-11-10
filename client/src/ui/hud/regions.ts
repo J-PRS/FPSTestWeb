@@ -1,4 +1,4 @@
-// Body-level HUD regions — lazy so pieces created before the HUD DOM
+// Body-level HUD regions - lazy so pieces created before the HUD DOM
 // exists (chat, VGS, frag messages, debug panels) can still dock. The
 // in-#hud regions are declared in dom.ts markup; these live on <body>
 // because their tenants outlive the gameplay HUD element. The region

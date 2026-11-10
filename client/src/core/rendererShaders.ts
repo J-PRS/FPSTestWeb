@@ -1,4 +1,4 @@
-// GLSL blobs for the post/pixel pipeline — pure data kept out of
+// GLSL blobs for the post/pixel pipeline - pure data kept out of
 // renderer.ts so the setup file stays navigable. These are
 // postprocessing `Effect` fragment bodies (mainImage signature).
 import { TONE_MAPPING_EXPOSURE } from './config.js';
@@ -6,18 +6,18 @@ import { TONE_MAPPING_EXPOSURE } from './config.js';
 export const UPSCALE_GLSL = /* glsl */ `
     uniform vec2 lowTexel; // 1/low-res-buffer size
     uniform float mode;  // 0 = nearest (hard pixels), 1 = edge-aware
-    // Luma-weighted distance — unweighted RGB treats a blue↔red edge the
+    // Luma-weighted distance - unweighted RGB treats a blue↔red edge the
     // same as an equal-magnitude green shift, but the eye disagrees.
     float cdist(vec3 a, vec3 b) {
       vec3 d = a - b;
       return dot(d * d, vec3(0.299, 0.587, 0.114));
     }
-    // Sharpen t around its midpoint by k — 1.0 = bilinear, grows toward
+    // Sharpen t around its midpoint by k - 1.0 = bilinear, grows toward
     // a step as edge contrast rises. Smooth nearest-morph, no floor snap.
     float sharpen(float t, float k) {
       return smoothstep(0.0, 1.0, clamp((t - 0.5) * k + 0.5, 0.0, 1.0));
     }
-    // Branchless Bayer matrices — classic bit-free formulation
+    // Branchless Bayer matrices - classic bit-free formulation
     float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
     float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
     float bayer8(vec2 a) { return bayer4(0.5 * a) * 0.25 + bayer2(a); }
@@ -35,10 +35,10 @@ export const UPSCALE_GLSL = /* glsl */ `
       }
 
       if (mode > 1.5) {
-        // Ordered dither stand-in for Floyd–Steinberg: quantize each channel
+        // Ordered dither stand-in for Floyd-Steinberg: quantize each channel
         // to LEVELS through an 8x8 Bayer threshold keyed on the LOW-RES texel
         // index, so every chunky pixel carries one dithered shade. True error
-        // diffusion needs compute shaders (WebGPU) — this is the WebGL answer.
+        // diffusion needs compute shaders (WebGPU) - this is the WebGL answer.
         const float LEVELS = 8.0;
         float b = bayer8(i);
         vec3 q = floor(c00 * (LEVELS - 1.0) + b) / (LEVELS - 1.0);
@@ -56,13 +56,13 @@ export const UPSCALE_GLSL = /* glsl */ `
                      max(cdist(c10, c11), cdist(c01, c11)));
 
       if (e < 0.002) {
-        // flat — hard pixel (nearest)
+        // flat - hard pixel (nearest)
         vec3 c = f.x < 0.5 ? (f.y < 0.5 ? c00 : c01) : (f.y < 0.5 ? c10 : c11);
         outputColor = vec4(c, 1.0);
       } else {
         // Diagonal or cardinal edge. Bilinear is the safe answer when the
         // diagonal coherence is weak; commit to the diagonal pair only as
-        // confidence grows — kills the 2-color stair on shallow diagonals.
+        // confidence grows - kills the 2-color stair on shallow diagonals.
         vec3 bilin = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
         float conf = clamp(abs(d0 - d1) * 25.0, 0.0, 1.0);
         vec3 diag;
@@ -74,7 +74,7 @@ export const UPSCALE_GLSL = /* glsl */ `
           diag = mix(c10, c01, t);
         }
         // Cardinal sharpening: pull bilinear toward nearest along whichever
-        // axis has less contrast — the stronger the edge, the harder the cut.
+        // axis has less contrast - the stronger the edge, the harder the cut.
         float ex = cdist(c00, c10) + cdist(c01, c11); // vertical edge strength
         float ey = cdist(c00, c01) + cdist(c10, c11); // horizontal edge strength
         float fx = sharpen(f.x, 1.0 + clamp((ex - ey) * 6.0, 0.0, 5.0));
@@ -85,11 +85,11 @@ export const UPSCALE_GLSL = /* glsl */ `
     }
   `;
 
-// Hyllian's xBR-lv2 (libretro port) — real edge-rule upscaler: a 5x5
+// Hyllian's xBR-lv2 (libretro port) - real edge-rule upscaler: a 5x5
 // neighborhood of luma samples feeds thresholded eq/neq rules that find
 // 30°/45°/60° edges and corners, then blends along the detected line with
 // sub-texel weights. Output is the vector-art smoothness the lite shader
-// approximates. One fullscreen pass, 21 taps — far cheaper than the
+// approximates. One fullscreen pass, 21 taps - far cheaper than the
 // scene raster a 4x res drop saves.
 export const XBR_GLSL = /* glsl */ `
     uniform vec2 lowTexel;   // 1/low-res-buffer size
@@ -112,7 +112,7 @@ export const XBR_GLSL = /* glsl */ `
       float S = xbrScale;
       vec4 delta = vec4(1.0/S), delta_l = vec4(0.5/S, 1.0/S, 0.5/S, 1.0/S);
       vec4 delta_u = delta_l.yxwz;
-      // inputBuffer is LINEAR-filtered — upstream samples a nearest source,
+      // inputBuffer is LINEAR-filtered - upstream samples a nearest source,
       // so every tap snaps to the texel center under the output fragment or
       // the eq/neq edge rules compare bilinear blur instead of source art.
       vec2 base = (floor(uv / inv) + 0.5) * inv;
@@ -137,7 +137,7 @@ export const XBR_GLSL = /* glsl */ `
       vec4 C4v = texture2D(inputBuffer, base + vec2(2.0*dx, -dy));
       vec4 F4v = texture2D(inputBuffer, base + vec2(2.0*dx, 0.0));
       vec4 I4v = texture2D(inputBuffer, base + vec2(2.0*dx, dy));
-      // Luma on a 0-255 scale — the threshold constants assume byte range.
+      // Luma on a 0-255 scale - the threshold constants assume byte range.
       vec3 A1=A1v.rgb*255.0,B1=B1v.rgb*255.0,C1=C1v.rgb*255.0;
       vec3 A=Av.rgb*255.0,B=Bv.rgb*255.0,C=Cv.rgb*255.0;
       vec3 D=Dv.rgb*255.0,E=Ev.rgb*255.0,F=Fv.rgb*255.0;
@@ -169,7 +169,7 @@ export const XBR_GLSL = /* glsl */ `
         eq(e,g) + eq(e,c));
       vec4 irlv2l = diff(e,g) * diff(d,g);
       vec4 irlv2u = diff(e,c) * diff(b,c);
-      // Upstream: only fx45i carries the -Ci (0.25) bias — fx45 without it
+      // Upstream: only fx45i carries the -Ci (0.25) bias - fx45 without it
       // was the dead rule that left the output ≈nearest.
       vec4 fx45i = clamp((fx + delta - vec4(1.5,0.5,-0.5,0.5) - vec4(0.25)) / (2.0*delta), 0.0, 1.0);
       vec4 fx45 = clamp((fx + delta - vec4(1.5,0.5,-0.5,0.5)) / (2.0*delta), 0.0, 1.0);
@@ -195,7 +195,7 @@ export const XBR_GLSL = /* glsl */ `
     }
   `;
 
-// Tone-map pass — renders to a composer target DON'T apply tone mapping
+// Tone-map pass - renders to a composer target DON'T apply tone mapping
 // (three only applies ACES when rendering straight to canvas), so without
 // this the whole composer path outputs a brighter, desaturated grade:
 // "bloom breaks the colors". Replicates three's exact ACESFilmic curve
@@ -224,10 +224,10 @@ export const ACES_GLSL = /* glsl */ `
     }
   `;
 
-// Vibrance (CeeJay.dk / SweetFX formulation) — Photoshop-style: the boost
+// Vibrance (CeeJay.dk / SweetFX formulation) - Photoshop-style: the boost
 // scales by (1 - saturation), so muted colors get pushed and already-hot
 // pixels (muzzle flashes, sky) barely move. Uniform saturation can't do
-// that — it neon-signs everything equally.
+// that - it neon-signs everything equally.
 export const VIBRANCE_GLSL = /* glsl */ `
     void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
       vec3 c = inputColor.rgb;
@@ -240,7 +240,7 @@ export const VIBRANCE_GLSL = /* glsl */ `
     }
   `;
 
-// Permanent subtle vignette — ~0 cost inside the fused grade pass.
+// Permanent subtle vignette - ~0 cost inside the fused grade pass.
 // Edge-dim + light desat reads as "lens" and keeps the eye on the
 // reticle; deliberately weaker than #dmg-vignette's damage feedback
 // band so it never reads as a hit tell.
@@ -256,14 +256,14 @@ export const VIGNETTE_GLSL = /* glsl */ `
     }
   `;
 
-// CAS sharpen — REMOVED after two regressions (dark frame from a bad
+// CAS sharpen - REMOVED after two regressions (dark frame from a bad
 // texel fetch, then global lift). The idea is sound but unverifiable
 // blind; revisit against a reference implementation with a live A/B.
-// HDR sanitize — runs between RenderPass and the bloom/dirt chain.
+// HDR sanitize - runs between RenderPass and the bloom/dirt chain.
 // The composer buffers are HalfFloat: an additive stack (EMIT_GAIN ×
 // overlapping trails/explosions, the sun disc) can push a texel past
 // 65504 → Inf. Bloom's mip chain then lerps Inf-Inf → NaN, and the
-// upsample smears one bad texel across the whole frame — the "glow on =
+// upsample smears one bad texel across the whole frame - the "glow on =
 // screen flickers black" bug. Zero non-finite channels and clamp to a
 // sane HDR ceiling; 64 is far past the 1.3 bloom threshold, so hot
 // emitters still halo at full strength.
@@ -272,7 +272,7 @@ export const SANITIZE_GLSL = /* glsl */ `
       vec3 c = inputColor.rgb;
       // NaN fails EVERY comparison (IEEE): the >= 0.0 guard drops NaN to
       // black, Inf survives the guard and clamps to the ceiling, negatives
-      // floor at 0. Portable — no isnan()/isinf() (GLSL ES 3.00 only).
+      // floor at 0. Portable - no isnan()/isinf() (GLSL ES 3.00 only).
       c.r = c.r >= 0.0 ? min(c.r, 64.0) : 0.0;
       c.g = c.g >= 0.0 ? min(c.g, 64.0) : 0.0;
       c.b = c.b >= 0.0 ? min(c.b, 64.0) : 0.0;
@@ -281,11 +281,11 @@ export const SANITIZE_GLSL = /* glsl */ `
     }
   `;
 
-// Bloom merge shader — postprocessing's stock version is one line:
+// Bloom merge shader - postprocessing's stock version is one line:
 // `outputColor = texture2D(map, uv) * intensity`, SCREEN-blended over the
 // frame. A NaN anywhere in the mipmap-blur texture (Inf-Inf inside a blur
 // tap, a stale mip level, driver UB on garbage input) therefore writes a
-// NaN pixel — pure black, often a huge diamond where one bad deep-mip
+// NaN pixel - pure black, often a huge diamond where one bad deep-mip
 // texel upsamples. Guard the SAMPLE, not the frame: fold non-finite
 // channels to 0 so the region just loses its halo instead of going black.
 // This is identical to bloom_default otherwise.
@@ -310,7 +310,7 @@ export const BLOOM_MERGE_GLSL = /* glsl */ `
 // buffer (the blurred mip composite), added over the frame. Unity:
 //   color += bloomTex*intensity + dirtTex*bloomTex*dirtIntensity
 // The bloom composite already holds only above-threshold light, so no
-// gate is needed — fog luminance never enters the buffer, so dirt can
+// gate is needed - fog luminance never enters the buffer, so dirt can
 // NEVER paint the sky the way a merged-frame luminance threshold can.
 export const LENS_DIRT_GLSL = `
 uniform sampler2D dirtMap;
@@ -318,14 +318,14 @@ uniform sampler2D bloomTex;
 uniform float dirtIntensity;
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
   // Cover-fit the dirt texture (CSS background-size:cover): scale the
-  // longer axis out so smudges stay round on any aspect — Unity's
+  // longer axis out so smudges stay round on any aspect - Unity's
   // _Bloom_DirtTileOffset does the same, raw uv was stretching them.
   vec2 dirtUv = (uv - 0.5) * vec2(min(1.0, aspect), min(1.0, 1.0 / aspect)) + 0.5;
   vec3 dirt = texture2D(dirtMap, dirtUv).rgb;
   vec3 bloom = texture2D(bloomTex, uv).rgb;
-  // bloomTex is the RAW mip composite — pre-sanitize, unclamped. Inf/NaN
+  // bloomTex is the RAW mip composite - pre-sanitize, unclamped. Inf/NaN
   // texels that BLOOM_MERGE_GLSL folds for display live here too, and
-  // Inf*dirt / NaN*0 re-poisons the frame AFTER the last guard — the
+  // Inf*dirt / NaN*0 re-poisons the frame AFTER the last guard - the
   // black half-screen flash all over again. Same IEEE fold, same 64 cap.
   bloom.r = bloom.r >= 0.0 ? min(bloom.r, 64.0) : 0.0;
   bloom.g = bloom.g >= 0.0 ? min(bloom.g, 64.0) : 0.0;

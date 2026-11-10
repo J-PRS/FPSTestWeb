@@ -1,20 +1,20 @@
 import * as THREE from 'three';
 import { markProbe } from '../core/fxDiag.js';
 
-// World-space speed lines — thin streak quads floating in a disc
+// World-space speed lines - thin streak quads floating in a disc
 // perpendicular to the player's velocity. They're ~stationary in the
 // world, so flying through them produces real relative motion: they
 // whip past the periphery and converge toward the velocity vanishing
 // point, correct for any direction of travel (dive, strafe, bounce).
 //
-// Camera-attached screen overlays fail at this — they can't converge on
+// Camera-attached screen overlays fail at this - they can't converge on
 // the true velocity vanishing point and read as static wallpaper.
 const MAX_STREAKS = 28;
-const MIN_SPEED = 30;    // m/s — no lines below this
+const MIN_SPEED = 30;    // m/s - no lines below this
 const FULL_SPEED = 85;   // full intensity
 const DISC_AHEAD_MIN = 3;   // spawn disc sits ahead along -vel
 const DISC_AHEAD_MAX = 18;
-const DISC_R_MIN = 1.6;  // inner radius — keeps the view center clear
+const DISC_R_MIN = 1.6;  // inner radius - keeps the view center clear
 const DISC_R_MAX = 5;
 const STREAK_LEN_MIN = 0.9;   // world-space streak length (m)
 const STREAK_LEN_MAX = 2;
@@ -46,16 +46,16 @@ export class SpeedLines {
   private streaks: Streak[] = [];
   private pool: Streak[] = [];
   private intensity = 0;
-  private burstLvl = 0;   // one-shot flare (Bounce) — decays fast
+  private burstLvl = 0;   // one-shot flare (Bounce) - decays fast
   private spawnAcc = 0;
 
-  /** Momentary flare — e.g. on Bounce redirect. Decays over ~0.4s. */
+  /** Momentary flare - e.g. on Bounce redirect. Decays over ~0.4s. */
   burst(): void {
     this.burstLvl = 1;
   }
 
   /**
-   * Tracer-style blink surge — a line of tinted streaks stamped along the
+   * Tracer-style blink surge - a line of tinted streaks stamped along the
    * travel path so the teleport reads as a whoosh, not a cut. Also flares
    * intensity so they render even if velocity just changed.
    */
@@ -78,7 +78,7 @@ export class SpeedLines {
         .addScaledVector(_up, Math.sin(ang) * rad);
       s.mesh.position.copy(_pos);
 
-      // Same cylindrical billboard orientation as spawnOne — streaks lie
+      // Same cylindrical billboard orientation as spawnOne - streaks lie
       // along the blink direction
       _toCam.subVectors(_pos, from).addScaledVector(_velDir, -_toCam.dot(_velDir));
       if (_toCam.lengthSq() < 1e-6) {_toCam.set(0, 0, 1);} else {_toCam.normalize();}
@@ -141,19 +141,19 @@ export class SpeedLines {
     s.mesh.position.copy(_pos);
 
     // Cylindrical billboard: long axis (local Y) along velocity, plane
-    // normal (local Z) facing the camera — the quad always reads as a
+    // normal (local Z) facing the camera - the quad always reads as a
     // line, never a flat sheet.
     _toCam.subVectors(camPos, _pos).addScaledVector(velDir, -_toCam.dot(velDir)); // reject vel component
     if (_toCam.lengthSq() < 1e-6) {_toCam.set(0, 0, 1);} else {_toCam.normalize();}
-    _x.crossVectors(velDir, _toCam); // local X — thin edge
+    _x.crossVectors(velDir, _toCam); // local X - thin edge
     _m.makeBasis(_x, velDir, _toCam);
     s.mesh.quaternion.setFromRotationMatrix(_m);
-    // Length scales with intensity — cruise gets short ticks, top-end
+    // Length scales with intensity - cruise gets short ticks, top-end
     // speed stretches streaks ~2x longer (the "whip" read, not density).
     const stretch = 1 + this.intensity * 1.2;
     s.mesh.scale.y = (STREAK_LEN_MIN + Math.random() * (STREAK_LEN_MAX - STREAK_LEN_MIN)) * stretch;
 
-    // Backward drift scales with intensity too — at cruise they linger,
+    // Backward drift scales with intensity too - at cruise they linger,
     // at speed they streak out of frame, which is the whole effect.
     s.drift.copy(velDir).multiplyScalar(-(2 + this.intensity * 5) - Math.random() * 3);
     s.maxLife = LIFE_MIN + Math.random() * (LIFE_MAX - LIFE_MIN);
@@ -165,17 +165,17 @@ export class SpeedLines {
   update(dt: number, camPos: THREE.Vector3, vel: THREE.Vector3): void {
     const speed = vel.length();
     // Response curve weighted to the top: cruise speeds stay faint
-    // (subtle presence), only genuinely fast flight goes dramatic —
+    // (subtle presence), only genuinely fast flight goes dramatic -
     // "ramped but not annoying" = the drama belongs to real speed.
     const linear = Math.min(Math.max((speed - MIN_SPEED) / (FULL_SPEED - MIN_SPEED), 0), 1);
     const target = Math.pow(linear, 1.5);
     this.intensity += (target - this.intensity) * Math.min((target > this.intensity ? 10 : 5) * dt, 1);
 
-    // Burst flare — spikes effective intensity past 1 briefly, decays fast
+    // Burst flare - spikes effective intensity past 1 briefly, decays fast
     this.burstLvl *= Math.exp(-dt * 7);
     const effective = Math.min(this.intensity + this.burstLvl * 0.85, 1);
 
-    // Tick live streaks — fade over life, drift slightly against velocity
+    // Tick live streaks - fade over life, drift slightly against velocity
     for (let i = this.streaks.length - 1; i >= 0; i -= 1) {
       const s = this.streaks[i];
       s.life -= dt;
@@ -186,7 +186,7 @@ export class SpeedLines {
       }
       const t = s.life / s.maxLife;
       s.mesh.position.addScaledVector(s.drift, dt);
-      // Peak opacity also scales with intensity — dim whisper at
+      // Peak opacity also scales with intensity - dim whisper at
       // cruise, a real rush at cap. Never a solid line.
       s.mat.opacity = effective * t * (0.20 + this.intensity * 0.28);
     }

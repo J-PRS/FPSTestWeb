@@ -3,7 +3,7 @@ import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js'
 
 import { makeDeps, feed } from './netHarness.js';
 vi.mock('../core/sfx.js', () => ({ at: (): void => { return; }, shotAt: (): void => { return; }, init: (): void => { return; }, hitMarker: (): void => { return; }, playerHurt: (): void => { return; }, shieldHit: (): void => { return; }, killConfirm: (): void => { return; }, flagCue: (): void => { return; }, matchHorn: (): void => { return; } }));
-// RemotePlayer's GLTF model fetch can't run headless — visual shell only,
+// RemotePlayer's GLTF model fetch can't run headless - visual shell only,
 // the lifecycle under test lives in RemoteSet, not the mesh.
 vi.mock('../entities/PlayerModel.js', (): { PlayerModel: () => { load: () => Promise<void>; }; } => ({
   PlayerModel: function (): { load: () => Promise<void>; } {
@@ -12,12 +12,12 @@ vi.mock('../entities/PlayerModel.js', (): { PlayerModel: () => { load: () => Pro
     });
   },
 }));
-// Lobby is constructed async inside wireNetworkHandlers off a fetch() —
+// Lobby is constructed async inside wireNetworkHandlers off a fetch() -
 // keep it pending forever so it never builds DOM in tests.
 globalThis.fetch = ((): Promise<Response> => new Promise<Response>((): void => { return; })) as unknown as typeof fetch;
 
 
-describe('netHarness — real wire messages through real handlers', (): void => {
+describe('netHarness - real wire messages through real handlers', (): void => {
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let h!: ReturnType<typeof makeDeps>;
   beforeEach((): void => { h = makeDeps(); });
@@ -40,7 +40,7 @@ describe('netHarness — real wire messages through real handlers', (): void => 
   it('playerJoined → update → left lifecycle through RemoteSet', (): void => {
     feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r' } as ServerMessage);
     feed(h.nm, { type: 'playerJoined', playerId: 'peer-1', position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
-    // Join only registers the roster row — the RemotePlayer materializes
+    // Join only registers the roster row - the RemotePlayer materializes
     // on the first tickUpdate carrying that id.
     feed(h.nm, { type: 'tickUpdate', updates: [{ playerId: 'peer-1', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 100, isDead: false }] } as ServerMessage);
     expect(h.world.remotePlayers.has('peer-1')).toBe(true);
@@ -62,7 +62,7 @@ describe('netHarness — real wire messages through real handlers', (): void => 
     expect(spawnSpy).toHaveBeenCalled();
     expect(h.world.netPickups?.has(7)).toBe(true);
     feed(h.nm, { type: 'pickupGone', id: 7, by: (h.nm as unknown as { getLocalPlayerId(): string }).getLocalPlayerId() } as ServerMessage);
-    // Server-verified collect — the handler grants the offline reward itself.
+    // Server-verified collect - the handler grants the offline reward itself.
     expect(h.player.heal).toHaveBeenCalledWith(0.2);
     expect(h.player.grantJetBoost).toHaveBeenCalled();
   });
@@ -91,14 +91,14 @@ describe('netHarness — real wire messages through real handlers', (): void => 
     expect(h.player.pos.x).toBe(0);
     feed(h.nm, { type: 'correction', seq: 2, position: { x: 10, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
     expect(h.player.pos.x).toBe(10);
-    // The sim snaps instantly but the camera eases — renderPos carries the
+    // The sim snaps instantly but the camera eases - renderPos carries the
     // pre-snap offset so the view glides ~100ms instead of teleporting.
     expect(h.calls.renderSnap).toEqual([10]);
   });
 
   // hitSeq/tickSeq are per-room spaces. A room hop without reconnect must
   // reset both watermarks or every hit (and every tick frame) drops for
-  // the rest of the session — the persistent health-desync signature.
+  // the rest of the session - the persistent health-desync signature.
   it('hit seq watermark resets on gameState so a new room hits apply', (): void => {
     const hit = (seq: number, health: number): void => feed(h.nm, {
       type: 'playerHit', shooterId: 'peer-1', targetId: 'tester-local', damage: 10, health, seq,
@@ -110,20 +110,20 @@ describe('netHarness — real wire messages through real handlers', (): void => 
     hit(5, 10);
     hit(4, 10);
     expect(h.player.health).toBe(50);
-    // Room hop: the new room's seqs restart at 1 — must still apply.
+    // Room hop: the new room's seqs restart at 1 - must still apply.
     feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r2' } as ServerMessage);
     hit(1, 90);
     expect(h.player.health).toBe(90);
   });
 
-  // Protocol mismatch: a stale bundle can't parse a new wire format —
+  // Protocol mismatch: a stale bundle can't parse a new wire format -
   // the gameState must bail BEFORE the roster swap (a cleared roster on
   // a bad frame would silently desync), count the reload attempt, and
   // stop trying after the 2-attempt budget so a newer server can't
   // reload-loop the tab.
   it('a protocol-mismatched gameState early-returns and caps reload attempts', (): void => {
     // Plain-object location: assignment is a no-op store, but the counter
-    // path runs — headless tests still exercise the reload contract.
+    // path runs - headless tests still exercise the reload contract.
     vi.stubGlobal('location', { href: 'http://x/' });
     feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r1', mode: 'dm' } as ServerMessage);
     expect(h.world.mode).toBe('dm');
@@ -131,11 +131,11 @@ describe('netHarness — real wire messages through real handlers', (): void => 
     const bad = (): void => feed(h.nm, { type: 'gameState', players: [], protocolVersion: 999_999, room: 'evil', mode: 'ctf' } as ServerMessage);
     bad();
     expect(sessionStorage.getItem('fps-proto-reload')).toBe('1');
-    expect(h.world.mode).toBe('dm'); // swap never ran — stale bundle can't rewrite state
+    expect(h.world.mode).toBe('dm'); // swap never ran - stale bundle can't rewrite state
     bad();
     expect(sessionStorage.getItem('fps-proto-reload')).toBe('2');
     bad();
-    expect(sessionStorage.getItem('fps-proto-reload')).toBe('2'); // budget spent — no loop
+    expect(sessionStorage.getItem('fps-proto-reload')).toBe('2'); // budget spent - no loop
 
     // A clean connect resets the counter and applies the frame normally.
     feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r2', mode: 'ctf' } as ServerMessage);
@@ -158,11 +158,11 @@ describe('netHarness — real wire messages through real handlers', (): void => 
 });
 
 // Corpse-window regression: dead rows keep streaming position echoes,
-// and update()'s revive-on-update used to fire on each one — dead↔alive
+// and update()'s revive-on-update used to fire on each one - dead↔alive
 // ping-pong that re-armed the mirror death and spammed gib bursts.
 // The roster gate in onPlayerUpdate must drop dead-row echoes, while a
 // roster-healed (live) row still revives a stale-dead entity.
-describe('netHarness — corpse-window echoes', (): void => {
+describe('netHarness - corpse-window echoes', (): void => {
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let h!: ReturnType<typeof makeDeps>;
   beforeEach((): void => { h = makeDeps(); });
@@ -181,13 +181,13 @@ describe('netHarness — corpse-window echoes', (): void => {
     feed(h.nm, { type: 'playerKill', shooterId: 'environment', targetId: 'peer-1' } as ServerMessage);
     expect(rp.isDead).toBe(true);
 
-    // Dead echoes — the corpse window. Each one used to revive the body.
+    // Dead echoes - the corpse window. Each one used to revive the body.
     for (const x of [4, 5, 6]) {
       upd(x, true, 0);
       expect(rp.isDead, `dead echo at x=${x} revived the corpse`).toBe(true);
     }
 
-    // Roster heals to live — the dropped-respawn-echo path still revives.
+    // Roster heals to live - the dropped-respawn-echo path still revives.
     upd(9, false, 100);
     expect(rp.isDead).toBe(false);
   });

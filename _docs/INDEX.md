@@ -14,7 +14,7 @@ The project produces a lot of documentation. This file is the map.
 | `changelog.txt` | Prepended `YYYY-MM-DD - <summary>` per settled topic |
 | `_docs/TASKS.md` | Project development context |
 | `_docs/NOTES.md` | JP's world notes |
-| `_docs/BOT_BRAIN_CODEX.md` | **Bot AI living codex** — philosophy (legal humans, wire-legal senses, dial escalation), architecture map, every dial + reader, hero-mode results loop, tests/telemetry, gaps |
+| `_docs/2026-11-08_BOT_BRAIN_CODEX.md` | **Bot AI living codex** — philosophy (legal humans, wire-legal senses, dial escalation), architecture map, every dial + reader, hero-mode results loop, tests/telemetry, gaps |
 | `_docs/2026-09-28_TEST_PLAN_BOTS.md` / `_docs/2026-09-28_TEST_PLAN_DEMO.md` | Test plans |
 | `_docs/2026-10-15_CAPPER_STRIKE.md` | **Living capper reference** — scoreboard, mechanics, physics budget, landmines, measured history |
 | `_docs/2026-10-22_CARRIER_GATE.md` | Capper carrier-gate fix — park block, airborneBy leak, tactical ski-release, arrival deceleration abandoned (wrong tool) |
@@ -106,6 +106,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-05_BOT_WEAPON_USE_AUDIT.md` | Bot weapon-use audit — full cycle-table sweep: 16 commits (body-bounce, bodyArmTime gate, far-slot GL/bolt, situational sidearms, hose/disc orbits, flak+splash serves), pinned-bench board, remaining balance items |
 | `_docs/2026-11-09_UI_BENCHMARK_AUDIT.md` | **UI benchmark vs browser-FPS greats** (Krunker prime, Narrow One): bones vs skin verdict — we win layout contract/tokens/rebinds, lose type cohesion/icons/restraint/juice; 6-item steal list ordered by impact for the restyle pass |
 | `_docs/2026-11-09_CHEAP_GFX_TECHNIQUES.md` | **Aesthetic-per-millisecond GFX survey** — post/material/lighting tricks ranked by cost for our fused-grade WebGL2 pipeline: vignette, rim light, ramp-toon, unlit gradient albedo, analytic occluder AO, cell-noise screen fx, channel packing; plus the SSAO/full-res-bloom/nested-pass traps to avoid |
+| `_docs/2026-11-09_ALWAYS_ON_EVOLVING_BOTS.md` | **Always-on + evolving bots plan** — research survey (tiered-sim is the industry pattern; production evolution = stats→smooth→mutate, not RL), inventory of what exists (skill matrix, heroTick, adaptOnRespawn, econOf), 3-phase design: reduced-rate zero-audience standing-room tick → persisted per-callsign ledger (HA%/energy) → clamped mutation of baseAxes/baseMove |
 | `_docs/2026-11-09_INDIE_FOOTGUNS.md` | **Indie footgun survey** — compelled-but-harmful features: mechanics-that-don't-multiply, cinematic post defaults (motion blur), options bloat, tutorial machinery, sunk-cost retention, wrong-layer fixes, core-engine conflicts, progression padding; our standing avoids + active watch-items |
 | `_docs/2026-11-07_MOAT_AUDIT.md` | Bundle-exposure audit + hardening plan: P2P authority sealed, remaining inventory ranked, import-boundary ratchet + static dev-tool gating as next steps |
 | `_docs/2026-11-07_MAPLAB_REGEN_PERF.md` | **maplab regen autopsy** — Alt+Q prof-ring added; 1.9s@449² is all gen.ts math (mesh/shader ~60ms). Python sidecar (`_tools/bench/gen_bench.py`): numba≈WASM≈2–8× only, `prange` 29× on synth; priorityFlood heap-encoding bug found; ranked fixes (separable glacier, cached drainage, worker pool, draft grid) |

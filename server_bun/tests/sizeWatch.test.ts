@@ -25,6 +25,9 @@ const GRANDFATHERED: Record<string, number> = {
   // Crossed via the C4 remote-replay block — the netcode half legitimately
   // aggregates interp/DR/replay paths. Pinned; still alarms at +15%.
   'client/src/entities/remoteInterp.ts': 913,
+  // Crossed via the 2026-11-09 fog-stack work (directional tint + animated
+  // mist + preset ramps). Pinned at current size; still alarms at +15%.
+  'client/src/world/terrain.ts': 945,
   'client/src/effects/vertexAO.ts': 956,
   'shared/botTaunts.ts': 1360,
   // Re-pinned at 1083 after the CTF flag-passing + headhunt hoard brain

@@ -1,4 +1,4 @@
-// Terrain GLSL — vertex displacement over the clipmap + fragment shading
+// Terrain GLSL - vertex displacement over the clipmap + fragment shading
 // (scorch decals, fog, lighting). Kept apart from terrain.ts so the clipmap
 // machinery reads without two pages of shader text.
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
@@ -26,12 +26,12 @@ export const terrainVert = /* glsl */`
   }
 
   // The parent ring's drawn surface: a two-triangle linear chord of the
-  // field over the parent's coarser lattice — the SAME diagonal split the
+  // field over the parent's coarser lattice - the SAME diagonal split the
   // flat-grid index buffer uses. (An earlier scheme morphed the COARSE
   // ring toward the fine chord instead: a linear interp between two
   // coarser-lattice chord values can never equal the fine level's 5m
   // boundary polyline, so hairline T-junction holes survived every LOD
-  // edge. The classic fix welds from the FINE side — morph the outer
+  // edge. The classic fix welds from the FINE side - morph the outer
   // verts onto the parent's drawn surface, where they coincide by
   // construction.)
   float parentChord(vec2 worldXZ) {
@@ -49,7 +49,7 @@ export const terrainVert = /* glsl */`
   }
 
   // Near this level's outer edge, morph field height onto the parent
-  // chord — full blend at the interior edge row, so the boundary
+  // chord - full blend at the interior edge row, so the boundary
   // polyline lies ON the parent's triangles at every vertex and the
   // discard-hole seam is watertight regardless of lattice parity.
   float getMorphHeight(vec2 worldXZ) {
@@ -79,7 +79,7 @@ export const terrainVert = /* glsl */`
     vWorldPos = worldPos;
     vCameraPos = cameraPosition;
 
-    // Shadow-receive coords — computed manually so vNormal (already
+    // Shadow-receive coords - computed manually so vNormal (already
     // world-space) provides the bias offset; the mesh transform is identity.
     #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
       for ( int i = 0; i < NUM_DIR_LIGHT_SHADOWS; i ++ ) {
@@ -103,11 +103,11 @@ export const terrainFrag = /* glsl */`
   #include <shadowmap_pars_fragment>
   #include <shadowmask_pars_fragment>
 
-  // Preset is a COMPILE-TIME define (material.defines), not a uniform —
+  // Preset is a COMPILE-TIME define (material.defines), not a uniform -
   // a runtime branch over six ~100-line palettes compiles all six into
   // every program; preprocessor exclusion means each program carries
   // only its own preset (~73KB frag measured at a 30-70s sync D3D
-  // compile on the real-GPU path — the browser hang).
+  // compile on the real-GPU path - the browser hang).
   #ifndef TERRAIN_PRESET
   #define TERRAIN_PRESET 0
   #endif
@@ -118,7 +118,7 @@ export const terrainFrag = /* glsl */`
   uniform float hscale;
   uniform sampler2D albedoMap;
   uniform bool useAlbedo;
-  // T2 material blend layer — real 256px tiles in a 4x2 atlas, blended
+  // T2 material blend layer - real 256px tiles in a 4x2 atlas, blended
   // by the map's alpha weights instead of the baked albedo's flattened
   // result. Fades out with distance; the bake carries the far field.
   uniform sampler2D matTiles;
@@ -132,14 +132,14 @@ export const terrainFrag = /* glsl */`
   uniform float fogStart;
   uniform float fogEnd;
   uniform float fogDir; // 1 = directional sunward/away haze tint (spec.fog.dirTint)
-  // Distance-gradient haze — FireWatch/COZY style: fog color rides a 1D
+  // Distance-gradient haze - FireWatch/COZY style: fog color rides a 1D
   // ramp of up to 6 stops keyed by normalized distance instead of one flat
   // color. xyz = stop color, w = position t in [0,1]. fogRampN = 0 → flat.
   uniform vec4 fogRamp[6];
   uniform int fogRampN;
-  uniform float mistTime;  // elapsed s — scrolls the mist density field
+  uniform float mistTime;  // elapsed s - scrolls the mist density field
   uniform float mistAnim;  // 0 = static mist (spec.fog.mistAnim:false)
-  // Authored local fog pockets (spec.fog.volumes) — analytic ray-sphere
+  // Authored local fog pockets (spec.fog.volumes) - analytic ray-sphere
   // extinction, the smooth version of T2's fog bands. xyz=center, w=radius;
   // fogVolD = extinction per meter. fogVolN=0 → skip.
   uniform vec4 fogVolC[4];
@@ -148,11 +148,11 @@ export const terrainFrag = /* glsl */`
   uniform float innerHalfSize;
   uniform vec2 innerGridOrigin;
   uniform float edgeHalf; // outermost level only: world-edge fade radius (0=off)
-  uniform float waterLevel; // sea level world m — < -1e8 = dry map
+  uniform float waterLevel; // sea level world m - < -1e8 = dry map
   uniform vec3 waterTint;   // shallow tint pushed onto the seabed
-  uniform float waterTime;  // caustic phase clock — ticked CPU-side
+  uniform float waterTime;  // caustic phase clock - ticked CPU-side
   // Mario Sunshine trick: the sea reads blue because the SEABED is
-  // tinted, not because the surface is opaque — submerged ground grades
+  // tinted, not because the surface is opaque - submerged ground grades
   // toward waterTint with depth, and the ~0.9m band just above the line
   // darkens (wet sand). One uniform does both shoreline reads.
   vec3 seaTint(vec3 col, float wy, vec2 wxz) {
@@ -160,10 +160,10 @@ export const terrainFrag = /* glsl */`
     float d = waterLevel - wy;                                   // >0 submerged
     col = mix(col, waterTint, clamp(d * 0.22, 0.0, 0.75));
     if (d > 0.0) {
-      // Caustic web — the sin-warp interference trick (3 iters, pure ALU):
+      // Caustic web - the sin-warp interference trick (3 iters, pure ALU):
       // curved wavefront families crossing spike filaments where they
       // reinforce = the dancing light webs sun draws through chop onto a
-      // bed. Fades with depth — light can't focus through deep water.
+      // bed. Fades with depth - light can't focus through deep water.
       vec2 p = wxz * 1.6;
       vec2 k = p;
       float c = 1.0;
@@ -200,21 +200,21 @@ export const terrainFrag = /* glsl */`
   }
   float noise(vec2 p) { return noised(p).x; }
 
-  // Valley mist — exponential height fog integrated along the view ray.
+  // Valley mist - exponential height fog integrated along the view ray.
   // Density pools near HF_FLOOR and thins exponentially with altitude, so
   // distant lowlands dissolve into haze while ridgelines stay crisp.
   // The integral is closed-form (no marching): D0*exp(-K*(ro-FLOOR)) with
   // the (1-e^-kΔy)/(k·rd.y) term handling up/down rays exactly.
   const float HF_FLOOR = 18.0;  // world-y where fog density peaks
-  const float HF_K = 0.024;     // altitude falloff (1/m) — layer thins ~every 29m
+  const float HF_K = 0.024;     // altitude falloff (1/m) - layer thins ~every 29m
   const float HF_D0 = 0.0024;   // extinction per meter at the floor
-  const float HF_CAP = 0.80;    // never fully opaque — haze, not soup
+  const float HF_CAP = 0.80;    // never fully opaque - haze, not soup
   float heightFogAmount(vec3 ro, vec3 delta, float dist) {
     if (dist < 1.0) return 0.0;
     float rdy = delta.y / dist;
     float a = HF_D0 * exp(-HF_K * max(ro.y - HF_FLOOR, 0.0));
     if (mistAnim > 0.5) {
-      // Drifting density — two scrolling noise octaves sampled mid-ray so
+      // Drifting density - two scrolling noise octaves sampled mid-ray so
       // banks vary across the screen; wind-matched drift (~2.5m/s) shares
       // direction with the ground-mist cards and cloud decks.
       vec3 mid = ro + delta * (dist * 0.5);
@@ -228,7 +228,7 @@ export const terrainFrag = /* glsl */`
     return min(1.0 - exp(-max(od, 0.0)), HF_CAP);
   }
 
-  // Local fog volumes — each is a uniform-density sphere; the ray's chord
+  // Local fog volumes - each is a uniform-density sphere; the ray's chord
   // through it contributes Beer-Lambert optical depth. Hard edge is fine
   // at these densities; the ambient height mist hides the silhouette.
   float localFogAmount(vec3 ro, vec3 delta, float dist) {
@@ -252,7 +252,7 @@ export const terrainFrag = /* glsl */`
 
   // Exp² distance fog on the spec's linear start/end: near field stays
   // clean, haze rolls in on the natural 1-e^-(t²) curve. The raw curve
-  // tops at ~98% — the *1.05 saturates the last ~13% of range to a true
+  // tops at ~98% - the *1.05 saturates the last ~13% of range to a true
   // 1.0 so the clipmap's far edge dissolves fully into the sky haze
   // instead of leaving a faint terrain-colored rim against it (T2 look).
   float terrainFogFactor(float dist) {
@@ -260,7 +260,7 @@ export const terrainFrag = /* glsl */`
     return min((1.0 - exp(-t * t * 4.0)) * 1.05, 1.0);
   }
 
-  // Directional haze tint — GLSL port of directionalFog.ts fogTint(): the
+  // Directional haze tint - GLSL port of directionalFog.ts fogTint(): the
   // fogged fraction warms toward the sun and cools away, approximating the
   // sky's own directional variation so fogged terrain doesn't read as a
   // flat cutout against it. fogDir uniform gates it per-map.
@@ -311,7 +311,7 @@ export const terrainFrag = /* glsl */`
   //   * a domain ROTATION per octave (m2) so their zero-crossings diverge;
   //   * a per-octave offset so the lattices don't share features;
   //   * band-limiting: an octave whose wavelength falls below the pixel
-  //     footprint (~dist * pixelAngle) fades out — this doubles as the AA, so
+  //     footprint (~dist * pixelAngle) fades out - this doubles as the AA, so
   //     the layer can never shimmer at distance.
   // baseWl is the coarsest octave's wavelength in metres.
   float detailFbm(vec2 wp, float dist, float baseWl) {
@@ -332,29 +332,29 @@ export const terrainFrag = /* glsl */`
   uniform vec4 scorchData[16]; // x, z, radius, intensity (w<=0 = unused slot)
   uniform float scorchEmber[16]; // per-slot ember rim glow (0 = none)
   uniform float scorchY[16];     // decal center height - sphere projection
-  // Creature ichor stains — the tinted cousin of scorch: hit/death splats
+  // Creature ichor stains - the tinted cousin of scorch: hit/death splats
   // paint the ground colored instead of charring it black.
   uniform vec4 splatData[24];  // x, z, radius, intensity
   uniform vec3 splatTint[24];  // per-slot ichor color
   uniform vec3 splatDir[24];   // unit smear dir xz + stretch (z=0: round pool)
   // Deployable field rings (recharge pad envelope): same projected-decal
-  // trick as scorch — drawn INTO the terrain fragment, so it conforms to
+  // trick as scorch - drawn INTO the terrain fragment, so it conforms to
   // the displaced surface exactly. A draped mesh can't: the clipmap is a
   // 5m chord approximation and any denser decal drowns under its bumps.
   uniform vec4 fieldRing[32]; // x, z, ±radius, intensity (w<=0 = unused)
   uniform vec3 fieldTint[32]; // per-slot color
   uniform float fieldY[32];   // dome-center Y for shell-contact slots
   // Dynamic loop bounds: constant-bound loops over uniform arrays get
-  // fully unrolled by the ANGLE→D3D backend — 72 iterations of decal
+  // fully unrolled by the ANGLE→D3D backend - 72 iterations of decal
   // math blew the fragment shader to 72KB and ~40s of sync compile per
   // program (measured: one getProgramParameter blocked 33s). The bound
-  // itself must be a uniform — a literal bound + break still unrolls.
+  // itself must be a uniform - a literal bound + break still unrolls.
   uniform int scorchCount;
   uniform int splatCount;
   uniform int fieldCount;
   uniform int dbgStage; // -1 off; desert-preset stage bisect (maplab tool)
   // lit knee: sunlit sand crossing display 1.0 skips ungradeColor's
-  // inverse and ACES desaturates it into pale blotches — compress the
+  // inverse and ACES desaturates it into pale blotches - compress the
   // smooth lit term so the noisy albedo texture survives untouched.
   uniform float litKnee;  // where compression starts (display-lit peak)
   uniform float litKeep;  // fraction of overshoot kept (contrast)
@@ -362,7 +362,7 @@ export const terrainFrag = /* glsl */`
 
   // Projected explosion-scorch decals: darken albedo inside each scorch
   // circle with a noise-jittered edge. Applied in the fragment shader so it
-  // conforms to the displaced surface exactly — no z-fighting, no decals
+  // conforms to the displaced surface exactly - no z-fighting, no decals
   // bridging dips or floating over slopes.
   // Sphere-projected decal (3D distance to the blast center): round on
   // flats, foreshortened on cliffs. The old XZ cylinder smeared the mark
@@ -383,7 +383,7 @@ export const terrainFrag = /* glsl */`
   // Ichor stains: later slots paint over earlier (chronological bleed-out),
   // coverage is the strongest single mask so overlapping pools don't blow
   // out to pure tint. A stain with a smear dir is elongated along its
-  // landing velocity and throws two small satellite specks trailing it —
+  // landing velocity and throws two small satellite specks trailing it -
   // a splatter, not a circle. Returns the stain color; writes mix weight.
   vec3 splatStain(vec2 p, out float m) {
     vec3 acc = vec3(0.0);
@@ -400,10 +400,10 @@ export const terrainFrag = /* glsl */`
       vec2 perp = off - dir * along;
       float axial = along / (1.0 + sd.z);
       float d = sqrt(axial * axial + dot(perp, perp) * (1.0 + sd.z * 0.6));
-      // Wobblier edge than scorch — a liquid splash, not a blast ring
+      // Wobblier edge than scorch - a liquid splash, not a blast ring
       float edge = s.z * (0.8 + 0.35 * noise(p * 1.4 + float(i) * 5.17));
       float w = s.w * (1.0 - smoothstep(edge * 0.35, edge, d));
-      // Satellite specks trailing the smear — real splashes throw droplets
+      // Satellite specks trailing the smear - real splashes throw droplets
       // past the main blot. Slot-hashed offsets, ~0.3r dots.
       if (sd.z > 0.01) {
         float fi = float(i);
@@ -421,7 +421,7 @@ export const terrainFrag = /* glsl */`
   }
 
   // Ember rim: additive orange ring at the blast edge, fades in ~1s.
-  // Projected in-shader so it always sits ON the terrain — a mesh ring
+  // Projected in-shader so it always sits ON the terrain - a mesh ring
   // gets eaten by surface bumps at grazing angles.
   vec3 scorchEmberGlow(vec3 p) {
     float g = 0.0;
@@ -436,15 +436,15 @@ export const terrainFrag = /* glsl */`
     return vec3(1.0, 0.45, 0.1) * min(g, 1.2);
   }
 
-  // Field-ring decals — tinted, additive like the ember rim. Two modes
+  // Field-ring decals - tinted, additive like the ember rim. Two modes
   // packed in the radius sign:
   //   r > 0: flat annulus near radius + faint interior fill (station pad)
-  //   r < 0: dome CONTACT CONTOUR — |r| is a sphere radius, fieldY[i] its
+  //   r < 0: dome CONTACT CONTOUR - |r| is a sphere radius, fieldY[i] its
   //          center height. The contact line of a half-buried sphere is
   //          where terrain height equals the lower shell's height, which
   //          is NOT a circle on slopes (uphill bites in, downhill runs
   //          wide). Comparing this fragment's own displaced height to the
-  //          shell height traces the true contour — cheap, no marching.
+  //          shell height traces the true contour - cheap, no marching.
   vec3 fieldGlow(vec3 wp) {
     vec3 g = vec3(0.0);
     for (int i = 0; i < fieldCount; i++) {
@@ -565,7 +565,7 @@ export const terrainFrag = /* glsl */`
     if (useAlbedo) {
       vec3 col = texture2D(albedoMap, fract(vWorldPos.xz / hmWorldScaleFrag)).rgb;
       if (useMats) {
-        // detFade gates the whole 10-sample block — past the fade the mix
+        // detFade gates the whole 10-sample block - past the fade the mix
         // multiplies by 1.0 anyway, so distant pixels skip ~10 fetches
         // (uniform-coherent branch: the fade varies smoothly, not per-texel).
         float detFade = 1.0 - smoothstep(140.0, 380.0, length(vWorldPos - vCameraPos));
@@ -589,7 +589,7 @@ export const terrainFrag = /* glsl */`
           float wsum = wA.r + wA.g + wA.b + wA.a + wB.r + wB.g + wB.b + wB.a;
           // Luminance modulation, not color replacement: the tile's own
           // weighted mean divides its luminance so the blend adds grain
-          // around neutral — the baked albedo keeps its color. Replacing
+          // around neutral - the baked albedo keeps its color. Replacing
           // outright painted every material region in flat tile color.
           float tmean = tileMeans[0] * wA.r + tileMeans[1] * wA.g + tileMeans[2] * wA.b + tileMeans[3] * wA.a
                       + tileMeans[4] * wB.r + tileMeans[5] * wB.g + tileMeans[6] * wB.b + tileMeans[7] * wB.a;
@@ -601,7 +601,7 @@ export const terrainFrag = /* glsl */`
       col *= 0.82 + 0.36 * detail;
       col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
-      // T2's terrain was baked/vertex-lit for a bright arcade read —
+      // T2's terrain was baked/vertex-lit for a bright arcade read -
       // the procedural path's diff² curve night-falls a ported albedo,
       // so ported maps take a linear diffuse + lifted ambient instead.
       float diff = max(dot(vNormal, sunDir), 0.0);
@@ -614,7 +614,7 @@ export const terrainFrag = /* glsl */`
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
       // World-edge dissolve: outermost level fades to transparent over its
-      // last ~300m — geometry itself dissolves over the sky, no silhouette
+      // last ~300m - geometry itself dissolves over the sky, no silhouette
       // (edgeHalf=0 on inner levels => edgeA stays 1).
       float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
@@ -631,14 +631,14 @@ export const terrainFrag = /* glsl */`
 
     // --- desert preset (sand + dirt + rock only) ---
     // 7 = same palette, hard-sun lighting (ridges): pure sun·diff², no
-    // ambient/rim fill — stylized matte-painting look, and palette·sun
+    // ambient/rim fill - stylized matte-painting look, and palette·sun
     // peaks ~0.9 so it can never trip the >1 HDR passthrough.
 #if TERRAIN_PRESET == 1 || TERRAIN_PRESET == 7
     {
       // Desert only needs: micro, cell, triRock, macro, medium, triDetail
       vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
       float macro  = fbm(uv + 0.8 * warp);
-      // Warp medium + micro too — unwarped fixed-frequency noise reads as
+      // Warp medium + micro too - unwarped fixed-frequency noise reads as
       // tiling at ground level even though nothing literally repeats
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * warp);
       float micro  = noise(uvFin + warp * 2.0) * 0.5 + noise(uvFin * 2.8 + warp * 3.5 + 1.7) * 0.5;
@@ -697,14 +697,14 @@ export const terrainFrag = /* glsl */`
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
       // World-edge dissolve: outermost level fades to transparent over its
-      // last ~300m — geometry itself dissolves over the sky, no silhouette
+      // last ~300m - geometry itself dissolves over the sky, no silhouette
       // (edgeHalf=0 on inner levels => edgeA stays 1).
       float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta))
                    + localFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
-      // dbgStage: freeze the pipeline at a named stage — 0 palette,
+      // dbgStage: freeze the pipeline at a named stage - 0 palette,
       // 1 detail, 2 decals, 3 lit, 4 glows, 5 seaTint, 6+ full (fog);
       // 7/8/9 isolate lit components (sun*diff² / ambient+rim / shadowMask).
       if (dbgStage < 0 || dbgStage == 6 || dbgStage > 9) {
@@ -733,7 +733,7 @@ export const terrainFrag = /* glsl */`
       // Nested domain warp (IQ's q->r->f idiom): the second warp stage is
       // what turns blobs into organic meadow/scrub regions.
       // Detail fadeout first: fixed-frequency terms at ~1m wavelength
-      // shimmer into soup past mid distance AND cost real ALU — skip
+      // shimmer into soup past mid distance AND cost real ALU - skip
       // evaluating them entirely where they can't be seen (Terrain3D's
       // octave-LOD: noise can't mip, so distance must gate the work).
       float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
@@ -742,7 +742,7 @@ export const terrainFrag = /* glsl */`
       float region = fbm(uv * 0.42 + 1.1 * r);
       float macro  = fbm(uv + 0.8 * q);
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
-      // Sub-2m terms: gated, not faded — a far pixel pays zero for them.
+      // Sub-2m terms: gated, not faded - a far pixel pays zero for them.
       float micro = 0.0, blade = 0.0, triDetail = 0.0;
       if (detFade > 0.0) {
         micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
@@ -752,11 +752,11 @@ export const terrainFrag = /* glsl */`
       // Per-clump id hash: stable hue jitter across grass tufts (same
       // domain as a worley grid, but without the 9-tap distance loop).
       float clumpId = hash(floor(uvMed * 1.4 + r * 0.6));
-      // Ridged noise for exposed rock — crease lines read as strata/scree.
+      // Ridged noise for exposed rock - crease lines read as strata/scree.
       float ridged  = 1.0 - abs(2.0 * fbm(uvMed * 1.9 + r) - 1.0);
       ridged *= ridged;
       // Drainage: anisotropic erosion streaks following the real normal
-      // — gully lines carved down slopes, not random dark blotches.
+      // - gully lines carved down slopes, not random dark blotches.
       vec2 slopeDir = normalize(vec2(vNormal.x, vNormal.z) + vec2(0.001));
       float drainage = terrainErosion(uvMed, slopeDir);
       float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.008));
@@ -800,7 +800,7 @@ export const terrainFrag = /* glsl */`
         // World-space height gradient over the surface; the det division
         // makes it independent of the screen-space pixel footprint.
         vec3 grad = sign(det) * (dFdx(hB) * r1 + dFdy(hB) * r2) / max(abs(det), 1e-3);
-        // Grazing fragments have a near-zero det — the gradient there is
+        // Grazing fragments have a near-zero det - the gradient there is
         // unstable, so damp the bump as the surface turns away from view.
         float facingG = abs(dot(normalize(vWorldPos - vCameraPos), vNormal));
         float bAmt = bumpFadeG * smoothstep(0.10, 0.40, facingG);
@@ -823,7 +823,7 @@ export const terrainFrag = /* glsl */`
       vec3 cCliffG    = vec3(0.20, 0.18, 0.14);
 
       // Canopy value gradient: medium noise lifts tip color over deep roots
-      // — the grass field gets real dark/light structure instead of one
+      // - the grass field gets real dark/light structure instead of one
       // mid-olive. Clump id jitters hue so tufts aren't clones.
       vec3 grass = mix(cGrassDeep, cGrassTip, smoothstep(0.25, 0.75, medium));
       grass = mix(grass, cGrassDry, clumpId * 0.35);
@@ -832,7 +832,7 @@ export const terrainFrag = /* glsl */`
 
       vec3 col = grass;
       // Dirt: only the driest cells, broken by medium noise so patches
-      // stay small and ragged — big smooth blobs read as mud smears.
+      // stay small and ragged - big smooth blobs read as mud smears.
       float dirtMask = smoothstep(0.62, 0.74, region) * smoothstep(0.14, 0.28, height)
                      * smoothstep(0.35, 0.65, medium);
       float hollow = (1.0 - smoothstep(0.12, 0.28, height)) * 0.35;
@@ -846,9 +846,9 @@ export const terrainFrag = /* glsl */`
       float slopeBlend = smoothstep(0.20, 0.48, slope);
       vec3 slopeCol = mix(mix(cDirtG, cRockG, ridged), cCliffG, smoothstep(0.30, 0.65, slope));
       col = mix(col, slopeCol, slopeBlend);
-      // Trough AO: fake canopy self-shadowing in micro lows — the single
+      // Trough AO: fake canopy self-shadowing in micro lows - the single
       // biggest fix for "flat" procedural ground.
-      // Drainage darkening: gully streaks on sloped ground only — flat
+      // Drainage darkening: gully streaks on sloped ground only - flat
       // meadow stays clean, hillsides get carved.
       // Damp meadow gathers in the low, flat valleys - wetter/darker turf.
       float valleyMaskG = (1.0 - smoothstep(0.08, 0.30, height)) * (1.0 - smoothstep(0.12, 0.30, slope));
@@ -867,18 +867,18 @@ export const terrainFrag = /* glsl */`
       float pebMaskG = smoothstep(0.80, 0.94, pebG) * detFade * dirtMask;
       col = mix(col, cRockG * 0.75, pebMaskG * 0.6);
       col *= 1.0 - smoothstep(0.10, 0.45, slope) * (1.0 - smoothstep(0.25, 0.75, drainage)) * 0.28;
-      // Slope shading: flats lift, hillsides drop — reads as grazing light
+      // Slope shading: flats lift, hillsides drop - reads as grazing light
       // on the relief itself, not just sun-on-normal.
       col *= mix(1.12, 0.74, smoothstep(0.0, 0.45, slope));
       float windG = 0.5 + 0.5 * sin((vWorldPos.x * 0.08 + vWorldPos.z * 0.04) + fbm(vWorldPos.xz * 0.004) * 4.0);
       col *= mix(vec3(0.96, 0.97, 0.90), vec3(1.04, 1.03, 1.00), windG) * (1.0 - slopeBlend * 0.4);
       // Continental tint: km-scale hue drift so the whole map isn't one
-      // green — reads as wetter/drier sub-regions at horizon distance.
+      // green - reads as wetter/drier sub-regions at horizon distance.
       col *= mix(vec3(0.88, 1.06, 0.82), vec3(1.10, 0.98, 0.80), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
       col *= 0.88 + 0.24 * detail;
       col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.10 * detFade;
       // Close-range grain finally lands on the albedo too (it used to be
-      // computed and thrown away) — plus a crease darkening driven by the
+      // computed and thrown away) - plus a crease darkening driven by the
       // bump gradient, so the micro-relief reads as turf, not just tint.
       col *= 1.0 + ((grainG - 0.5) * 0.38 + (triGrainG - 0.5) * 0.22 * nearFadeG) * grainFadeG;
       col *= 1.0 - clamp(bumpGrad * 0.035, 0.0, 0.22) * grainFadeG;
@@ -889,7 +889,7 @@ export const terrainFrag = /* glsl */`
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
-      // Grass sheen: grazing-angle specular lift on open meadow — turf
+      // Grass sheen: grazing-angle specular lift on open meadow - turf
       // blades glint; masked off dirt, rock, and shaded faces.
       vec3 viewDir2 = normalize(vCameraPos - vWorldPos);
       float sheen = pow(max(dot(reflect(-sunDir, nrmG), viewDir2), 0.0), 14.0);
@@ -901,7 +901,7 @@ export const terrainFrag = /* glsl */`
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
       // World-edge dissolve: outermost level fades to transparent over its
-      // last ~300m — geometry itself dissolves over the sky, no silhouette
+      // last ~300m - geometry itself dissolves over the sky, no silhouette
       // (edgeHalf=0 on inner levels => edgeA stays 1).
       float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
@@ -988,7 +988,7 @@ ${TERRAIN_PRESET_GLSL}
     col *= lit;
     col += scorchEmberGlow(vWorldPos);
     col += fieldGlow(vWorldPos);
-    // Same dampened-downward-distance fog as the desert branch — see above
+    // Same dampened-downward-distance fog as the desert branch - see above
     col = seaTint(col, vWorldPos.y, vWorldPos.xz);
     vec3 fogDelta = vWorldPos - vCameraPos;
     float dist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));

@@ -21,20 +21,20 @@ export interface OverlayInputDeps {
   lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void; sendPerkUpdate(perk: string): void } | null;
 }
 
-// While a demo plays, gameplay keys belong to the player — only the
+// While a demo plays, gameplay keys belong to the player - only the
 // transport controls (Escape/F6/arrows) still reach the overlay.
 function demoOwnsKey(dm: DemoManager | null, code: string): boolean {
   return Boolean(dm?.isPlaying) && code !== 'Escape' && code !== 'F6' &&
     code !== 'ArrowUp' && code !== 'ArrowDown' && code !== 'ArrowLeft' && code !== 'ArrowRight';
 }
 
-// Overlay / pointer-lock / global key handling: ESC menu flow (Krunker-style —
+// Overlay / pointer-lock / global key handling: ESC menu flow (Krunker-style -
 // any lock exit opens the menu), scoreboard Tab, demo playback arrow keys,
 // F4 pixel toggle, F6 demo UI, Space pause.
 export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => void; } {
   const { overlay, rendererCanvas, logger } = deps;
 
-  // Loadout bar lives in its own module — it builds the chip/dropup DOM and
+  // Loadout bar lives in its own module - it builds the chip/dropup DOM and
   // owns the refreshLoadout funnel the overlay opens through.
   const loadout = wireLoadoutBar(deps);
   const {refreshLoadout} = loadout;
@@ -44,7 +44,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
   const keysMenu = keysOpen && keysModal ? buildKeysMenu(keysOpen, keysModal) : null;
 
   // Section expanders: a label folds its rows until the next label.
-  // PROFILE (name) and GAME (PLAY) stay open — the core rows never collapse.
+  // PROFILE (name) and GAME (PLAY) stay open - the core rows never collapse.
   document.querySelectorAll('#menu-side .section-label').forEach((label): void => {
     if (label.textContent === 'PROFILE' || label.textContent === 'GAME') {return;}
     label.classList.add('expandable');
@@ -59,7 +59,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
   });
   wireLabButton();
 
-  // Single source of truth for menu visibility — sets overlay display AND
+  // Single source of truth for menu visibility - sets overlay display AND
   // the body class that hides the HUD layer (inline display:block left by
   // hud.show() would beat a plain CSS selector, so the rule uses !important).
   function setOverlay(open: boolean): void {
@@ -68,7 +68,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
     audio.setDucked(open);
     if (open) {refreshLoadout();}
     else {
-      // Nothing may strand open over a resume — dropups, the keybind
+      // Nothing may strand open over a resume - dropups, the keybind
       // popup, or a live "press any key" capture all reset here.
       loadout.closeDrops();
       keysMenu?.close();
@@ -76,14 +76,14 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
   }
 
   function requestLock(): void {
-    // AudioContext unlocks on user gesture — the click that enters pointer
+    // AudioContext unlocks on user gesture - the click that enters pointer
     // lock is exactly that gesture.
     audio.unlock();
-    // Raw mouse input first — unadjustedMovement kills the OS accel curve
+    // Raw mouse input first - unadjustedMovement kills the OS accel curve
     // so cm/360 means the same thing on every box (Chrome ≥88; FF/Safari
     // ignore or reject the option). Falls back to the plain call.
     const warnCooldown = (): void => {
-      logger.info('Pointer lock on cooldown — browser requires a brief delay after exiting lock. Click again to re-enter.');
+      logger.info('Pointer lock on cooldown - browser requires a brief delay after exiting lock. Click again to re-enter.');
     };
     const lock = (raw: boolean): void => {
       let p: Promise<void> | undefined;
@@ -99,7 +99,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
     if (document.pointerLockElement === rendererCanvas) {
       setOverlay(false);
     } else if (deps.isGameStarted()) {
-      // Browsers reserve ESC for exiting pointer lock — its keydown never reaches
+      // Browsers reserve ESC for exiting pointer lock - its keydown never reaches
       // the page while locked. So treat any lock exit (ESC, alt-tab, browser UI)
       // as "open the menu", same as Krunker.
       setOverlay(true);
@@ -144,7 +144,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
   }
 
   document.addEventListener('keydown', (e): void => {
-    // A keybind capture owns the next keystroke — it must not leak into
+    // A keybind capture owns the next keystroke - it must not leak into
     // menu/demo handling (its listener already stops propagation, this is
     // belt-and-braces for ordering across modules)
     if (isCapturing()) {return;}
