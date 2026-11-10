@@ -6,7 +6,7 @@
  * so "where to go" and "how to get there" each read on their own.
  */
 import { botRand } from './botRand.ts';
-import { GRAVITY } from './movement.ts';
+import { GRAVITY, MOVEMENT_CONFIG } from './movement.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
 import type { BotVec, BrainCtx, BrainOut } from './botBrain.ts';
 
@@ -68,6 +68,10 @@ export class BotMoves {
   /** Short latch letting an apex-extension burn survive the diveRun
    *  veto - same role reconHoldT plays for recon climbs. */
   private apexHoldT = 0;
+  /** Same latch for cruise burns - wander dests flatten to pos.y, so a
+   *  cruising roamer always reads "dest below = dive" and diveRun would
+   *  kill every ascend boost the tick after it arms. */
+  private cruiseHoldT = 0;
   /** Burn-glide cycle: enforced no-discretionary-jet window after a
    *  committed burn ends on a free roamer. Chaos soak (_tools/_chaos3.ts)
    *  showed pulse-burn-then-glide beat scattered taps - the descent
@@ -301,7 +305,27 @@ export class BotMoves {
       this.jetHold = Math.max(this.jetHold, T.moves.jetHoldBase + botRand() * T.moves.jetHoldRand);
     }
     this.reconTick(dt, ctx, pos, { g0, rise, airborne, tanked, speed });
+    // Cruise (skill.airLove): the Tribes hangtime buy - a free roamer
+    // ascending or on a shallow descent (vy > -4) burns to stay up:
+    // ascent extends the climb, the shallow-descend burn is the glide
+    // over the bowl that keeps altitude banked as ha instead of trading
+    // it back to the slope. Steep descents never burn - gravity is
+    // already paying, the dive/pump logic owns that leg.
+    const al = ctx.airLove ?? 0;
+    if (al > 0 && airborne && !ctx.posted && ctx.runner !== true && ctx.wave !== true && ctx.running !== true
+        && (ctx.vel?.y ?? 0) > -4 && speed > T.moves.reconMinSpeed * (ctx.speedScale ?? 1)
+        // Reserve discipline: cruise only arms off a healthy tank - a
+        // bot that re-burns each regen trickle lives dry, and dry +
+        // airborne is a target, not a dodger (evo: airLove carriers
+        // halved eFill and died MORE). Burn a window, glide, refill.
+        && (ctx.energy === undefined || ctx.energy > T.moves.climbTapMinE)
+        && pos.y - g0 < T.moves.reconAglMax * (1 + al * 2)) {
+      this.jetHold = Math.max(this.jetHold, T.moves.reconBurn * al);
+      this.cruiseHoldT = Math.max(this.cruiseHoldT, T.moves.reconBurn * al);
+      this.jetWhy = 'cruise';
+    }
     this.reconHoldT = Math.max(0, this.reconHoldT - dt); this.apexHoldT = Math.max(0, this.apexHoldT - dt);
+    this.cruiseHoldT = Math.max(0, this.cruiseHoldT - dt);
     // The dive: a destination at or below the bot wants gravity, not
     // thrust — a capper jets to the stand's zip code, then lets
     // momentum carry the touch. The runway scales with what has to
@@ -341,7 +365,7 @@ export class BotMoves {
     // purpose, and the skim-down that follows is the ski leg. Vetoing
     // it here meant roamers (usually descending - that's why they ski)
     // cancelled every climb before it started.
-    if (diveRun && this.reconHoldT <= 0 && this.apexHoldT <= 0) {this.jetHold = 0;}
+    if (diveRun && this.reconHoldT <= 0 && this.apexHoldT <= 0 && this.cruiseHoldT <= 0) {this.jetHold = 0;}
     // Tail-of-hop tap — the timing the standalone sweep measured: jetting
     // only the DESCENDING arc of each hop holds ~43m/s at ~1/10 the energy
     // per meter of a held burn (66m/s): every thrust tick lands as forward
@@ -383,7 +407,7 @@ export class BotMoves {
     // duty telemetry reads a third of all thrust as reasonless ('-').
     const escJet = this.host.escapeJetT() > 0 && !inGlide;
     if (escJet && this.jetHold <= 0) {this.jetWhy = 'escape';}
-    const jet = (!diveRun || this.reconHoldT > 0 || this.apexHoldT > 0) && !landDive && (((this.jetHold > 0 || escJet) && tanked) || (tail && !inGlide));
+    const jet = (!diveRun || this.reconHoldT > 0 || this.apexHoldT > 0 || this.cruiseHoldT > 0) && !landDive && (((this.jetHold > 0 || escJet) && tanked) || (tail && !inGlide));
     this.jetOut = jet;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
@@ -428,15 +452,25 @@ export class BotMoves {
       // VELOCITY line — if that drops, the surface under the slide is
       // falling away and the hop veto stands.
       // And no hop when the CURRENT ballistic arc already threads the
-      // flag's ±6m vertical window — the hop just raises the arc over
+      // flag's ±6m vertical window - the hop just raises the arc over
       // the pole (broadside: a 53m/s pass overflew at dy=33, ungrabbable).
       // Strike-window deck glue: inside the run-in on flat ground the
-      // hop chain is the only thing keeping the bot airborne — and the
+      // hop chain is the only thing keeping the bot airborne - and the
       // feet blast needs <6m of dirt to pop. Grounded ski is frictionless
       // too, so gluing the runner costs no speed and opens the 2.2s
       // heel-blast cadence (the flat-stand path to ~40m/s entry speed).
       jump: (uphill && speed < T.moves.jumpUphillSpeed && !airborne)
-        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && rise > -T.moves.hopDescRise && !this.travelDescent(ctx, pos, speed) && !this.arcThreadsFlag(ctx, pos, speed, od) && !(ctx.runner === true && od < T.moves.strikeGd && Math.abs(rise) < T.moves.stepRise)
+        // Jump-first launch: any burn that arms on the deck pops the
+        // jump edge first - the hop's free vy is what the jets then
+        // multiply (jet-from-standing burns the same tank for half the
+        // apex). Humans never burn without the launch.
+        || (jet && !airborne)
+        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed * (ctx.speedScale ?? 1) && rise > -T.moves.hopDescRise && !this.arcThreadsFlag(ctx, pos, speed, od) && !(ctx.runner === true && od < T.moves.strikeGd && Math.abs(rise) < T.moves.stepRise)
+          // Cruise chain (airLove): the relaunch. Pumpable descents veto
+          // the hop for a speed-maxing bot - but an air-loving roamer's
+          // hop isn't bought speed, it's the next climb's launch ramp.
+          // Landing = immediately going back up.
+          && ((al > 0 && ctx.runner !== true && ctx.wave !== true && ctx.running !== true) || !this.travelDescent(ctx, pos, speed))
           // Runners below cruise speed stay glued on near-flat ground:
           // ski contact is frictionless so a flat hop buys nothing, and
           // it pops the bot airborne where no grounded cruise burn can
@@ -510,10 +544,12 @@ export class BotMoves {
         && ctx.running !== true && !s.airborne && !this.perched && s.tanked && s.rise > -T.moves.boostRise
         && s.speed > T.moves.reconMinSpeed
         && (ctx.energy === undefined || ctx.energy > T.moves.reconMinE)
-        && pos.y - s.g0 < T.moves.reconAglMax) {
-      this.reconT = T.moves.reconPeriod * (0.6 + botRand() * 0.8);
-      this.jetHold = Math.max(this.jetHold, T.moves.reconBurn);
-      this.reconHoldT = T.moves.reconBurn;
+        && pos.y - s.g0 < T.moves.reconAglMax * (1 + (ctx.airLove ?? 0))) {
+      // airLove: climb sooner (shorter cooldown), burn longer, allow a
+      // taller self-ceiling — the 50%HA chill style as one appetite dial.
+      this.reconT = (T.moves.reconPeriod * (0.6 + botRand() * 0.8)) / (1 + (ctx.airLove ?? 0) * 2);
+      this.jetHold = Math.max(this.jetHold, T.moves.reconBurn * (1 + (ctx.airLove ?? 0)));
+      this.reconHoldT = T.moves.reconBurn * (1 + (ctx.airLove ?? 0));
       this.jetWhy = 'recon';
     }
   }
@@ -634,6 +670,45 @@ export class BotMoves {
     // sits at-or-below the start point — an arc still rising toward a
     // high face (e.g. mid-burn ascent) must not veto its own thrust.
     return ctx.groundY(x, z) < pos.y + 4;
+  }
+
+  /** Marginal-utility jet: march the no-thrust arc and the burn arc
+   *  ~2s forward, compare terminal mechanical energy (½v²+g·h). A burn
+   *  pays iff thrust leaves the bot richer than gliding — micro-taps,
+   *  graze-landings, ascend-burns and band-holding all EMERGE from the
+   *  inequality instead of being scripted behaviors. Only evaluated
+   *  while airborne (deck climbs are terrain duty, priced elsewhere). */
+  private burnPays(ctx: BrainCtx, pos: BotVec): boolean {
+    const v = ctx.vel;
+    if (!v) {return false;}
+    const dtS = 0.12, G = -GRAVITY;
+    // mass 1 = light/medium (heavies climb slower; ctx carries no mass —
+    // a shared mass keeps the gate comparative, not absolute).
+    const UP = MOVEMENT_CONFIG.jetForceUp, FWD = MOVEMENT_CONFIG.jetForceDir, CAP = MOVEMENT_CONFIG.jetMaxFwdAccel;
+    const vx1 = v.x, vz1 = v.z;
+    let x1 = pos.x, y1 = pos.y, z1 = pos.z, vy1 = v.y ?? 0;
+    let x2 = x1, y2 = y1, z2 = z1, vx2 = vx1, vy2 = vy1, vz2 = vz1;
+    let done1 = false, done2 = false, steps = 0;
+    for (let s = 0; s < 18 && (!done1 || !done2); s += 1) {
+      steps += 1;
+      if (!done1) {
+        x1 += vx1 * dtS; z1 += vz1 * dtS; y1 += vy1 * dtS; vy1 -= G * dtS;
+        done1 = y1 - ctx.groundY(x1, z1) <= 1.2;
+      }
+      if (!done2) {
+        const hv = Math.hypot(vx2, vz2);
+        vy2 += (UP - G) * dtS;
+        if (hv < CAP && hv > 0.01) {
+          const nx = vx2 / hv, nz = vz2 / hv;
+          vx2 += nx * FWD * dtS; vz2 += nz * FWD * dtS;
+        }
+        x2 += vx2 * dtS; z2 += vz2 * dtS; y2 += vy2 * dtS;
+        done2 = y2 - ctx.groundY(x2, z2) <= 1.2;
+      }
+    }
+    const mech = (vx: number, vy: number, vz: number, y: number, gx: number, gz: number): number =>
+      0.5 * (vx * vx + vy * vy + vz * vz) + G * Math.max(0, y - ctx.groundY(gx, gz));
+    return mech(vx2, vy2, vz2, y2, x2, z2) > mech(vx1, vy1, vz1, y1, x1, z1) * 1.05;
   }
 
   /** Whether the situation calls for a burn: genuine climbs, airborne
@@ -840,6 +915,15 @@ export class BotMoves {
     else if (runIn) {why = 'runIn';}
     else if (tap) {why = 'tap';}
     else if (boost) {why = 'boost';}
+    // Marginal-utility first principles: for non-committed bots the
+    // arc math evaluates BEFORE the reason table — a burn arms whenever
+    // thrust ends richer than gliding, regardless of which legacy gate
+    // would've named it. Mission burns (climb/destHigh/prey) keep their
+    // own pricing: a flag face is duty, not a trade. Reserve floor stays.
+    if (why !== 'climb' && why !== 'destHigh' && why !== 'prey' && why !== 'block'
+        && s.airborne && !ctx.runner && !ctx.wave && !ctx.running && !ctx.posted
+        && (ctx.energy === undefined || ctx.energy > T.moves.climbTapMinE)
+        && this.burnPays(ctx, pos)) { this.jetWhy = 'econ'; return true; }
     if (why === '-') {return false;}
     // Energy thrift (skill.thrift): the Tribes loop is jet-on-ascent,
     // never-on-descent — a burn while the slope is pumping buys energy

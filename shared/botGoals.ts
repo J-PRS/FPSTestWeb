@@ -28,6 +28,13 @@ export interface GoalState {
   /** Wander pacing - personal clock so a squad doesn't caravan. */
   wanderT: number;
   wanderWp: BotVec;
+  /** Hill-king perch dwell - an air-loving roamer that just topped a
+   *  climb leg holds the summit a beat (look around, take shots) before
+   *  the next roll. 0 = not perched. */
+  perchT: number;
+  /** Last committed wander leg style (see rollWander's mode): the
+   *  hill-king cycle alternates climb→descend instead of re-rolling. */
+  lastWanderMode: number;
   /** Thinks since the current goal was picked - the stale clock for
    *  the switching-cost model (a committed line expires, never locks). */
   goalAge: number;
@@ -278,7 +285,16 @@ export class BotGoals {
    *  pacing clock says so, else the leg already underway. */
   private wanderCandidate(ctx: BrainCtx, pos: BotVec): BotVec | null {
     const s = this.s();
-    if (s.wanderT <= 0 || distSq(pos, s.wanderWp) < 9) {
+    s.perchT = Math.max(0, s.perchT - 0.2); // think cadence ~5Hz
+    const arrived = distSq(pos, s.wanderWp) < 9;
+    // Hill-king (airLove): topping a climb leg earns a perch - stand the
+    // summit, look around, then the next roll is the ski-down leg.
+    if (arrived && (ctx.airLove ?? 0) > 0 && s.lastWanderMode === -1 && s.perchT <= 0) {
+      s.perchT = 1.5 + botRand() * 3;
+    }
+    // A perched king holds the summit - no re-roll while the dwell runs.
+    if (s.perchT > 0 && arrived) {return s.wanderWp;}
+    if (s.wanderT <= 0 || arrived) {
       s.wanderT = (3 + botRand() * 4) / this.wanderlust();
       const best = this.rollWander(ctx, pos);
       if (best) {s.wanderWp = best;}
@@ -291,6 +307,7 @@ export class BotGoals {
    *  commits to its character instead of flip-flopping per candidate.
    *  Death spots are skipped outright. */
   private rollWander(ctx: BrainCtx, pos: BotVec): BotVec | null {
+    const s = this.s();
     const g0 = ctx.groundY(pos.x, pos.z);
     // A cold field's best pull is the crowd - every live body's position
     // is already a legal sense (retreat folds read it), and a lobby
@@ -320,6 +337,14 @@ export class BotGoals {
     let mode = 0;
     if (leg < T.brain.wanderDownP) {mode = 1;}
     else if (leg < T.brain.wanderDownP + T.brain.wanderClimbP) {mode = -1;}
+    // Hill-king (airLove): no dice - the leg ALTERNATES. Climb leg tops
+    // a summit (perch handles the dwell), descend leg is the ski-down
+    // that sets up the next climb. JP's recipe: jet uphill, stand on
+    // it, ski down, jet up the next face, repeat - while fighting.
+    if ((ctx.airLove ?? 0) > 0) {
+      mode = s.lastWanderMode === -1 ? 1 : -1;
+    }
+    s.lastWanderMode = mode;
     let best: BotVec | null = null;
     let bestScore = -Infinity;
     for (let tries = 0; tries < 3; tries += 1) {

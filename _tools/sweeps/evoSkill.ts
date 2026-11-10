@@ -52,10 +52,11 @@ const MAP = arg('map', '');
 // --inject aim=1.45,jit=0.5,temp=1.3,react=0.45: pin a named genome
 // into slot 0 — e.g. the impossible tier row — as a fixed ceiling probe.
 const INJECT = arg('inject', '');
-// --fit air|ha|mech: fitness numerator — air = ha+a share (default),
+// --fit air|ha|mech: fitness numerator - air = ha+a share (default),
 // ha = the >5m bucket alone, mech = mean ½v²+g·h per unit mass
 // (conserve total energy; altitude falls out of the physics).
 const FIT = arg('fit', 'air');
+const MODE = arg('mode', 'dm');
 const parseGenome = (s: string): Genome => {
   const g = { ...BASE } as Genome;
   for (const kv of s.split(',')) {
@@ -69,10 +70,10 @@ const OUT_DIR = resolve(import.meta.dir, 'out');
 mkdirSync(OUT_DIR, { recursive: true });
 const OUT = resolve(OUT_DIR, 'evoSkill.jsonl');
 
-type Genome = { aim: number; move: number; react: number; jitter: number; temper: number; thrift: number };
-const BASE: Genome = { aim: 1, move: 1, react: 1, jitter: 1, temper: 1, thrift: 0 };
+type Genome = { aim: number; move: number; react: number; jitter: number; temper: number; thrift: number; airLove: number };
+const BASE: Genome = { aim: 1, move: 1, react: 1, jitter: 1, temper: 1, thrift: 0, airLove: 0 };
 const CLAMP: Record<keyof Genome, [number, number]> = {
-  aim: [0.4, 1.6], move: [0.5, 1.5], react: [0.3, 2.5], jitter: [0.3, 2.5], temper: [0.6, 1.5], thrift: [0, 0.95],
+  aim: [0.4, 1.6], move: [0.5, 1.5], react: [0.3, 2.5], jitter: [0.3, 2.5], temper: [0.6, 1.5], thrift: [0, 0.95], airLove: [0, 1],
 };
 
 // Own mulberry32 — NEVER botRand: the room's seeded stream must draw
@@ -96,9 +97,9 @@ const mutate = (g: Genome): Genome => {
   for (let i = 0; i < hits; i++) {
     const k = keys[Math.floor(rng() * keys.length)]!;
     const [lo, hi] = CLAMP[k];
-    // thrift is a 0-based personality share — a multiplicative nudge
+    // thrift is a 0-based personality share - a multiplicative nudge
     // can never leave 0. Additive for it, multiplicative elsewhere.
-    m[k] = k === 'thrift'
+    m[k] = k === 'thrift' || k === 'airLove'
       ? Math.min(hi, Math.max(lo, m[k] + (rng() - 0.4) * 0.3))
       : Math.min(hi, Math.max(lo, m[k] * (1 + (rng() - 0.5) * 0.2)));
   }
@@ -129,7 +130,8 @@ function applyGenome(s: BotSkill, g: Genome): void {
     s.axes[ax].moving *= g.aim; s.axes[ax].still *= g.aim;
   }
   s.baseMove *= g.move; s.movement *= g.move;
-  s.thrift = g.thrift; // personality draw — overwrite the roll outright
+  s.thrift = g.thrift; // personality draws — overwrite the roll outright
+  s.airLove = g.airLove;
 }
 
 function runEra(pop: Genome[], genSeed: number): Metrics[] {
@@ -139,7 +141,7 @@ function runEra(pop: Genome[], genSeed: number): Metrics[] {
     const spec = JSON.parse(readFileSync(resolve(import.meta.dir, `../../maps/${MAP}.json`), 'utf8')) as { heightScale?: number };
     field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale ?? 1);
   }
-  const room = mkRoom({ mode: 'dm', bots: BOTS, botSkill: 'medium', arena: { x: 0, z: 0, radius: ARENA } }, 'dm', genSeed, false, field);
+  const room = mkRoom({ mode: MODE, bots: BOTS, botSkill: 'medium', arena: { x: 0, z: 0, radius: ARENA } }, MODE, genSeed, false, field);
   const ctl = room.bots as unknown as {
     brains: Map<string, { skill: BotSkill }>;
     loadouts: Map<string, BotLoadout>;
@@ -221,15 +223,19 @@ for (let gen = 0; gen < GENS; gen++) {
     const air = (m.asw.ha + m.asw.a) / n;
     const eFill = m.eN > 0 ? m.eSum / m.eN : 0;
     const mech = m.mechN > 0 ? m.mechSum / m.mechN : 0;
-    // mech is ~[0..2000+] J/kg — scale to ~[0..1] against a generous
+    // mech is ~[0..2000+] J/kg - scale to ~[0..1] against a generous
     // sustained target (60 m/s cruise ≈ 1800) so it mixes with shares.
-    const fit = (FIT === 'ha' ? m.asw.ha / n : FIT === 'mech' ? Math.min(1, mech / 1800) : air) + WE * eFill;
+    // survive: survivability doctrine - high air is the means, not
+    // dying is the goal. Score = ha share + not-dying share (lives
+    // intact across the era). Both [0..1]-ish, same weight.
+    const survive = (m.asw.ha / n) + Math.max(0, 1 - m.deaths / (n / 60));
+    const fit = (FIT === 'ha' ? m.asw.ha / n : FIT === 'mech' ? Math.min(1, mech / 1800) : FIT === 'survive' ? survive : air) + WE * eFill;
     return { g, m, n, air, eFill, mech, fit };
   }).sort((a, b) => b.fit - a.fit);
   for (const r of rows) {
     const pct = (v: number): string => `${(v / r.n * 100).toFixed(0).padStart(2)}`;
     console.log(
-      `${gen}   | aim ${r.g.aim.toFixed(2)} move ${r.g.move.toFixed(2)} react ${r.g.react.toFixed(2)} jit ${r.g.jitter.toFixed(2)} temp ${r.g.temper.toFixed(2)} thr ${r.g.thrift.toFixed(2)}` +
+      `${gen}   | aim ${r.g.aim.toFixed(2)} move ${r.g.move.toFixed(2)} react ${r.g.react.toFixed(2)} jit ${r.g.jitter.toFixed(2)} temp ${r.g.temper.toFixed(2)} thr ${r.g.thrift.toFixed(2)} air ${r.g.airLove.toFixed(2)}` +
       ` | ${(r.air * 100).toFixed(1).padStart(5)}% (${pct(r.m.asw.ha)}+${pct(r.m.asw.a)}) s${pct(r.m.asw.s)} w${pct(r.m.asw.w)} st${pct(r.m.asw.st)} i${pct(r.m.asw.i)}` +
       ` | ${String(r.m.kills).padStart(3)} ${String(r.m.deaths).padStart(3)} ${(r.eFill * 100).toFixed(1).padStart(5)}% ${String(r.m.dry).padStart(3)} E${r.mech.toFixed(0).padStart(4)} | ${r.fit.toFixed(3)}`,
     );

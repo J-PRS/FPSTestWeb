@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameBot, EYE } from './botBrain.js';
 import { BotWatchdog } from './botWatchdog.js';
 import { SheepMeter } from './botSheep.js';
-import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, rollBotPerk } from '../../../../shared/botLoadouts.js';
+import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, rollBotPerk, type BotLoadout } from '../../../../shared/botLoadouts.js';
 import { botRand } from '../../../../shared/botRand.js';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { ENERGY } from '../../../../shared/movement.js';
@@ -42,7 +42,7 @@ import { simRand } from '../../../../shared/simRand.js';
  */
 
 import { BOT_NAMES } from '../../../../shared/botNames.js';
-import { CLASS_STATS, classCapsule, classMass } from '../../../../shared/botClasses.js';
+import { CLASS_STATS, classCapsule, classMass, type ArmorClass } from '../../../../shared/botClasses.js';
 import type { BodyCapsule } from '../../../../shared/movement.js';
 import type { DeployOwner } from '../deployables.js';
 import type { MapSpec } from '../../../../shared/mapSpec.js';
@@ -188,19 +188,25 @@ export class TeamBots {
         const base = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;
         // Same perk roll the server roster makes - kit fields weapons,
         // perk table fields the person; class derives after the roll.
-        const lo = Object.assign({}, base, {perk: rollBotPerk(base, botRand)});
-        const cls = botClassForLoadout(lo);
+        // Instagib rooms field the same forced kit the server roster does:
+        // railgun everywhere, hook belt, light frame, no alternates to adapt into.
+        const insta = deps.world.instagib;
+        const lo: BotLoadout = insta
+          ? { perk: 'jumpstart', near: WeaponType.Railgun, mid: WeaponType.Railgun, far: WeaponType.Railgun, belt: WeaponType.Hook, side: WeaponType.Railgun }
+          : Object.assign({}, base, {perk: rollBotPerk(base, botRand)});
+        const cls = insta ? 'light' : botClassForLoadout(lo);
         const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain, cls);
         bot.setLoadout(lo);
         // Q-skill: same per-class pool the server roster rolls - lights
         // favor mobility teleports, heavies the dive/endurance.
-        bot.skillId = cls === 'light' ? (botRand() < 0.6 ? 'blink' : 'dash')
+        bot.skillId = insta ? 'blink'
+          : cls === 'light' ? (botRand() < 0.6 ? 'blink' : 'dash')
           : cls === 'heavy' ? (botRand() < 0.5 ? 'slam' : 'medkit')
           : (['dash', 'bounce', 'warp', 'shield'] as const)[Math.floor(botRand() * 4)]!;
-        bot.loadoutAlts = wildcard ? WILDCARD_SLOTS : BOT_ALT_SLOTS[kitIdx];
+        bot.loadoutAlts = insta ? {} : (wildcard ? WILDCARD_SLOTS : BOT_ALT_SLOTS[kitIdx]);
         // The spawn pick is skill-weighted, not flat — the brain's own
         // matrix rerolls every open slot toward what it hits with.
-        bot.adaptLoadout();
+        if (!insta) {bot.adaptLoadout();}
         if (ffa) {
           // FFA pseudo-team = own id — everyone is everyone else's enemy.
           bot.team = bot.playerId;
@@ -570,6 +576,8 @@ bn += 1;
     ctx.flagPos = flagTeam ? this.ctf!.flagPos(flagTeam, false) ?? null : null;
     ctx.moveSkill = bot.skill?.movement;
     ctx.thrift = bot.skill?.thrift;
+    ctx.airLove = bot.skill?.airLove;
+    ctx.speedScale = CLASS_STATS[bot.armorClass as ArmorClass].speedScale;
     ctx.skill = bot.skillId;
     ctx.beltItem = bot.loadout?.belt;
     ctx.pickupVal = ctx.nugget?.val;

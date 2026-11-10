@@ -197,6 +197,11 @@ interface BotThinkCtx {
   moveSkill?: number;
   /** skill.thrift - vetoes wasteful grounded burns (shared/botMoves). */
   thrift?: number;
+  /** skill.airLove - scales recon-climb appetite (shared/botMoves). */
+  airLove?: number;
+  /** Armor-class speedScale - speed floors in shared/botMoves scale by
+   *  it so heavies are limited by physics, not a tuned floor. */
+  speedScale?: number;
   /** Chased pickup's denomination (headhunt 1/3/9/27). */
   pickupVal?: number;
   /** Score deficit x endgame pressure, ~0..2 - team modes only. */

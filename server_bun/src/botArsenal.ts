@@ -263,10 +263,26 @@ s[kind] += 1; this.propels.set(id, s);
           const st = getWeaponStats(tr.wt);
           const p0 = this.room.players.getPlayer(id);
           if (st && st.speed > 0 && p0) {
-            const flightT = Math.hypot(tp.x - p0.position.x, tp.y - p0.position.y, tp.z - p0.position.z) / st.speed;
-            const v = tr.tv;
-            leadX = (v?.x ?? 0) * flightT; leadZ = (v?.z ?? 0) * flightT;
-            leadY = st.gravity ? 0.5 * GRAVITY * flightT * flightT : 0;
+            const dx = tp.x - p0.position.x, dy = tp.y - p0.position.y, dz = tp.z - p0.position.z;
+            const dist = Math.hypot(dx, dy, dz);
+            const inh = st.inherit ?? 0;
+            // Effective muzzle speed: the shell carries `inherit` of the
+            // shooter's velocity, so a bot charging the shot throws a
+            // faster projectile (shorter flightT) and one backpedaling
+            // throws slower. flightT off by that term misleads magnitude.
+            const pv = p0.velocity;
+            const effSpeed = st.speed + inh * (pv.x * dx + pv.y * dy + pv.z * dz) / (dist || 1);
+            const flightT = dist / Math.max(1, effSpeed);
+            const {tv} = tr;
+            // Relative lead on all three axes: target-motion minus the
+            // momentum already lent to the shell - including vy, which
+            // the old code dropped entirely (an airborne bot's downward
+            // dive handed every shell a free downward kick it never
+            // aimed out). Without it a 30m/s cruiser aims as if static.
+            leadX = ((tv?.x ?? 0) - pv.x * inh) * flightT;
+            leadY = ((tv?.y ?? 0) - pv.y * inh) * flightT
+              + (st.gravity ? 0.5 * GRAVITY * flightT * flightT : 0);
+            leadZ = ((tv?.z ?? 0) - pv.z * inh) * flightT;
           }
         }
         tr.aim.x = tp.x + e.x + leadX;

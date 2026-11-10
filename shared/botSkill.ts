@@ -104,7 +104,12 @@ export interface BotSkill {
    *  is the point, not never spending. Personality draw like courage.
    *  The evo hook for "preserve kinetic+potential energy". */
   thrift: number;
-  /** The spec this roll was drawn from — hunt/brain reads the resolved
+  /** Air affinity 0..1 - how much the bot *wants* altitude: scales
+   *  recon-climb frequency, burn length, and the self-imposed ceiling.
+   *  The chill-at-50%HA playstyle as a personality draw: buys height,
+   *  cruises the hangtime, survives by being unsplashable. */
+  airLove: number;
+  /** The spec this roll was drawn from - hunt/brain reads the resolved
    *  mods for reaction delay, jitter and cadence. */
   readonly spec: BotSkillSpec;
   readonly mods: BotTierMods;
@@ -151,6 +156,9 @@ export function rollSkill(spawn: BotVec, spec: BotSkillSpec = 'medium'): BotSkil
     beltPull: rng() < 0.45,
     courage: rng(),
     thrift: rng(),
+    // Air-loving skews upper-half: the altitude-seeking style is what
+    // good players do, so the lobby draws from the better tail of it.
+    airLove: 0.5 + rng() * 0.5,
     spec,
     mods: Object.assign({}, mods),
     rng,

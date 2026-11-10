@@ -16,7 +16,7 @@ const kit = (over: { wanderlust?: number; heading?: { x: number; z: number }; ne
   const s: GoalState = {
     goal: { x: 0, y: 0, z: 0 },
     revengeT: 0, revengeFrom: { x: 0, y: 0, z: 0 },
-    wanderT: 0, wanderWp: { x: 0, y: 0, z: 0 }, goalAge: 0, goalScore: 0,
+    wanderT: 0, wanderWp: { x: 0, y: 0, z: 0 }, perchT: 0, lastWanderMode: 0, goalAge: 0, goalScore: 0,
   };
   const g = new BotGoals(
     () => s,

@@ -77,9 +77,16 @@ export interface BrainCtx {
   /** skill.movement - times the hop-descent tap: skilled bots jet only the
    *  falling arc; undefined reads as skilled (hosts without a skill matrix). */
   moveSkill?: number;
-  /** skill.thrift 0..1 — vetoes wasteful grounded burns in botMoves;
+  /** skill.thrift 0..1 - vetoes wasteful grounded burns in botMoves;
    *  undefined reads as 0 (hosts without a skill matrix stay thirsty). */
   thrift?: number;
+  /** skill.airLove 0..1 - scales recon-climb appetite in botMoves;
+   *  undefined reads as 0. */
+  airLove?: number;
+  /** Armor-class speedScale (1 = medium) - speed floors in botMoves
+   *  scale by it so physics stays the only real limiter: a heavy is
+   *  slow because its mass makes it slow, not because a gate said so. */
+  speedScale?: number;
   enemies: BotEnemy[];
   /** Objective anchor (CTF flag/base) - outranks pickup and wander. */
   objective?: BotVec | null;
@@ -430,6 +437,8 @@ export class BotBrain {
     revengeFrom: { x: 0, y: 0, z: 0 },
     wanderT: 0,
     wanderWp: { x: 0, y: 0, z: 0 },
+    perchT: 0,
+    lastWanderMode: 0,
     goalAge: 0, goalScore: 0,
   };
   private readonly goals = new BotGoals(

@@ -15,6 +15,7 @@ import type { ChatterKind } from '../../shared/botTaunts.ts';
 import { botWeaponHooks } from '../../shared/botWeaponHooks.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
+import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 
 import { dist3 } from '../../shared/botVec.ts';
 import { WeaponType } from '../../shared/weapons.ts';
@@ -269,14 +270,14 @@ export class ServerBotSenses {
   /** The sensorium for one think tick - see file header for what's legal
    *  on each channel. */
   // oxlint-disable-next-line complexity, max-params -- the ctx assembler; one field list, one call
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number; kills?: number; deaths?: number; heldTokens?: number; skill?: string }, goal: { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number; kills?: number; deaths?: number; heldTokens?: number; skill?: string; armorClass?: string }, goal: { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number): number => aimSkillFor(skill, t, 0) : undefined;
     const parties = sharedParties ?? this.partiesOf(p);
     const bp = sharedEnv.thinkProf ? (k: string, t0: number): Map<string, number> => sharedEnv.thinkProf!.set(k, (sharedEnv.thinkProf!.get(k) ?? 0) + sharedEnv.wallPerf!() - t0) : null;
     const ctx: BrainCtx = Object.assign({}, {id: p.id,team: p.team,pos: p.position,vel: p.velocity,enemies: parties.enemies,objective: goal?.pos ?? null,flagPos: goal?.flagPos ?? null,infiltrating: goal?.infiltrating ?? false,running: goal?.running ?? false,runner: goal?.runner ?? false,wave: goal?.wave ?? false,marshal: goal?.marshal ?? false,pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,posted: goal?.posted ?? 0,...((): { pickup?: BotVec; pickupVal?: number } => { const t = sharedEnv.wallPerf?.() ?? 0; const pk = this.pickupFor(p, parties.enemies); if (bp) {bp('sense:pickup', t);} return pk ? { pickup: pk.pos, pickupVal: pk.val } : {}; })(),huntCreatures: this.room.mode === 'nuggets'
-        || Object.values(this.room.creatureSim.pops).some((cap): boolean => cap > 0),groundY: (x: number, z: number): number => {
+        || Object.values(this.room.creatureSim.pops).some((cap): boolean => cap > 0),speedScale: (p.armorClass !== undefined && p.armorClass in CLASS_STATS ? CLASS_STATS[p.armorClass as ArmorClass].speedScale : 1),groundY: (x: number, z: number): number => {
         const t0 = sharedEnv.thinkProf ? sharedEnv.wallPerf!() : 0;
         const ep = this.room.moveSim.structureEpoch;
         if (ep !== this.groundEpoch) { this.groundMemo.clear(); this.groundEpoch = ep; }
@@ -300,7 +301,7 @@ export class ServerBotSenses {
       ), (skill ? {
         aimSkill: (d: number, targetSpeed: number): number =>
           aimSkillFor(skill, pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage), targetSpeed),
-      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,thrift: skill?.thrift,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,skill: p.skill,beltItem: this.loadouts.get(id)?.belt,held: this.room.mode === 'headhunt' ? p.heldTokens : undefined,convoy: this.convoyOf(p),spillSoon: this.spillWatchOf(p),desperate: this.desperateOf(p),capSync: this.routing.capSyncFor(p),confidence: this.confidenceOf(p),hero: this.heroOf(p),threats: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec): { x: number; z: number; } =>
+      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,thrift: skill?.thrift,airLove: skill?.airLove,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,skill: p.skill,beltItem: this.loadouts.get(id)?.belt,held: this.room.mode === 'headhunt' ? p.heldTokens : undefined,convoy: this.convoyOf(p),spillSoon: this.spillWatchOf(p),desperate: this.desperateOf(p),capSync: this.routing.capSyncFor(p),confidence: this.confidenceOf(p),hero: this.heroOf(p),threats: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec): { x: number; z: number; } =>
         this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),imapHottest: (v: BotVec): { x: number; z: number; v: number; } | null => this.room.influence.hottestNear(v, 'opportunity'),imapDanger: (v: BotVec): number =>
         this.room.influence.value(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),notice: this.notices.for(id, p.team, now),repair: builder === false ? null : this.repairJob(p), now});
     // Squad spot-report: reports land via reportSpots() AFTER the bot's
