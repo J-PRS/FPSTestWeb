@@ -416,7 +416,10 @@ export class MoveSim {
   // it identically.
   private jumpstartKick(): void {
     if (this.jumpstart <= 0) {return;}
+    // LAUNCH means ground: an airborne ski-press was a free +8 m/s
+    // horizontal boost — an uncapped air-jump, not a perk.
     const s = this.state;
+    if (!(s.onGround || this.groundedBuffered)) {return;}
     const hs = dhypot2(s.vel.x, s.vel.z);
     if (hs > MOVEMENT_CONFIG.maxVelocityGround * this.speedScale + 0.001) {return;}
     const dir = this.inputDirection();
