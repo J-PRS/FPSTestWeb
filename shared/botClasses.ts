@@ -5,6 +5,7 @@
  *  blast impulses divide by it, so the mech anchor that shrugs off
  *  shoves also burns more sky per drop of fuel. */
 import { WEAPONS } from './weaponRows.js';
+import { WeaponType } from './weaponTable.js';
 
 export type ArmorClass = 'light' | 'medium' | 'heavy';
 
@@ -39,6 +40,15 @@ export const LIGHT_ONLY_WEAPONS: ReadonlySet<number> = tierOf('light');
 
 const TIER_RANK: Record<ArmorClass, number> = { light: 0, medium: 1, heavy: 2 };
 
+/** Spawn-only types — child shells and skill pseudo-weapons, never a
+ *  muzzle weapon. Without this fence a forged fire intent on one rides
+ *  the default-light tier through every gate that whitelists on class. */
+const NEVER_FIRED: ReadonlySet<number> = new Set([
+  WeaponType.ClusterBomblet,
+  WeaponType.MRVBomblet,
+  WeaponType.Slam,
+]);
+
 /** The lowest tier allowed to fire weapon `w` (WeaponType id). Light-only
  *  guns report 'light' — the floor IS the ceiling for them. */
 export function minClassForWeapon(w: number): ArmorClass {
@@ -50,6 +60,7 @@ export function minClassForWeapon(w: number): ArmorClass {
 /** Server-side boundary: may `cls` fire weapon `w`? Unknown class = medium,
  *  same default the rest of the class plumbing assumes. */
 export function classCanFire(cls: string | undefined, w: number): boolean {
+  if (NEVER_FIRED.has(w)) {return false;}
   const have = cls === 'light' || cls === 'heavy' ? cls : 'medium';
   if (LIGHT_ONLY_WEAPONS.has(w)) {return have === 'light';}
   if (MEDIUM_ONLY_WEAPONS.has(w)) {return have === 'medium';}
