@@ -233,6 +233,25 @@ export class RoomDeployables {
    *  PLANT_FLOAT above it is pulled down - "server decides" applies to
    *  the landing spot too, and the replica echoes this y verbatim. */
   private groundY(pos: Vec3): number {
+    // Claimed point inside a solid: the downward ray starts inside the
+    // collider and the item would plant invisibly inside a wall. Lift to
+    // the containing collider's top - same "buried claim surfaces" rule.
+    let insideTop = -Infinity;
+    for (const c of [...this.room.ballSim.colliders, ...this.solidCols]) {
+      const ox = pos.x - c.cx, oz = pos.z - c.cz;
+      const lx = ox * c.cos + oz * c.sin;
+      const lz = -ox * c.sin + oz * c.cos;
+      if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) {continue;}
+      if (c.dome) {
+        const cy0 = c.cy - c.hy;
+        const dd = ox * ox + (pos.y - cy0) * (pos.y - cy0) + oz * oz;
+        const inside = pos.y < cy0 ? Math.abs(pos.y - c.cy) <= c.hy : dd <= c.dome * c.dome;
+        if (inside) {insideTop = Math.max(insideTop, cy0 + c.dome);}
+      } else if (Math.abs(pos.y - c.cy) <= c.hy) {
+        insideTop = Math.max(insideTop, c.cy + c.hy);
+      }
+    }
+    if (insideTop > -Infinity) {return insideTop;}
     // Chord-augmented floor - the replica renders on the drawn mesh, so
     // "terrain" here must mean the surface the client draws, not the
     // smooth field under it (same law as nuggets/flags/bot shadows).
