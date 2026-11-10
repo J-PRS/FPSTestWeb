@@ -56,6 +56,13 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     if (playerId === nm().getLocalPlayerId()) {return;}
     const remotePlayer = deps.world.remotePlayers.get(playerId);
     if (remotePlayer) {
+      // Roster truth gates the feed: dead rows keep streaming position
+      // echoes through the corpse window, and update()'s revive-on-update
+      // would ping-pong dead↔alive off each one (gib spam, flailing
+      // corpse). The row is patched from this same message before this
+      // callback runs, so isDead here is already current. A live row
+      // still revives a stale-dead entity — the dropped-respawn-echo case.
+      if (nm().getPlayers().get(playerId)?.isDead) {return;}
       remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, nm().getPing(), velocity, serverMs);
       if (Math.random() < DEBUG_LOG_SAMPLE_RATE) { // 5% of updates log for debugging
         logger.debug(`onPlayerUpdate: ${playerId} at ${position.x.toFixed(1)},${position.y.toFixed(1)},${position.z.toFixed(1)}`);

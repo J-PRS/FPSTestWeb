@@ -14,10 +14,27 @@ import { displayName } from '../nameOf.js';
 import { noteKill } from '../../core/stateDebug.js';
 import { ATLAS_BLACK } from '../../entities/PlayerModel.js';
 
-const _gibBlack = new THREE.Color(0x11_11_11); // reads black without being a void on dark ground
 import { noteCorpseFling } from './pickups.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { NetCtx } from './ctx.js';
+import type { WorldState } from '../worldState.js';
+import type { Terrain } from '../../world/terrain.js';
+import type { ChildLogger } from '../../core/Logger.js';
+
+const _gibBlack = new THREE.Color(0x11_11_11); // reads black without being a void on dark ground
+
+/** Minimal deps the gib path needs — NetDeps and RemotesDeps both
+ *  satisfy it, so the kill wire and the roster-mirror death share one
+ *  hide+debris implementation. */
+export interface GibBodyDeps {
+  world: WorldState;
+  lazyScene(): THREE.Scene;
+  lazyTerrain(): Terrain;
+  lazyPlayer(): { pos: THREE.Vector3 };
+  lazyHud(): { removePlayerIndicator(id: string): void };
+  lazyHealthBarSystem(): { removeBar(id: string): void };
+  logger: ChildLogger;
+}
 
 /** UT-style streak ladder — one title per 5 kills since your last death.
  *  Ordered high→low; matched with `===` so each announces once. */
@@ -70,7 +87,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   // ~120m real body parts are indistinguishable from primitive shards,
   // so far kills take the instanced path — mesh-path gibs are ~20
   // unique materials and matrix writes each (~7ms spikes under throttle).
-  gibBurst(ctx, remotePlayer, team, impulseDir, centerY);
+  gibBurst(ctx.deps, remotePlayer, team, impulseDir, centerY);
 
   // respawn()'s showRemote restores on the next life.
   deps.lazyHud().removePlayerIndicator(targetId);
@@ -80,8 +97,11 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
 // The corpse→debris half of gibVictim: throttle-gated real body parts
 // near, instanced shards far, hide-first so a ctor throw can't leave a
 // standing body.
-function gibBurst(ctx: NetCtx, remotePlayer: RemotePlayer, team: TeamId | undefined, impulseDir: THREE.Vector3 | undefined, centerY: number): void {
-  const { deps } = ctx;
+export function gibBurst(deps: GibBodyDeps, remotePlayer: RemotePlayer, team: TeamId | undefined, impulseDir: THREE.Vector3 | undefined, centerY: number): void {
+  // One gib per death — the roster mirror can fire this before a
+  // wid-queued kill event lands; the event's own call must not double it.
+  if (remotePlayer.deathGibbed) {return;}
+  remotePlayer.deathGibbed = true;
   const cam = deps.lazyPlayer().pos;
   const gdx = remotePlayer.position.x - cam.x, gdy = centerY - cam.y, gdz = remotePlayer.position.z - cam.z;
   const nearEnough = gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120;
@@ -107,6 +127,16 @@ function gibBurst(ctx: NetCtx, remotePlayer: RemotePlayer, team: TeamId | undefi
       { impulseDir, inheritVel: remotePlayer.vel, parts, shardGeos: parts?.map((p) => p.geo), count: fullGib ? undefined : 6, smoke: fullGib },
     ));
   } catch (error) { deps.logger.warn('PlayerDebris spawn failed', { err: String(error) }); }
+}
+
+/** Roster-mirror death — the isDead tick can beat a wid-queued playerKill
+ *  by ~1.5s (or outlive a dropped event). Same hide+gib outcome as the
+ *  kill wire; feed/score/loot stay event-owned, so a late kill still
+ *  lands its full context on top of the already-gibbed body. */
+export function gibRemoteBody(deps: GibBodyDeps, remotePlayer: RemotePlayer, team?: TeamId): void {
+  gibBurst(deps, remotePlayer, team, undefined, remotePlayer.position.y - 0.6);
+  deps.lazyHud().removePlayerIndicator(remotePlayer.playerId);
+  deps.lazyHealthBarSystem().removeBar(remotePlayer.playerId);
 }
 
 function findShooterExplosion(deps: NetCtx['deps'], shooterId: string): { position: THREE.Vector3; force: number } | undefined {

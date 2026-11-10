@@ -20,6 +20,7 @@ import { settings } from '../core/settings.js';
 import { isBotId, botRosterName } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
+import { gibRemoteBody } from './net/playerKill.js';
 import { sampleRemoteGhosts } from './ghostTrace.js';
 import { intelContact } from './intel.js';
 import { debugOverlaysOn } from '../ui/hud/indicators.js';
@@ -237,13 +238,13 @@ function aswAccrue(id: string, dead: boolean, alt: number, skiing: boolean, dt: 
 // reads ~0 at every window (loops fool a single 30s mark); a real
 // transiting player stays high across all of them.
 const locoRing = new Map<string, { x: number; z: number; t: number }[]>();
-const LOCO_WINS = [1000, 2000, 5000, 10000, 15000];
+const LOCO_WINS = [1000, 2000, 5000, 10_000, 15_000];
 function locoNote(id: string, dead: boolean, x: number, z: number): void {
   const now = performance.now();
   if (dead) { locoRing.delete(id); return; }
   const ring = locoRing.get(id) ?? [];
   ring.push({ x, z, t: now });
-  while (ring.length > 1 && now - ring[0].t > 16000) {ring.shift();}
+  while (ring.length > 1 && now - ring[0].t > 16_000) {ring.shift();}
   locoRing.set(id, ring);
 }
 /** Per-window displacement rates (1/2/5/10/15s), '-' per unfilled window. */
@@ -263,7 +264,7 @@ function locoVals(id: string): string[] {
     return (d / ((now - anchor.t) / 1000)).toFixed(0);
   });
 }
-const locoStr = (id: string): string => { const v = locoVals(id); return v.length ? v.join('/') : '-'; };
+const locoStr = (id: string): string => { const v = locoVals(id); return v.length > 0 ? v.join('/') : '-'; };
 
 
 
@@ -305,7 +306,13 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // the silent invisible-bot desync the hash can't flag because the
   // roster agrees).
   if (playerState.isDead !== remotePlayer.isDead) {
-    if (playerState.isDead) {remotePlayer.playDeath();}
+    if (playerState.isDead) {
+      remotePlayer.playDeath();
+      // Same hide+gib outcome as the kill wire — the isDead tick can beat
+      // a wid-queued playerKill event; without this the corpse flails
+      // visibly until the event lands (or forever if it's lost).
+      gibRemoteBody(deps, remotePlayer, playerState.team);
+    }
     else {remotePlayer.respawn(playerState.position);}
   }
 

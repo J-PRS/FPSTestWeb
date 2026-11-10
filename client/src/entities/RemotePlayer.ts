@@ -526,8 +526,14 @@ export class RemotePlayer {
     this._model.setColliderColor(hex);
   }
 
+  /** Set once the death gib burst has spawned — the roster-mirror death
+   *  path and the kill wire can both reach gibBurst for one death; the
+   *  flag keeps the debris single-spawn. Reset on respawn. */
+  deathGibbed = false;
+
   respawn(position: { x: number; y: number; z: number }): void {
     this._isDead = false;
+    this.deathGibbed = false;
     this.ragdoll = null;
     this.gunDrop?.restore(); this.gunDrop = null;
     resetCorpse(this.corpse);

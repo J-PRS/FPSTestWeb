@@ -156,3 +156,39 @@ describe('netHarness — real wire messages through real handlers', (): void => 
     vi.unstubAllGlobals();
   });
 });
+
+// Corpse-window regression: dead rows keep streaming position echoes,
+// and update()'s revive-on-update used to fire on each one — dead↔alive
+// ping-pong that re-armed the mirror death and spammed gib bursts.
+// The roster gate in onPlayerUpdate must drop dead-row echoes, while a
+// roster-healed (live) row still revives a stale-dead entity.
+describe('netHarness — corpse-window echoes', (): void => {
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let h!: ReturnType<typeof makeDeps>;
+  beforeEach((): void => { h = makeDeps(); });
+
+  it('dead-row position echoes do not revive; live row does', (): void => {
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r' } as ServerMessage);
+    feed(h.nm, { type: 'playerJoined', playerId: 'peer-1', position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
+    const upd = (x: number, isDead: boolean, hp: number): void => feed(h.nm, {
+      type: 'tickUpdate',
+      updates: [{ playerId: 'peer-1', position: { x, y: 2, z: 3 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: hp, isDead }],
+    } as ServerMessage);
+    upd(1, false, 100);
+    const rp = h.world.remotePlayers.get('peer-1')!;
+    expect(rp.isDead).toBe(false);
+
+    feed(h.nm, { type: 'playerKill', shooterId: 'environment', targetId: 'peer-1' } as ServerMessage);
+    expect(rp.isDead).toBe(true);
+
+    // Dead echoes — the corpse window. Each one used to revive the body.
+    for (const x of [4, 5, 6]) {
+      upd(x, true, 0);
+      expect(rp.isDead, `dead echo at x=${x} revived the corpse`).toBe(true);
+    }
+
+    // Roster heals to live — the dropped-respawn-echo path still revives.
+    upd(9, false, 100);
+    expect(rp.isDead).toBe(false);
+  });
+});
