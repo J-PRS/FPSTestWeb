@@ -211,6 +211,10 @@ export function wireProjectiles(ctx: NetCtx): void {
 
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, srvAge?: number, srvT?: number): void => {
     if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
+    // Hidden tabs render nothing and the un-hide resync reaps remote
+    // shells anyway — spawning them anyway just piles up a backlog the
+    // 512 map-cap doesn't cover (the 709-shell drop + TrailDriver churn).
+    if (document.hidden) {return;}
     noteWeapon(ownerId, weaponType);
     // For own projectiles: link the server id to the local shell by nonce.
     if (ownerId === nm().getLocalPlayerId()) {

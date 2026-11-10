@@ -307,9 +307,15 @@ export class RemoteInterp {
   }
 
   /** Hard re-seat (teleport/dummy hook): the buffer and every timing
-   *  field go back to zero-truth at `pos`. */
+   *  field go back to zero-truth at `pos`. lastServerPosition moves too —
+   *  leaving it stale made the FIRST post-reseat snapshot flag an
+   *  undeclared-teleport GLITCH (the purgeStaleRemotes reconnect path),
+   *  and a room hop rewinds serverMs, so the stamp gate resets like
+   *  reset() or the new room's pushes drop as out-of-order. */
   reseat(pos: THREE.Vector3): void {
     this.targetPosition.copy(pos);
+    this.lastServerPosition.copy(pos);
+    this.lastServerUpdateMs = 0;
     this.net.clear();
     this.lastUpdateTime = Date.now();
     this._simulating = false;

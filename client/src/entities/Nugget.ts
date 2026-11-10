@@ -329,8 +329,14 @@ export class Nugget {
    *  run tumble cells the server ran in real time — rests WILL diverge
    *  by design, so the nugrest anomaly shouldn't count them. */
   private throttleBurst = false;
+  private lastTickMs = 0;
   private serverTumble(dt: number, terrain: Terrain): void {
-    if (dt > 0.3) {this.throttleBurst = true;}
+    // Wall-clock gap, not frame dt: a fully-hidden tab runs ZERO frames,
+    // and a clamped dt never reaches the 0.3s trip — rests WILL diverge
+    // by design after any stall, so the anomaly shouldn't count them.
+    const nowMs = performance.now();
+    if (dt > 0.3 || (this.lastTickMs !== 0 && nowMs - this.lastTickMs > 300)) {this.throttleBurst = true;}
+    this.lastTickMs = nowMs;
     this.tumbleAcc += dt;
     if (this.settled) {this.tumbleAcc = 0; return;}
     // Fixed 50ms cells — the server steps the same grid (RoomPickups),
