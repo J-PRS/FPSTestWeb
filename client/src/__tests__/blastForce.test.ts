@@ -170,6 +170,22 @@ describe('applyForceToRemotes', (): void => {
     expect(r.hbs.predictDamage).not.toHaveBeenCalled();
   });
 
+  it('friendly splash shows NOTHING - number, predicted dip and flash all suppressed', (): void => {
+    const r = mkRig();
+    const rp = mkRemote(5);
+    r.remotes.set('p1', rp);
+    // Same team as the shooter - hitF swallows the hit (zero damage),
+    // so every feedback channel must stay silent or it lies.
+    (r.deps.world as { localTeam?: string }).localTeam = 'alpha';
+    (r.deps as { lazyNetworkManager: () => unknown }).lazyNetworkManager = () => ({
+      getPlayers: (): Map<string, { team: string }> => new Map([['p1', { team: 'alpha' }]]),
+      authoritySims: (): boolean => false,
+    });
+    r.blast.applyExplosionForce(args());
+    expect(r.dmgNumbers.spawn).not.toHaveBeenCalled();
+    expect(r.hbs.predictDamage).not.toHaveBeenCalled();
+  });
+
   it('remote outside radius → nothing predicted', (): void => {
     const r = mkRig();
     const rp = mkRemote(50);
