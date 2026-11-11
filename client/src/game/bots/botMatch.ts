@@ -20,7 +20,7 @@ export interface MatchHost {
   conquest?: { reset?(): void } | null;
   conquestWin?: string | null;
   deps: {
-    world: { localTeam?: string; remotePlayers: { rename(oldId: string, newId: string): void } };
+    world: { localTeam?: string; killCounts: Map<string, number>; deathCounts: Map<string, number>; remotePlayers: { rename(oldId: string, newId: string): void } };
     lazyHud(): { setTeamScore?(a: number, b: number): void; scoreboardVisible?: boolean; setScoreboardVisible?(v: boolean): void; setScoreboardCountdown?(secLeft: number | null): void };
   };
   hooks: {
@@ -110,6 +110,10 @@ export function resetMatch(m: MatchHost): void {
     }
   }
   m.dmgPool.clear();
+  // The frag/death tallies ride kill-edge deltas with no snapshot echo —
+  // same wipe the wire onMatchStart does or last match's columns linger.
+  m.deps.world.killCounts.clear();
+  m.deps.world.deathCounts.clear();
   m.ctf?.reset();
   m.rabbit?.reset();
   m.flagrun?.reset();

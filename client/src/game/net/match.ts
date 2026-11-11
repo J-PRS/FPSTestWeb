@@ -155,6 +155,10 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     // full-board echo arrives to wipe ours, so clear it here or last
     // match's rows linger forever.
     deps.world.ffaScores.clear();
+    // Same wipe for the frag/death tallies - they ride kill-edge deltas
+    // with no snapshot echo, so last match's columns persist without it.
+    deps.world.killCounts.clear();
+    deps.world.deathCounts.clear();
     chat.add(null, `match start — ${mode || 'arena'}`);
     sfx.matchHorn('start');
   };
