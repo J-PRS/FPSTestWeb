@@ -75,9 +75,10 @@ export function sample(name: string, dest: AudioNode, gain = 1, rate = 1,
   } else {
     // Universal release ramp at the natural end — most .ogg tails don't
     // decay to exact zero, so an untapered stop() is an audible "pop"
-    // (discontinuity click). ~18ms fade kills it with no audible loss.
+    // (discontinuity click). 30ms covers stubborn tails; still short
+    // enough to read as a natural release rather than a fade.
     const playDur = buf.duration / playRate;
-    g.gain.setValueAtTime(gain, t0 + Math.max(0, playDur - 0.018));
+    g.gain.setValueAtTime(gain, t0 + Math.max(0, playDur - 0.03));
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + playDur);
   }
   src.start(t0);
