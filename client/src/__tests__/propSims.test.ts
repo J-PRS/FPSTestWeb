@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { aoeDamageAt, aoeImpulseAt, hitRadiusAt, lgTickDamage, lgChargeAt } from '../../../shared/combat.js';
 import { effectiveResist } from '../../../shared/perks.js';
-import { gunGameWeapon, gunGameAllows } from '../../../shared/gunGame.js';
+import { gunGameWeapon, gunGameAllows, gunGameRoll, gunGameBucket, gunGameClimax } from '../../../shared/gunGame.js';
 import { WeaponType, beltThrowCost, spendAmmo, type AmmoPool } from '../../../shared/weapons.js';
 import { classCanFire, NEVER_FIRED } from '../../../shared/botClasses.js';
 
@@ -135,6 +135,28 @@ describe('shared sim properties', (): void => {
       fc.integer({ min: 0, max: 64 }),
       (w): void => {
         expect(classCanFire(undefined, w)).toBe(classCanFire('medium', w));
+      },
+    ));
+  });
+
+  it('gunGameRoll always deals a weapon the rung allows - the deal can never softlock', (): void => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 20 }), fc.boolean(), fc.float({ min: 0, max: 1, noNaN: true, noDefaultInfinity: true }),
+      (rung, igun, rand): void => {
+        const r = Math.min(rung, gunGameClimax(igun));
+        const dealt = gunGameRoll(r, igun, rand);
+        expect(gunGameAllows(r, dealt, igun)).toBe(true);
+        expect(gunGameBucket(r, igun)).toContain(dealt);
+      },
+    ));
+  });
+
+  it('gunGameRoll clamps out-of-range draws to bucket members', (): void => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 20 }), fc.boolean(), fc.float({ min: -1, max: 2, noNaN: true }),
+      (rung, igun, rand): void => {
+        const r = Math.min(rung, gunGameClimax(igun));
+        expect(gunGameBucket(r, igun)).toContain(gunGameRoll(r, igun, rand));
       },
     ));
   });
