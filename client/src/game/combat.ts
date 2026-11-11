@@ -177,7 +177,7 @@ export function createCombat(deps: CombatDeps) {
       // any route that shouldered a gated weapon past the menu (gunlab,
       // stale persisted slot, sidearm) must refuse here too, or every
       // spawn + blast claim spam-rejects for the rest of the life.
-      if (!classCanFire(deps.lazyPlayer().appliedClass, def.weaponType)) {return;}
+      if (!deps.lazyPlayer().armory.kitLocked && !classCanFire(deps.lazyPlayer().appliedClass, def.weaponType)) {return;}
       // Hitscan kinds leave no projectile for observers - tell the server
       // so it can relay a cosmetic playerShot (muzzle audio/visual).
       if (def.kind === 'fan' || def.kind === 'beam') {

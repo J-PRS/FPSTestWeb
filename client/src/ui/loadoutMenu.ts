@@ -4,7 +4,8 @@
 import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '../entities/Player.js';
 import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import type { ArmorClass } from '../../../shared/botClasses.js';
-import { SLOT_DEFS } from '../weapons.js';
+import { SLOT_DEFS, widOf } from '../weapons.js';
+import { WeaponType } from '../../../shared/weapons.js';
 import { PlayerLoadout, type SidearmId } from '../entities/playerLoadout.js';
 import { codeFor, codeLabel } from '../core/keybinds.js';
 import { PACK_KINDS, type DeployKind } from '../../../shared/deployables.js';
@@ -47,6 +48,11 @@ interface BarUi {
   perkDrop: Drop | null; classDrop: Drop | null; sidearmDrop: Drop | null;
   packDrop: Drop | null; beltLabel: HTMLElement | null; skillLabel: HTMLElement | null;
   sidearmLabel: HTMLElement | null; packLabel: HTMLElement | null;
+  sidearmCell: HTMLElement | null; packCell: HTMLElement | null;
+  armorTiles: { v: string; el: HTMLElement }[];
+  /** Whole-group boxes - instagib hides ARMOR/WEAPONS/KIT-row-A outright
+   *  (kit is forced); only SKILL + PERK stay live. */
+  armorBox: HTMLElement | null; weaponBox: HTMLElement | null; kitBoxA: HTMLElement | null;
 }
 
 type MkDrop = (options: DropOpt[], onPick: (v: string) => void, faceOpts?: DropOpt[], cols2?: boolean) => Drop;
@@ -59,6 +65,8 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     slotDrops: [], beltDrop: null, skillDrop: null, perkDrop: null,
     classDrop: null, sidearmDrop: null, packDrop: null,
     beltLabel: null, skillLabel: null, sidearmLabel: null, packLabel: null,
+    sidearmCell: null, packCell: null, armorTiles: [],
+    armorBox: null, weaponBox: null, kitBoxA: null,
   };
 
   const mkGroup = (title: string, showHead = true): HTMLElement => {
@@ -80,12 +88,15 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // --- ARMOR: tile picker, not a dropup - headless like the other
   // groups; three labeled tiles need no banner to read as armor class.
   const armorCells = mkGroup('ARMOR', false);
+  ui.armorBox = armorCells;
   const tiles = document.createElement('div');
   tiles.className = 'lo-tiles';
   armorCells.append(tiles);
   const classTileEls: { v: string; el: HTMLElement }[] = [];
   const pickClass = (v: string): void => {
     const player = deps.lazyPlayer();
+    if (player.armory.igun) {return;}
+    if (player.armory.instagib && v !== 'light') {return;}
     player.setArmorClass(v as ArmorClass);
     deps.lazyNetworkManager?.()?.sendClassUpdate(v);
     // Re-flag locks + re-face chips for the tier just picked - the menu
@@ -111,12 +122,14 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     tiles.append(t);
     classTileEls.push({ v: cls, el: t });
   }
+  ui.armorTiles = classTileEls;
   // Drop-compatible shim: refreshLoadout drives faces via setValue.
   ui.classDrop = { el: tiles, setValue: (): void => refreshTiles() };
 
   // --- WEAPONS: one numbered cell per slot. No group head - every cell
   // is already captioned, the banner just ate vertical space. ---
   const weaponCells = mkGroup('WEAPONS', false);
+  ui.weaponBox = weaponCells;
   // Filter by armorClass - the tier the menu edits (a banked class swap
   // edits that tier's kit, so its legal picks must show). lazyPlayer can
   // be unborn at wire-up - default the flag pass to medium.
@@ -134,9 +147,11 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // five cells in one nowrap strip overflowed the bar's width. ---
   const kitRowA = mkGroup('KIT', false);
   kitRowA.classList.add('lo-grid2');
+  ui.kitBoxA = kitRowA;
   const kitRowB = mkGroup('KIT', false);
   kitRowB.classList.add('lo-grid3');
   const sidearm = mkCellDom(kitRowA);
+  ui.sidearmCell = sidearm.cell;
   ui.sidearmLabel = sidearm.cap;
   ui.sidearmDrop = mkDrop(
     // The SIDEARM table owns id→wid+label - the menu derives, so a new
@@ -151,14 +166,13 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const belt = mkCellDom(kitRowA);
   ui.beltLabel = belt.cap;
   ui.beltDrop = mkDrop(
-    // No descs - every belt item is one throw away from explaining itself.
-    // BELT_ITEMS order is feature-history, not a sort key — order by label.
-    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })).toSorted(byLabel),
+    BELT_OPTS,
     (v): void => deps.lazyPlayer().setBeltItem(v as BeltItem),
   );
   belt.cell.append(ui.beltDrop.el);
 
   const pack = mkCellDom(kitRowB);
+  ui.packCell = pack.cell;
   ui.packLabel = pack.cap;
   ui.packDrop = mkDrop(
     PACK_KINDS.map((kind): { v: DeployKind; label: string; } => ({ v: kind, label: DEPLOY_ITEMS[kind].label })).toSorted(byLabel),
@@ -194,6 +208,10 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
 
 
 const byLabel = (a: { label: string }, b: { label: string }): number => a.label.localeCompare(b.label);
+
+const BELT_OPTS: DropOpt[] = BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })).toSorted(byLabel);
+const BELT_HOOK_ONLY: DropOpt[] = [{ v: 'hook', label: BELT_LABELS.hook }];
+const RAIL_WID = widOf(WeaponType.Railgun);
 
 // Only equippable weapons list - the class gate hides other tiers'
 // ordnance outright; grayed-out dead options were pure noise.
@@ -337,18 +355,29 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
   function refreshLoadout(): void {
     if (!ui) {return;}
     const player = deps.lazyPlayer();
-    // Options gate on armorClass - the tier whose kit is being edited
-    // (a banked heavy pick CAN hold a mortar; it shoulders at respawn).
-    // Faces come from menuKit: the pending kit while a swap is banked.
-    const opts = weaponOptsFor(player.armorClass);
+    // Room modifiers own parts of the kit: instagib forces chassis+gun+
+    // belt outright (only skill/perk live); gun game keeps class/skill/
+    // perk but the ladder owns the weapon band and the belt is hook-only.
+    const insta = player.armory.instagib;
+    const gg = player.armory.gunGame;
+    const {igun} = player.armory;
+    if (ui.armorBox) {ui.armorBox.style.display = (insta || igun) ? 'none' : '';}
+    if (ui.weaponBox) {ui.weaponBox.style.display = (insta || gg) ? 'none' : '';}
+    if (ui.kitBoxA) {ui.kitBoxA.style.display = (insta || gg) ? 'none' : '';}
+    const opts = insta
+      ? weaponOptsFor('light').filter((o): boolean => o.v === String(RAIL_WID))
+      : weaponOptsFor(player.armorClass);
     ui.slotDrops.forEach((d, i): void => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
     markSlotUse(player, ui.slotDrops);
+    ui.beltDrop?.setOptions?.(insta || gg ? BELT_HOOK_ONLY : BELT_OPTS);
     ui.beltDrop?.setValue(player.menuGear.beltItem);
     ui.skillDrop?.setValue(player.menuGear.skill);
     ui.perkDrop?.setValue(player.menuGear.perk);
     ui.classDrop?.setValue(player.armorClass);
     ui.sidearmDrop?.setValue(player.menuGear.sidearm);
     ui.packDrop?.setValue(player.menuGear.packItem);
+    if (ui.sidearmCell) {ui.sidearmCell.style.display = (insta || gg) ? 'none' : '';}
+    if (ui.packCell) {ui.packCell.style.display = (insta || gg) ? 'none' : '';}
     if (ui.beltLabel) {ui.beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;}
     if (ui.skillLabel) {ui.skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;}
     if (ui.sidearmLabel) {ui.sidearmLabel.textContent = `SIDEARM (${codeLabel(codeFor('sidearm'))})`;}

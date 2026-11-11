@@ -17,6 +17,7 @@ import { TEAM_COLORS } from '../../../shared/teams.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
 import { settings } from '../core/settings.js';
+import { MAX_HEALTH } from '../core/config.js';
 import { isBotId, botRosterName } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
@@ -460,6 +461,14 @@ function dumpPingNet(id: string, wr: { ping?: number | null; transport?: string 
   if (isBotId(id)) {return ['bot', 'bot'];}
   return [String(wr?.ping ?? '-'), String(wr?.transport ?? '-')];
 }
+// cur/max for the dump's hp column - the wire ships current health only,
+// but max is class-derived (perk maxHealth is always 0), so remotes get
+// the same number the server computed.
+function dumpHp(cur: number | undefined, cls: string | undefined): string {
+  if (cur === undefined || !Number.isFinite(cur)) {return '-';}
+  const max = MAX_HEALTH + (cls !== undefined && cls in CLASS_STATS ? CLASS_STATS[cls as keyof typeof CLASS_STATS].maxHealth : 0);
+  return `${Math.round(cur)}/${max}`;
+}
 function gameDumpRow(w: WorldState, id: string, rp: RemotePlayer, now: number): string {
   const s = aswStr(id);
   const wr = wireRoster.get(id);
@@ -470,7 +479,8 @@ function gameDumpRow(w: WorldState, id: string, rp: RemotePlayer, now: number): 
   // brain.skill through GameBot's getter; wire remotes don't carry it.
   const rsv = (rp as { skill?: { resolve?: number } }).skill?.resolve;
   const ai = (rp as { aiDump?: string }).aiDump;
-  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${locoStr(id).padEnd(13)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}${ai ? ` ${ai}` : ''}`;
+  const hp = dumpHp(wr?.health ?? (rp as { health?: number }).health, rp.armorClass);
+  return `  ${id.slice(0, 20).padEnd(20)} ${String(team).padEnd(9)} ${String(rp.armorClass ?? '-').padEnd(8)} ${String(w.killCounts.get(id) ?? 0).padStart(2)} ${String(w.deathCounts.get(id) ?? 0).padStart(2)} ${String(w.ffaScores.get(id) ?? 0).padStart(5)} ${hp.padStart(8)} ${String(dumpSheep(rp)).padStart(5)} ${String(aliveSecs(id, rp.isDead, now) ?? '-').padStart(5)} ${rsv === undefined ? '-' : rsv.toFixed(2).padStart(4)} ${locoStr(id).padEnd(13)} ${ping.padStart(4)} ${net.padEnd(5)} ${s ? `${s.ha}/${s.a}/${s.s}/${s.w}/${s.st}/${s.i}` : '-'}${ai ? ` ${ai}` : ''}`;
 }
 if (typeof window !== 'undefined') {
   (window as { __aswDump?: () => string[] }).__aswDump = (): string[] => {
@@ -499,7 +509,7 @@ function gameDumpSelfRow(d: RemotesDeps, w: WorldState, now: number): string {
   const selfD = selfCount(w.deathCounts, localScoreId);
   const ss = aswStr(localId);
   const shown = d.lazyPlayerSheep?.().shown;
-  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${' - '.padStart(4)} ${locoStr(localId).padEnd(13)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
+  return `  ${String(settings.get('fps-name') || localId).slice(0, 20).padEnd(20)} ${String(w.localTeam ?? '-').padEnd(9)} ${String(self.appliedClass ?? '-').padEnd(8)} ${String(selfF).padStart(2)} ${String(selfD).padStart(2)} ${String(scores.get(localScoreId) ?? 0).padStart(5)} ${dumpHp(self.health, self.appliedClass).padStart(8)} ${String(shown === undefined ? '-' : Number(shown.toFixed(2))).padStart(5)} ${String(aliveSecs(localId, self.isDead, now) ?? '-').padStart(5)} ${' - '.padStart(4)} ${locoStr(localId).padEnd(13)} ${String(nm.getPing()).padStart(4)} ${String(nm.getTransportTier() ?? '-').padEnd(5)} ${ss ? `${ss.ha}/${ss.a}/${ss.s}/${ss.w}/${ss.st}/${ss.i}` : '-'}`;
 }
 function gameDump(): string[] {
   const d = depsRef;
@@ -509,7 +519,7 @@ function gameDump(): string[] {
   // scoreboard path on the wall clock; mixing epochs prints garbage.
   const now = Date.now();
   const lines: string[] = [`  mode=${w.mode} map=${w.mapName ?? '-'} teams=${JSON.stringify(w.teamScores ?? {})}`];
-  lines.push('  name                 team      cls      F  D  score sheep alive rsv  loco(1/5/10/15s) ping net   asw(HA/A/S/W/ST/I)');
+  lines.push('  name                 team      cls      F  D  score   hp/max sheep alive rsv  loco(1/5/10/15s) ping net   asw(HA/A/S/W/ST/I)');
   lines.push(gameDumpSelfRow(d, w, now));
   for (const [id, rp] of w.remotePlayers) {lines.push(gameDumpRow(w, id, rp, now));}
   return lines;
@@ -519,7 +529,7 @@ let depsRef: RemotesDeps | undefined;
 function noteDeps(d: RemotesDeps): void { if (!depsRef) {depsRef = d;} }
 // Wire-roster snapshot for the game dump's ping/net columns - written
 // per remote per tick, so it's the same data the scoreboard sees.
-const wireRoster = new Map<string, { ping?: number | null; transport?: string | null; team?: string }>();
+const wireRoster = new Map<string, { ping?: number | null; transport?: string | null; team?: string; health?: number }>();
 function pruneAsw(live: Set<string>): void {
   for (const id of asw.keys()) {
     if (!live.has(id)) {asw.delete(id);}
@@ -587,7 +597,8 @@ function updateScoreboard(deps: RemotesDeps): void {
   hud.setScoreboardPingVisible?.(nm.isConnected()); // offline bots-only boards drop the latency column
   hud.setScoreboardNetVisible?.(nm.isConnected()); // and the transport column - every row would read 'bot'/'-'
   hud.setScoreboardTeamScores?.(deps.world.teamScores);
-  hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName));
+  const modTag = deps.world.instagib ? 'INSTAGIB' : deps.world.igun ? 'IGUNGAME' : deps.world.gungame ? 'GUNGAME' : undefined;
+  hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName, modTag));
 }
 
 // The local player's row - kill/death sums ride selfCount's two-key

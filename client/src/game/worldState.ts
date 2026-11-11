@@ -48,6 +48,16 @@ export interface WorldState {
   // Match meta from the wire - scoreboard needs mode/team/scores to group
   // rows; populated by netHandlers on gameState/teamScore/ffaScore.
   mode?: string;
+  /** Room modifier echoed by gameState - loadout UI locks to the
+   *  instagib kit while skill/perk stay editable. */
+  instagib: boolean;
+  /** Gun-game modifiers echoed by gameState - the weapon ladder owns
+   *  the loadout band; igun is the ~200-damage variant. */
+  gungame: boolean;
+  igun: boolean;
+  /** Offline gun-game ladder - the server keeps the same map on Room;
+   *  absent entries are rung 0. Only populated while world.gungame. */
+  gunRungs: Map<string, number>;
   /** Map display name (spec `name` or filename) - scoreboard title. */
   mapName?: string;
   localTeam?: TeamId;
@@ -148,6 +158,10 @@ export function createWorldState(): WorldState {
     implosions: new HiddenFxArray<Implosion>(),
     aoeGizmos: [],
     ffaScores: new Map(),
+    instagib: false,
+    gungame: false,
+    igun: false,
+    gunRungs: new Map(),
     teamScores: null,
     matchEndsAt: null,
     respawnMs: 3000,

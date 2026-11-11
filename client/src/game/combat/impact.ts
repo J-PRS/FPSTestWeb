@@ -32,7 +32,7 @@ import * as sfx from '../../core/sfx.js';
 
 import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE, SPLAT_MAX } from '../../core/config.js';
 
-import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats, serverSimmed } from '../../../../shared/weapons.js';
+import { WeaponType, directHitAoeBonus, roomDirectDamage, getWeaponStats, serverSimmed, IGUN_AOE_MULT } from '../../../../shared/weapons.js';
 
 import { expectDamageEcho, projWireAt } from '../parity.js';
 
@@ -282,7 +282,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
 
-  const directDamage = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1);
+  const directDamage = roomDirectDamage(p.config.weaponType, deps.world.instagib, p.directHit ? p.hitAge : undefined, deps.world.igun) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1);
 
   // Personal feedback (numbers/marker/score) is for shells I fired - a
 
@@ -397,7 +397,7 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: Targetable): vo
 
   // Airtime ramp is body-contact only - wake hits pay flat directDamage.
 
-  const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1);
+  const dmg = roomDirectDamage(p.config.weaponType, deps.world.instagib, p.directHit ? p.hitAge : undefined, deps.world.igun) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1);
 
   if (p.config.weaponType === WeaponType.Chaingun) {chaingunBank(c, p, ball);}
 
@@ -763,7 +763,11 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 
     // aoeDamage) - the stat-block aoeDamage only backs zero-direct specials.
 
-    aoeDamage: getWeaponStats(weaponType).directDamage || p.config.aoeDamage,
+    // igun: splash pays table aoeDamage ×5 (same law as server
+    // combatBlast) - ordnance pops stay lethal, rapid pops stay chip.
+    aoeDamage: deps.world.igun === true
+      ? (getWeaponStats(weaponType).aoeDamage || p.config.aoeDamage) * IGUN_AOE_MULT
+      : getWeaponStats(weaponType).directDamage || p.config.aoeDamage,
 
     forceMultiplier: p.config.forceMultiplier,
 

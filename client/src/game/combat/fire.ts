@@ -82,7 +82,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // calls class-locked must not spawn a predicted shell or send an
   // intent - every pull otherwise spam-rejects for the life (belt
   // throws reach this without passing fireWeapon).
-  if (!classCanFire(deps.lazyPlayer().appliedClass, config.weaponType)) {return undefined;}
+  if (!deps.lazyPlayer().armory.kitLocked && !classCanFire(deps.lazyPlayer().appliedClass, config.weaponType)) {return undefined;}
   // One-shot TTS (time-to-shoot) marker - invisible, no debug overlays.
   // Records the first fired shot's performance.now() (ms since navigation
   // start) on dev hosts or when ?tts=1 is present. Production https builds
@@ -325,7 +325,7 @@ function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count
 function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
   // Class lock ahead of every spend — a refused pull must not charge
   // energy or ammo, and must not spawn the ghost shell prediction.
-  if (!classCanFire(deps.lazyPlayer().appliedClass, def.config.weaponType)) {return;}
+  if (!deps.lazyPlayer().armory.kitLocked && !classCanFire(deps.lazyPlayer().appliedClass, def.config.weaponType)) {return;}
   // Energy-paid weapons (Blaster): the jet tank IS the magazine — the
   // shared payShotCost gate keeps client prediction, server intent and
   // bot fire on one formula; a dry tank can't draw a ghost bolt.

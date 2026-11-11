@@ -70,11 +70,11 @@ export interface LobbyDeps {
   listMaps(): Promise<MapRow[]>;
   /** GET /join?mode&map&bots — server picks the emptiest live match
    *  fitting the request (or spins a fresh room from the map spec). */
-  quickJoin(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean): Promise<{ room: string }>;
+  quickJoin(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): Promise<{ room: string }>;
   /** In-place room hop over the live socket — false when there's no
    *  connection (caller reloads instead). map/bots/mode are creation
    *  hints for a room that doesn't exist yet. */
-  switchRoom?(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): boolean;
+  switchRoom?(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): boolean;
   /** /maps/thumbs/<name>.png — pre-rendered vantage shot for the MAP
    *  picker preview. Absent → no preview panel. */
   mapThumbUrl?(name: string): string;
@@ -436,7 +436,7 @@ export class Lobby {
     if (bots > 0) {meta.append(mk(`(${bots})`, 'lb-bots'));}
   }
 
-  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): void {
+  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): void {
     // Already there — a reload would boot us into the same seat anyway.
     // Offline solo has no room, so 'default' is a real join target.
     if (name === this.currentRoom() && this.online()) {return;}
@@ -449,15 +449,18 @@ export class Lobby {
     settings.set('fps-lobby', 0);
     settings.set('fps-solo', 0);
     settings.set('fps-last-room', name);
-    writeJoinSpec({ map, bots, mode });
+    writeJoinSpec({ map, bots, mode, instagib, gungame, igun });
     if (unlisted) {settings.set('fps-unlisted', 1);}
     if (noCreatures) {settings.set('fps-nocreatures', 1);}
     if (noBalls) {settings.set('fps-noballs', 1);}
+    if (instagib) {settings.set('fps-instagib', 1);}
+    if (gungame) {settings.set('fps-gungame', 1);}
+    if (igun) {settings.set('fps-igun', 1);}
     const q = new URLSearchParams(window.location.search);
-    for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs']) {q.delete(k);}
+    for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs', 'instagib', 'gungame', 'igun']) {q.delete(k);}
     const href = `/s/${encodeURIComponent(name)}${q.size > 0 ? `?${q}` : ''}`;
     // Live socket: hop in place — the gameState rebuild does the rest.
-    if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls)) {
+    if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls, instagib, gungame, igun)) {
       history.replaceState(null, '', href);
       return;
     }

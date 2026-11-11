@@ -2,7 +2,7 @@ import { simMs } from './simClock.ts';
 import type { ClientMessage, Vec3,PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 
-import {type WeaponStats, getWeaponStats, WeaponType} from '../../shared/weapons.ts';
+import {type WeaponStats, getWeaponStats, WeaponType,isInstagibWeapon} from '../../shared/weapons.ts';
 import { lgTickDamage, LG_TICK_BASE } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
@@ -10,7 +10,9 @@ import { segSolidHit, type ColliderIndex } from '../../shared/solidWorld.ts';
 import type { ChargeBank } from './combatCharge.ts';
 import type { BlastRunner } from './combatBlast.ts';
 import { renderLagOf } from './rewind.ts';
-import { classCanFire } from '../../shared/botClasses.ts';
+import { classCanFire, NEVER_FIRED } from '../../shared/botClasses.ts';
+import { gunGameAllows } from '../../shared/gunGame.ts';
+
 
 // AOE claim adjudication - what remains after the server took over
 // projectiles: self-positioned skills (melee arc, slam, clear-of-
@@ -25,6 +27,9 @@ export interface AoeHost {
   readonly solids: readonly StructureCollider[];
   solidIndex: ColliderIndex | null;
   hb(key: string, n?: number): void;
+  /** Live room modifiers + gungame rung reader - same weapon gate the
+   *  shot path runs, so a P2P-host aoeShot claim can't dodge the ladder. */
+  deps: { mods?: () => { instagib?: boolean; gungame?: boolean; igun?: boolean }; gunRungOf?: (playerId: string) => number; gunGameHeld?: (playerId: string, weaponType: number) => void };
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
   notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void;
   friendly(shooterId: string, targetId: string): boolean;
@@ -40,9 +45,30 @@ export class AoeClaims {
     const player = this.h.playerManager.getPlayer(playerId);
     if (!player || player.isDead) { this.h.hb('drop.deadShooter'); return; }
     this.h.hb('aoe');
-    if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
-      this.h.reject(playerId, 'AOE', 'class-locked weapon', undefined, msg.weaponType);
-      return;
+    // NEVER_FIRED members are skill pseudo-weapons (Slam) or child
+    // shells - the muzzle fence doesn't apply to skill claims; forged
+    // bomblets still die at the 'projectile blasts are server-simmed'
+    // gate below. Kit modifiers OWN the weapon law in their rooms -
+    // gungame's ladder crosses class tiers on purpose, so classCanFire
+    // must yield to it (and to the instagib whitelist) rather than stack.
+    if (msg.weaponType !== undefined && !NEVER_FIRED.has(msg.weaponType)) {
+      const mods = this.h.deps.mods?.() ?? {};
+      const wt = msg.weaponType;
+      if (mods.gungame === true) {
+        if (!gunGameAllows(this.h.deps.gunRungOf?.(playerId) ?? 0, wt, mods.igun === true)) {
+          this.h.reject(playerId, 'AOE', 'gun-game weapon', undefined, wt);
+          return;
+        }
+        this.h.deps.gunGameHeld?.(playerId, wt);
+      } else if (mods.instagib === true) {
+        if (!isInstagibWeapon(wt)) {
+          this.h.reject(playerId, 'AOE', 'instagib weapon', undefined, wt);
+          return;
+        }
+      } else if (!classCanFire(player.armorClass, wt)) {
+        this.h.reject(playerId, 'AOE', 'class-locked weapon', undefined, wt);
+        return;
+      }
     }
     player.protectedUntil = simMs(0); // firing breaks your own spawn shield
     const stats = getWeaponStats(msg.weaponType);

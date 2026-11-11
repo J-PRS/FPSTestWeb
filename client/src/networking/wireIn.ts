@@ -438,6 +438,9 @@ this.handlerThrows += 1;
     },
     yourCharge: (data): void | undefined => this.h.onYourCharge?.(data.charge),
     yourAmmo: (data): void | undefined => this.h.onYourAmmo?.(data.ammo),
+    // Gun-game ladder edge (owner-only): swap the locked band to the
+    // rung weapon. Prediction only - the server gate is the law.
+    gunRung: (data): void | undefined => this.h.onGunRung?.(data.rung, data.wt),
     playerKill: (data): void => this.handlePlayerKill(data),
     knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull, data.yank),
     jump: (data): void | undefined => this.h.onPlayerJump?.(data.playerId, data.position),
@@ -584,7 +587,7 @@ dropCensus.total += 1;
       this.h.reseat();
     }
     logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
-    this.h.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
+    this.h.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, instagib: data.instagib, gungame: data.gungame, igun: data.igun, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }
 
   /** Protocol handshake: a stale bundle can't parse a new wire format -

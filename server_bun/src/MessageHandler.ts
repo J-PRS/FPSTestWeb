@@ -7,6 +7,7 @@ import type { KillFeed } from './killFeed.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
+import type { RoomMods } from '../../shared/protocol.ts';
 import { CONFIG } from './config.ts';
 import { WIRE } from './wire.ts';
 import { encodeWidPos, WIRE_E_JUMP, WIRE_E_JET } from '../../shared/wire.ts';
@@ -111,6 +112,12 @@ export interface RoomInfo {
   flags?: () => { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
   /** Live pickups for gameState joins — RoomPickups.snapshot. */
   pickups?: () => { id: number; pos: Vec3; kind: PickupKind }[];
+  /** Live room-modifier reader - roomFactory can flip the flags on a
+   *  reused Room after this snapshot, so combatDeps and the gameState
+   *  echo both read through here instead of cached booleans. */
+  mods?: () => RoomMods;
+  gunRungOf?: (playerId: string) => number;
+  gunGameHeld?: (playerId: string, weaponType: number) => void;
   /** Match-clock deadline (epoch ms) for gameState joins — Room.matchEndsAt.
    *  0 means "not armed yet" (no humans have joined). */
   matchEndsAt?: () => number;
@@ -234,7 +241,7 @@ export interface RoomInfo {
   fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number) => string | null;
   /** Beam-intent resolution — the honest ray a Lightning tick strikes
    *  (terrain/wall/player/creature, earliest wins). Room.beamSweep. */
-  beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number) => BeamContact | null;
+  beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates?: boolean) => BeamContact | null;
   /** Beam contact damage sinks — BallSim/CreatureSim handleHit. */
   ballHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
   crawlerHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
@@ -259,6 +266,9 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     moveResync: roomInfo?.moveResync,
 
     mode: roomInfo?.mode,
+    mods: roomInfo?.mods,
+    gunRungOf: roomInfo?.gunRungOf,
+    gunGameHeld: roomInfo?.gunGameHeld,
     influence: roomInfo?.influence,
     health: roomInfo?.health,
     envRange: roomInfo?.envRange,
@@ -518,6 +528,9 @@ export class MessageHandler {
     return {
       room: this.roomInfo.room,
       mode: this.roomInfo.mode || undefined,
+      instagib: this.roomInfo.mods?.().instagib || undefined,
+      gungame: this.roomInfo.mods?.().gungame || undefined,
+      igun: this.roomInfo.mods?.().igun || undefined,
       // Top level, not inside map: a bare arena (no bases/terrain) still
       // has a name, and the scoreboard title wants it either way.
       mapName: this.roomInfo.mapName?.(),

@@ -15,9 +15,24 @@ import { noteKill } from '../../core/stateDebug.js';
 import { GameBot } from './botBrain.js';
 import type { TeamBots } from './index.js';
 import { simRand } from '../../../../shared/simRand.js';
+import { gunGameOnKill, gunRungOf } from '../gunGame.js';
+import { igunChassis } from '../../../../shared/gunGame.js';
 
 const _stealPos = new THREE.Vector3();
 const sayTimers = new Set<ReturnType<typeof setTimeout>>();
+
+/** Gun-game rung edge → weapon swap: the local armory band or every
+ *  weapon slot on the named bot's loadout (belt pinned to the hook -
+ *  the only belt item the ladder gate lets fire). */
+function applyGunRung(b: TeamBots, id: string, wt: WeaponType): void {
+  if (id === 'local') {b.deps.lazyPlayer().armory.setGunGameRung(gunRungOf(b.deps.world, id), wt); return;}
+  const kb = b.bots.find((x): boolean => x.playerId === id);
+  if (kb?.loadout) {
+    kb.loadout.near = wt; kb.loadout.mid = wt; kb.loadout.far = wt; kb.loadout.side = wt;
+    kb.loadout.belt = WeaponType.Hook;
+    if (b.deps.world.igun === true) {kb.setBotClass(igunChassis(wt));}
+  }
+}
 
 // Kill + respawn bookkeeping - the local-authority half of fragging:
 // bot respawns, player→bot hit funnel, the local player's own death.
@@ -30,8 +45,9 @@ export function respawnBotF(b: TeamBots, bot: GameBot): void {
     // spawns); spec-less modes fall back to the ring around the player.
     const sp = b.spawnSpot(bot.team);
     // Kit drift before the body comes back - the skill matrix rerolls
-    // each open slot toward what this bot actually hits with.
-    bot.adaptLoadout();
+    // each open slot toward what this bot actually hits with. Kit-lock
+    // rooms field fixed weapons; a reroll would arm contraband.
+    if (!b.deps.world.instagib && !b.deps.world.gungame) {bot.adaptLoadout();}
     bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
     bot.botHp = bot.botMaxHp;
     // Fresh life is unproven - the meter re-earns it each spawn.
@@ -97,6 +113,7 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
     if (p.health > 0) {return;}
     b.deps.world.killCounts.set(attackerId, (b.deps.world.killCounts.get(attackerId) ?? 0) + 1);
     b.creditKill(attackerId, false, p.pos);
+    gunGameOnKill(b.deps.world, 'local', attackerId, applyGunRung.bind(null, b));
     b.localDied();
     noteKill(attackerId, 'local', opts.weapon ?? (opts.melee ? WeaponType.Melee : undefined));
     b.hooks.killFeed(attackerId.replace('bot:', ''), 'YOU', false, true,
@@ -138,6 +155,7 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     b.deps.world.killCounts.set(killerId, (b.deps.world.killCounts.get(killerId) ?? 0) + 1);
     b.deps.world.deathCounts.set(bot.playerId, (b.deps.world.deathCounts.get(bot.playerId) ?? 0) + 1);
     b.creditKill(killerId, false, bot.position);
+    gunGameOnKill(b.deps.world, bot.playerId, killerId, applyGunRung.bind(null, b));
     // Lifesteal - the server's creditKill rule mirrored for local
     // authority: a melee frag refills the killer's pool, a lance frag half.
     const stealFrac = weapon === WeaponType.Melee ? 1 : weapon === WeaponType.Shocklance ? 0.5 : 0;

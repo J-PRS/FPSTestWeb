@@ -1,5 +1,6 @@
 import { simMs } from './simClock.ts';
-import { getWeaponStats, WeaponType, scaledDirectDamage, HEALBEAM_ENERGY, HEALBEAM_PER_TICK, HEALBEAM_RANGE } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, scaledDirectDamage, isInstagibWeapon, INSTAGIB_RAILGUN_DAMAGE, HEALBEAM_ENERGY, HEALBEAM_PER_TICK, HEALBEAM_RANGE } from '../../shared/weapons.ts';
+import { gunGameAllows } from '../../shared/gunGame.ts';
 import { healPool } from './healPool.ts';
 import { lgTickDamage } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -14,7 +15,7 @@ import { wallNow , wallMs} from './wallClock.ts';
 // Structural slice - geometry reads + the damage funnels, nothing else.
 export type AttackHost = Pick<CombatHandler,
   '_solids' | 'solidIndex' | 'chargeBank' | 'playerManager' | 'hb' | 'friendly' | 'serverHit'
-> & { deps: Pick<CombatDeps, 'energyOf' | 'drainEnergy'> };
+> & { deps: Pick<CombatDeps, 'energyOf' | 'drainEnergy' | 'mods' | 'gunRungOf' | 'gunGameHeld'> };
 
 export function crawlerAttack(h: AttackHost, targetId: string, damage: number, species = 'crawler', from?: { x: number; y: number; z: number }): void {
     // A creature wedged inside/behind geometry can't bite through it -
@@ -34,6 +35,15 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
 
     const shooter = h.playerManager.getPlayer(shooterId);
     if (!shooter || shooter.isDead) {return;}
+    const mods = h.deps.mods?.() ?? {};
+    // Instagib whitelist - bot melee/kit drift can't land damage the
+    // modifier doesn't allow (spawn() already refused the body; this
+    // covers the body-less intents like the knife-range punch).
+    if (mods.instagib === true && !isInstagibWeapon(weaponType)) {return;}
+    // Gungame ladder - same backstop for the rung weapon (covers the
+    // body-less intents: melee punch, beam ticks, hold-out sidearms).
+    if (mods.gungame === true && !gunGameAllows(h.deps.gunRungOf?.(shooterId) ?? 0, weaponType, mods.igun === true)) {return;}
+    if (mods.gungame === true) {h.deps.gunGameHeld?.(shooterId, weaponType);}
     // Heal beam: same tick/cadence path as the damage beam, but the
     // payload is HP on a friend and the ammo is the shooter's own jet
     // tank - pocket-healing a push costs the bot its climb out.
@@ -70,6 +80,10 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
     const sm = perkMods(shooter.perk);
     const slug = sm.projSpeedCap > 0 && stats.speed > sm.projSpeedCap ? Math.min(1.5, stats.speed / sm.projSpeedCap) : 1;
     let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * sm.directDamage * slug;
+    // Instagib/igun: the flat 200 slug - airtime ramp, perk multipliers
+    // and the slugger speed bonus all sit out. igun pays it on EVERY
+    // weapon (the ladder's difficulty is handling, not damage).
+    if (mods.igun === true || (mods.instagib === true && weaponType === WeaponType.Railgun)) {damage = INSTAGIB_RAILGUN_DAMAGE;}
     // Bot beams ramp down like human ones - the beam-rider loadout pays
     // the same hold-decay a client's beam does.
     if (weaponType === WeaponType.Lightning) {

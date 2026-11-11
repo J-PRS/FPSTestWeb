@@ -475,6 +475,13 @@ function wirePlayerCombat(ctx: NetCtx): void {
     for (const [wt, n] of rows) {player.ammoPool.set(wt, { ammo: n, t, shotAt: -Infinity });}
   };
 
+  // Gun-game rung edge - the ladder owns the band; mirror the server's
+  // weapon pick into the locked loadout so prediction/HUD agree.
+  networkManager.onGunRung = (rung, wt): void => {
+    if (deps.world.playbackMode) {return;}
+    deps.lazyPlayer().armory.setGunGameRung(rung, wt);
+  };
+
   // Server tells us to apply knockback/pull to our local player
   networkManager.onKnockback = (position, force, pull, yank): void =>
     wireKnockback(ctx, position, force, pull, yank);

@@ -79,7 +79,7 @@ function beamChain(world: BeamSweepWorld, contact: Vec3, dir: Vec3, excludeBall:
 
 
 
-export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: Vec3, dir: Vec3, range: number): BeamContact | null {
+export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates = false): BeamContact | null {
   const end = { x: muzzle.x + dir.x * range, y: muzzle.y + dir.y * range, z: muzzle.z + dir.z * range };
   const at = (t: number): Vec3 => ({ x: muzzle.x + (end.x - muzzle.x) * t, y: muzzle.y + (end.y - muzzle.y) * t, z: muzzle.z + (end.z - muzzle.z) * t });
   let bestT = 1;
@@ -121,9 +121,10 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
     let playerId: string | undefined;
     for (const [pid, t] of world.players.getAllPlayers()) {
       if (pid === shooterId || t.isDead) {continue;}
-      // Teammates aren't cover — friendly damage is refused anyway, so a
-      // body-block just eats the ray (and its chain) for nothing.
-      if (!CONFIG.friendlyFire && shooter?.team !== undefined && t.team === shooter.team) {continue;}
+      // Teammates aren't cover - friendly damage is refused anyway, so a
+      // body-block just eats the ray (and its chain) for nothing. Heal
+      // intents pass includeTeammates: the teammate IS the target there.
+      if (!includeTeammates && !CONFIG.friendlyFire && shooter?.team !== undefined && t.team === shooter.team) {continue;}
       const cap = classCapsule(t.armorClass);
       const targetTransit = world.transitOf?.(pid) ?? 0;
       // Full rewind to the shooter's reported view epoch (viewLag is

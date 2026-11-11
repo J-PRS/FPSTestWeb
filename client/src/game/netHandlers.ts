@@ -150,7 +150,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       if (!res.ok) {throw new Error(`maps ${res.status}`);}
       return res.json() as Promise<MapRow[]>;
     },
-    quickJoin: async (mode, map, bots, noCreatures, noBalls): Promise<{ room: string; }> => {
+    quickJoin: async (mode, map, bots, noCreatures, noBalls, instagib, gungame, igun): Promise<{ room: string; }> => {
       const q = new URLSearchParams({ mode });
       if (map) {q.set('map', map);}
       if (bots !== undefined) {q.set('bots', String(bots));}
@@ -158,6 +158,9 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       // exists before the flag can ever reach it.
       if (noCreatures) {q.set('nocreatures', '1');}
       if (noBalls) {q.set('noballs', '1');}
+      if (instagib) {q.set('instagib', '1');}
+      if (gungame) {q.set('gungame', '1');}
+      if (igun) {q.set('igun', '1');}
       // Fleet: the matchmaker's /join picks the emptiest room FLEET-wide
       // and pins its placement — a worker-local quickJoin would only see
       // that worker's rooms.
@@ -170,7 +173,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
     // Returning undefined takes the ?room= reload path, which re-resolves
     // through the matchmaker and lands on the owning worker.
     switchRoom: fleet ? undefined
-      : (name, map, bots, mode, unlisted, noCreatures, noBalls): boolean => networkManager.switchRoom(name, map, bots, mode, unlisted, noCreatures, noBalls),
+      : (name, map, bots, mode, unlisted, noCreatures, noBalls, instagib, gungame, igun): boolean => networkManager.switchRoom(name, map, bots, mode, unlisted, noCreatures, noBalls, instagib, gungame, igun),
     mapThumbUrl: (name): string => `${httpUrl}/maps/thumbs/${name}.png`,
     isConnected: (): boolean => networkManager.isConnected(),
     listP2pLobbies: async (): Promise<{ room: string; since: number; }[]> => {

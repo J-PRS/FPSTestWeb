@@ -1,7 +1,7 @@
 import type { ServerMessage, Vec3, PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
-import {type WeaponStats, getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL, CONC_JET_DRAIN} from '../../shared/weapons.ts';
+import {type WeaponStats, getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL, CONC_JET_DRAIN, IGUN_AOE_MULT} from '../../shared/weapons.ts';
 import { healPool } from './healPool.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { classMass } from '../../shared/botClasses.ts';
@@ -73,6 +73,8 @@ export interface BlastHost {
     /** Room wireId lookup + single-recipient binary lane (knockback). */
     widOf?: (playerId: string) => number | undefined;
     wireTo?: (playerId: string, data: Uint8Array, journaled?: boolean | 'volatile') => void;
+    /** Room modifiers - igun scales the blast envelope's damage base. */
+    mods?: () => { igun?: boolean };
   };
   sendToPlayer: (playerId: string, msg: ServerMessage) => void;
   solids: readonly StructureCollider[];
@@ -121,6 +123,9 @@ export class BlastRunner {
     // Perk modifies the blast envelope, not the damage numbers - a
     // Sharpshooter's rocket lands tighter, not weaker.
     const radius = stats.aoeRadius * perkMods(player.perk).aoeRadius;
+    // igun: splash pays table aoeDamage ×5 - ordnance splash stays a
+    // kill threat (Bombard's 140 → 700), rapid-gun pops stay chip.
+    const igun = this.h.deps.mods?.().igun === true;
     const ctx: BlastCtx = {
       shooterId: playerId, ping: player.ping, bot: Boolean(player.isBot), pos: position,
       lagMs: player.isBot ? 0 : renderLagOf(player, this.lagBoundOf(playerId)),
@@ -129,7 +134,8 @@ export class BlastRunner {
       // Splash pays a banded fraction of the DIRECT hit - aoeDamage on
       // the stat block only survives as the base for damage-only specials
       // (melee arc, injected LG pop charge) that have no directDamage.
-      radius, baseDamage: (stats.directDamage || stats.aoeDamage) * this.h.ddMult(player), scales: stats.aoeScales,
+      radius, baseDamage: (igun ? (stats.aoeDamage || stats.directDamage) * IGUN_AOE_MULT
+        : (stats.directDamage || stats.aoeDamage)) * this.h.ddMult(player), scales: stats.aoeScales,
       impulse: stats.knockbackForce, pull,
       label: pull ? 'disc AOE' : 'AOE', weapon, shotId, air,
     };
@@ -143,7 +149,7 @@ export class BlastRunner {
     // take the first, everyone else the second's falloff.
     this.h.deps.emit?.({
       type: 'blast', pos: position, damage: ctx.baseDamage, radius, shooterId: playerId, scales: ctx.scales, weapon,
-      splash: stats.aoeDamage * this.h.ddMult(player),
+      splash: stats.aoeDamage * (igun ? IGUN_AOE_MULT : 1) * this.h.ddMult(player),
     });
 
     // Loose physical objects - flags, pickups, wildlife - get punted by

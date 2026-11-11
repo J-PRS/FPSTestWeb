@@ -116,6 +116,12 @@ export class ServerBots {
   private readonly mpcProgress = new Map<string, { x: number; z: number; t: number }>();
 
   private roster: BotRoster;
+  /** igun chassis edge: Room's rung sync calls this for bot seats so the
+   *  class follows the rung weapon's tier through the roster's own
+   *  applyClass (its health-delta bookkeeping stays consistent). */
+  syncIgunClass(id: string): void {
+    this.roster.refitClass(id);
+  }
   /** A bot's current squad role (post-rebalance) - telemetry reads it
    *  for per-role stat lines without touching the roster internals. */
   roleOf(id: string): BotRole | undefined {
@@ -321,7 +327,7 @@ export class ServerBots {
    *  + lands a blast, blink/warp teleport toward the current goal with
    *  a ground snap. */
   private applySkill(id: string, p: { position: BotVec; rotation: { yaw: number }; skill?: string; lastSkillUse?: number }, out: BrainOut): void {
-    const skill = p.skill;
+    const {skill} = p;
     if (!skill || out.skill !== skill) {return;}
     const now = wallNow();
     if (p.lastSkillUse !== undefined && now - p.lastSkillUse < 850) {return;}
@@ -333,16 +339,19 @@ export class ServerBots {
     const dl = Math.hypot(dir.x, dir.z) || 1;
     dir.x /= dl; dir.z /= dl;
     switch (skill) {
-      case 'dash':
+      case 'dash': {
         this.room.moveSim.applyImpulse(id, { x: dir.x * 16, y: 2, z: dir.z * 16 });
         break;
-      case 'bounce':
+      }
+      case 'bounce': {
         this.room.moveSim.applyImpulse(id, { x: 0, y: 10, z: 0 });
         break;
-      case 'slam':
+      }
+      case 'slam': {
         this.room.moveSim.applyImpulse(id, { x: 0, y: -16, z: 0 });
         this.room.deployables.applyBlast({ x: p.position.x, y: p.position.y, z: p.position.z }, 70, 8, id);
         break;
+      }
       case 'blink':
       case 'warp': {
         const nx = p.position.x + dir.x * 14, nz = p.position.z + dir.z * 14;

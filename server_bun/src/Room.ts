@@ -38,7 +38,7 @@ import { CLASS_STATS, classCapsule, classCanFire, type ArmorClass } from '../../
 import { inv, setInvariantSink } from '../../shared/invariants.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
-import type { ServerMessage } from '../../shared/protocol.ts';
+import type { ServerMessage, RoomMods } from '../../shared/protocol.ts';
 import { WORLD_MODEL, verbPayload, eventPayload } from '../../shared/worldModel.ts';
 import { decomposeTokens, POWERUP } from '../../shared/pickups.ts';
 import { botRand, tauntRand } from '../../shared/botRand.ts';
@@ -48,7 +48,8 @@ import { EventBus } from './roomEvents.ts';
 import { MODE_MODULES, type ModeModule } from './modeModules.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY, MOVEMENT_CONFIG, type BodyCapsule } from '../../shared/movement.ts';
-import { BELT_MAX, serverSimmed, WeaponType } from '../../shared/weapons.ts';
+import { BELT_MAX, serverSimmed, isInstagibWeapon, WeaponType } from '../../shared/weapons.ts';
+import { gunGameClimax, gunGameAllows, gunGameRoll, igunChassis } from '../../shared/gunGame.ts';
 import { chatKindFor, vgsCommandFor, radioAimFor } from '../../shared/botTaunts.ts';
 import { perkMods, isPerkId } from '../../shared/perks.ts';
 import { healPool } from './healPool.ts';
@@ -64,13 +65,13 @@ import { RoomDemo } from './roomDemo.ts';
 
 export class Room {
   readonly name: string;
-  /** Unlisted rooms never appear in /rooms or quick-join picks  -  the
-   *  only way in is knowing the name. Set once at creation. */
-  unlisted = false;
-  /** Creation-time sim gates (host toggles): strip the melee-species /
-   *  ball populations at mint and on applySpec reloads. */
-  noCreatures = false;
-  noBalls = false;
+  /** Room modifiers - the single truth for every creation-time gate:
+   *  unlisted hides the room, noCreatures/noBalls strip ambient sims,
+   *  instagib is the railgun kit lock, gungame/igun own the weapon
+   *  ladder (+ flat ~200 damage for igun). roomFactory writes the whole
+   *  object on mint and on bot-only adoption; consumers read through
+   *  mods() so a post-construction flip can never go stale. */
+  mods: RoomMods = {};
   // First joiner's mode locks the match  -  later joins inherit it via
   // gameState rather than a per-client URL param.
   readonly mode: string;
@@ -424,7 +425,13 @@ export class Room {
   earlyShotRelay(playerId: string, msg: { shotId?: string; weaponType?: number; dir?: Vec3 }): void {
     if (!msg.shotId || msg.weaponType === undefined) {return;}
     const p = this.players.getPlayer(playerId);
-    if (!p || p.isDead || !classCanFire(p.armorClass, msg.weaponType)) {return;}
+    if (!p || p.isDead) {return;}
+    // Gungame owns the weapon gate outright (the ladder crosses class
+    // tiers on purpose); every other room keeps class + instagib.
+    if (this.mods.gungame ? !this.gunGameAllowsFire(playerId, msg.weaponType)
+        : (!classCanFire(p.armorClass, msg.weaponType)
+          || (this.mods.instagib === true && !isInstagibWeapon(msg.weaponType)))) {return;}
+    if (this.mods.gungame) {this.gunGameHeld(playerId, msg.weaponType);}
     // Only intents whose drain path emits a playerShot relay qualify:
     // melee swings, beam intents, and non-simmed weapons all land on the
     // cosmetic emit. A simmed non-beam weapon spawns a shell instead -
@@ -450,6 +457,93 @@ export class Room {
    *  relay emit must skip it or observers see a double muzzle. */
   earlyRelayed(playerId: string, shotId?: string): boolean {
     return shotId !== undefined && this.earlyShots.has(`${playerId}:${shotId}`);
+  }
+
+  /** Ladder position - rung lives on the seat's PlayerState, so a
+   *  grace-period reclaim keeps its climb for free. Absent = rung 0. */
+  gunRungOf(playerId: string): number { return this.players.getPlayer(playerId)?.gunRung ?? 0; }
+
+  /** The one weapon gate every gungame fire path consults: the rung's
+   *  ladder weapon plus the Hook grapple (deals no damage - it can't
+   *  farm rungs, and everyone keeps their traverse). */
+  gunGameAllowsFire(playerId: string, weaponType: number): boolean {
+    return gunGameAllows(this.gunRungOf(playerId), weaponType, this.mods.igun === true);
+  }
+
+  /** Bucket pick edge: a gungame fire claim names the member the player
+   *  actually shouldered - roster weapon (remote viewmodel) and the igun
+   *  chassis follow the real pick, not the bucket's first member. */
+  gunGameHeld(playerId: string, weaponType: number): void {
+    const p = this.players.getPlayer(playerId);
+    if (!p || p.weapon === weaponType) {return;}
+    p.weapon = weaponType;
+    this.igunClassSync(playerId);
+  }
+
+  /** Rung edge → wire + roster weapon. Only the owner needs the number:
+   *  remotes read a player's gun off their own fires (p.weapon rides
+   *  the roster), so the push goes to one socket. */
+  private setGunRung(playerId: string, rung: number): void {
+    const r = Math.max(0, Math.min(gunGameClimax(this.mods.igun === true), Math.floor(rung)));
+    const p = this.players.getPlayer(playerId);
+    if (!p) {return;}
+    p.gunRung = r;
+    // Bucket roll: the rung deals one member - luck, not a pick. The wire
+    // carries the draw so the client's locked band mirrors the same gun.
+    p.weapon = gunGameRoll(r, this.mods.igun === true, this.rng());
+    this.igunClassSync(playerId);
+    this.sendToPlayer(playerId, { type: 'gunRung', rung: r, wt: p.weapon });
+  }
+
+  /** igun chassis edge: the body follows the rung weapon's tier. Humans
+   *  ride applyClaimedClass (the claim arg is dead under igun anyway);
+   *  bots ride the roster's applyClass so its health-delta bookkeeping
+   *  and the `classes` map stay consistent. */
+  private igunClassSync(playerId: string): void {
+    if (this.mods.igun !== true) {return;}
+    const p = this.players.getPlayer(playerId);
+    if (!p) {return;}
+    if (p.isBot) {this.bots.syncIgunClass(playerId);}
+    else {this.applyClaimedClass(playerId, '');}
+  }
+
+  /** Join/reclaim edge: seat the ladder rung - roster weapon + the owner
+   *  push that locks the client's band. Call AFTER the handshake's
+   *  gameState so the client's kit lock exists when the rung lands;
+   *  reclaim re-reads the stored rung so a grace-window return keeps
+   *  its climb. */
+  gunGameSeat(playerId: string): void {
+    if (this.mods.gungame !== true) {return;}
+    const p = this.players.getPlayer(playerId);
+    if (!p) {return;}
+    const r = p.gunRung ?? 0;
+    p.weapon = gunGameRoll(r, this.mods.igun === true, this.rng());
+    this.igunClassSync(playerId);
+    this.sendToPlayer(playerId, { type: 'gunRung', rung: r, wt: p.weapon });
+  }
+
+  /** New match = fresh ladders: every seat back to rung 0 (roster weapon
+   *  + owner push), then respawnAll lands bodies on the new spec. */
+  gunGameReset(): void {
+    if (this.mods.gungame !== true) {return;}
+    for (const p of this.players.getAllPlayers().values()) {
+      p.gunRung = 0;
+      p.weapon = gunGameRoll(0, this.mods.igun === true, this.rng());
+      this.igunClassSync(p.id);
+      this.sendToPlayer(p.id, { type: 'gunRung', rung: 0, wt: p.weapon });
+    }
+  }
+
+  /** Gun-game ladder edges off the shared kill bus: a player frag
+   *  advances the shooter one rung (climax holds - frag count decides
+   *  the match), the victim drops to rung 0. Environment/self kills
+   *  move nobody. Every damage funnel emits 'kill', so shells, beams,
+   *  melee and deployables all feed the ladder. */
+  private gunGameOnKill(targetId: string, shooterId: string): void {
+    if (this.mods.gungame !== true) {return;}
+    if (this.players.getPlayer(targetId)) {this.setGunRung(targetId, 0);}
+    if (shooterId === 'environment' || shooterId === targetId) {return;}
+    if (this.players.getPlayer(shooterId)) {this.setGunRung(shooterId, this.gunRungOf(shooterId) + 1);}
   }
   /** Spatial memory  -  kills/fights/gems/flags leave decaying scent the
    *  brains read for where-the-action-was. See influenceMap.ts. Sized to
@@ -491,15 +585,24 @@ export class Room {
    *  class leaves the client's real kit class-locked until death. Same
    *  field set respawnPlayer's pendingClass block touches. */
   applyClaimedClass(playerId: string, claim: string): void {
-    if (claim !== 'light' && claim !== 'medium' && claim !== 'heavy') {return;}
     const p = this.players.getPlayer(playerId);
+    // Instagib has no class choice - every claim resolves to light. igun
+    // resolves to the rung weapon's own tier (untiered = medium): the
+    // chassis rides the ladder, so a reclaim's stale pick can't stick.
+    if (this.mods.instagib === true) {claim = 'light';}
+    else if (this.mods.igun === true) {claim = igunChassis(p?.weapon);}
+    if (claim !== 'light' && claim !== 'medium' && claim !== 'heavy') {return;}
     if (!p || p.armorClass === claim) {return;}
+    const prev = p.armorClass as ArmorClass;
     p.armorClass = claim;
     // pendingClass survives: it's the rejoiner's banked pick, still
     // owed at respawn — clearing it here would strand the client
     // shouldering the new tier's kit against the old enforced class.
     p.maxHealth = CONFIG.playerMaxHealth + perkMods(p.perk).maxHealth + CLASS_STATS[claim].maxHealth;
-    p.health = Math.min(p.health, p.maxHealth);
+    // Chassis-up swaps grant the tier's extra pool like the bot roster's
+    // delta heal; chassis-down just clamps into the smaller bar.
+    p.health = Math.max(0, Math.min(p.maxHealth,
+      p.health + Math.max(0, CLASS_STATS[claim].maxHealth - CLASS_STATS[prev].maxHealth)));
     this.applyClassScale(playerId);
   }
 
@@ -669,7 +772,7 @@ export class Room {
       (msg): void => this.connections.broadcast(msg),
       (data): void => this.connections.broadcastBinaryReliable(data),
     );
-    if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
+    if (this.mods.noBalls === true) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
     else if (this.spec.balls) {this.ballSim.population = this.spec.balls;}
     this.ballSim.killY = this.spec.killY ?? -Infinity;
     this.ballSim.onKilled = (by, pos, variant): void => this.scoring.nonPlayerKill(by, pos, variant);
@@ -691,7 +794,7 @@ export class Room {
     // think phases, so an answer lands a beat later like real chat.
     this.events.on((e): void => {
       switch (e.type) {
-        case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); const w = (e as { weapon?: number }).weapon; if (w !== undefined) {this.killsByWeapon.set(w, (this.killsByWeapon.get(w) ?? 0) + 1);} break;
+        case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); const w = (e as { weapon?: number }).weapon; if (w !== undefined) {this.killsByWeapon.set(w, (this.killsByWeapon.get(w) ?? 0) + 1);} this.gunGameOnKill(e.targetId, e.shooterId); break;
         }
         case 'hit': { this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); break;
         }
@@ -843,7 +946,7 @@ export class Room {
       (msg): void => this.connections.broadcast(msg),
       (pid, msg): void => this.connections.sendToPlayer(pid, msg),
     );
-    creatureSim.pops = this.noCreatures ? {} : (this.spec.creatures ?? {});
+    creatureSim.pops = this.mods.noCreatures === true ? {} : (this.spec.creatures ?? {});
     creatureSim.colliders = this.ballSim.colliders;
     creatureSim.onBite = (c, targetId): void => {
       // dep:N ids are deployables  -  gnaw their hp, not a player.
@@ -1057,7 +1160,7 @@ export class Room {
    *  earliest of terrain face, wall, player capsule, or creature wins
    *  (same math as botBeam.beamContact). A creature contact also picks
    *  the chain fork; payment stays in CombatHandler. */
-  private beamSweep(shooterId: string, muzzle: Vec3, dir: Vec3, range: number): BeamContact | null {
+  private beamSweep(shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates = false): BeamContact | null {
     // One cast for every authority shape  -  Room and P2PHost resolve the
     // same rays through shared beamSweep.ts.
     return beamSweepRay({
@@ -1067,7 +1170,7 @@ export class Room {
       ballSim: this.ballSim, creatureSim: this.creatureSim,
       transitOf: (pid): number => this.moveSim.transitOf(pid),
       transitVarOf: (pid): number => this.moveSim.transitVarOf(pid),
-    }, shooterId, muzzle, dir, range);
+    }, shooterId, muzzle, dir, range, includeTeammates);
   }
 
   /** Any player death drops a carried flag  -  called from the damage
@@ -1105,6 +1208,9 @@ export class Room {
     return {
       room: roomName,
       mode: this.mode,
+      // Live reader, not a snapshot: roomFactory flips these flags on
+      // reused Rooms after this RoomInfo was captured.
+      mods: (): RoomMods => this.mods,
       // This authority sims every outcome  -  no client claim is legitimate.
       claimsAccepted: false,
       scores: this.scores,
@@ -1180,11 +1286,11 @@ export class Room {
       admitQueue: (pid, ids): void => { this.admitPending.set(pid, ids); },
       floodPause: (pid, ms): void => this.connections.floodPause(pid, ms),
       fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS),
-      beamSweep: (pid, muzzle, dir, range): BeamContact | null => this.beamSweep(pid, muzzle, dir, range),
+      beamSweep: (pid, muzzle, dir, range, includeTeammates): BeamContact | null => this.beamSweep(pid, muzzle, dir, range, includeTeammates),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
       crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),
       repairTarget: (pid, muz, dir, range): number | null => this.deployables.repairTarget(pid, muz, dir, range),
-      onDeploy: (pid, kind, pos, vel): string | true => this.deployables.handleDeploy(pid, kind, pos, vel),
+      onDeploy: (pid, kind, pos, vel): string | true => this.mods.instagib === true ? 'instagib' : this.mods.gungame === true ? 'gungame' : this.deployables.handleDeploy(pid, kind, pos, vel),
       onRepair: (pid, targetId): string | true => this.deployables.repair(pid, targetId),
       deployables: () => this.deployables.snapshot(),
       influence: this.influence,
@@ -1234,6 +1340,8 @@ export class Room {
       wireCast: (data, journaled, exclude): void => this.connections.broadcastBinaryReliable(data, journaled, exclude),
       wireTo: (pid, data, journaled): void => this.connections.sendBinToPlayerReliable(pid, data, journaled),
       earlyRelayed: (pid, shotId): boolean => this.earlyRelayed(pid, shotId),
+      gunRungOf: (pid): number => this.gunRungOf(pid),
+      gunGameHeld: (pid, wt): void => this.gunGameHeld(pid, wt),
       // The rabbit dep's presence IS the mode check  -  CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? (): string | null => this.flags?.carrierId() ?? null : undefined,
@@ -1616,11 +1724,11 @@ export class Room {
 
   /** Ball/creature population pools for the swapped spec. */
   private applySpecPops(spec: MapSpec): void {
-    if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
+    if (this.mods.noBalls === true) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
     else if (spec.balls) {this.ballSim.population = spec.balls;}
     if (spec.ballMix) {this.ballSim.ballMix = spec.ballMix;}
     this.ballSim.killY = spec.killY ?? -Infinity;
-    this.creatureSim.pops = this.noCreatures ? {} : (spec.creatures ?? {});
+    this.creatureSim.pops = this.mods.noCreatures === true ? {} : (spec.creatures ?? {});
     this.creatureSim.colliders = this.ballSim.colliders;
   }
 

@@ -26,6 +26,8 @@ import { poissonDisc } from '../../utils/poissonSpread.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { Targetable } from '../../entities/balls.js';
 import { classCanFire, type ArmorClass } from '../../../../shared/botClasses.js';
+import { gunGameWeapon } from '../../../../shared/gunGame.js';
+import { gunRungOf } from '../gunGame.js';
 import { simRand } from '../../../../shared/simRand.js';
 
 const _shotDir = new THREE.Vector3();
@@ -37,7 +39,7 @@ const _pelletUp0 = new THREE.Vector3(0, 1, 0);
 export interface FireHost {
   scene(): THREE.Scene;
   player(): { pos: THREE.Vector3; isDead: boolean; appliedClass: ArmorClass };
-  world(): { projectiles: Projectile[]; remotePlayers: Map<string, RemotePlayer> };
+  world(): { projectiles: Projectile[]; remotePlayers: Map<string, RemotePlayer>; instagib?: boolean; gungame?: boolean; igun?: boolean; gunRungs?: Map<string, number> };
   targets: Targetable[];
   /** Connected room → real spawns would misattribute to the local
    *  player; everything routes through the claim path instead. */
@@ -93,6 +95,9 @@ export class BotFire {
    *  the claim to the local player - server bots own that case anyway. */
   resolveShot(bot: GameBot, targetId: string, aim: THREE.Vector3): void {
     const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
+    const w = this.host.world();
+    const insta = w.instagib === true;
+    const gg = w.gungame === true;
     const dx = aim.x - bot.position.x, dy = aim.y - bot.position.y, dz = aim.z - bot.position.z;
     const dist = Math.hypot(dx, dy, dz) || 1;
     // Fire-along-facing: the pull waits until the body has swung inside
@@ -101,18 +106,25 @@ export class BotFire {
     const cp = Math.cos(bot.rotation.pitch);
     const fx = Math.sin(bot.rotation.yaw) * cp, fy = -Math.sin(bot.rotation.pitch), fz = Math.cos(bot.rotation.yaw) * cp;
     if ((fx * dx + fy * dy + fz * dz) / dist < SETTLE_COS) {return;}
-    const picked0 = pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
-      bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
+    // Gun game: the ladder owns the pick outright - same rung the server
+    // gate would admit, not whatever the loadout drifted to.
+    const picked0 = insta ? WeaponType.Railgun
+      : gg ? gunGameWeapon(gunRungOf(w, bot.playerId), w.igun === true)
+      : pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
+        bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
     // Deploy artillery only draws feet-down - same fallback the server's
     // arsenal picks: airborne body + groundedOnly pick = next legal slot,
     // not a dry pull that never fires.
     const picked = getWeaponStats(picked0).groundedOnly && !bot.grounded
       ? ([lo.far, lo.mid, lo.near, lo.side].find((w): boolean => !getWeaponStats(w).groundedOnly && classCanFire(bot.armorClass, w)) ?? picked0)
       : picked0;
-    const melee = picked === WeaponType.Melee || dist <= MELEE_RANGE;
+    // Kit locks have no melee - knife range still shoots the held gun.
+    const melee = !insta && !gg && (picked === WeaponType.Melee || dist <= MELEE_RANGE);
     // Same class gate the server holds players to - a pick the body can't
     // legally shoulder falls back to the first legal slot, never fires.
-    const wt = melee || classCanFire(bot.armorClass, picked) ? picked
+    // Gun game bypasses it outright: the ladder crosses armor tiers, so
+    // the rung weapon is legal on any chassis (server shotAdmit agrees).
+    const wt = gg || melee || classCanFire(bot.armorClass, picked) ? picked
       : ([lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(bot.armorClass, w)) ?? -1);
     if (!melee && wt < 0) {return;}
     if (!this.canFire(bot, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}

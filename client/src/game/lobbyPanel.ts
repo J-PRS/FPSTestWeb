@@ -30,7 +30,7 @@ export interface LobbyPanelHost {
 
   toggleMapFam(kind: 't2' | 'q3' | 'custom'): void;
 
-  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): void;
+  join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): void;
 
   /** SOLO page's pickers — Lobby refills them from the same map list as
 
@@ -276,7 +276,7 @@ function playOffline(mode: string, map: string, bots: number | undefined): void 
 
   const q = new URLSearchParams(window.location.search);
 
-  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs']) {q.delete(k);}
+  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs', 'instagib', 'gungame', 'igun']) {q.delete(k);}
 
   const href = q.size > 0 ? `/?${q}` : '/';
   window.location.href = href;
@@ -817,6 +817,64 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     gateToggles(famRow);
 
+    // INSTAGIB - room modifier, not a gate: layers onto whatever mode is
+    // picked (instagib duel, instagib headhunt). ON rides the join like
+    // `unlisted`; skill + perk picks still apply. OFFLINE's solo boot
+    // honors the same fps-instagib setting (see connectPhase).
+    // Every modifier toggle registers {button, settings key} here so the
+    // HOST and OFFLINE pages' duplicate buttons re-sync from one source
+    // of truth after any exclusivity change.
+    const modButtons: { btn: HTMLButtonElement; key: 'fps-instagib' | 'fps-gungame' | 'fps-igun' }[] = [];
+    const syncModButtons = (): void => {
+      for (const m of modButtons) {m.btn.classList.toggle('active', settings.get(m.key) === 1);}
+    };
+    const instaToggle = (row: HTMLDivElement): void => {
+      const instaBtn = btn('INSTAGIB');
+      instaBtn.title = 'instagib rules: everyone light, railgun + hook only, 200dmg rail hits';
+      instaBtn.addEventListener('click', (): void => {
+        const on = settings.get('fps-instagib') !== 1;
+        settings.set('fps-instagib', on ? 1 : 0);
+        // Instagib and the gun-game ladder are mutually exclusive room
+        // modifiers - the server drops gungame when instagib rides, so
+        // don't leave a phantom toggle armed.
+        if (on) {settings.set('fps-gungame', 0); settings.set('fps-igun', 0);}
+        syncModButtons();
+      });
+      modButtons.push({ btn: instaBtn, key: 'fps-instagib' });
+      syncModButtons();
+      row.append(instaBtn);
+    };
+    instaToggle(famRow);
+
+    // GUN GAME / IGUNGAME - room modifiers like instagib: the shared
+    // weapon ladder owns every gun (kills climb, deaths reset). IGUN
+    // is the same ladder paying ~200 effective damage per hit; it
+    // implies GUNGAME so the ladder rules always ride along. OFFLINE's
+    // solo boot honors the same fps-* settings (see connectPhase).
+    const gunToggle = (row: HTMLDivElement): void => {
+      const ggBtn = btn('GUNGAME');
+      ggBtn.title = 'gun game: shared weapon ladder - kills advance, deaths reset';
+      ggBtn.addEventListener('click', (): void => {
+        const on = settings.get('fps-gungame') !== 1;
+        settings.set('fps-gungame', on ? 1 : 0);
+        if (on) {settings.set('fps-instagib', 0);}
+        else {settings.set('fps-igun', 0);}
+        syncModButtons();
+      });
+      const igBtn = btn('IGUN');
+      igBtn.title = 'igun: gun game with ~200 effective damage on every weapon';
+      igBtn.addEventListener('click', (): void => {
+        const on = settings.get('fps-igun') !== 1;
+        settings.set('fps-igun', on ? 1 : 0);
+        if (on) {settings.set('fps-gungame', 1); settings.set('fps-instagib', 0);}
+        syncModButtons();
+      });
+      modButtons.push({ btn: ggBtn, key: 'fps-gungame' }, { btn: igBtn, key: 'fps-igun' });
+      syncModButtons();
+      row.append(ggBtn, igBtn);
+    };
+    gunToggle(famRow);
+
     const { select: mapSelect, thumb: mapThumb, live: mapLive } = mapPicker(h);
     keepSelect(mapSelect, 'fps-host-map');
 
@@ -871,13 +929,19 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
         const noBalls = settings.get('fps-noballs') === 1;
 
+        const insta = settings.get('fps-instagib') === 1;
+
+        const gg = settings.get('fps-gungame') === 1;
+
+        const ig = settings.get('fps-igun') === 1;
+
         // A named PRIVATE room is always self-hosted — quickJoin would
 
         // land in someone's public match instead of creating ours.
 
-        const room = named || (priv ? `room-${Math.random().toString(36).slice(2, 8)}` : (await h.deps.quickJoin(mode, map || undefined, bots, noCreatures, noBalls)).room);
+        const room = named || (priv ? `room-${Math.random().toString(36).slice(2, 8)}` : (await h.deps.quickJoin(mode, map || undefined, bots, noCreatures, noBalls, insta, gg, ig)).room);
 
-        h.join(room, map || undefined, bots, mode || undefined, priv || undefined, noCreatures || undefined, noBalls || undefined);
+        h.join(room, map || undefined, bots, mode || undefined, priv || undefined, noCreatures || undefined, noBalls || undefined, insta || undefined, gg || undefined, ig || undefined);
 
       } catch { hostBtn.disabled = false; }
 
@@ -1131,6 +1195,10 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const soloFamRow = famToggles();
 
     gateToggles(soloFamRow);
+
+    instaToggle(soloFamRow);
+
+    gunToggle(soloFamRow);
 
     const { select: soloMapSel, thumb: soloThumb, live: soloLive } = mapPicker(h);
     keepSelect(soloMapSel, 'fps-solo-map');

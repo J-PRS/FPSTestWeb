@@ -6,6 +6,7 @@ import { SheepMeter } from './botSheep.js';
 import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, rollBotPerk, type BotLoadout } from '../../../../shared/botLoadouts.js';
 import { botRand } from '../../../../shared/botRand.js';
 import { WeaponType } from '../../../../shared/weapons.js';
+import { gunGameWeapon, igunChassis } from '../../../../shared/gunGame.js';
 import { ENERGY } from '../../../../shared/movement.js';
 import type { Nugget } from '../../entities/Nugget.js';
 import type { Targetable } from '../../entities/balls.js';
@@ -191,10 +192,15 @@ export class TeamBots {
         // Instagib rooms field the same forced kit the server roster does:
         // railgun everywhere, hook belt, light frame, no alternates to adapt into.
         const insta = deps.world.instagib;
+        const gg = deps.world.gungame;
         const lo: BotLoadout = insta
           ? { perk: 'jumpstart', near: WeaponType.Railgun, mid: WeaponType.Railgun, far: WeaponType.Railgun, belt: WeaponType.Hook, side: WeaponType.Railgun }
-          : Object.assign({}, base, {perk: rollBotPerk(base, botRand)});
-        const cls = insta ? 'light' : botClassForLoadout(lo);
+          : gg
+            // Gun game: rung 0 weapon in every slot, hook belt, no perk
+            // force - skill/perk stay live picks like the server roster.
+            ? { perk: rollBotPerk(base, botRand), near: gunGameWeapon(0, deps.world.igun === true), mid: gunGameWeapon(0, deps.world.igun === true), far: gunGameWeapon(0, deps.world.igun === true), side: gunGameWeapon(0, deps.world.igun === true), belt: WeaponType.Hook }
+            : Object.assign({}, base, {perk: rollBotPerk(base, botRand)});
+        const cls = insta ? 'light' : (deps.world.igun === true ? igunChassis(gunGameWeapon(0, true)) : botClassForLoadout(lo));
         const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain, cls);
         bot.setLoadout(lo);
         // Q-skill: same per-class pool the server roster rolls - lights
@@ -203,10 +209,10 @@ export class TeamBots {
           : cls === 'light' ? (botRand() < 0.6 ? 'blink' : 'dash')
           : cls === 'heavy' ? (botRand() < 0.5 ? 'slam' : 'medkit')
           : (['dash', 'bounce', 'warp', 'shield'] as const)[Math.floor(botRand() * 4)]!;
-        bot.loadoutAlts = insta ? {} : (wildcard ? WILDCARD_SLOTS : BOT_ALT_SLOTS[kitIdx]);
+        bot.loadoutAlts = (insta || gg) ? {} : (wildcard ? WILDCARD_SLOTS : BOT_ALT_SLOTS[kitIdx]);
         // The spawn pick is skill-weighted, not flat — the brain's own
         // matrix rerolls every open slot toward what it hits with.
-        if (!insta) {bot.adaptLoadout();}
+        if (!insta && !gg) {bot.adaptLoadout();}
         if (ffa) {
           // FFA pseudo-team = own id — everyone is everyone else's enemy.
           bot.team = bot.playerId;

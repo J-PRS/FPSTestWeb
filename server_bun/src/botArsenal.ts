@@ -9,6 +9,7 @@ import type { Room } from './Room.ts';
 import { classCapsule, classCanFire } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow } from '../../shared/weapons.ts';
+import { gunGameWeapon } from '../../shared/gunGame.ts';
 import { idSeed } from '../../shared/weaponTable.ts';
 import { SELF_SPLASH_MAX,aoeDamageAt, hitRadiusAt } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -797,6 +798,9 @@ s[kind] += 1; this.propels.set(id, s);
   }
 
   pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string): number {
+    // Gun-game: the ladder IS the arsenal - kit tables can't offer a
+    // weapon the rung gate would refuse anyway.
+    if (this.room.mods.gungame === true) {return gunGameWeapon(botId ? this.room.gunRungOf(botId) : 0, this.room.mods.igun === true);}
     const s = botId ? this.skillOfCb(botId) : undefined;
     const skill = s ? (t: number): number => aimSkillFor(s, t, 0) : undefined;
     // The wounded-explosive gate lives in shared pickBotWeaponSafe so
@@ -835,6 +839,9 @@ s[kind] += 1; this.propels.set(id, s);
    *  Aims at lastSeen, never the live body - a cloaked or occluded
    *  target is only as findable as memory says. */
   throwBelt(p: BotBody): void {
+    // Gungame: belt ordnance is off-ladder - the spawn gate would refuse
+    // every shell, so don't spend the think on a guaranteed whiff.
+    if (this.room.mods.gungame === true) {return;}
     if (!this.lastHunt(p.id)) {return;}
     // Same wounded-explosive gate as the primary pick: a bot under one
     // self-blast's price doesn't throw ordnance that can pop short.
@@ -856,6 +863,9 @@ s[kind] += 1; this.propels.set(id, s);
    *  lob closer than its own blast envelope - eating falloff IS the
    *  sabotage, humans disc a gen point-blank. */
   lobAt(p: BotBody, aim: Vec3 & { vel?: BotVec }, riskSelf = false): boolean {
+    // Gungame: every belt throw is off-ladder ordnance - refuse up front
+    // rather than relying on each caller to know the room's rules.
+    if (this.room.mods.gungame === true) {return false;}
     const want = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
     const wt = classCanFire(p.armorClass, want) ? want : WeaponType.Grenade;
     const stats = getWeaponStats(wt);

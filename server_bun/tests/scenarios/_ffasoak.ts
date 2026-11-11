@@ -59,6 +59,10 @@ function run(weapons: WeaponType[], seed: number): {
   }
   const mode = FFASOAK_TDM ? 'tdm' : 'dm';
   const room = mkRoom({ mode, bots: BOTS, botSkill: 'impossible', arena: { x: 0, z: 0, radius: FFASOAK_ARENA } }, mode, seed, false, field ?? undefined);
+  // FFASOAK_IGUN: igun damage law (×10 direct, ×5 splash) WITHOUT the
+  // ladder gate - the kill leaderboard then ranks pure kill-ease, which
+  // is the axis the igun ladder orders on.
+  if (process.env.FFASOAK_IGUN) {room.mods.igun = true;}
 
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
   const ctl = room.bots as unknown as {

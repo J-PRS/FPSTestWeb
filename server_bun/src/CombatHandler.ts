@@ -4,7 +4,9 @@ import { POWERUP } from '../../shared/pickups.ts';
 
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow } from '../../shared/weapons.ts';
+import { serverSimmed, isInstagibWeapon, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow } from '../../shared/weapons.ts';
+import { gunGameAllows } from '../../shared/gunGame.ts';
+import type { RoomMods } from '../../shared/protocol.ts';
 import { idSeed } from '../../shared/weaponTable.ts';
 import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
@@ -87,6 +89,17 @@ export interface CombatDeps {
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Room mode tag for balance telemetry ('ctf', 'nuggets', ...). */
   mode?: string;
+  /** Live room-modifier reader - instagib's weapon whitelist + rail
+   *  overrides, gungame's per-player ladder gate (gunRungOf), igun's
+   *  flat ~200 damage. A function because roomFactory can flip the
+   *  flags on a reused Room after this deps snapshot was taken - a
+   *  boolean here would be stale forever. */
+  mods?: () => RoomMods;
+  gunRungOf?: (playerId: string) => number;
+  /** Bucket-pick edge: a passed gungame claim names the member the
+   *  player actually shouldered - Room syncs roster weapon + igun
+   *  chassis. Called from every admit site (shot/aoe/attacks). */
+  gunGameHeld?: (playerId: string, weaponType: number) => void;
 
   /** A bot chat line hit the wire - Room relays it as a 'reply' notice
    *  so squadmates can answer back. Emitted as 'botSpoke'. */
@@ -115,7 +128,7 @@ export interface CombatDeps {
   /** Beam-intent resolution - the honest ray against terrain, walls,
    *  players, and creatures; earliest contact wins. Absent = beam
    *  intents stay cosmetic relays only. */
-  beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number) => BeamContact | null;
+  beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates?: boolean) => BeamContact | null;
   /** Creature damage sinks for beam contacts - BallSim/CreatureSim
    *  handleHit; absent when the room runs no creature sims. */
   ballHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
@@ -459,11 +472,21 @@ w.n += 1;
     // (not rejecting) is correct: the first intent's verdict already flew.
     if (this.shotDup(playerId, msg.shotId, now)) {return null;}
     const fireProjectile = dir && serverSimmed(msg.weaponType) && !CombatHandler.BEAM_INTENT_WEAPONS.has(msg.weaponType!) ? this.deps.fireProjectile : undefined;
-    // Class lock applies to every fire intent - beams and melee skip the
-    // projectile branch but must not dodge it.
-    if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
-      this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
-      return null;
+    // Weapon gate, in order: gungame's ladder owns the check outright
+    // (it crosses class tiers on purpose); every other room keeps the
+    // class lock + instagib whitelist. Beams and melee can't dodge it.
+    if (msg.weaponType !== undefined) {
+      const mods = this.deps.mods?.() ?? {};
+      const gg = mods.gungame === true;
+      const allowed = gg
+        ? gunGameAllows(this.deps.gunRungOf?.(playerId) ?? 0, msg.weaponType, mods.igun === true)
+        : classCanFire(player.armorClass, msg.weaponType)
+          && (mods.instagib !== true || isInstagibWeapon(msg.weaponType));
+      if (!allowed) {
+        this.reject(playerId, 'Shot', gg ? 'gun-game weapon' : 'class-locked weapon', undefined, msg.weaponType, msg.shotId);
+        return null;
+      }
+      if (gg) {this.deps.gunGameHeld?.(playerId, msg.weaponType);}
     }
     return { player, now, dir, fireProjectile };
   }
@@ -596,9 +619,11 @@ w.n += 1;
     if (this.beamFloodGate(playerId, now)) {return true;}
     const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
     const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+    // includeTeammates: the honest ray must CONTACT the patient - damage
+    // beams skip friendly bodies, but the heal contact IS a teammate.
     const c = sweep(playerId,
       { x: mpos.x, y: mpos.y, z: mpos.z },
-      { x: dir.x / l, y: dir.y / l, z: dir.z / l }, HEALBEAM_RANGE);
+      { x: dir.x / l, y: dir.y / l, z: dir.z / l }, HEALBEAM_RANGE, true);
     if (c?.playerId && this.friendly(playerId, c.playerId)) {
       this.healBeamTick(playerId, c.playerId, now);
     }

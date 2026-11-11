@@ -27,6 +27,35 @@ export interface Vec3 {
 /** Server↔client socket transports; client adds 'p2p'/'host' locally. */
 export type TransportKind = 'wt' | 'rtc' | 'ws';
 
+/** Creation-time room modifiers, defined once. The wire carries them as
+ *  flat optional booleans on join/switchRoom/gameState (a stale client
+ *  simply omits them); internally they travel as this one object through
+ *  roomFor/quickRoom/SessionManager so a new modifier is one field, not
+ *  a signature change in six files. igun implies gungame. */
+export interface RoomMods {
+  unlisted?: boolean;
+  noCreatures?: boolean;
+  noBalls?: boolean;
+  instagib?: boolean;
+  gungame?: boolean;
+  igun?: boolean;
+}
+
+/** Collect the flat wire fields into the mods object the room layer
+ *  consumes. Absent/false fields normalize to undefined so `mods.x`
+ *  reads as a plain boolean check. */
+export function roomModsOf(m: RoomMods | undefined | null): RoomMods {
+  if (!m) {return {};}
+  const out: RoomMods = {};
+  if (m.unlisted) {out.unlisted = true;}
+  if (m.noCreatures) {out.noCreatures = true;}
+  if (m.noBalls) {out.noBalls = true;}
+  if (m.instagib) {out.instagib = true;}
+  if (m.gungame || m.igun) {out.gungame = true;}
+  if (m.igun) {out.igun = true;}
+  return out;
+}
+
 export interface Rotation {
   yaw: number;
   pitch: number;
@@ -63,6 +92,14 @@ export type ClientMessage =
        *  populations from a fresh room - honored like `mode`, only when
        *  this join creates the room. */
       noCreatures?: boolean; noBalls?: boolean;
+      /** Creation-time modifier: instagib rules - light class, railgun
+       *  + hook only, 200dmg rail hits. Layers onto any mode like
+       *  noBalls; honored only at room creation. */
+      instagib?: boolean;
+      /** Creation-time modifier: gun game ladder - every player fields
+       *  the rung weapon, kills advance, deaths reset. igun is the same
+       *  ladder with ~200-effective damage on every weapon. */
+      gungame?: boolean; igun?: boolean;
       /** Netcode-v2 tier the client negotiated - /metrics tier counts. */
       transport?: string;
       /** Offset cursor: last reliable `ev` seq the client processed - a
@@ -187,7 +224,7 @@ export type ClientMessage =
   // session in the target room and answers with a fresh gameState, which
   // the client's existing reconnect path rebuilds from. Same creation
   // hints as join; room absent = 'default'.
-  | { type: 'switchRoom'; room?: string; mode?: string; map?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean };
+  | { type: 'switchRoom'; room?: string; mode?: string; map?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean; instagib?: boolean; gungame?: boolean; igun?: boolean };
 
 export interface TickUpdatePlayer {
   playerId: string;
@@ -212,7 +249,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to - set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind; val?: number; vel?: Vec3 }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string>; udp?: { token: string; port: number } }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; instagib?: boolean; gungame?: boolean; igun?: boolean; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind; val?: number; vel?: Vec3 }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string>; udp?: { token: string; port: number } }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: string; armorClass?: string;
       /** Chosen display name (cosmetic - ids are still the identity). */
       name?: string;
@@ -261,6 +298,10 @@ export type ServerMessage =
       /** Lifesteal perk healed the shooter on this frag - clients render
        *  the red implode VFX on the killer. */
       steal?: boolean }
+  // Gun-game ladder position, pushed to the owning client only - the
+  // rung changes on kill/death edges, so a dedicated edge beats riding
+  // the roster row. rung indexes shared/gunGame.GUN_GAME_LADDER.
+  | { type: 'gunRung'; rung: number; wt?: number }
   | { type: 'knockback'; targetId: string; position: Vec3; force: number; pull?: boolean; yank?: boolean }
   | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; armorClass?: string; health?: number }
   | { type: 'jump'; playerId: string; position: Vec3 }

@@ -1,6 +1,7 @@
 import { settings } from '../core/settings.js';
 import { SLOT_COUNT, weaponDef, widOf, LANCE_WID } from '../weapons.js';
 import { WeaponType, getWeaponStats } from '../../../shared/weapons.js';
+import { gunGameWeapon, igunChassis } from '../../../shared/gunGame.js';
 import { SIDEARM_DRAW_TIME } from './ViewModel.js';
 import type { MovementController } from './movement.js';
 import type { PlayerInput } from './player/input.js';
@@ -81,6 +82,147 @@ export class PlayerLoadout {
   /** Banked gear — non-null while armorClass ≠ appliedClass. Installed by
    *  applyPendingClass alongside the weapon kit. */
   pendingGear: { beltItem: BeltItem; sidearm: SidearmId; packItem: DeployKind; perk: PerkId; skill: SkillId } | null = null;
+
+  /** Pre-instagib kit snapshot - non-null while the room modifier owns
+   *  the chassis. Live fields only: nothing here touches settings, so a
+   *  normal-mode kit survives the instagib room untouched. */
+  private instaPrev: { loadout: number[]; beltItem: BeltItem; armorClass: ArmorClass; skill: SkillId; perk: PerkId } | null = null;
+
+  /** True while an instagib room's gameState holds the kit lock - the
+   *  loadout menu reads this to hide locked cells (skill/perk stay live). */
+  get instagib(): boolean { return this.instaPrev !== null; }
+
+  /** Pre-gungame weapon kit - non-null while the ladder owns the loadout.
+   *  Only the weapon band + belt snapshot: class/skill/perk stay live
+   *  picks in a gun-game room (the modifier doesn't touch them). */
+  private ggPrev: { loadout: number[]; beltItem: BeltItem; igun: boolean; armorClass: ArmorClass | null; weaponIndex: number } | null = null;
+
+  /** Roll that arrived before the lock - stashed for applyGunGame. */
+  private pendingGunRoll: { rung: number; wt?: number } | null = null;
+
+  /** True while a gun-game room's gameState holds the weapon lock. */
+  get gunGame(): boolean { return this.ggPrev !== null; }
+
+  /** igun variant - the chassis follows the rung weapon's own tier
+   *  (untiered = medium), swapping live on every rung edge. Class picks
+   *  are dead either way. */
+  get igun(): boolean { return this.ggPrev?.igun === true; }
+
+  /** Any room modifier owning the kit - HUD/menu hide dead controls on
+   *  either lock (instagib's chassis lock or the ladder's weapon lock). */
+  get kitLocked(): boolean { return this.instagib || this.gunGame; }
+
+  /** Gun-game kit lock: the rung's bucket members fill slots 1..N (the
+   *  slot keys ARE the pick - any member fires), belt is the hook (the
+   *  only belt item the ladder gate lets fire). The rung itself arrives
+   *  on 'gunRung' edges - this only holds the shape. */
+  applyGunGame(igun = false): void {
+    if (this.ggPrev) {return;}
+    this.ggPrev = { loadout: this.h.loadout, beltItem: this.h.beltItem, igun, armorClass: igun ? this.h.armorClass : null, weaponIndex: this.h.weaponIndex };
+    this.pendingLoadout = null;
+    this.pendingGear = null;
+    // A gunRung edge can beat the gameState that applies this lock - the
+    // stashed roll lands here instead of being eaten by the early-return.
+    const roll = this.pendingGunRoll;
+    this.pendingGunRoll = null;
+    this.fillGunSlots(roll?.rung ?? 0, roll?.wt);
+    this.h.beltItem = 'hook';
+    if (igun) {this.h.armorClass = igunChassis(weaponDef(this.currentWid).weaponType);}
+    this.applyPendingClass();
+    this.emitWeaponSwitch(this.currentWid);
+  }
+
+  /** Bucket roll mirror: the dealt member fills every slot - the roll is
+   *  luck, not a pick, so slot keys are dead input and mirroring is just
+   *  bookkeeping. The server's roll rides 'gunRung.wt'; absent it the
+   *  canonical member stands in. */
+  private fillGunSlots(rung: number, wt?: number): void {
+    const wid = widOf(wt ?? gunGameWeapon(rung, this.ggPrev?.igun === true));
+    this.h.loadout = [wid, wid, wid, wid];
+    this.h.weaponIndex = 0;
+    this.pendingLoadout = null;
+  }
+
+  /** igun chassis from the held slot - a bucket pick or a rung edge can
+   *  change the tier, so the body follows whatever's shouldered. */
+  private igunSlotChassis(): void {
+    if (!this.ggPrev?.igun) {return;}
+    this.h.armorClass = igunChassis(weaponDef(this.currentWid).weaponType);
+    this.applyPendingClass();
+  }
+
+  /** Ladder edge: the rung deals one member (wt rides the wire, absent =
+   *  canonical) - the band mirrors it, slot keys stay dead. igun swaps
+   *  the chassis to the dealt weapon's tier, live. */
+  setGunGameRung(rung: number, wt?: number): void {
+    if (!this.ggPrev) {this.pendingGunRoll = { rung, wt }; return;}
+    this.fillGunSlots(rung, wt);
+    this.igunSlotChassis();
+    // Fresh gun, fresh cadence - the old weapon's cooldown (a Missile
+    // Launcher's 2s beat) must not lock the dealt gun.
+    this.refundWeaponCooldown();
+    this.emitWeaponSwitch(this.currentWid);
+  }
+
+  /** Leaving a gun-game room: hand the pre-lock weapon band + belt back. */
+  releaseGunGame(): void {
+    const prev = this.ggPrev;
+    if (!prev) {return;}
+    this.ggPrev = null;
+    this.h.loadout = prev.loadout;
+    this.h.beltItem = prev.beltItem;
+    this.h.weaponIndex = prev.weaponIndex;
+    if (prev.igun && prev.armorClass) {this.h.armorClass = prev.armorClass;}
+    // A class swap banked mid-match edited the LADDER kit - it can't
+    // install over the restored normal kit at the next respawn.
+    this.pendingLoadout = null;
+    this.applyPendingClass();
+    this.emitWeaponSwitch(this.h.loadout[this.h.weaponIndex] ?? 0);
+  }
+
+  /** Room-modifier kit lock: every slot railgun, belt hook, light chassis.
+   *  Idempotent per room entry; the server re-derives the same truth, this
+   *  only keeps prediction/UI from diverging. Perk and skill picks are
+   *  untouched - the modifier leaves both selectable. */
+  applyInstagib(): void {
+    if (this.instaPrev) {return;}
+    const rail = widOf(WeaponType.Railgun);
+    this.instaPrev = { loadout: this.h.loadout, beltItem: this.h.beltItem, armorClass: this.h.armorClass, skill: this.h.skill, perk: this.h.perk };
+    // Server seat() defaults an undeclared skill to blink and floors perk
+    // at jumpstart - mirror both locally so prediction names the same
+    // picks the authority shadows. settings untouched: these were never
+    // explicit picks, normal mode keeps its own defaults.
+    if (!settings.has('fps-skill')) {this.h.skill = 'blink';}
+    if (this.h.perk === 'none') {this.h.perk = 'jumpstart';}
+    // A banked normal-mode swap must not install over the forced kit at
+    // the next respawn - the modifier owns this life's whole loadout.
+    this.pendingLoadout = null;
+    this.pendingGear = null;
+    this.h.loadout = [rail, rail, rail, rail];
+    this.h.beltItem = 'hook';
+    this.h.armorClass = 'light';
+    this.applyPendingClass();
+    this.emitWeaponSwitch(this.h.loadout[this.h.weaponIndex] ?? rail);
+  }
+
+  /** Leaving an instagib room (or its gameState echo flipping off):
+   *  hand the pre-lock kit back through the normal respawn path. */
+  releaseInstagib(): void {
+    const prev = this.instaPrev;
+    if (!prev) {return;}
+    this.instaPrev = null;
+    this.h.loadout = prev.loadout;
+    this.h.beltItem = prev.beltItem;
+    this.h.armorClass = prev.armorClass;
+    // Same explicit-pick test as apply: a skill chosen inside instagib
+    // (has() flipped) is the player's own pick and survives the release.
+    if (!settings.has('fps-skill')) {this.h.skill = prev.skill;}
+    // Undo only the 'none' floor we applied - a perk re-picked inside
+    // instagib (perkUpdate reached the server) must survive the release.
+    if (prev.perk === 'none' && this.h.perk === 'jumpstart') {this.h.perk = 'none';}
+    this.applyPendingClass();
+    this.emitWeaponSwitch(this.h.loadout[this.h.weaponIndex] ?? 0);
+  }
 
   private gearBundle(): string {
     const g = this.gearPick();
@@ -169,6 +311,8 @@ export class PlayerLoadout {
    *  applyPendingClass (the server banks the same pick through
    *  classUpdate so both ends flip together). */
   setArmorClass(c: ArmorClass): void {
+    if (this.igun) {return;}
+    if (this.instagib && c !== 'light') {return;}
     if (c !== this.h.armorClass) {
       // Stash the kit under the tier being left — the PENDING kit if one
       // was being built, live otherwise — then recall the target tier's
@@ -314,6 +458,12 @@ export class PlayerLoadout {
 
   setLoadoutSlot(slot: number, weaponId: number): void {
     const {h} = this;
+    // Instagib: the modifier owns every slot - a stray pick (console,
+    // stale menu) can't diversify the kit the server would reject anyway.
+    if (this.instagib && weaponId !== widOf(WeaponType.Railgun)) {return;}
+    // Gun-game: the ladder owns every slot - a stray pick can't diversify
+    // the kit the rung gate would reject anyway.
+    if (this.gunGame) {return;}
     // Heavy-only ordnance bounces off lighter armor — the menu filters it
     // out, this is the belt line for stale loadouts/console picks. Gates on
     // appliedClass (the tier the server enforces), not armorClass — a mid-
@@ -374,16 +524,20 @@ export class PlayerLoadout {
   }
 
   setBeltItem(item: BeltItem): void {
+    if (this.instagib && item !== 'hook') {return;}
+    if (this.gunGame && item !== 'hook') {return;} // only the grapple survives the ladder gate
     this.gearPick().beltItem = item;
     if (!this.pendingGear) {settings.set('fps-belt', item);}
     this.saveGear();
   }
   setSidearm(s: SidearmId): void {
+    if (this.instagib || this.gunGame) {return;} // no sidearm under a kit lock
     this.gearPick().sidearm = s;
     if (!this.pendingGear) {settings.set('fps-sidearm', s);}
     this.saveGear();
   }
   setPackItem(p: DeployKind): void {
+    if (this.instagib || this.gunGame) {return;} // no pack under a kit lock
     this.gearPick().packItem = p;
     if (!this.pendingGear) {settings.set('fps-pack', p);}
     this.saveGear();
@@ -399,6 +553,7 @@ export class PlayerLoadout {
 
   /** Hold-out key down — swap the sidearm in and arm its draw timer. */
   secondaryDown(wid: number): void {
+    if (this.kitLocked) {return;} // no sidearm under a kit lock
     if (wid !== this.secondaryWid) {
       this.secondaryWid = wid;
       this.secondaryDrawT = SIDEARM_DRAW_TIME;
@@ -416,20 +571,25 @@ export class PlayerLoadout {
 
   selectSlot(i: number): void {
     const {h} = this;
+    // Kit locks field one gun - slot keys are dead input, not a swap.
+    if (this.kitLocked) {return;}
     // Draw is always legal: prepping a groundedOnly weapon for touchdown
     // is the play - fire.ts refuses the trigger, not the shoulder.
     if (i !== h.weaponIndex) {
       h.weaponIndex = i;
+      this.igunSlotChassis();
       this.emitWeaponSwitch(h.loadout[i]);
     }
   }
 
   cycleWeapon(step: number): void {
     const {h} = this;
+    if (this.kitLocked) {return;}
     const n = h.loadout.length;
     const idx = (h.weaponIndex + step + n) % n;
     if (idx !== h.weaponIndex) {
       h.weaponIndex = idx;
+      this.igunSlotChassis();
       this.emitWeaponSwitch(h.loadout[idx]);
     }
   }

@@ -8,6 +8,7 @@ import type { Room } from './Room.ts';
 import { BotBrain } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
+import { gunGameWeapon, igunChassis } from '../../shared/gunGame.ts';
 import { CLASS_STATS, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
 import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, rollBotPerk, adaptLoadout, type BotLoadout, type LoadoutSlot } from '../../shared/botLoadouts.ts';
 import { aimSkillFor , type BotSkillSpec } from '../../shared/botSkill.ts';
@@ -73,15 +74,21 @@ export class BotRoster {
       const id = `BOT-${BOT_NAMES[(idx - 1) % BOT_NAMES.length]}-${String(idx).padStart(2, '0')}`;
       const kitIdx = (this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length;
       const wildcard = botRand() < 0.125;
+      const insta = this.room.mods.instagib === true;
       let loadout;
-      if (process.env.FPS_SOAK_RANDLO === '1') {loadout = { perk: 'lifesteal' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) };}
+      if (insta) {
+        // Instagib kit: every band slot is the railgun, the belt is the
+        // hook - pickBotWeapon can only ever draw legal weapons, and an
+        // empty alt table freezes adaptOnRespawn's reroll too.
+        loadout = { perk: 'jumpstart' as const, near: WeaponType.Railgun, mid: WeaponType.Railgun, far: WeaponType.Railgun, belt: WeaponType.Hook, side: WeaponType.Railgun };
+      } else if (process.env.FPS_SOAK_RANDLO === '1') {loadout = { perk: 'lifesteal' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) };}
       else {
         loadout = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;
         // Perk is a spawn roll, not kit identity - the authored table
         // fields the weapons, the perk table fields the person.
         loadout = Object.assign({}, loadout, {perk: rollBotPerk(loadout, botRand)});
       }
-      this.alts.set(id, wildcard ? WILDCARD_SLOTS : (BOT_ALT_SLOTS[kitIdx] ?? {}));
+      this.alts.set(id, insta ? {} : (wildcard ? WILDCARD_SLOTS : (BOT_ALT_SLOTS[kitIdx] ?? {})));
       // Kit picks the body, then the squad's weighted fill picks the
       // job — plated/mortar kits anchor heavy, featherjets flies light,
       // everything else runs medium until rebalance assigns a role.
@@ -159,7 +166,9 @@ export class BotRoster {
     const lo = this.loadouts.get(id);
     const p = this.room.players.getPlayer(id);
     if (!lo || !p) {return;}
-    p.armorClass = botClassForLoadout(lo);
+    p.armorClass = this.room.mods.igun === true
+      ? igunChassis(this.room.mods.gungame === true ? gunGameWeapon(this.room.gunRungOf(id), true) : p.weapon)
+      : botClassForLoadout(lo);
     this.applyClass(p, p.armorClass as ArmorClass);
   }
 
@@ -256,7 +265,10 @@ export class BotRoster {
         // a heavy capper or light HoF is comedy, not a roster bug.
         const cls = strict && misfitClass(strict, botRand);
         const donorP = this.room.players.getPlayer(donor);
-        if (donorP && cls) {
+        // Instagib: roles still assign, but kit/class/perk mutations
+        // would break the light+railgun contract the modifier owns.
+        const instaKit = this.room.mods.instagib === true;
+        if (!instaKit && donorP && cls) {
           // The sim re-fit alone leaves the wire record on the kit
           // class — a strict hof would stream 'medium' while playing
           // heavy mass/speed, i.e. a medium skin on a heavy sim.
@@ -280,12 +292,12 @@ export class BotRoster {
         // HoF that isn't ON the flag — juggernaut is the perk a human
         // anchor would pick, and it's what makes "planted" physically
         // true instead of a goal the sim keeps vetoing.
-        if (want === 'hof' && donorP) {donorP.perk = 'juggernaut';}
+        if (want === 'hof' && donorP && !instaKit) {donorP.perk = 'juggernaut';}
         // A capper who PREFERS pull rides the implosion disc — the
         // forward launch needs no heel-shot turnaround. Push-style
         // cappers keep their drawn belt and blast off their heels;
         // lobbies want both kinds of runner.
-        if (want === 'capper') {
+        if (!instaKit && want === 'capper') {
           const lo = this.loadouts.get(donor);
           // The spinfusor is the capper's one-tool-fits-all: instant
           // contact detonation is the jump engine and the knockback
@@ -315,7 +327,7 @@ export class BotRoster {
         }
         // The medic role is the DEDICATED kit — a fighter carrying a
         // heal nade is a hybrid, the medic carries the whole archetype.
-        if (want === 'medic') {
+        if (!instaKit && want === 'medic') {
           const lo = this.loadouts.get(donor);
           if (lo) {this.loadouts.set(donor, Object.assign({}, lo, {near: WeaponType.HealBeam,belt: WeaponType.HealGrenade}));}
         }
@@ -323,7 +335,7 @@ export class BotRoster {
         // a mortar or rocket rack can't lead that, and a shotgun can't
         // reach it. Swap only the anti-pursuit slots, keep the rest of
         // the drawn kit (personality over uniformity).
-        if (want === 'ldefense') {
+        if (!instaKit && want === 'ldefense') {
           const lo = this.loadouts.get(donor);
           if (lo) {
             const slowFar = new Set([WeaponType.Mortar, WeaponType.MissileLauncher, WeaponType.PlasmaCannon]);
@@ -338,7 +350,7 @@ export class BotRoster {
         }
         // The sniper IS the railgun — a mortar/rack kit on the perch
         // can't do the one job the role exists for.
-        if (want === 'sniper') {
+        if (!instaKit && want === 'sniper') {
           const lo = this.loadouts.get(donor);
           if (lo && lo.far !== WeaponType.Railgun) {this.loadouts.set(donor, Object.assign({}, lo, {far: WeaponType.Railgun}));}
         }
@@ -346,7 +358,7 @@ export class BotRoster {
         // legal tier — an LD donor grafted Lightning must run light or
         // the class gate makes its own guns contraband. Strict roles
         // already re-fit above; everyone else re-derives from the kit.
-        if (!strict) {this.refitClass(donor);}
+        if (!instaKit && !strict) {this.refitClass(donor);}
         logger.info('Bot role', { id: donor, role: want, room: this.room.name });
 have += 1;
       }

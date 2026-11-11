@@ -118,7 +118,7 @@ export class NetworkManager {
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean, yank?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined, muted: boolean) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind; val?: number }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec } }) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; instagib?: boolean; gungame?: boolean; igun?: boolean; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind; val?: number }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec } }) => void) | null = null;
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
   public onMatchEnd: ((winner: TeamId | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
@@ -146,6 +146,7 @@ export class NetworkManager {
   /** Server pool-ammo echo ([weaponType, rounds]) - snaps the predicted
    *  pool back to truth after rejects/accrual drift, ~2Hz while below cap. */
   public onYourAmmo: ((ammo: [number, number][]) => void) | null = null;
+  public onGunRung: ((rung: number, wt?: number) => void) | null = null;
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number> | undefined, winAt: number, deltaId?: string, deltaScore?: number, rm?: boolean) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
@@ -596,9 +597,16 @@ export class NetworkManager {
       unlisted: urlParams.unlisted || undefined,
       noCreatures: urlParams.noCreatures || undefined,
       noBalls: urlParams.noBalls || undefined,
-      perk: this.joinPerk?.(),
+      instagib: urlParams.instagib || readJoinSpec().instagib || undefined,
+      gungame: urlParams.gungame || readJoinSpec().gungame || undefined,
+      igun: urlParams.igun || readJoinSpec().igun || undefined,
+      // Instagib defaults ride the server's seat() when the joiner never
+      // persisted a skill/perk pick - settings.get can't tell unset from
+      // default ('dash'/'jumpstart' always answer truthy), so has() is
+      // the explicit-pick test. An explicit fps-skill/fps-perk still wins.
+      perk: urlParams.instagib || readJoinSpec().instagib ? (settings.has('fps-perk') ? this.joinPerk?.() : undefined) : this.joinPerk?.(),
       armorClass: this.joinClass?.(),
-      skill: this.joinSkill?.(),
+      skill: urlParams.instagib || readJoinSpec().instagib ? (settings.has('fps-skill') ? this.joinSkill?.() : undefined) : this.joinSkill?.(),
     };
   }
 
@@ -1377,9 +1385,9 @@ this.sendDrops += 1;
    *  with a fresh gameState, which the normal (re)connect path rebuilds
    *  from. Returns false when there's no live socket (caller falls back
    *  to a reload join). */
-  switchRoom(room: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): boolean {
+  switchRoom(room: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): boolean {
     if (!this.isConnected()) {return false;}
-    this.send({ type: 'switchRoom', room, map, bots, mode, unlisted: unlisted || undefined, noCreatures: noCreatures || undefined, noBalls: noBalls || undefined });
+    this.send({ type: 'switchRoom', room, map, bots, mode, unlisted: unlisted || undefined, noCreatures: noCreatures || undefined, noBalls: noBalls || undefined, instagib: instagib || undefined, gungame: gungame || undefined, igun: igun || undefined });
     return true;
   }
 

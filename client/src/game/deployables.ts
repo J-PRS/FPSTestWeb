@@ -249,6 +249,7 @@ export class Deployables {
    *  sticks where it lands, then unfolds into the real deployable. */
   deploy(): void {
     const p = this.deps.lazyPlayer();
+    if (p.armory.instagib) {return;} // instagib rooms have no pack - the server refuses the claim anyway
     const def = this.selDef;
     if (p.throwLockT > 0) {return;} // mid-throw - the gun hand is busy
     // The gate pays on release and counts pods already in the air (see

@@ -16,7 +16,7 @@ import { Logger, ChildLogger } from './core/Logger.js';
 import { settings } from './core/settings.js';
 import { urlParams, isDevHost } from './core/params.js';
 import { feedMode } from './feed/feedMode.js';
-import { simRngSeed, lcg32 } from '../../shared/simRand.js';
+import { simRngSeed, lcg32,simRand } from '../../shared/simRand.js';
 import { spawnRngSeed } from '../../shared/spawnDice.js';
 import { botRng } from '../../shared/botRand.js';
 import { setRunSeed, mintSeed, getChallenge, fetchChallenge } from './demo/demoSeed.js';
@@ -57,6 +57,7 @@ import { installOverlapAudit, reportHudOverlap } from './ui/overlapAudit.js';
 import { effectiveResist } from '../../shared/perks.js';
 import { MOVEMENT_CONFIG } from '../../shared/movement.js';
 import { REPAIR_HEAL_PER_TICK } from '../../shared/weapons.js';
+import { gunGameRoll } from '../../shared/gunGame.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
@@ -164,6 +165,19 @@ let networkManager!: NetworkManager;
 let earlyConnP: Promise<void> | null = null;
 // All shared mutable entity collections live in world - see game/worldState.ts
 const world = createWorldState();
+// Offline instagib: no server gameState ever echoes the modifier, so the
+// flag rides the persisted toggle from boot - TeamBots reads it at
+// construction (setupOfflineMode fires on the same whenStable edge
+// connectPhase awaits, and its .then was registered first).
+if (!urlParams.room && !urlParams.p2p && urlParams.instagib) {
+  world.instagib = true;
+}
+// Offline gun game rides the same persisted toggles - igun implies
+// gungame (the server's roomModsOf normalizes the same way).
+if (!urlParams.room && !urlParams.p2p && (urlParams.gungame || urlParams.igun)) {
+  world.gungame = true;
+  world.igun = urlParams.igun;
+}
 const {remotePlayers} = world;
 let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
@@ -698,6 +712,14 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // mid-compile-hitch (the online path gates on the session veil).
   if (!networkManager.isConnected()) {await gameLoop.whenStable();}
   if (classicMode || soloMode) {player.unfreezeInput(); viewModel.draw();}
+  // Offline instagib: the local armory takes the same kit lock a room's
+  // gameState would enforce (world.instagib was set at boot - see above).
+  if (soloMode && world.instagib) {
+    player.armory.applyInstagib();
+  }
+  if (soloMode && world.gungame) {
+    player.armory.applyGunGame(world.igun === true);
+  }
   // Spec maps spawn you at an authored anchor (team spawn > generic
   // spawn > own base) - origin on a T2 port can be kilometers from play.
   if (soloMode && soloSpec) {
@@ -1244,6 +1266,13 @@ function killLocal(source: string): void {
   // bot-frag path, which already ran localDied() before the banner.
   teamBots?.localDied();
   world.deathCounts.set('local', (world.deathCounts.get('local') ?? 0) + 1);
+  // Gun game: any death drops the ladder - the bot-kill path already
+  // ran the full edge (shooter advance + victim reset) upstream; this
+  // covers env/fall/self deaths where nobody should climb.
+  if (world.gungame) {
+    world.gunRungs.set('local', 0);
+    player.armory.setGunGameRung(0, gunGameRoll(0, world.igun === true, simRand()));
+  }
   player.isDead = true;
   player.health = 0;
   respawnLapsed = false;
