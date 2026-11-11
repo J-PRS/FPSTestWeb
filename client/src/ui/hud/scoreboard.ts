@@ -44,9 +44,9 @@ function prettifyMapName(file: string): string {
 
  *  title still carries both halves (UT/Quake convention: mode · map). */
 
-export function scoreboardTitle(mode?: string, mapName?: string): string {
+export function scoreboardTitle(mode?: string, mapName?: string, tag?: string): string {
 
-  const label = MODES[mode as ModeId]?.label ?? mode?.toUpperCase() ?? '';
+  const label = [tag, MODES[mode as ModeId]?.label ?? mode?.toUpperCase() ?? ''].filter(Boolean).join(' ');
 
   let map = '';
   if (mapName) {map = prettifyMapName(mapName);}

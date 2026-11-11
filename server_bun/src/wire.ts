@@ -495,7 +495,10 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       const p = h.playerManager.getPlayer(id);
       // The validator allows exactly light|medium|heavy; this `in` guard
       // keeps the table honest if CLASS_STATS' keys ever drift from that.
-      if (p && m.armorClass in CLASS_STATS) {p.pendingClass = m.armorClass as ArmorClass;}
+      // Instagib rooms have no class pick - a banked swap would respawn
+      // the seat into a tier the modifier doesn't allow. igun derives
+      // the chassis from the rung weapon, so picks are dead there too.
+      if (p && m.armorClass in CLASS_STATS && h.roomInfo.mods?.().instagib !== true && h.roomInfo.mods?.().igun !== true) {p.pendingClass = m.armorClass as ArmorClass;}
     },
   },
 
@@ -521,7 +524,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       const bots = isFiniteNumber(obj.bots)
         ? Math.max(0, Math.min(24, Math.floor(obj.bots as number)))
         : undefined;
-      return { success: true, data: { type: 'switchRoom', room: word(obj.room), map: word(obj.map), mode: word(obj.mode), bots, unlisted: obj.unlisted === true ? true : undefined, noCreatures: obj.noCreatures === true ? true : undefined, noBalls: obj.noBalls === true ? true : undefined } };
+      return { success: true, data: { type: 'switchRoom', room: word(obj.room), map: word(obj.map), mode: word(obj.mode), bots, unlisted: obj.unlisted === true ? true : undefined, noCreatures: obj.noCreatures === true ? true : undefined, noBalls: obj.noBalls === true ? true : undefined, instagib: obj.instagib === true ? true : undefined, gungame: obj.gungame === true ? true : undefined, igun: obj.igun === true ? true : undefined } };
     },
   },
 

@@ -32,6 +32,7 @@ export interface HudDom {
   playerList: HTMLDivElement;
   ballCountEl: HTMLDivElement;
   timerEl: HTMLDivElement;
+  weaponBar: HTMLDivElement;
   weaponSlots: HTMLSpanElement[];
   healthBar: HTMLDivElement;
   energyBar: HTMLDivElement;
@@ -148,6 +149,7 @@ export function createHudDom(): HudDom {
     const ghostBar = el.querySelector('#health-ghost')! as HTMLDivElement;
     const playerList = el.querySelector('#player-list')! as HTMLDivElement;
     const hitMarker = el.querySelector('#hit-marker')! as HTMLDivElement;
+    const weaponBar = el.querySelector('#hud-weapons')! as HTMLDivElement;
     const weaponSlots = Array.from(el.querySelectorAll<HTMLSpanElement>('.wslot'));
     const healthBar = el.querySelector('#health-bar') as HTMLDivElement;
     const energyBar = el.querySelector('#energy-bar') as HTMLDivElement;
@@ -180,7 +182,7 @@ export function createHudDom(): HudDom {
 
   return { el, health, energy, ammo, speed, speedH, speedV, kills, state, ping, loss, jitter,
     fps, crosshair, bloomRing, sheepReadout, energyReadout, groundReadout, hitMarker, dmgVignette, dmgEdge, dmgDir, dmgDirArc, ghostBar,
-    playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar, wammoReadout, wammoRegenFill,
+    playerList, ballCountEl, timerEl, weaponBar, weaponSlots, healthBar, energyBar, wammoReadout, wammoRegenFill,
     armor, armorBar, buffsRow,
     scoreboard, sbRows, teamScore, tsA, tsB, heldCount, classicScore,
     matchStatus, matchClock, flagA, flagB, killFeed, connBanner };

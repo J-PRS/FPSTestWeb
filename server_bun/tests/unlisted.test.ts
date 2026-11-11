@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { GameServer } from '../src/GameServer.ts';
 import type { Room } from '../src/Room.ts';
+import type { RoomMods } from '../../shared/protocol.ts';
 
 function fakeWs() {
   const sent: string[] = [];
@@ -16,8 +17,8 @@ function fakeWs() {
 }
 
 interface Peek {
-  factory: { roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null;
-           quickRoom(mode: string, map?: string, bots?: number): Room | null };
+  factory: { roomFor(name: string, mode?: string, map?: string, bots?: number, mods?: RoomMods): Room | null;
+           quickRoom(mode: string, map?: string, bots?: number, mods?: RoomMods): Room | null };
   rooms: Map<string, Room>;
   tickLoop: { stop(): void };
   listRooms(): unknown[];
@@ -31,8 +32,8 @@ describe('unlisted rooms', () => {
     const gs = new GameServer();
     const peek = gs as unknown as Peek;
     try {
-      const priv = peek.factory.roomFor('secret', 'ctf', '', 0, true)!;
-      expect(priv.unlisted).toBe(true);
+      const priv = peek.factory.roomFor('secret', 'ctf', '', 0, { unlisted: true })!;
+      expect(priv.mods.unlisted).toBe(true);
 
       // /rooms hides it.
       expect((peek.listRooms() as { name: string }[]).map(r => r.name)).not.toContain('secret');
@@ -60,7 +61,7 @@ describe('unlisted rooms', () => {
       // hosted match leaks into /rooms the moment it forms.
       gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'vip', unlisted: true }));
       const vip = peek.rooms.get('vip')!;
-      expect(vip.unlisted).toBe(true);
+      expect(vip.mods.unlisted).toBe(true);
       expect((peek.listRooms() as { name: string }[]).map(r => r.name)).not.toContain('vip');
 
       // A friend hopping BY NAME lands inside it — unlisted hides the room

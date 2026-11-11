@@ -120,6 +120,10 @@ export interface PlayerState {
    *  and every authoritative shell spawn. Rides the roster so remotes
    *  draw a real gun, not the placeholder prop, before a shot edge. */
   weapon?: number;
+  /** Gun-game ladder position (shared/gunGame.ts) - gungame rooms only.
+   *  Player state like `weapon`: survives grace-period reclaim because
+   *  the seat's PlayerState does; resets on match restart. */
+  gunRung?: number;
   /** Join-declared Q skill — skillUse claims naming another skill are
    *  refused; undeclared (old clients) skips the identity check. */
   skill?: string;

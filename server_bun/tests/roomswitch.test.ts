@@ -157,13 +157,13 @@ describe('switchRoom', () => {
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r', bots: 2 }));
     const {rooms} = (gs as unknown as { rooms: Map<string, {
       terrainReady?: Promise<unknown>;
-      noBalls: boolean;
+      mods: { noBalls?: boolean };
       ballSim: { population: { base: number }; balls: Map<number, unknown> };
       players: { getHumanCount(): number };
     }> });
     await awaitSeat(rooms, 'r');
     const room = rooms.get('r')!;
-    expect(room.noBalls).toBe(false);
+    expect(room.mods.noBalls).toBeUndefined();
 
     // p1 hops away — 'r' keeps its bots but has no humans left.
     gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'other' }));
@@ -172,7 +172,7 @@ describe('switchRoom', () => {
     const ws2 = fakeWs();
     gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'r', noBalls: true }));
     await awaitSeat(rooms, 'r');
-    expect(room.noBalls).toBe(true);
+    expect(room.mods.noBalls).toBe(true);
     expect(room.ballSim.population.base).toBe(0);
     expect(room.ballSim.balls.size).toBe(0);
     expect(ws2.sent.some((s: string) => s.includes('serverWarn'))).toBe(false);
@@ -221,13 +221,13 @@ describe('switchRoom', () => {
     gs = new GameServer();
     const ws = fakeWs();
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r', mode: 'dm' }));
-    const {rooms} = (gs as unknown as { rooms: Map<string, { terrainReady?: Promise<unknown>; noBalls: boolean }> });
+    const {rooms} = (gs as unknown as { rooms: Map<string, { terrainReady?: Promise<unknown>; mods: { noBalls?: boolean } }> });
     await awaitSeat(rooms, 'r');
 
     const ws2 = fakeWs();
     gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'r', noBalls: true }));
     await awaitSeat(rooms, 'r');
-    expect(rooms.get('r')!.noBalls).toBe(false);
+    expect(rooms.get('r')!.mods.noBalls).toBeUndefined();
     expect(ws2.sent.some((s: string) => s.includes('serverWarn'))).toBe(true);
   });
 });

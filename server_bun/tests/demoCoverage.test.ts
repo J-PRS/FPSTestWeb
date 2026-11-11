@@ -56,6 +56,7 @@ const EXEMPT: Record<string, string> = {
   classUpdate: 'roster meta',
   perkUpdate: 'roster meta',
   playerHeld: 'roster meta — headhunt crown/count are cosmetic reads',
+  gunRung: 'roster meta — gungame ladder position is UI/loadout state, not an actor',
   buff: 'local-state echo — local frames own hp/armor',
   yourHealth: 'local-state echo',
   yourCharge: 'local-state echo',

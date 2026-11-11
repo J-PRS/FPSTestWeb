@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { prune, dedup } from '@gltf-transform/functions';

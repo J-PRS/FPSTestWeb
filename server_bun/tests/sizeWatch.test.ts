@@ -33,6 +33,9 @@ const GRANDFATHERED: Record<string, number> = {
   // Re-pinned at 1083 after the CTF flag-passing + headhunt hoard brain
   // growth — bots legitimately aggregates behaviors; still alarms at +15%.
   'shared/botBrain.ts': 1083,
+  // Breached unpinned by the air-lover bot WIP (fd58d853) — pinned at
+  // current size so the next 15% still alarms.
+  'shared/botMoves.ts': 975,
   'client/src/main.ts': 1450, // re-pinned at post-reclaim-fix size — still alarms at +15%
   'client/src/game/gameLoop.ts': 1123, // ditto
   // Pinned after the alarm tripped (ROADMAP next-list: burn down the
@@ -75,7 +78,9 @@ const GRANDFATHERED: Record<string, number> = {
   'client/src/game/bots/index.ts': 1049, // re-pinned after dashWatch payoff (fc623e26) — still alarms at +15%
   // Crossed via the server-authoritative spread + ammo-pool claims —
   // the damage funnel legitimately aggregates intents. Pinned; +15% alarms.
-  'server_bun/src/CombatHandler.ts': 909,
+  // Re-pinned at 1054 after the room-modifier weapon gate (gungame
+  // ladder + instagib whitelist unify in shotAdmit) — still +15% alarms.
+  'server_bun/src/CombatHandler.ts': 1054,
   // Crossed via the parked-bot hunt-memory + arsenal work — the bot
   // roster orchestrator legitimately aggregates. Pinned; +15% alarms.
   'server_bun/src/ServerBots.ts': 916,

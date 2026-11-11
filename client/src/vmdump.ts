@@ -41,14 +41,17 @@ if (q.get('export')) {
   const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
   const exporter = new GLTFExporter();
   const out: Record<number, string> = {};
+  const only = wParam !== '0' && wParam !== 'fist' ? new Set([w]) : null;
   for (const [wt, g] of vm.weapons) {
+    if (only && !only.has(wt)) {continue;}
     g.visible = true;
     const glow: THREE.Mesh[] = [];
     g.traverse((o): void => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) {return;}
       // Glow parts stay procedural — they're neon-bright, not baked metal.
-      if ((m.material as THREE.Material).type === 'MeshBasicMaterial') { glow.push(m); return; }
+      // Named basics (groove liners) are real geometry - keep them.
+      if ((m.material as THREE.Material).type === 'MeshBasicMaterial' && m.name !== 'liner') { glow.push(m); return; }
       const geo = m.geometry as THREE.BufferGeometry;
       // bakeVertexAO already wrote a 'color' attr with AO values — and any
       // extra color sets export as COLOR_1.. and confuse the bake's pick.

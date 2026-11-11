@@ -19,6 +19,7 @@ import { STATUS_PAGE } from './statusPage.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 import { wireMeterSnapshot } from './wireMeter.ts';
+import { roomModsOf, type RoomMods } from '../../shared/protocol.ts';
 
 export interface HttpCtx {
   gameServer: GameServer;
@@ -106,7 +107,7 @@ function joinThrottleAllow(ip: string): boolean {
   return windowAllow(joinIps, ip, wallNow(), JOIN_IP_WINDOW_MS, JOIN_IP_LIMIT, 1024);
 }
 
-interface JoinArgs { mode: string; map: string; bots?: number; noCreatures: boolean; noballs: boolean; preferHumans: boolean }
+interface JoinArgs extends RoomMods { mode: string; map: string; bots?: number; preferHumans: boolean }
 
 /** /join query parse + validation. Returns the args, or a 4xx Response
  *  the route passes straight through. */
@@ -127,7 +128,10 @@ function joinArgs(url: URL, hasMap: (m: string) => boolean): JoinArgs | Response
   return {
     mode, map, bots,
     noCreatures: url.searchParams.get('nocreatures') === '1',
-    noballs: url.searchParams.get('noballs') === '1',
+    noBalls: url.searchParams.get('noballs') === '1',
+    instagib: url.searchParams.get('instagib') === '1',
+    gungame: url.searchParams.get('gungame') === '1',
+    igun: url.searchParams.get('igun') === '1',
     preferHumans: url.searchParams.get('humans') === '1',
   };
 }
@@ -179,7 +183,7 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
       if (args instanceof Response) {return args;}
       // Sim gates ride the mint — a bare roomFor'd room ignores the
       // flags the follow-up join carries (creation-time only).
-      const room = ctx.gameServer.quickRoom(args.mode, args.map, args.bots, args.noCreatures, args.noballs, args.preferHumans, CONFIG.clientRooms);
+      const room = ctx.gameServer.quickRoom(args.mode, args.map, args.bots, roomModsOf(args), args.preferHumans, CONFIG.clientRooms);
       if (!room) {return corsResponse('Server full', { status: 503 });}
       return json({ room: room.name, mode: room.mode });
     },

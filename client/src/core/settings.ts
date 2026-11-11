@@ -41,6 +41,9 @@ type Schema = {
   'fps-nocreatures': number;  // 1 = hosted rooms mint without melee species
   'fps-creatures': number;    // 1 = opt back IN to species in offline pop (default balls-only)
   'fps-noballs': number;      // 1 = hosted rooms mint without the ball sim
+  'fps-instagib': number;     // 1 = hosted rooms mint with instagib rules (light + railgun/hook, 200dmg, no rail splash)
+  'fps-gungame': number;      // 1 = hosted/offline rooms run the weapon ladder (kills climb, deaths reset)
+  'fps-igun': number;         // 1 = gungame with ~200 effective damage on every weapon (implies gungame)
   'fps-nolips': number;       // 1 = lip-sync flares off (speech-jam debug)
   'fps-fav-rooms': string;    // JSON string[] - server-browser favorites column
   'fps-shadows': boolean;     // shadow map pass - off on potatoes (whole second scene raster per frame)
@@ -111,6 +114,9 @@ const DEFAULTS: Schema = {
   'fps-nocreatures': 1,
   'fps-creatures': 0,
   'fps-noballs': 1,
+  'fps-instagib': 0,
+  'fps-gungame': 0,
+  'fps-igun': 0,
   'fps-nolips': 0,
   'fps-fav-rooms': '[]',
   'fps-shadows': true,

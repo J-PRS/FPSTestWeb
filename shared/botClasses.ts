@@ -43,7 +43,7 @@ const TIER_RANK: Record<ArmorClass, number> = { light: 0, medium: 1, heavy: 2 };
 /** Spawn-only types — child shells and skill pseudo-weapons, never a
  *  muzzle weapon. Without this fence a forged fire intent on one rides
  *  the default-light tier through every gate that whitelists on class. */
-const NEVER_FIRED: ReadonlySet<number> = new Set([
+export const NEVER_FIRED: ReadonlySet<number> = new Set([
   WeaponType.ClusterBomblet,
   WeaponType.MRVBomblet,
   WeaponType.Slam,
@@ -113,7 +113,7 @@ export function classCapsule(cls?: string): Readonly<{ eye: number; height: numb
   return c;
 }
 
-/** Sim mass for impulse scaling — jets and blast shoves divide by it. */
+/** Sim mass for impulse scaling - jets and blast shoves divide by it. */
 export function classMass(cls?: string): number {
   return cls === 'light' || cls === 'medium' || cls === 'heavy' ? CLASS_STATS[cls].mass : 1;
 }

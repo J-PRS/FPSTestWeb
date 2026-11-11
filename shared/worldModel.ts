@@ -493,6 +493,9 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'wireIds', wire: 'obj', channel: 'edge', absent: null },
       { name: 'room', wire: 'str', channel: 'edge', absent: null },
       { name: 'mode', wire: 'str', channel: 'edge', absent: null },
+      { name: 'instagib', wire: 'bool', channel: 'edge', absent: null },
+      { name: 'gungame', wire: 'bool', channel: 'edge', absent: null },
+      { name: 'igun', wire: 'bool', channel: 'edge', absent: null },
       { name: 'mapName', wire: 'str', channel: 'edge', absent: null },
       { name: 'team', wire: 'str', channel: 'edge', absent: null },
       { name: 'localPlayerState', wire: 'obj', channel: 'edge', absent: null },
@@ -750,7 +753,7 @@ export function checkPacket(
  *  the handler reading `undefined.x` five frames later. */
 export interface IntentFieldDecl { name: string; wire?: KindFieldDecl['wire']; absent?: unknown }
 export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
-  join: [{ name: 'playerId', wire: 'str' }, { name: 'token', wire: 'str', absent: null }, { name: 'room', wire: 'str', absent: null }, { name: 'mode', wire: 'str', absent: null }, { name: 'perk', wire: 'str', absent: null }, { name: 'armorClass', wire: 'str', absent: null }, { name: 'name', wire: 'str', absent: null }, { name: 'map', wire: 'str', absent: null }, { name: 'bots', wire: 'num', absent: null }, { name: 'unlisted', wire: 'bool', absent: null }, { name: 'transport', wire: 'str', absent: null }, { name: 'resumeSeq', wire: 'num', absent: null }],
+  join: [{ name: 'playerId', wire: 'str' }, { name: 'token', wire: 'str', absent: null }, { name: 'room', wire: 'str', absent: null }, { name: 'mode', wire: 'str', absent: null }, { name: 'perk', wire: 'str', absent: null }, { name: 'armorClass', wire: 'str', absent: null }, { name: 'skill', wire: 'str', absent: null }, { name: 'name', wire: 'str', absent: null }, { name: 'map', wire: 'str', absent: null }, { name: 'bots', wire: 'num', absent: null }, { name: 'unlisted', wire: 'bool', absent: null }, { name: 'noCreatures', wire: 'bool', absent: null }, { name: 'noBalls', wire: 'bool', absent: null }, { name: 'instagib', wire: 'bool', absent: null }, { name: 'gungame', wire: 'bool', absent: null }, { name: 'igun', wire: 'bool', absent: null }, { name: 'spawnHold', wire: 'bool', absent: null }, { name: 'transport', wire: 'str', absent: null }, { name: 'resumeSeq', wire: 'num', absent: null }],
   position: [{ name: 'position', wire: 'vec3' }, { name: 'rotation', wire: 'rot' }, { name: 'velocity', wire: 'vec3' }, { name: 'seq', wire: 'num', absent: null }, { name: 'inputSeq', wire: 'num', absent: null }, { name: 'ping', wire: 'num', absent: null }],
   teleport: [{ name: 'position', wire: 'vec3' }, { name: 'rotation', wire: 'rot' }, { name: 'velocity', wire: 'vec3' }],
   ping: [{ name: 'timestamp', wire: 'num' }],
@@ -781,7 +784,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   resync: [],
   classUpdate: [{ name: 'armorClass', wire: 'str' }],
   perkUpdate: [{ name: 'perk', wire: 'str' }],
-  switchRoom: [{ name: 'room', wire: 'str', absent: null }, { name: 'mode', wire: 'str', absent: null }, { name: 'map', wire: 'str', absent: null }, { name: 'bots', wire: 'num', absent: null }, { name: 'unlisted', wire: 'bool', absent: null }],
+  switchRoom: [{ name: 'room', wire: 'str', absent: null }, { name: 'mode', wire: 'str', absent: null }, { name: 'map', wire: 'str', absent: null }, { name: 'bots', wire: 'num', absent: null }, { name: 'unlisted', wire: 'bool', absent: null }, { name: 'noCreatures', wire: 'bool', absent: null }, { name: 'noBalls', wire: 'bool', absent: null }, { name: 'instagib', wire: 'bool', absent: null }, { name: 'gungame', wire: 'bool', absent: null }, { name: 'igun', wire: 'bool', absent: null }],
 };
 
 // Any warn here repeats per packet/emit - a hostile peer or a broken

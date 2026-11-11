@@ -75,7 +75,7 @@ const live = (): URLSearchParams => {
  *  Once the room exists its spec is server-side, so stale hints only
  *  matter if the room was disposed since (same semantics ?map/?bots
  *  in the URL used to give). */
-export interface JoinSpec { map?: string; bots?: number; mode?: string }
+export interface JoinSpec { map?: string; bots?: number; mode?: string; instagib?: boolean; gungame?: boolean; igun?: boolean }
 export function readJoinSpec(): JoinSpec {
   try {
     const v = JSON.parse(settings.get('fps-join-spec')) as JoinSpec;
@@ -138,6 +138,16 @@ export const urlParams = {
    *  creature gates still read noCreatures above. */
   get creatures(): boolean { return live().has('creatures') || settings.get('fps-creatures') === 1; },
   get noBalls(): boolean { return live().has('noballs') || settings.get('fps-noballs') === 1; },
+  /** ?instagib / fps-instagib - creation-time modifier forwarded on
+   *  join/switchRoom: light chassis, railgun+hook only, 200dmg rail hits,
+   *  no rail splash. Layers onto whatever mode the room runs. */
+  get instagib(): boolean { return live().has('instagib') || settings.get('fps-instagib') === 1; },
+  /** ?gungame / fps-gungame - creation-time modifier: the shared weapon
+   *  ladder owns every player's gun (kills advance, deaths reset). */
+  get gungame(): boolean { return live().has('gungame') || settings.get('fps-gungame') === 1; },
+  /** ?igun / fps-igun - gun game with ~200-effective damage on every
+   *  weapon; implies gungame server-side (roomModsOf). */
+  get igun(): boolean { return live().has('igun') || settings.get('fps-igun') === 1; },
   get noLips(): boolean { return live().has('nolips') || settings.get('fps-nolips') === 1; },
   /** Local ambient ball field only - honors an explicit ?noballs, but NOT
    *  the persisted fps-noballs room-creation flag (pure-PvP hosted default

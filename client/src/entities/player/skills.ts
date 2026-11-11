@@ -91,7 +91,7 @@ export class PlayerSkills {
   private blinkSavedVel = new THREE.Vector3();
 
   private dashCooldown = 0;
-  private slamActive = false;  // falling at slam speed — detonates on landing
+  private slamActive = false;  // falling at slam speed - detonates on landing
   private slamCooldown = 0;
 
   // Energy-channel toggles (cloak/shield/mend) live in skillChannels.ts.
@@ -120,7 +120,7 @@ export class PlayerSkills {
     this.warp.fizzle();
   }
 
-  // Q pressed — one dispatch point per skill.
+  // Q pressed - one dispatch point per skill.
   press(skill: SkillId): void {
     if (skill === 'blink') {this.tryBlink();}
     else if (skill === 'dash') {this.tryDash();}

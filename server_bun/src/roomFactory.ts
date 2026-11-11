@@ -13,6 +13,7 @@ import type { MapCatalog } from './mapCatalog.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
 import { hmScaled, type Heightfield } from '../../shared/heightfield.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
+import type { RoomMods } from '../../shared/protocol.ts';
 import { ResultSigner, SIGN_SECRET, nextMatchId } from './resultSigner.ts';
 
 export interface RoomFactoryHost {
@@ -120,10 +121,17 @@ export class RoomFactory {
    *  with no human audience: an empty or bot-only room loses nothing,
    *  its name just remints on the next join. Returns null only when
    *  every live room is occupied — the caller rejects the join. */
-  roomFor(name: string, mode = '', map = '', bots?: number, unlisted = false, noCreatures = false, noBalls = false): Room | null {
+  roomFor(name: string, mode = '', map = '', bots?: number, mods: RoomMods = {}): Room | null {
     // Server policy beats client requests: gates only tighten unless the operator opted in.
-    noCreatures = noCreatures || !CONFIG.allowCreatures;
-    noBalls = noBalls || !CONFIG.allowBalls;
+    const unlisted = mods.unlisted === true;
+    const noCreatures = mods.noCreatures === true || !CONFIG.allowCreatures;
+    const noBalls = mods.noBalls === true || !CONFIG.allowBalls;
+    const instagib = mods.instagib === true;
+    // igun implies gungame (roomModsOf already normalized, belt-and-
+    // suspenders for direct callers); instagib and gungame are mutually
+    // exclusive - a railgun-only whitelist can't host an 18-rung ladder.
+    const gungame = !instagib && mods.gungame === true;
+    const igun = gungame && mods.igun === true;
     let room = this.host.rooms.get(name);
     // A bot-only room's mode is first-joiner residue, not someone's
     // match — a hosted 'ctf' landing in a stale 'nuggets' room would
@@ -172,11 +180,15 @@ export class RoomFactory {
       const needsAttach = Boolean(spec?.terrain || spec?.heightScale || spec?.tileSize);
       room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority,
         (Math.random() * 0x1_00_00_00_00) >>> 0, needsAttach);
-      room.unlisted = unlisted;
-      // The ctor already seeded populations (fields default false) — the
+      // The ctor already seeded populations (mods default empty) — the
       // gates apply post-ctor and on later applySpec reloads.
-      room.noCreatures = noCreatures;
-      room.noBalls = noBalls;
+      room.mods = {};
+      if (unlisted) {room.mods.unlisted = true;}
+      if (noCreatures) {room.mods.noCreatures = true;}
+      if (noBalls) {room.mods.noBalls = true;}
+      if (instagib) {room.mods.instagib = true;}
+      if (gungame) {room.mods.gungame = true;}
+      if (igun) {room.mods.igun = true;}
       if (noCreatures) {room.creatureSim.pops = {};}
       if (noBalls) {room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
       room.sessions = this.host.sessions;
@@ -203,13 +215,18 @@ export class RoomFactory {
       if (needsAttach && spec) {this.attachTerrain(room, spec);}
       this.host.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
-    } else if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {
+    } else if ((room.mods.noBalls === true) !== noBalls || (room.mods.noCreatures === true) !== noCreatures
+        || (room.mods.instagib === true) !== instagib
+        || (room.mods.gungame === true) !== gungame || (room.mods.igun === true) !== igun) {
       if (room.players.getHumanCount() === 0) {
         // No human contradicts the joiner's gates — a bot-only room just
         // adopts them instead of warning. Same post-ctor gate writes the
         // mint path runs, plus culling the populations already alive.
-        room.noBalls = noBalls;
-        room.noCreatures = noCreatures;
+        room.mods.noBalls = noBalls || undefined;
+        room.mods.noCreatures = noCreatures || undefined;
+        room.mods.instagib = instagib || undefined;
+        room.mods.gungame = gungame || undefined;
+        room.mods.igun = igun || undefined;
         if (noCreatures) {
           room.creatureSim.pops = {};
           room.creatureSim.cullAll();
@@ -219,13 +236,13 @@ export class RoomFactory {
           room.ballSim.cullAll();
         }
         logger.info('Bot-only room adopted joiner sim gates', {
-          room: name, noBalls, noCreatures,
+          room: name, noBalls, noCreatures, instagib, gungame, igun,
         });
       } else {
         // First joiner defines the sim gates — callers warn their joiner.
         logger.warn('Join sim gates differ from room', {
           room: name, wantNoBalls: noBalls, wantNoCreatures: noCreatures,
-          roomNoBalls: room.noBalls, roomNoCreatures: room.noCreatures,
+          roomNoBalls: room.mods.noBalls === true, roomNoCreatures: room.mods.noCreatures === true,
         });
       }
     }
@@ -238,7 +255,12 @@ export class RoomFactory {
    *  gates must ride the mint too — joining the freshly picked name
    *  with noBalls afterwards is a no-op (first joiner defines), so a
    *  bare quickRoom would silently ignore the host's toggles. */
-  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false, mayMint = true): Room | null {
+  quickRoom(mode: string, map = '', bots?: number, mods: RoomMods = {}, preferHumans = false, mayMint = true): Room | null {
+    const noCreatures = mods.noCreatures === true;
+    const noBalls = mods.noBalls === true;
+    const instagib = mods.instagib === true;
+    const gungame = !instagib && mods.gungame === true;
+    const igun = gungame && mods.igun === true;
     let best: Room | undefined = undefined;
     let bestHumans = -1;
     for (const room of this.host.rooms.values()) {
@@ -253,9 +275,13 @@ export class RoomFactory {
       // joiner (both false) lands in whatever room is live - standing
       // lobbies seed gated-off for cost, and exact-match would refuse
       // every bare join the moment minting is denied.
-      if ((noBalls && !room.noBalls) || (noCreatures && !room.noCreatures)) {continue;}
+      if ((noBalls && room.mods.noBalls !== true) || (noCreatures && room.mods.noCreatures !== true)) {continue;}
+      // Instagib/gun-game are hard room properties, not preferences - a
+      // normal room can never become one (or vice versa) mid-match.
+      if (instagib !== (room.mods.instagib === true)
+          || gungame !== (room.mods.gungame === true) || igun !== (room.mods.igun === true)) {continue;}
       if (room.playerCount() >= room.maxPlayers) {continue;}
-      if (room.unlisted) {continue;}
+      if (room.mods.unlisted === true) {continue;}
       // humans=1 — /quickjoin wants a live match: the busiest room with
       // humans in it, falling back to the plain emptiest pick when every
       // room is bots-only.
@@ -270,7 +296,7 @@ export class RoomFactory {
       }
       if (!best || room.playerCount() > best.playerCount()) {best = room;}
     }
-    if (preferHumans && bestHumans < 0) {return this.quickRoom(mode, map, bots, noCreatures, noBalls, false, mayMint);}
+    if (preferHumans && bestHumans < 0) {return this.quickRoom(mode, map, bots, mods, false, mayMint);}
     if (best) {return best;}
     // Public deploys deny mints to untrusted traffic - the join falls back
     // to the caller's no-mint retry or 'Server full' instead of growing
@@ -296,6 +322,6 @@ export class RoomFactory {
     const wCnt = Math.max(1, Number(process.env.FPS_WORKERS ?? 1) || 1);
     let n = wIdx + 1;
     while (this.host.rooms.has(`${base}-${n}`)) {n += wCnt;}
-    return this.roomFor(`${base}-${n}`, specMode, mintMap, bots, false, noCreatures, noBalls);
+    return this.roomFor(`${base}-${n}`, specMode, mintMap, bots, mods);
   }
 }

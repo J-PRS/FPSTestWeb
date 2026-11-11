@@ -85,13 +85,14 @@ describe('roomFactory terrain cache', () => {
 describe('quickRoom sim-gate filter', () => {
   const gatedRoom = (name: string, noBalls: boolean, noCreatures: boolean): Room =>
     ({ name, mode: 'headhunt', noBalls, noCreatures, unlisted: false, maxPlayers: 32,
+       mods: {},
        playerCount: () => 5, players: { getHumanCount: () => 0 } } as unknown as Room);
 
   it('an unasked joiner reuses a gated-off standing room', () => {
     const host = stubHost();
     host.rooms.set('headhunt-1', gatedRoom('headhunt-1', true, true));
     const factory = new RoomFactory(host);
-    expect(factory.quickRoom('', '', undefined, false, false, false, false)?.name).toBe('headhunt-1');
+    expect(factory.quickRoom('', '', undefined, {})?.name).toBe('headhunt-1');
   });
 
   it('a joiner asserting noBalls skips a balled room', () => {
@@ -99,6 +100,6 @@ describe('quickRoom sim-gate filter', () => {
     host.rooms.set('headhunt-1', gatedRoom('headhunt-1', false, false));
     const factory = new RoomFactory(host);
     // Asked for balls OFF, the only room has them ON, mint denied -> null.
-    expect(factory.quickRoom('', '', undefined, false, true, false, false)).toBeNull();
+    expect(factory.quickRoom('', '', undefined, { noBalls: true }, false, false)).toBeNull();
   });
 });

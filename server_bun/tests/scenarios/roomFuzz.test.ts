@@ -19,6 +19,7 @@ import { describe, it, expect, afterEach } from 'bun:test';
 import { GameServer } from '../../src/GameServer.ts';
 import { CONFIG } from '../../src/config.ts';
 import type { Room } from '../../src/Room.ts';
+import type { RoomMods } from '../../../shared/protocol.ts';
 import { lcg } from './harness.ts';
 
 interface FakeSock {
@@ -42,8 +43,8 @@ const mkSock = (): FakeSock => ({
 
 interface Peek {
   factory: {
-    roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean): Room | null;
-    quickRoom(mode: string, map?: string, bots?: number): Room | null;
+    roomFor(name: string, mode?: string, map?: string, bots?: number, mods?: RoomMods): Room | null;
+    quickRoom(mode: string, map?: string, bots?: number, mods?: RoomMods): Room | null;
   };
   rooms: Map<string, Room>;
   playerRoom: Map<string, Room>;
@@ -101,7 +102,7 @@ describe('room lifecycle conformance fuzz', () => {
         // Visibility contract: quickRoom must never hand out an unlisted room.
         for (let i = 0; i < 3; i++) {
           const q = peek.factory.quickRoom(i === 0 ? 'ctf' : i === 1 ? 'dm' : '');
-          if (q && q.unlisted) {violations.push(`${ctx(0, opDesc)}: quickRoom returned unlisted ${q.name}`);}
+          if (q && q.mods.unlisted === true) {violations.push(`${ctx(0, opDesc)}: quickRoom returned unlisted ${q.name}`);}
         }
       };
 
@@ -167,7 +168,7 @@ describe('room lifecycle conformance fuzz', () => {
         } else if (r < 0.86) {
           // Direct recycle pressure — mint via the factory like a join
           // storm would.
-          peek.factory.roomFor(`direct${Math.floor(rng() * 20)}`, '', '', 0, rng() < 0.2);
+          peek.factory.roomFor(`direct${Math.floor(rng() * 20)}`, '', '', 0, { unlisted: rng() < 0.2 });
           desc = 'direct-mint';
         }
 
@@ -184,7 +185,7 @@ describe('room lifecycle conformance fuzz', () => {
         if (room) {peek.removePlayerCompletely(room, id, 'teardown');}
       }
       for (const [name, room] of peek.rooms) {
-        if (room.unlisted && peek.factory.quickRoom('') === room) {
+        if (room.mods.unlisted === true && peek.factory.quickRoom('') === room) {
           violations.push(`${ctx(OPS, 'final')}: unlisted ${name} surfaced by quickRoom after teardown`);
         }
       }

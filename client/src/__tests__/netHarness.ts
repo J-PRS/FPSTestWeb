@@ -33,6 +33,16 @@ export function makeDeps() {
     health: 100, armor: 0, isDead: false, isShielded: false,
     buffUntil: { regen: 0, dd: 0, shield: 0 },
     absorbShieldDamage(): void { return; }, applyPull(): void { return; }, applyKnockback(): void { return; },
+    armory: {
+      applyInstagib: vi.fn((): void => { return; }),
+      releaseInstagib: vi.fn((): void => { return; }),
+      applyGunGame: vi.fn((): void => { return; }),
+      releaseGunGame: vi.fn((): void => { return; }),
+      setGunGameWeapon: vi.fn((): void => { return; }),
+      instagib: false,
+      gunGame: false,
+      kitLocked: false,
+    },
     heal: vi.fn((): void => { return; }), grantJetBoost: vi.fn((): void => { return; }), syncMovement(): void { return; }, markTeleport(): void { return; },
     // Correction render-ease seam — a spy so tests can see the ease fired
     // (and so a missing wiring throws instead of being swallowed).

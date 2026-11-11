@@ -24,10 +24,11 @@ import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballSim.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage, directHitAoeBonus, RIDE_CATCH_R, canHostRide, BELT_THROW_WEAPONS } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, idSeed, jitteredTtl, roomDirectDamage, directHitAoeBonus, RIDE_CATCH_R, canHostRide, BELT_THROW_WEAPONS, isInstagibWeapon } from '../../shared/weapons.ts';
 import { waterDomeDrag, type WaterDome } from '../../shared/deployItems.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3, ServerMessage } from './types.ts';
+import type { RoomMods } from '../../shared/protocol.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { MessageHandler } from './MessageHandler.ts';
@@ -127,6 +128,11 @@ export interface ProjHost {
   rng(): number;
   tickSeq: number;
   mode: string;
+  /** Room modifiers - instagib whitelists spawned weapons and pays
+   *  the flat rail number; gungame gates spawns to the owner's rung
+   *  weapon and igun pays the flat ~200 on body contacts. */
+  mods?: RoomMods;
+  gunGameAllowsFire?(ownerId: string, weaponType: number): boolean;
   pushNoise(pos: Vec3): void;
   ballSim?: {
     handleHit(ownerId: string, ballId: number, dmg: number): { killed: boolean };
@@ -208,6 +214,10 @@ export class RoomProjectiles {
    *  registers `burst` shells fanned by golden-angle cone offsets, same
    *  coverage the client spawnFan produces. */
   spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS = 0): string | null {
+    // Modifier backstops: every spawn path (claims, bot arsenal, deploy
+    // sims) funnels here - a weapon outside the room's rules has no body.
+    if (this.room.mods?.instagib === true && !isInstagibWeapon(weaponType)) {return null;}
+    if (this.room.mods?.gungame === true && this.room.gunGameAllowsFire?.(ownerId, weaponType) === false) {return null;}
     const stats = getWeaponStats(weaponType);
     const burst = stats?.burst ?? 1;
     const spread = stats?.pelletSpread ?? 0;
@@ -433,12 +443,12 @@ export class RoomProjectiles {
     // blast splashes the rest of the swarm - same outcome a player-caused
     // hit + aoeShot pair produces, minus the claims.
     if (ballId !== undefined) {
-      const dmg = (scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage) * proj.directBonus;
+      const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * proj.directBonus;
       const killed = this.room.ballSim?.handleHit(proj.ownerId, ballId, dmg).killed ?? false;
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
     if (crawlerId !== undefined) {
-      const dmg = (scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage) * proj.directBonus;
+      const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * proj.directBonus;
       const killed = this.room.creatureSim?.handleHit(proj.ownerId, crawlerId, dmg).killed ?? false;
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }

@@ -83,6 +83,7 @@ export class HUD {
     this.playerList = d.playerList;
     this.ballCountEl = d.ballCountEl;
     this.timerEl = d.timerEl;
+    this.weaponBar = d.weaponBar;
     this.weaponSlots = d.weaponSlots;
     this.healthBar = d.healthBar;
     this.energyBar = d.energyBar;
@@ -309,6 +310,7 @@ export class HUD {
   /** Header over the roster — "CAPTURE THE FLAG · Dangerous Crossing". */
   setScoreboardTitle(t: string): void { this.sb.setTitle(t); }
 
+  weaponBar!: HTMLDivElement;
   weaponSlots: HTMLSpanElement[] = [];  // public — HudStats family paints it
   healthBar!: HTMLDivElement;
   energyBar!: HTMLDivElement;

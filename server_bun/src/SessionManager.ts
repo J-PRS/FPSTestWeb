@@ -11,6 +11,7 @@ import { wallNow } from './wallClock.ts';
 import { simNow, simMs } from './simClock.ts';
 import { windowAllow } from './windowLimit.ts';
 import { roomWord } from './wire.ts';
+import { roomModsOf, type RoomMods } from '../../shared/protocol.ts';
 
 /** Everything the socket lifecycle needs from GameServer  -  supplied as
  *  closures/maps so ownership stays with the dispatcher. */
@@ -20,8 +21,8 @@ export interface SessionDeps {
   playerRoom: Map<string, Room>;
   /** Spectator sockets aren't players  -  roomOfPlayer can't find them. */
   specRooms: Map<string, Room>;
-  roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): Room | null;
-  quickRoom(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean, preferHumans?: boolean, mayMint?: boolean): Room | null;
+  roomFor(name: string, mode?: string, map?: string, bots?: number, mods?: RoomMods): Room | null;
+  quickRoom(mode: string, map?: string, bots?: number, mods?: RoomMods, preferHumans?: boolean, mayMint?: boolean): Room | null;
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
   /** Drain-deploys: armed via /admin/drain  -  new joins refused (reclaims
@@ -44,8 +45,9 @@ export interface SessionDeps {
  *  the reclaim gate, room resolution, and seat stages of handle(). */
 interface JoinSpec {
   token: string | undefined; roomName: string; roomMode: string; joinMap: string; joinBots: number | undefined;
-  resumeSeq: number | undefined; name: string | undefined; unlisted: boolean;
-  noCreatures: boolean; noBalls: boolean;
+  resumeSeq: number | undefined; name: string | undefined;
+  /** Creation-time room modifiers, normalized off the flat wire fields. */
+  mods: RoomMods;
 }
 
 /** Join handshake + persistent identity. Handles four join shapes:
@@ -160,7 +162,8 @@ export class SessionManager {
    *  player out of their own seat  -  reclaim is already authenticated
    *  by the session token. */
   private reclaimHandled(ws: ServerWebSocket<WebSocketData>, playerId: string, handshake: Record<string, unknown>, spec: JoinSpec): boolean {
-    const { token, roomName, resumeSeq, noBalls, noCreatures } = spec;
+    const { token, roomName, resumeSeq, mods } = spec;
+    const noBalls = mods.noBalls === true, noCreatures = mods.noCreatures === true;
     const reclaimRoom = this.d.roomOfPlayer(playerId);
     // …but only for the SAME room: an explicit ?room=B while a grace seat
     // lingers in A is intent to move, not a flapping transport. Retire the
@@ -182,14 +185,17 @@ export class SessionManager {
     }
     if (!reclaimRoom) {return false;}
     const ok = this.reclaim(ws, reclaimRoom, playerId, token, resumeSeq, handshake);
+    // Same post-gameState seat edge as a fresh join - restores the
+    // stored rung (and roster weapon) the grace seat kept.
+    if (ok) {reclaimRoom.gunGameSeat(playerId);}
     // Reclaim skips roomFor, so the joiner's sim gates would never be
     // consulted  -  a re-host with noBalls inside the grace window lands
     // in the stale spec anyway. When the room is otherwise bot-only
     // it's still theirs: adopt the flags like an empty-room join does.
     if (ok && reclaimRoom.players.getHumanCount() <= 1 &&
-        (reclaimRoom.noBalls !== noBalls || reclaimRoom.noCreatures !== noCreatures)) {
-      reclaimRoom.noBalls = noBalls;
-      reclaimRoom.noCreatures = noCreatures;
+        ((reclaimRoom.mods.noBalls === true) !== noBalls || (reclaimRoom.mods.noCreatures === true) !== noCreatures)) {
+      reclaimRoom.mods.noBalls = noBalls || undefined;
+      reclaimRoom.mods.noCreatures = noCreatures || undefined;
       if (noCreatures) {reclaimRoom.creatureSim.pops = {}; reclaimRoom.creatureSim.cullAll();}
       if (noBalls) {reclaimRoom.ballSim.population = { base: 0, perPlayer: 0, max: 0 }; reclaimRoom.ballSim.cullAll();}
       logger.info('Reclaim adopted joiner sim gates', { room: reclaimRoom.name, noBalls, noCreatures });
@@ -235,18 +241,18 @@ export class SessionManager {
    *  FPS_CLIENT_ROOMS=0  -  the join flood's room-mint side-channel
    *  closes with the same gate. */
   private joinRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, handshake: Record<string, unknown>, spec: JoinSpec): Room | null {
-    const { roomName, roomMode, joinMap, joinBots, unlisted, noCreatures, noBalls } = spec;
-    const creates = joinMap !== '' || roomMode !== '' || joinBots !== undefined || unlisted;
+    const { roomName, roomMode, joinMap, joinBots, mods } = spec;
+    const creates = joinMap !== '' || roomMode !== '' || joinBots !== undefined || mods.unlisted === true;
     const mayMint = CONFIG.clientRooms || ws.data.trusted === true;
     let room: Room | null;
     if (!creates && !this.d.rooms.has(roomName)) {
-      room = this.d.quickRoom(roomMode, joinMap, joinBots, noCreatures, noBalls, true, mayMint);
+      room = this.d.quickRoom(roomMode, joinMap, joinBots, mods, true, mayMint);
     } else if (mayMint || this.d.rooms.has(roomName)) {
-      room = this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted, noCreatures, noBalls);
+      room = this.d.roomFor(roomName, roomMode, joinMap, joinBots, mods);
     } else {
       room = null;
     }
-    if (!room && !mayMint) {room = this.d.quickRoom('', '', undefined, noCreatures, noBalls, true, false);}
+    if (!room && !mayMint) {room = this.d.quickRoom('', '', undefined, mods, true, false);}
     if (!room) {
       ws.close(1013, 'Server full');
       return null;
@@ -283,7 +289,7 @@ export class SessionManager {
    *  stealing by knowing the id), spectator eviction, session record,
    *  then the deferred finishJoin once the room's field is resident. */
   private seatJoiner(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, handshake: Record<string, unknown>, spec: JoinSpec): void {
-    const { token, roomMode, joinBots, name, noCreatures, noBalls } = spec;
+    const { token, roomMode, joinBots, name, mods } = spec;
     // Same-socket re-join for the same id is self-proving (the transport
     // endpoint was already validated)  -  a room hop issued before the first
     // gameState lands has no token yet and must not eat a reject.
@@ -317,12 +323,19 @@ export class SessionManager {
       // otherwise silently drop into someone else's match.
       const modeDiff = roomMode && room.mode !== roomMode ? `mode '${room.mode}'` : '';
       const botDiff = joinBots !== undefined && room.bots.count !== joinBots ? `${room.bots.count} bots` : '';
-      if (room.noBalls !== noBalls || room.noCreatures !== noCreatures || modeDiff || botDiff) {
+      const wantGG = mods.gungame === true, wantIG = mods.igun === true;
+      const rm = room.mods;
+      if ((rm.noBalls === true) !== (mods.noBalls === true) || (rm.noCreatures === true) !== (mods.noCreatures === true)
+          || (rm.instagib === true) !== (mods.instagib === true)
+          || (rm.gungame === true) !== wantGG || (rm.igun === true) !== wantIG || modeDiff || botDiff) {
         const diffs = [
           modeDiff,
           botDiff,
-          room.noBalls === noBalls ? '' : `balls ${room.noBalls ? 'OFF' : 'ON'}`,
-          room.noCreatures === noCreatures ? '' : `critters ${room.noCreatures ? 'OFF' : 'ON'}`,
+          (rm.noBalls === true) === (mods.noBalls === true) ? '' : `balls ${rm.noBalls === true ? 'OFF' : 'ON'}`,
+          (rm.noCreatures === true) === (mods.noCreatures === true) ? '' : `critters ${rm.noCreatures === true ? 'OFF' : 'ON'}`,
+          (rm.instagib === true) === (mods.instagib === true) ? '' : `instagib ${rm.instagib === true ? 'ON' : 'OFF'}`,
+          (rm.gungame === true) === wantGG ? '' : `gungame ${rm.gungame === true ? 'ON' : 'OFF'}`,
+          (rm.igun === true) === wantIG ? '' : `igun ${rm.igun === true ? 'ON' : 'OFF'}`,
         ].filter(Boolean).join(', ');
         room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed  -  your settings overridden (${diffs})` });
       }
@@ -501,9 +514,7 @@ this.d.ops.joins += 1;
       resumeSeq: typeof handshake.resumeSeq === 'number' && Number.isFinite(handshake.resumeSeq)
         ? Math.max(0, Math.floor(handshake.resumeSeq))
         : undefined,
-      unlisted: handshake.unlisted === true,
-      noCreatures: handshake.noCreatures === true,
-      noBalls: handshake.noBalls === true,
+      mods: roomModsOf(handshake as RoomMods),
     };
   }
 
@@ -532,8 +543,13 @@ this.d.ops.joins += 1;
   /** The seat itself: player record, transport tag, indices, handshake
    *  reply, and the join/tier counters. */
   private seat(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, handshake: Record<string, unknown>, sessionToken: string, name?: string): void {
-    const joinedPlayer = room.players.addPlayer(playerId, room.nextHumanTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none',
-      typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium');
+    // Instagib: no class pick (light only), perk defaults jumpstart, and
+    // an undeclared skill falls back to blink - picks still flow through
+    // perkUpdate/skill claims like any other room.
+    const insta = room.mods.instagib === true;
+    const joinedPlayer = room.players.addPlayer(playerId, room.nextHumanTeam(),
+      isPerkId(handshake.perk) && (!insta || handshake.perk !== 'none') ? handshake.perk : (insta ? 'jumpstart' : 'none'),
+      insta ? 'light' : (room.mods.igun === true ? 'medium' : (typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium')));
     // The seat replaces a bot's ONLY when the join grew the big side  - 
     // a human landing on the short side already balanced the room, and
     // retiring there too would just un-swap it (the bug where every join
@@ -548,6 +564,7 @@ this.d.ops.joins += 1;
     room.balanceTeams();
     joinedPlayer.name = name;
     if (typeof handshake.skill === 'string' && handshake.skill.length <= 16) {joinedPlayer.skill = handshake.skill;}
+    else if (insta) {joinedPlayer.skill = 'blink';}
     joinedPlayer.spawnHold = handshake.spawnHold === true;
     if (handshake.transport === 'wt' || handshake.transport === 'rtc' || handshake.transport === 'ws') {
       joinedPlayer.transport = handshake.transport;
@@ -558,6 +575,9 @@ this.d.ops.joins += 1;
     room.markIntro(playerId); // per-joiner full window  -  see Room.introPlayers
     const workT0 = wallNow();
     room.messages.handleHandshake(playerId, sessionToken);
+    // After the handshake's gameState: the client's kit lock must exist
+    // before the rung push lands or a reclaim's climb reads as rung 0.
+    room.gunGameSeat(playerId);
     const workMs = wallNow() - workT0;
     this.d.ops.joinWorkMsSum += workMs;
     if (workMs > this.d.ops.joinWorkMsMax) {this.d.ops.joinWorkMsMax = workMs;}

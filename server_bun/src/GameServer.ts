@@ -24,7 +24,8 @@ import { ConnectionManager } from './ConnectionManager.ts';
 import { MessageHandler } from './MessageHandler.ts';
 import type { UdpLane } from './UdpLane.ts';
 import type { TeamId } from '../../shared/teams.ts';
-import type { ClientMessage } from '../../shared/protocol.ts';
+import type { ClientMessage, RoomMods } from '../../shared/protocol.ts';
+import { roomModsOf } from '../../shared/protocol.ts';
 
 interface RestoreSeat {
   id: string; name?: string; team?: TeamId; perk?: string; armorClass?: string;
@@ -33,9 +34,8 @@ interface RestoreSeat {
   yaw?: number; pitch?: number; health?: number; isDead?: boolean; token: string;
 }
 
-interface RestoreRoom {
-  name: string; mode?: string; map?: string; bots?: number; unlisted?: boolean;
-  noCreatures?: boolean; noBalls?: boolean;
+interface RestoreRoom extends RoomMods {
+  name: string; mode?: string; map?: string; bots?: number;
   players: RestoreSeat[];
 }
 
@@ -134,8 +134,8 @@ export class GameServer {
       rooms: this.rooms,
       playerRoom: this.playerRoom,
       specRooms: this.specRooms,
-      roomFor: (n, m, mp, b, u, nc, nb): Room | null => this.factory.roomFor(n, m, mp, b, u, nc, nb),
-      quickRoom: (m, mp, b, nc, nb, ph, mm): Room | null => this.factory.quickRoom(m, mp ?? '', b, nc ?? false, nb ?? false, ph ?? false, mm ?? true),
+      roomFor: (n, m, mp, b, mods): Room | null => this.factory.roomFor(n, m, mp, b, mods),
+      quickRoom: (m, mp, b, mods, ph, mm): Room | null => this.factory.quickRoom(m, mp ?? '', b, mods, ph ?? false, mm ?? true),
       roomOfPlayer: (id): Room | undefined => this.roomOfPlayer(id),
       totalPlayers: (): number => opsTotalPlayers(this),
       draining: this.draining,
@@ -155,7 +155,7 @@ export class GameServer {
     });
     this.switcher = new RoomSwitcher({
       roomOfPlayer: (id): Room | undefined => this.roomOfPlayer(id),
-      roomFor: (n, m, mp, b, u, nc, nb): Room | null => this.factory.roomFor(n, m, mp, b, u, nc, nb),
+      roomFor: (n, m, mp, b, mods): Room | null => this.factory.roomFor(n, m, mp, b, mods),
       hasRoom: (n): boolean => this.rooms.has(n),
       removePlayerCompletely: (r, id, reason): void => this.removePlayerCompletely(r, id, reason),
       totalPlayers: (): number => opsTotalPlayers(this),
@@ -282,8 +282,8 @@ export class GameServer {
     return n;
   }
 
-  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false, mayMint = true): Room | null {
-    return this.factory.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans, mayMint);
+  quickRoom(mode: string, map = '', bots?: number, mods: RoomMods = {}, preferHumans = false, mayMint = true): Room | null {
+    return this.factory.quickRoom(mode, map, bots, mods, preferHumans, mayMint);
   }
 
   /** Route guard: does maps/<name>.json resolve? The catalog negative-
@@ -592,7 +592,7 @@ export class GameServer {
   /** Lobby listing - live matches a client can join by name. `withNames`
    *  (ops callers only) adds the per-player id→name roster. */
   listRooms(withNames = false) {
-    return [...this.rooms.values()].filter((r): boolean => !r.unlisted).map(r => ({
+    return [...this.rooms.values()].filter((r): boolean => r.mods.unlisted !== true).map(r => ({
       name: r.name,
       mode: r.mode || undefined,
       // Terrain name is what "map" means to a browser - duel-1 and
@@ -738,7 +738,10 @@ export class GameServer {
         });
       }
       if (players.length > 0) {
-        rooms.push({ name: room.name, mode: room.mode, map: room.mapSrc, bots: room.spec.bots, unlisted: room.unlisted, players });
+        rooms.push({ name: room.name, mode: room.mode, map: room.mapSrc, bots: room.spec.bots,
+          unlisted: room.mods.unlisted || undefined, noCreatures: room.mods.noCreatures || undefined,
+          noBalls: room.mods.noBalls || undefined, instagib: room.mods.instagib || undefined,
+          gungame: room.mods.gungame || undefined, igun: room.mods.igun || undefined, players });
       }
     }
     return { v: 1, rooms };
@@ -754,7 +757,8 @@ export class GameServer {
     let seated = 0;
     for (const rs of s.rooms) {
       if (!rs || typeof rs.name !== 'string' || !Array.isArray(rs.players)) {continue;}
-      const room = this.factory.roomFor(rs.name, rs.mode ?? '', rs.map ?? '', rs.bots, rs.unlisted === true, rs.noCreatures === true, rs.noBalls === true);
+      const room = this.factory.roomFor(rs.name, rs.mode ?? '', rs.map ?? '', rs.bots,
+        roomModsOf(rs as RoomMods));
       if (!room) {continue;}
       for (const ps of rs.players) {
         if (!ps || typeof ps.id !== 'string' || typeof ps.token !== 'string') {continue;}
@@ -763,7 +767,7 @@ export class GameServer {
         if (ps.vel && !(Number.isFinite(ps.vel.x) && Number.isFinite(ps.vel.y) && Number.isFinite(ps.vel.z))) {continue;}
         if (ps.health !== undefined && !Number.isFinite(ps.health)) {continue;}
         if (room.players.getPlayer(ps.id)) {continue;}
-        const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', ps.armorClass ?? 'medium');
+        const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', room.mods.instagib === true ? 'light' : (room.mods.igun === true ? 'medium' : (ps.armorClass ?? 'medium')));
         p.position = Object.assign({}, ps.pos);
         p.velocity = Object.assign({}, ps.vel);
         p.rotation.yaw = ps.yaw ?? 0;
@@ -775,7 +779,7 @@ export class GameServer {
         p.name = ps.name;
         // Banked mid-match picks ride the blob - a restart must not eat
         // the classUpdate/perkUpdate the player was owed at next life.
-        p.pendingClass = ps.pendingClass === 'light' || ps.pendingClass === 'medium' || ps.pendingClass === 'heavy' ? ps.pendingClass : undefined;
+        p.pendingClass = room.mods.instagib !== true && room.mods.igun !== true && (ps.pendingClass === 'light' || ps.pendingClass === 'medium' || ps.pendingClass === 'heavy') ? ps.pendingClass : undefined;
         p.pendingPerk = ps.pendingPerk;
         // A mid-fight seat, not a fresh spawn - no protection bubble.
         p.protectedUntil = simMs(0);

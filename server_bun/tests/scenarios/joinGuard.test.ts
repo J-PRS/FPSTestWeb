@@ -150,7 +150,7 @@ describe('join guards', () => {
       const mgr = new SessionManager({
         rooms: new Map([[room.name, room]]), playerRoom, specRooms: new Map(),
         roomFor: (n) => { calls.roomFor.push(n); return room; },
-        quickRoom: (_m, _mp, _b, _nc, _nb, _ph, mm) => { calls.quickMint.push(mm ?? true); return room; },
+        quickRoom: (_m, _mp, _b, _mods, _ph, mm) => { calls.quickMint.push(mm ?? true); return room; },
         roomOfPlayer: (id) => room.players.getPlayer(id) ? room : undefined,
         totalPlayers: () => playerRoom.size,
         ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0, joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0 },

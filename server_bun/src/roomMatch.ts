@@ -24,6 +24,7 @@ export interface MatchHost {
   applySpec(spec: MapSpec): void;
   reshuffleBots?(): void;      // re-deal bot team assignments for the next match
   respawnAll?(): void;         // fresh round = fresh bodies on the new spec
+  gunGameReset?(): void;       // gungame rooms: ladders back to rung 0
   onMatchEnd?: (record: MatchRecord & { token?: ResultToken }) => void;
   onEnded?: (winner: string) => void;  // the horn fired — bots get their 'gg' beat
   onStarted?(): void;                  // a match went live — bots get their gl-hf beat
@@ -188,6 +189,7 @@ else {w = s.alpha > s.bravo ? 'alpha' : 'bravo';}
     host.reshuffleBots?.();
     const next = host.rotate();
     if (next) {host.applySpec(next);}
+    host.gunGameReset?.();
     // Fresh round = fresh bodies — dead players (and everyone standing on
     // the old layout) respawn onto the NEW spec's spawn points. Without
     // this a corpse's respawn timer outlives the reset and they join the

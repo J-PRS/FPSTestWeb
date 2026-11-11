@@ -8,6 +8,12 @@ import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore, mkLoft, 
 // children are positioned in viewmodel space; a child named 'barrels'
 // is the chaingun spin group.
 
+// Groove liners - unlit body-color-darkened. MeshBasicMaterial keeps
+// them OUT of the vertexAO bake (lit materials get raycast AO, and a
+// liner deep in a narrow channel bakes to permanent darkness that also
+// varies per rebuild via the shared material's wearTex).
+const linerMat = new THREE.MeshBasicMaterial({ color: 0x2E_32_36 });
+
 // Weapon 0 - bolt launcher, T:A-style military crossbow: a skeletal
 // receiver split top/bottom like the disc's slit trick, the chambered
 // bolt glowing inside the channel. Twin mechanical arms sweep forward
@@ -360,8 +366,8 @@ fd.add(extrudeAt(hexHalfGrooved(1), zFront, slitLen, bodyMat));
 fd.add(extrudeAt(hexHalfGrooved(-1), zFront, slitLen, bodyMat));
 // Groove shadow liners - each speed channel gets a dark insert sunk to
 // the bottom HALF of the (now double-deep) cut, so the remaining visible
-// channel depth matches the pre-liner groove. boreMat is unlit black -
-// the groove keeps its depth and reads black inside from every angle.
+// channel depth matches the pre-liner groove. linerMat is bodyMat
+// darkened - shaded like the body, just deeper in the channel.
 const grooveLiners = (side: 1 | -1): void => {
   const base = (hexHalf(side) as THREE.Shape).getPoints();
   for (let i = 0; i < base.length; i += 1) {
@@ -381,7 +387,9 @@ const grooveLiners = (side: 1 | -1): void => {
       new THREE.Vector2(b.x + nx * depth, b.y + ny * depth),
       new THREE.Vector2(b.x + nx * top, b.y + ny * top),
     ]);
-    fd.add(extrudeAt(liner, zFront, slitLen, boreMat));
+    const lm = extrudeAt(liner, zFront, slitLen, linerMat);
+    lm.name = 'liner'; // export tag - vmdump keeps named basics, hides glow
+    fd.add(lm);
   }
 };
 grooveLiners(1);
