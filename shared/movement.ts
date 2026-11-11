@@ -184,6 +184,9 @@ export interface SimSnapshot {
   /** Last step's skiHeld - the Jumpstart boost is edge-triggered; a
    *  snapshot taken mid-press must not re-fire it on restore. */
   wasSkiHeld?: boolean;
+  /** Blast-impulse fall-damage multiplier (decays 3/s) - a mid-decay
+   *  restore without it resets to 1 and re-prices the landing. */
+  fallBoost?: number;
 }
 
 /** What the sim needs from the world: terrain height + surface normal.
@@ -374,7 +377,7 @@ export class MoveSim {
       groundedBuffered: this.groundedBuffered, acc: this.acc,
       groundGraceT: this.groundGraceT,
       bandDist: this.bandDist,
-      impulseT: this.impulseT, wasSkiHeld: this.wasSkiHeld };
+      impulseT: this.impulseT, wasSkiHeld: this.wasSkiHeld, fallBoost: this.fallBoost };
   }
 
   restore(snap: SimSnapshot): void {
@@ -392,6 +395,7 @@ export class MoveSim {
     // Legacy snapshots predate the ski edge - assume the held state
     // persisted so a restore mid-hold can't re-fire a Jumpstart boost.
     this.wasSkiHeld = snap.wasSkiHeld ?? snap.input.skiHeld;
+    this.fallBoost = snap.fallBoost ?? 1;
   }
 
   update(dt: number): void {
