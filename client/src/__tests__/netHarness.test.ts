@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as THREE from 'three';
 import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 
 import { makeDeps, feed } from './netHarness.js';
@@ -35,6 +36,17 @@ describe('netHarness - real wire messages through real handlers', (): void => {
     expect(h.world.localTeam).toBe('bravo');
     expect(h.world.ffaScores.get('BOT-1')).toBe(2);
     expect(h.world.respawnMs).toBe(3000);
+  });
+
+  // The instagib modifier rides gameState - world.instagib feeds the
+  // shared damage/blast overrides and the armory takes the kit lock.
+  it('instagib gameState locks the armory; clearing it releases', (): void => {
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r', instagib: true } as ServerMessage);
+    expect(h.world.instagib).toBe(true);
+    expect(h.player.armory.applyInstagib).toHaveBeenCalled();
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r', instagib: false } as ServerMessage);
+    expect(h.world.instagib).toBe(false);
+    expect(h.player.armory.releaseInstagib).toHaveBeenCalled();
   });
 
   it('playerJoined → update → left lifecycle through RemoteSet', (): void => {
@@ -190,5 +202,51 @@ describe('netHarness - corpse-window echoes', (): void => {
     // Roster heals to live - the dropped-respawn-echo path still revives.
     upd(9, false, 100);
     expect(rp.isDead).toBe(false);
+  });
+
+  // Stryker: the correction funnel (snap floor, journal replay, vel.set,
+  // renderSnap) had one test grazing it - these pin each branch.
+  it('correction above floor hard-snaps when no journal exists', (): void => {
+    feed(h.nm, { type: 'correction', seq: 1, position: { x: 5, y: 5, z: 0 }, velocity: { x: 7, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
+    expect(h.player.pos.x).toBe(5);
+    expect(h.player.vel.x).toBe(7); // vel.set rides the snap
+    expect(h.calls.renderSnap).toEqual([5]); // render ease carries the delta
+  });
+
+  it('correction with a journal rewinds and replays instead of snapping', (): void => {
+    const setState = vi.spyOn(h.player.movement, 'setState');
+    const update = vi.spyOn(h.player.movement, 'update');
+    vi.spyOn(h.nm, 'inputsAfter').mockReturnValue([
+      { t: performance.now() - 50, input: { forward: 1, right: 0, jump: 0, ski: 0 } },
+    ]);
+    const stPos = new THREE.Vector3(6, 5, 2);
+    vi.spyOn(h.player.movement, 'getState').mockReturnValue({ pos: stPos, vel: new THREE.Vector3(1, 0, 0), onGround: true });
+    feed(h.nm, { type: 'correction', seq: 1, position: { x: 5, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, inputSeq: 3 } as ServerMessage);
+    // Replay path: sim rewound to server truth, journaled input stepped,
+    // final pos comes from getState - not the raw authority vector.
+    expect(setState).toHaveBeenCalled();
+    expect(update).toHaveBeenCalled();
+    expect(h.player.pos.x).toBe(6);
+    expect(h.player.pos.z).toBe(2);
+  });
+
+  it('correction carrying a non-finite authority vector is dropped, pos untouched', (): void => {
+    feed(h.nm, { type: 'correction', seq: 1, position: { x: NaN, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
+    expect(h.player.pos.x).toBe(0);
+  });
+
+  it('correction during demo playback is ignored entirely', (): void => {
+    h.world.playbackMode = true;
+    feed(h.nm, { type: 'correction', seq: 1, position: { x: 9, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
+    expect(h.player.pos.x).toBe(0);
+    h.world.playbackMode = false;
+  });
+
+  it('the ignore band scales with speed - a 1.5m error is ignored at 20m/s', (): void => {
+    h.player.vel.set(20, 0, 0); // floor = max(1.2, 20*0.1) = 2.0
+    feed(h.nm, { type: 'correction', seq: 1, position: { x: 1.5, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
+    expect(h.player.pos.x).toBe(0); // 1.5 < 2.0 floor -> ignored
+    feed(h.nm, { type: 'correction', seq: 2, position: { x: 3, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
+    expect(h.player.pos.x).toBe(3); // 3 > 2.0 floor -> snaps
   });
 });
