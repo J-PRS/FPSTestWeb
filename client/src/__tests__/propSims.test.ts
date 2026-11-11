@@ -151,6 +151,18 @@ describe('shared sim properties', (): void => {
     ));
   });
 
+  it('gunGameWeapon (canonical member) is also rung-legal - the wt-absent fallback can\'t deal a brick', (): void => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 20 }), fc.boolean(),
+      (rung, igun): void => {
+        const r = Math.min(rung, gunGameClimax(igun));
+        const w = gunGameWeapon(r, igun);
+        expect(gunGameAllows(r, w, igun)).toBe(true);
+        expect(gunGameBucket(r, igun)).toContain(w);
+      },
+    ));
+  });
+
   it('gunGameRoll clamps out-of-range draws to bucket members', (): void => {
     fc.assert(fc.property(
       fc.integer({ min: 0, max: 20 }), fc.boolean(), fc.float({ min: -1, max: 2, noNaN: true }),
