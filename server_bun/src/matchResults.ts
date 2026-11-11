@@ -14,6 +14,7 @@ const RESULTS_DIR = join(LOGS_DIR, 'results');
 export interface PlayerResult {
   id: string; name?: string; team?: string; bot?: boolean;
   armorClass?: string; weapon?: number; gunRung?: number;
+  perk?: string;
   kills: number; deaths: number; streak?: number;
   health: number; maxHealth: number; heldTokens?: number;
   /** Bot brain spec (aim/move/courage/thrift + tier) - undefined on humans. */
@@ -44,7 +45,7 @@ export interface ResultsHost {
   spec?: { name?: string };
   scores?: unknown;
   ffaScores?: Map<string, number>;
-  players: { getAllPlayers(): Map<string, { id: string; name?: string; team?: string; isBot?: boolean; armorClass?: string; weapon?: number; gunRung?: number; kills: number; deaths: number; streak?: number; health: number; maxHealth: number; heldTokens?: number }> };
+  players: { getAllPlayers(): Map<string, { id: string; name?: string; team?: string; isBot?: boolean; armorClass?: string; weapon?: number; gunRung?: number; perk?: string; kills: number; deaths: number; streak?: number; health: number; maxHealth: number; heldTokens?: number }> };
 }
 
 /** File-per-result: <wallms>-<room>-<reason>.json in logs/results/. */
@@ -61,7 +62,7 @@ export function collectServerResult(host: ResultsHost, reason: string, opts: { w
   for (const p of host.players.getAllPlayers().values()) {
     players.push({
       id: p.id, name: p.name, team: p.team, bot: p.isBot,
-      armorClass: p.armorClass, weapon: p.weapon, gunRung: p.gunRung,
+      armorClass: p.armorClass, weapon: p.weapon, gunRung: p.gunRung, perk: p.perk,
       kills: p.kills, deaths: p.deaths, streak: p.streak,
       health: p.health, maxHealth: p.maxHealth, heldTokens: p.heldTokens,
       skill: opts.skillOf?.(p.id), econ: opts.econOf?.(p.id), loco: opts.locoOf?.(p.id),
