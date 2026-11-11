@@ -83,7 +83,10 @@ function boot(): void {
   child = spawn({
     cmd: ['bun', 'src/server.ts'],
     stdout: 'inherit', stderr: 'inherit', stdin: 'inherit',
-    env: Object.assign({}, process.env, { FPS_STATE_URL: STATE_URL }),
+    // Dev default: record every game's demo into logs/demos/ - the
+    // results ledger pairs with a full replay. Prod spawns without the
+    // watcher, so this default can't leak there.
+    env: Object.assign({}, process.env, { FPS_STATE_URL: STATE_URL, FPS_DEMO: process.env.FPS_DEMO ?? 'logs/demos' }),
   });
   // Crash or /dev/shutdown outside a restart(): dev means "server is up",
   // so a dead child respawns. restart() itself serializes its own boot.

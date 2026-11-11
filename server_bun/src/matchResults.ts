@@ -34,6 +34,9 @@ export interface MatchResult {
    *  do matches actually run" and "which modes bleed longest". */
   startedAt?: number; durationMs?: number;
   winner?: string; scores?: Record<string, number>;
+  /** Full replay flushed this room (FPS_DEMO) - result row names its
+   *  demo so a balance read can jump straight to the footage. */
+  demo?: string;
   players: PlayerResult[];
 }
 
@@ -57,7 +60,7 @@ export function writeMatchResult(result: MatchResult, dir = RESULTS_DIR): string
 }
 
 /** Server-side collect: room meta + every seat's outcome/skill/econ. */
-export function collectServerResult(host: ResultsHost, reason: string, opts: { winner?: string; skillOf?: (id: string) => unknown; econOf?: (id: string) => unknown; locoOf?: (id: string) => unknown } = {}): MatchResult {
+export function collectServerResult(host: ResultsHost, reason: string, opts: { winner?: string; demo?: string; skillOf?: (id: string) => unknown; econOf?: (id: string) => unknown; locoOf?: (id: string) => unknown } = {}): MatchResult {
   const players: PlayerResult[] = [];
   for (const p of host.players.getAllPlayers().values()) {
     players.push({
@@ -74,7 +77,7 @@ export function collectServerResult(host: ResultsHost, reason: string, opts: { w
     endedAt: wallNow(), reason,
     startedAt: host.createdAt,
     durationMs: host.createdAt !== undefined ? wallNow() - host.createdAt : undefined,
-    winner: opts.winner,
+    winner: opts.winner, demo: opts.demo,
     scores: host.scores !== undefined ? Object.assign({}, host.scores) as Record<string, number>
       : (host.ffaScores ? Object.fromEntries(host.ffaScores) : undefined),
     players,

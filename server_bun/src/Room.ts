@@ -661,7 +661,12 @@ export class Room {
     this.spec = spec ?? resolveMapSpec(null);
     this.influence = new InfluenceMap(this.spec.tileSize);
     this.mode = mode || this.spec.mode || '';
-    this.modeSpec = MODES[this.mode as ModeId] ?? null;
+    // Spec-level winAt/timeLimitS overrides ride a derived spec - the
+    // MODES table is shared, so mutating it would leak into every room.
+    const modeBase = MODES[this.mode as ModeId] ?? null;
+    this.modeSpec = modeBase && (this.spec.winAt !== undefined || this.spec.timeLimitS !== undefined || this.spec.ptsPlayerKill !== undefined)
+      ? { ...modeBase, winAt: this.spec.winAt ?? modeBase.winAt, timeLimitS: this.spec.timeLimitS ?? modeBase.timeLimitS, ptsPlayerKill: this.spec.ptsPlayerKill ?? modeBase.ptsPlayerKill }
+      : modeBase;
     this.messages = new MessageHandler(
       this.players,
       this.rateLimiter,
@@ -1770,9 +1775,10 @@ excess -= 1;
    *  from a pile of real outcomes (map, mode, scores, per-seat kills/
    *  deaths/class/rung/skill/econ). Best-effort - a dump failure can
    *  never take a live room down with it. */
-  dumpResults(reason: string): void {
+  dumpResults(reason: string, demoPath?: string): void {
     try {
       writeMatchResult(collectServerResult(this, reason, {
+        demo: demoPath,
         skillOf: (id): unknown => this.bots?.skillOf?.(id),
         econOf: (id): unknown => this.moveSim?.econOf?.(id),
         locoOf: (id): unknown => this.bots?.watchdog?.statsOf?.(id),
@@ -1783,18 +1789,19 @@ excess -= 1;
   }
 
   dispose(): void {
-    this.dumpResults('close');
     this.ballSim.stop();
     this.creatureSim.stop();
     this.messages.dispose();
+    let demoPath: string | undefined;
     if (this.demo && process.env.FPS_DEMO) {
       try {
-        const path = this.demo.flush(process.env.FPS_DEMO);
-        logger.info('server demo written', { room: this.name, path });
+        demoPath = this.demo.flush(process.env.FPS_DEMO);
+        logger.info('server demo written', { room: this.name, path: demoPath });
       } catch (error) {
         logger.warn('server demo flush failed', { room: this.name, err: String(error) });
       }
     }
+    this.dumpResults('close', demoPath);
   }
 
   /** Full teardown  -  every store moves together or a slot/token leaks. */
