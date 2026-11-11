@@ -222,8 +222,12 @@ detector" bug class.
 
 ## Provenance
 
-- Mutation score 46.3%: `npx stryker run` in `client/`,
+- Mutation score 46.3% → **47.5%** after pinning occlusion +
+  blastRemotes (blastForce.test.ts 21 tests): `npx stryker run` in
+  `client/`,
   `client/stryker.conf.mjs`, report `client/reports/mutation/index.html`.
+  Windows caveat: inPlace restore can EPERM on file-locked scratch dirs;
+  verify `git status` after every run (mutated source restored fine here).
 - PBT efficacy: ACM PLS 2025, "An Empirical Evaluation of
   Property-Based Testing in Python" (~50x mutants/test, 76% in first
   20 inputs).

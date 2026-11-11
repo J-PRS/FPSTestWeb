@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { createBlastForce, type BlastArgs } from '../game/blastForce.js';
+import { Projectile } from '../projectiles/Projectile.js';
 import { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { CombatDeps } from '../game/combat.js';
 import type { Targetable } from '../entities/balls.js';
@@ -184,6 +185,35 @@ describe('applyForceToRemotes', (): void => {
     r.blast.applyExplosionForce(args());
     expect(r.dmgNumbers.spawn).not.toHaveBeenCalled();
     expect(r.hbs.predictDamage).not.toHaveBeenCalled();
+  });
+
+  it('occluded remote gets no splash feedback - a wall between blast and victim silences all of it', (): void => {
+    const r = mkRig();
+    const rp = mkRemote(5);
+    r.remotes.set('p1', rp);
+    // Solid slab between blast origin and the victim - the Stryker
+    // survivor that proved this gate untested: deleting occluded() must
+    // now fail this case.
+    const wall = { cx: 2.5, cy: 2, cz: 0, hx: 0.3, hy: 5, hz: 5, cos: 1, sin: 0 };
+    const prev = Projectile.solidColliders;
+    Projectile.solidColliders = [wall as never];
+    try {
+      r.blast.applyExplosionForce(args());
+    } finally {
+      Projectile.solidColliders = prev;
+    }
+    expect(r.dmgNumbers.spawn).not.toHaveBeenCalled();
+    expect(r.hbs.predictDamage).not.toHaveBeenCalled();
+    expect(r.hud.showHitMarker).not.toHaveBeenCalled();
+  });
+
+  it('deployables get the blast relay - blastRemotes fires with the envelope', (): void => {
+    const r = mkRig();
+    const blastRemotes = vi.fn();
+    (r.deps as { lazyDeployables?: () => { blastRemotes: typeof blastRemotes } }).lazyDeployables = () => ({ blastRemotes });
+    r.blast.applyExplosionForce(args({ pos: new THREE.Vector3(1, 2, 3), aoeDamage: 40, radius: 10 }));
+    expect(blastRemotes).toHaveBeenCalled();
+    expect(blastRemotes.mock.calls[0]![0]).toMatchObject({ x: 1, y: 2, z: 3 });
   });
 
   it('remote outside radius → nothing predicted', (): void => {
