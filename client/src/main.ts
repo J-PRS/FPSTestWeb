@@ -61,6 +61,7 @@ import { gunGameRoll } from '../../shared/gunGame.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
 import { shipMatchResult } from './game/matchResults.js';
+import { DemoSerializer } from './demo/DemoSerializer.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots/index.js';
@@ -1493,6 +1494,21 @@ init().then(async (): Promise<void> => {
   // the client post is the offline-game lane).
   window.addEventListener('beforeunload', (): void => {
     shipMatchResult(world, { kills: player.kills, team: world.localTeam, armorClass: player.armorClass }, 'unload');
+    // F5 demo save: the rolling recording serializes + keepalive-POSTs
+    // to /demos/upload before the tab dies - same pile the cool-shot
+    // clips already land in.
+    try {
+      const mgr = demoManager;
+      if (mgr && mgr.mode === 'recording' && mgr.coolShotMgr.serverUrl) {
+        const file = mgr.recorder.buildDemoFile('f5-save');
+        void fetch(`${mgr.coolShotMgr.serverUrl}/demos/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: DemoSerializer.serialize(file),
+          keepalive: true,
+        }).catch((): void => undefined);
+      }
+    } catch { /* unload telemetry - never block the refresh */ }
   });
   window.addEventListener('fps:set', (e): void => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
