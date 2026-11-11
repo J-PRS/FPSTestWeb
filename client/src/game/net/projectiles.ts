@@ -242,6 +242,17 @@ export function wireProjectiles(ctx: NetCtx): void {
     const cfg = (weaponType === undefined ? undefined : getProjectileConfig(weaponType)) ?? BOLT_CONFIG;
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
+    // Underground spawn: a wire origin already below the heightmap can
+    // never "cross" terrain in the replica sweep - it tunnels forever.
+    // Seat it one radius above the surface (same lift bounceOffField
+    // gives after a real bounce) so the arc resumes above ground.
+    {
+      const terr = deps.lazyTerrain();
+      if (terr) {
+        const floor = terr.getHeight(origin.x, origin.z) + (cfg.bodyRadius ?? 0.2) + 0.05;
+        if (origin.y < floor) {origin.y = floor; remoteProjectile.pos.y = floor;}
+      }
+    }
     remoteProjectile.isRemote = true;
     // Cosmetic body-pop needs the local body too - same lazy reads the
     // own-shell path uses (null while dead = no sweep target).
