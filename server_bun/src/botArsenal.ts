@@ -849,6 +849,10 @@ s[kind] += 1; this.propels.set(id, s);
     const nerve = s?.courage ?? 0.5;
     const hp = this.room.players.getAllPlayers().get(p.id)?.health ?? 100;
     const beltWt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
+    // Hook is a mobility tool, not ordnance - the enemy-throw path fired
+    // grapples at players because it's "a belt". Locomotion lobs go
+    // through pickHook -> lobAt directly and stay untouched.
+    if (beltWt === WeaponType.Hook) {return;}
     const beltSplash = getWeaponStats(beltWt)?.aoeDamage ?? SELF_SPLASH_MAX;
     if (hp <= beltSplash * (1.5 - nerve)) {return;}
     const seen = this.huntSeenCb(p.id);
