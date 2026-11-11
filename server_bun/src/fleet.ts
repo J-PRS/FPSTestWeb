@@ -24,6 +24,7 @@ import { CONFIG } from './config.ts';
 import { FleetDirectory } from './fleetDir.ts';
 import { corsResponse } from './serverRoutes.ts';
 import { clientLogRoute } from './clientLogs.ts';
+import { matchResultsRoute } from './matchResults.ts';
 import { windowAllow } from './windowLimit.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
@@ -173,6 +174,10 @@ Bun.serve({
     // 404s and prod telemetry goes silent exactly when the fleet is used.
     if (url.pathname === '/client-log' && req.method === 'POST') {
       return clientLogRoute(req, corsResponse, srv.requestIP(req)?.address ?? '');
+    }
+
+    if (url.pathname === '/results' && req.method === 'POST') {
+      return matchResultsRoute(req, corsResponse);
     }
 
     if (url.pathname === '/fleet/report' && req.method === 'POST') {

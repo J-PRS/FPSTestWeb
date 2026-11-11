@@ -60,6 +60,7 @@ import { REPAIR_HEAL_PER_TICK } from '../../shared/weapons.js';
 import { gunGameRoll } from '../../shared/gunGame.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
+import { shipMatchResult } from './game/matchResults.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots/index.js';
@@ -1487,6 +1488,12 @@ init().then(async (): Promise<void> => {
   // layout once the reveal frame lands.
   window.addEventListener('fps:altq', (): number =>
     requestAnimationFrame((): number => requestAnimationFrame(reportHudOverlap)));
+  // Match-results ship: F5/tab-close still lands the local game's
+  // outcome in logs/results/ (hosted rooms ALSO dump server-side -
+  // the client post is the offline-game lane).
+  window.addEventListener('beforeunload', (): void => {
+    shipMatchResult(world, { kills: player.kills, team: world.localTeam, armorClass: player.armorClass }, 'unload');
+  });
   window.addEventListener('fps:set', (e): void => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
     if (key === 'fps-debug' && value === 1 && devtoolsOn && isDevHost()) {wireDebugTools();}

@@ -8,6 +8,7 @@ import { RtcServer } from './RtcServer.ts';
 import { WtServer } from './WtServer.ts';
 import { join } from 'node:path';
 import { clientLogRoute, rotateLogs } from './clientLogs.ts';
+import { matchResultsRoute } from './matchResults.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import { adminRoute, clipRoute, corsResponse, demoRoute, leaderboardRoute, makeRoutes, mapBinRoute } from './serverRoutes.ts';
 import { wallNow } from './wallClock.ts';
@@ -260,6 +261,10 @@ const serveOpts = {
     if (url.pathname.startsWith('/maps/')) {return mapBinRoute(url);}
     if (url.pathname === '/client-log' && req.method === 'POST') {
       return clientLogRoute(req, corsResponse, srv.requestIP(req)?.address ?? '');
+    }
+
+    if (url.pathname === '/results' && req.method === 'POST') {
+      return matchResultsRoute(req, corsResponse);
     }
 
     return corsResponse('Not found', { status: 404 });

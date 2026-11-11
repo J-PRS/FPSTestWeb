@@ -53,6 +53,7 @@ import { gunGameClimax, gunGameAllows, gunGameRoll, igunChassis } from '../../sh
 import { chatKindFor, vgsCommandFor, radioAimFor } from '../../shared/botTaunts.ts';
 import { perkMods, isPerkId } from '../../shared/perks.ts';
 import { healPool } from './healPool.ts';
+import { collectServerResult, writeMatchResult } from './matchResults.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { ServerWebSocket } from 'bun';
 
@@ -1494,7 +1495,10 @@ export class Room {
       },
       rotate: (): MapSpec | null => this.onRotate?.() ?? null,
       applySpec: (s): void => this.applySpec(s),
-      onMatchEnd: (r): void | undefined => this.onMatchEnd?.(r),
+      onMatchEnd: (r): void | undefined => {
+        this.dumpResults('end');
+        this.onMatchEnd?.(r);
+      },
       // 'match' isn't a bot id  -  nobody's actor-excluded, so every bot
       // sees the gg notice on its own think phase and the usual dice
       // decide who bothers replying. matchEnd adds the staggered
@@ -1757,7 +1761,23 @@ excess -= 1;
     }
   }
 
+  /** Match-results dump: one JSON per end/close so balance reads come
+   *  from a pile of real outcomes (map, mode, scores, per-seat kills/
+   *  deaths/class/rung/skill/econ). Best-effort - a dump failure can
+   *  never take a live room down with it. */
+  dumpResults(reason: string): void {
+    try {
+      writeMatchResult(collectServerResult(this, reason, {
+        skillOf: (id): unknown => this.bots?.skillOf?.(id),
+        econOf: (id): unknown => this.moveSim?.econOf?.(id),
+      }));
+    } catch (err) {
+      logger.warn('match-results dump failed', { room: this.name, err: String(err) });
+    }
+  }
+
   dispose(): void {
+    this.dumpResults('close');
     this.ballSim.stop();
     this.creatureSim.stop();
     this.messages.dispose();
