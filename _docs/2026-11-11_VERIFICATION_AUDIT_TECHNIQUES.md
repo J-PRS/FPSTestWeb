@@ -222,6 +222,13 @@ detector" bug class.
 
 ## Execution plan (next few hours, ranked by value-per-hour)
 
+**Landed:** Phase 1 complete (bombletScatter.test.ts - 300-sample
+sphere-uniformity + 6-18 kick band). Phase 2 first leg complete:
+snapshot/restore parity law in moveReplay.test.ts found + fixed a real
+loss (fallBoost was dropped by SimSnapshot - committed).
+**Remaining:** RoomMoveSim-level differential (server wrapper vs bare
+sim), invEq lattice (Phase 3), wrap (Phase 4).
+
 1. **impact.ts bomblet scatter via seeded-simRand PBT** (~30-45 min) -
    the only 95%-uncovered file left with a statistical shape worth
    pinning: sphere-direction uniformity (mean/variance), speed band,
