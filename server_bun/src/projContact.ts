@@ -9,6 +9,7 @@ import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import { renderLagOf, renderLagOfTarget, renderLagBoundOf, REWIND_MS } from './rewind.ts';
 import { logger } from './logger.ts';
+import { CONFIG } from './config.ts';
 
 type ContactHost = RoomProjectiles;
 
@@ -81,6 +82,10 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
     const halfLen = dhypot3(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) {continue;}
+      // Teammates aren't cover: friendly damage is refused anyway, so a
+      // body-block just eats the shell for nothing. friendlyFire rooms
+      // keep the block (everyone is hittable there).
+      if (!CONFIG.friendlyFire && proj.ownerTeam !== undefined && target.team === proj.ownerTeam) {continue;}
       const speed = dhypot3(target.velocity.x, target.velocity.y, target.velocity.z);
       // The reject only needs a bound on backMs — the rewind ceiling —
       // so ghostBack's transit/renderLag lookups wait for survivors.

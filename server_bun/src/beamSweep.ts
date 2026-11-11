@@ -18,6 +18,7 @@ import type { BeamContact } from './CombatHandler.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf, renderLagOfTarget, renderLagBoundOf } from './rewind.ts';
+import { CONFIG } from './config.ts';
 
 /** The sweep only reads positions/ids off the sims — structural slices
  *  keep Room's concrete sims and a P2P host's lighter set compatible. */
@@ -120,6 +121,9 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
     let playerId: string | undefined;
     for (const [pid, t] of world.players.getAllPlayers()) {
       if (pid === shooterId || t.isDead) {continue;}
+      // Teammates aren't cover — friendly damage is refused anyway, so a
+      // body-block just eats the ray (and its chain) for nothing.
+      if (!CONFIG.friendlyFire && shooter?.team !== undefined && t.team === shooter.team) {continue;}
       const cap = classCapsule(t.armorClass);
       const targetTransit = world.transitOf?.(pid) ?? 0;
       // Full rewind to the shooter's reported view epoch (viewLag is
@@ -165,6 +169,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
     let pick: BeamContact | null = null;
     for (const [pid, t] of world.players.getAllPlayers()) {
       if (pid === shooterId || t.isDead) {continue;}
+      if (!CONFIG.friendlyFire && shooter?.team !== undefined && t.team === shooter.team) {continue;}
       const cap = classCapsule(t.armorClass);
       const targetTransit = world.transitOf?.(pid) ?? 0;
       const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid, shooterBound) - targetTransit);
