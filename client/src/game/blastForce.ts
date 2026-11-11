@@ -177,20 +177,23 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // clipping a remote isn't my frag to celebrate.
       if (!a.shooterId) {deps.lazyHud().showHitMarker();}
       const aoeDmg = aoeDamageOf(aoeDamage, dist, radius, scales);
+      // Friendly splash deals nothing in team rooms (the server's rule) -
+      // the number/predicted dip must not lie ahead of it, so this check
+      // precedes ALL feedback, not just the echo stamp it used to gate.
+      const victimTeam = deps.lazyNetworkManager()?.getPlayers?.().get(playerId)?.team;
+      const friendly = victimTeam !== undefined && victimTeam === deps.world.localTeam;
       // Splash on a player/bot shows a number too - direct hits had one
       // (impact.ts) but blast feedback stopped at the hitmarker, so the
       // common "rocket at their feet" read as dealing nothing.
-      if (!a.shooterId && aoeDmg >= 1) {
+      if (!a.shooterId && !friendly && aoeDmg >= 1) {
         deps.lazyDamageNumbers().spawn(rp.position, aoeDmg, splashColor(weaponType), deps.lazyCamera());
       }
       if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType, a.air)) {continue;} // local authority resolved it
-      deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
+      if (!friendly) {deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);}
       // My blast predicted splash the server may whiff - stamp it like the
       // direct-hit path does or a silent splash miss reads as clean damage.
       // The server skips friendly damage in team rooms, so a stamped
       // teammate would be a false ghost - only stamp plausible victims.
-      const victimTeam = deps.lazyNetworkManager()?.getPlayers?.().get(playerId)?.team;
-      const friendly = victimTeam !== undefined && victimTeam === deps.world.localTeam;
       if (!a.shooterId && !friendly && aoeDmg >= 1 && deps.lazyNetworkManager()?.authoritySims?.()) {
         expectDamageEcho(playerId, aoeDmg, weaponType, a.shotId, { x: pos.x, y: pos.y, z: pos.z },
           { x: vpos.x, y: vpos.y, z: vpos.z });
