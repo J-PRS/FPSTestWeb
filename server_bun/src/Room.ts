@@ -638,6 +638,11 @@ export class Room {
    *  birth; mapCatalog's rotation + GameServer's reload keep it current. */
   mapSrc = '';
 
+  /** Wall-clock mint - the match-results ledger reads it for
+   *  startedAt/durationMs (room lifetime ≈ match length on single-
+   *  match rooms). */
+  readonly createdAt = wallNow();
+
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false, seed?: number, deferBots = false) {
     if (seed !== undefined) {
       // A minted seed drives this room's draws  -  the spawn layout the
@@ -1770,6 +1775,7 @@ excess -= 1;
       writeMatchResult(collectServerResult(this, reason, {
         skillOf: (id): unknown => this.bots?.skillOf?.(id),
         econOf: (id): unknown => this.moveSim?.econOf?.(id),
+        locoOf: (id): unknown => this.bots?.watchdog?.statsOf?.(id),
       }));
     } catch (err) {
       logger.warn('match-results dump failed', { room: this.name, err: String(err) });

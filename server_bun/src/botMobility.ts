@@ -51,6 +51,22 @@ export class MobilityWatchdog {
     this.sheep.delete(id);
   }
 
+  /** Live mobility read for the match-results ledger - the same HA/A/S
+   *  buckets the scoreboard shows (ski+air / air / jet as % of active
+   *  ticks) plus pace + distance covered. Humans aren't tracked here -
+   *  their movement signature rides the client scoreboard instead. */
+  statsOf(id: string, dt = 0.05): { skiAirPct: number; airPct: number; jetPct: number; avgSpeed: number; covered: number } | undefined {
+    const s = this.sheep.get(id);
+    if (!s || s.ticks === 0) {return undefined;}
+    return {
+      skiAirPct: Math.round((s.skiAir / s.ticks) * 100),
+      airPct: Math.round((s.air / s.ticks) * 100),
+      jetPct: Math.round((s.jet / s.ticks) * 100),
+      avgSpeed: Number((s.dist / (s.ticks * dt)).toFixed(1)),
+      covered: Number(s.dist.toFixed(1)),
+    };
+  }
+
   /** Warn when an alive bot hasn't covered ~2m in a few seconds. Re-arms
    *  each time the bot actually moves, so the log line marks the stall
    *  boundary rather than spamming every tick. Stand-and-shoot is a legal

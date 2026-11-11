@@ -20,12 +20,18 @@ export interface PlayerResult {
   skill?: unknown;
   /** Energy economy read - drain/regen/max for jet-skill balance. */
   econ?: unknown;
+  /** Movement signature - ski+air/air/jet % + pace + covered (bots;
+   *  humans' loco rides the client scoreboard). */
+  loco?: unknown;
 }
 
 export interface MatchResult {
   kind: 'server' | 'client';
   room: string; mode?: string; map?: string;
   endedAt: number; reason: string;
+  /** Wall-clock room mint + lifetime - lets the pile answer "how long
+   *  do matches actually run" and "which modes bleed longest". */
+  startedAt?: number; durationMs?: number;
   winner?: string; scores?: Record<string, number>;
   players: PlayerResult[];
 }
@@ -34,6 +40,7 @@ export interface MatchResult {
  *  Room dep surface stays unchanged. */
 export interface ResultsHost {
   name: string; mode?: string; mapSrc?: string;
+  createdAt?: number;
   spec?: { name?: string };
   scores?: unknown;
   ffaScores?: Map<string, number>;
@@ -49,7 +56,7 @@ export function writeMatchResult(result: MatchResult, dir = RESULTS_DIR): string
 }
 
 /** Server-side collect: room meta + every seat's outcome/skill/econ. */
-export function collectServerResult(host: ResultsHost, reason: string, opts: { winner?: string; skillOf?: (id: string) => unknown; econOf?: (id: string) => unknown } = {}): MatchResult {
+export function collectServerResult(host: ResultsHost, reason: string, opts: { winner?: string; skillOf?: (id: string) => unknown; econOf?: (id: string) => unknown; locoOf?: (id: string) => unknown } = {}): MatchResult {
   const players: PlayerResult[] = [];
   for (const p of host.players.getAllPlayers().values()) {
     players.push({
@@ -57,13 +64,15 @@ export function collectServerResult(host: ResultsHost, reason: string, opts: { w
       armorClass: p.armorClass, weapon: p.weapon, gunRung: p.gunRung,
       kills: p.kills, deaths: p.deaths, streak: p.streak,
       health: p.health, maxHealth: p.maxHealth, heldTokens: p.heldTokens,
-      skill: opts.skillOf?.(p.id), econ: opts.econOf?.(p.id),
+      skill: opts.skillOf?.(p.id), econ: opts.econOf?.(p.id), loco: opts.locoOf?.(p.id),
     });
   }
   return {
     kind: 'server', room: host.name, mode: host.mode,
     map: host.spec?.name ?? host.mapSrc,
     endedAt: wallNow(), reason,
+    startedAt: host.createdAt,
+    durationMs: host.createdAt !== undefined ? wallNow() - host.createdAt : undefined,
     winner: opts.winner,
     scores: host.scores !== undefined ? Object.assign({}, host.scores) as Record<string, number>
       : (host.ffaScores ? Object.fromEntries(host.ffaScores) : undefined),
@@ -86,6 +95,7 @@ export async function matchResultsRoute(req: Request, cors: (body: BodyInit | nu
       kind: 'client',
       room: parsed.room, mode: parsed.mode, map: parsed.map,
       endedAt: typeof parsed.endedAt === 'number' ? parsed.endedAt : wallNow(),
+      startedAt: parsed.startedAt, durationMs: parsed.durationMs,
       reason: typeof parsed.reason === 'string' ? parsed.reason : 'client',
       winner: parsed.winner, scores: parsed.scores,
       players: parsed.players as PlayerResult[],
