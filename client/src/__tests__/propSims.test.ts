@@ -3,7 +3,7 @@ import fc from 'fast-check';
 import { aoeDamageAt, aoeImpulseAt, hitRadiusAt, lgTickDamage, lgChargeAt } from '../../../shared/combat.js';
 import { effectiveResist } from '../../../shared/perks.js';
 import { gunGameWeapon, gunGameAllows, gunGameRoll, gunGameBucket, gunGameClimax, igunChassis } from '../../../shared/gunGame.js';
-import { WeaponType, beltThrowCost, spendAmmo, type AmmoPool } from '../../../shared/weapons.js';
+import { WeaponType, beltThrowCost, spendAmmo, roomDirectDamage, IGUN_DIRECT_MULT, type AmmoPool } from '../../../shared/weapons.js';
 import { classCanFire, NEVER_FIRED } from '../../../shared/botClasses.js';
 
 // fast-check on shared sims - each property asserts a LAW, not a sample.
@@ -184,6 +184,20 @@ describe('shared sim properties', (): void => {
         // dealt weapon, or an igun player could be handed a gun they
         // can't shoulder.
         expect(classCanFire(chassis, dealt)).toBe(true);
+      },
+    ));
+  });
+
+  it('igun pays exactly xIGUN_DIRECT_MULT on every weapon and instagib only touches the Railgun', (): void => {
+    fc.assert(fc.property(
+      wt,
+      (w): void => {
+        const base = roomDirectDamage(w, false, undefined, false);
+        expect(roomDirectDamage(w, false, undefined, true)).toBeCloseTo(base * IGUN_DIRECT_MULT, 5);
+        // instagib is a Railgun-only override - every other weapon is untouched.
+        if (w !== WeaponType.Railgun) {
+          expect(roomDirectDamage(w, true)).toBe(base);
+        }
       },
     ));
   });
