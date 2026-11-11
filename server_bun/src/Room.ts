@@ -487,7 +487,7 @@ export class Room {
   private setGunRung(playerId: string, rung: number): void {
     const r = Math.max(0, Math.min(gunGameClimax(this.mods.igun === true), Math.floor(rung)));
     const p = this.players.getPlayer(playerId);
-    if (!p) {return;}
+    if (!p || p.gunRung === r) {return;} // no edge = no redeal - a climax kill must not replay the swap
     p.gunRung = r;
     // Bucket roll: the rung deals one member - luck, not a pick. The wire
     // carries the draw so the client's locked band mirrors the same gun.
@@ -1777,6 +1777,12 @@ excess -= 1;
    *  never take a live room down with it. */
   dumpResults(reason: string, demoPath?: string): void {
     try {
+      // A match end inside a still-running room gets its own flush —
+      // without it the demo only lands at dispose and "every game"
+      // really means "every teardown".
+      if (reason === 'end' && !demoPath && this.demo && process.env.FPS_DEMO) {
+        demoPath = this.demo.flush(process.env.FPS_DEMO, 'end');
+      }
       writeMatchResult(collectServerResult(this, reason, {
         demo: demoPath,
         skillOf: (id): unknown => this.bots?.skillOf?.(id),

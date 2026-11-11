@@ -322,6 +322,25 @@ export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Pr
 }
 
 export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
+  // Chunked game stream: POST /demos/stream?session=<id>&seq=<n> —
+  // each body is a complete .demo slice; files land as stream_<id>_<seq>.
+  if (url.pathname === '/demos/stream' && req.method === 'POST') {
+    const ip = req && ctx.requestIP?.(req)?.address;
+    if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
+        !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT * 10, 1024)) {
+      return json({ success: false, error: 'Too many uploads' }, { status: 429 });
+    }
+    const body = await req.arrayBuffer();
+    if (body.byteLength > 16 * 1024 * 1024) {
+      return json({ success: false, error: 'Chunk too large' }, { status: 413 });
+    }
+    try {
+      const meta = await ctx.demoStorage.saveStream(body, url.searchParams.get('session') ?? '', Number(url.searchParams.get('seq') ?? 0));
+      return json(Object.assign({}, {success: true}, meta));
+    } catch (error) {
+      return json({ success: false, error: (error as Error).message }, { status: 400 });
+    }
+  }
   if (url.pathname === '/demos/upload' && req.method === 'POST') {
     const ip = req && ctx.requestIP?.(req)?.address;
     if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&

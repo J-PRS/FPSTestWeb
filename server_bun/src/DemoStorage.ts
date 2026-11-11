@@ -181,6 +181,21 @@ added += 1;
     return { projectileLifetime, description, duration };
   }
 
+  /** Stream lane: chunked game recordings arrive as sequential
+   *  complete .demo files (each extractClip slice is independently
+   *  playable). No lifetime gate - the cool-shot floor is a clips
+   *  concern, and these skip the index for the same reason. */
+  async saveStream(data: ArrayBuffer, session: string, seq: number): Promise<{ filename: string }> {
+    const header = this.parseDemoHeader(data); // validates it's a demo at all
+    if (!Number.isFinite(header.duration)) {throw new Error('Malformed demo: non-finite duration');}
+    const safe = session.replace(/[^\w-]/g, '_').slice(0, 48) || 'anon';
+    const filename = `stream_${safe}_${String(seq).padStart(4, '0')}.demo`;
+    await mkdir(this.demosDir, { recursive: true });
+    await writeFile(join(this.demosDir, filename), new Uint8Array(data));
+    logger.info('Demo stream chunk saved', { filename, seq, size: data.byteLength });
+    return { filename };
+  }
+
   async saveDemo(data: ArrayBuffer): Promise<{ filename: string; projectileLifetime: number; description: string }> {
     const header = this.parseDemoHeader(data);
 
