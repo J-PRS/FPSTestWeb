@@ -12,6 +12,7 @@
 import { WeaponType, type WeaponStats } from './weaponTable.js';
 import { WEAPONS } from './weaponRows.js';
 import { dcos, dsin, dhypot3 } from './dmath.js';
+import { inv } from './invariants.js';
 export const AOE_VFX_SCALE = 0.8;
 
 /** Melee cone half-angle (cos) — ~57°. The client swings this cone for
@@ -78,6 +79,32 @@ export const SERVER_SIMMED_WEAPONS = new Set<number>(Object.keys(WEAPONS).map(Nu
 export function serverSimmed(weaponType: number | undefined): boolean {
   return weaponType !== undefined && SERVER_SIMMED_WEAPONS.has(weaponType);
 }
+
+/** Instagib room modifier: the whole arsenal collapses to one gun and a
+ *  fixed hit number. Room.instagib gates every fire path server-side;
+ *  these constants are the shared truth client prediction reads too. */
+export const INSTAGIB_RAILGUN_DAMAGE = 200;
+const INSTAGIB_WEAPONS = new Set<number>([WeaponType.Railgun, WeaponType.Hook]);
+export function isInstagibWeapon(wt: number | undefined): boolean {
+  return wt !== undefined && INSTAGIB_WEAPONS.has(wt);
+}
+
+/** Room-aware direct damage: instagib pays the flat rail number on every
+ *  hit path (human shells, bot attacks, creature contacts) - table stats,
+ *  airtime ramp and perk multipliers all sit out. Gun-game's igun pays
+ *  the same flat number for EVERY weapon - the ladder's difficulty is
+ *  handling, not damage. Non-modifier rooms read the plain scaled table
+ *  value. */
+export function roomDirectDamage(weaponType: number, instagib: boolean, airtime?: number, igun = false): number {
+  // igun: table damage ×10 on directs - heavy chassis soaks the fast
+  // taps, big guns stay one-shot. Splash scales separately (×5 in the
+  // blast envelope) so chip pops don't one-shot either.
+  if (igun) {return scaledDirectDamage(weaponType, airtime) * IGUN_DIRECT_MULT;}
+  return instagib && weaponType === WeaponType.Railgun ? INSTAGIB_RAILGUN_DAMAGE : scaledDirectDamage(weaponType, airtime);
+}
+
+export const IGUN_DIRECT_MULT = 10;
+export const IGUN_AOE_MULT = 5;
 
 export const REPAIR_RANGE = 14;        // beam reach (m)
 export const REPAIR_HEAL_PER_TICK = 5; // per fire tick → ~50 hp/s at 0.1s rate
@@ -202,6 +229,9 @@ function accrue(pool: AmmoPool, weaponType: number, nowS: number): { ammo: numbe
   const start = c.ammo < 1 || st.ammoAlwaysRegen ? c.t : Math.max(c.t, c.shotAt + interval);
   if (nowS > start) {c.ammo = Math.min(st.ammoCap, c.ammo + (nowS - start) / regenS);}
   c.t = nowS;
+  // Pool law: every writer funnels through accrue/spendAmmo - ammo lives
+  // in [0, cap], no fractional-over-cap or underflow reads downstream.
+  inv('ammo-pool-bounds', c.ammo >= 0 && c.ammo <= st.ammoCap + 0.01, { wt: weaponType, ammo: c.ammo, cap: st.ammoCap });
   return c;
 }
 
