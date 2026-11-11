@@ -216,6 +216,7 @@ describe('netHarness - corpse-window echoes', (): void => {
   it('correction with a journal rewinds and replays instead of snapping', (): void => {
     const setState = vi.spyOn(h.player.movement, 'setState');
     const update = vi.spyOn(h.player.movement, 'update');
+    const setInput = vi.spyOn(h.player.movement, 'setInput');
     vi.spyOn(h.nm, 'inputsAfter').mockReturnValue([
       { t: performance.now() - 50, input: { forward: 1, right: 0, jump: 0, ski: 0 } },
     ]);
@@ -226,8 +227,12 @@ describe('netHarness - corpse-window echoes', (): void => {
     // final pos comes from getState - not the raw authority vector.
     expect(setState).toHaveBeenCalled();
     expect(update).toHaveBeenCalled();
+    expect(setInput).toHaveBeenCalledWith(expect.objectContaining({ forward: 1 }));
     expect(h.player.pos.x).toBe(6);
     expect(h.player.pos.z).toBe(2);
+    expect(h.player.vel.x).toBe(1); // vel.set rides getState, not the raw authority vector
+    // renderSnap delta = final sim pos - pre-snap pos = (6,5,2)-(0,5,0).
+    expect(h.calls.renderSnap[0]).toBeCloseTo(Math.hypot(6, 2), 3);
   });
 
   it('correction carrying a non-finite authority vector is dropped, pos untouched', (): void => {
