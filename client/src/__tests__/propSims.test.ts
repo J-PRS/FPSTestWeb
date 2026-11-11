@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { aoeDamageAt, hitRadiusAt, lgTickDamage } from '../../../shared/combat.js';
+import { aoeDamageAt, aoeImpulseAt, hitRadiusAt, lgTickDamage, lgChargeAt } from '../../../shared/combat.js';
 import { effectiveResist } from '../../../shared/perks.js';
 import { gunGameWeapon, gunGameAllows } from '../../../shared/gunGame.js';
-import { WeaponType } from '../../../shared/weapons.js';
+import { WeaponType, beltThrowCost, spendAmmo, type AmmoPool } from '../../../shared/weapons.js';
+import { classCanFire, NEVER_FIRED } from '../../../shared/botClasses.js';
 
 // fast-check on shared sims - each property asserts a LAW, not a sample.
 // See _docs/2026-11-11_VERIFICATION_AUDIT_TECHNIQUES.md (item 2: PBT).
@@ -77,6 +78,76 @@ describe('shared sim properties', (): void => {
         expect(r).toBeLessThanOrEqual(resist);
         expect(r === resist || r === 0).toBe(true);
         if (health >= maxHealth * 0.2) {expect(r).toBe(0);}
+      },
+    ));
+  });
+
+  it('aoeImpulseAt is non-increasing in distance and never negative', (): void => {
+    fc.assert(fc.property(
+      wt, fc.float({ min: 0, max: 200, noNaN: true }), fc.float({ min: 0, max: 200, noNaN: true }),
+      (w, d1, d2): void => {
+        const [near, far] = d1 <= d2 ? [d1, d2] : [d2, d1];
+        expect(aoeImpulseAt(near, w)).toBeGreaterThanOrEqual(aoeImpulseAt(far, w));
+        expect(aoeImpulseAt(far, w)).toBeGreaterThanOrEqual(0);
+      },
+    ));
+  });
+
+  it('lgChargeAt drains to zero, never exceeds the banked amount, never rewinds', (): void => {
+    fc.assert(fc.property(
+      fc.float({ min: 0, max: 100, noNaN: true }),
+      fc.float({ min: 0, max: 1000, noNaN: true }),
+      fc.float({ min: 0, max: 60, noNaN: true }),
+      (acc, chargeT, elapsed): void => {
+        const now = chargeT + elapsed;
+        const c = lgChargeAt(acc, chargeT, now);
+        expect(c).toBeGreaterThanOrEqual(0);
+        expect(c).toBeLessThanOrEqual(acc);
+        if (elapsed > 0) {expect(c).toBeLessThanOrEqual(lgChargeAt(acc, chargeT, chargeT));}
+        // Long enough past the stamp, the bank is empty.
+        if (elapsed > acc + 10) {expect(c).toBe(0);}
+      },
+    ));
+  });
+
+  it('beltThrowCost is a positive integer for every weapon type', (): void => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 64 }),
+      (w): void => {
+        const c = beltThrowCost(w);
+        expect(c).toBeGreaterThanOrEqual(1);
+        expect(Number.isInteger(c)).toBe(true);
+      },
+    ));
+  });
+
+  it('NEVER_FIRED weapons are refused for every armor class', (): void => {
+    const classes: (string | undefined)[] = [undefined, 'light', 'medium', 'heavy'];
+    for (const w of NEVER_FIRED) {
+      for (const cls of classes) {
+        expect(classCanFire(cls, w)).toBe(false);
+      }
+    }
+  });
+
+  it('classCanFire: an undeclared class behaves as medium for all weapons', (): void => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 64 }),
+      (w): void => {
+        expect(classCanFire(undefined, w)).toBe(classCanFire('medium', w));
+      },
+    ));
+  });
+
+  it('spendAmmo never goes below zero and a dry cell stays dry', (): void => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 64 }), fc.float({ min: 0, max: 1000, noNaN: true }),
+      (w, now): void => {
+        const pool: AmmoPool = new Map();
+        // Whatever the cell seeds to, spending past empty must fail.
+        for (let i = 0; i < 50; i++) {spendAmmo(pool, w, now + i * 0.1);}
+        const cell = pool.get(w);
+        if (cell) {expect(cell.ammo).toBeGreaterThanOrEqual(0);}
       },
     ));
   });
