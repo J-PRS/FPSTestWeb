@@ -119,6 +119,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-08_WEAPON_MODEL_REVIEW.md` | All 27 weapon viewmodels ranked best→worst from gunsheet 4-up sheets — Revolver/Railgun/Chaingun top, Pistol/Mortar/Disc bottom; fast-disc groove+liner fixes, gunlab Implodisc filter, mkWeaponSel `.keys()` bug, rework shortlist |
 | `_docs/2026-11-08_VIEWMODEL_AND_MARKER_FIXES.md` | Session changelog for the viewmodel batch + runtime bugs — Blaster/Pistol reworks (pistol_v1 archived), 512² sheets + bounding-box cell fit, IFF marker flicker (duplicate headhuntBadges writer), frozen-corpse `process.env` crash in shared/botGoals |
 | `_docs/2026-11-09_BUZZARD.md` | Buzzard port report — ambient decor made a server-owned fly-family creature: `creatures` pops, shared `stepFlyer` both ends, 6s shooter-grudge brain, `attachField` fix that un-dead creature spawns on terrain maps, stat-fidelity audit + gaps |
+| `_docs/2026-11-11_VERIFICATION_AUDIT_TECHNIQUES.md` | SOTA verification-audit survey — mutation testing (blastForce pilot 46.3%), property-based testing (~50x mutants/test), differential replay client-vs-server, executable invariants, semantic-diff gates, protocol fuzzing; ranked adoption order for this repo |
 
 ## Agent memory (append-only, one line each)
 
