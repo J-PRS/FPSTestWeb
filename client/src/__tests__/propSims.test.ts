@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { aoeDamageAt, aoeImpulseAt, hitRadiusAt, lgTickDamage, lgChargeAt } from '../../../shared/combat.js';
 import { effectiveResist } from '../../../shared/perks.js';
-import { gunGameWeapon, gunGameAllows, gunGameRoll, gunGameBucket, gunGameClimax } from '../../../shared/gunGame.js';
+import { gunGameWeapon, gunGameAllows, gunGameRoll, gunGameBucket, gunGameClimax, igunChassis } from '../../../shared/gunGame.js';
 import { WeaponType, beltThrowCost, spendAmmo, type AmmoPool } from '../../../shared/weapons.js';
 import { classCanFire, NEVER_FIRED } from '../../../shared/botClasses.js';
 
@@ -157,6 +157,21 @@ describe('shared sim properties', (): void => {
       (rung, igun, rand): void => {
         const r = Math.min(rung, gunGameClimax(igun));
         expect(gunGameBucket(r, igun)).toContain(gunGameRoll(r, igun, rand));
+      },
+    ));
+  });
+
+  it('igunChassis equals the weapon tier and the dealt gun is fireable on it', (): void => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 20 }), fc.float({ min: 0, max: 1, noNaN: true, noDefaultInfinity: true }),
+      (rung, rand): void => {
+        const r = Math.min(rung, gunGameClimax(true));
+        const dealt = gunGameRoll(r, true, rand);
+        const chassis = igunChassis(dealt);
+        // The chassis IS the tier - and the class gate must admit the
+        // dealt weapon, or an igun player could be handed a gun they
+        // can't shoulder.
+        expect(classCanFire(chassis, dealt)).toBe(true);
       },
     ));
   });
