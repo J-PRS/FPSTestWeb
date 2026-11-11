@@ -8,6 +8,7 @@ import { lifestealBurst } from '../../effects/vfx.js';
 import { killTaunt, deathTaunt, comboTailFor, comboCutDelayMs, chatter, noteFrag, bulliedBy } from '../../../../shared/botTaunts.js';
 import { tauntRand } from '../../../../shared/botRand.js';
 import { chatSink } from '../chat.js';
+import { settings } from '../../core/settings.js';
 import { ATLAS_BLACK } from '../../entities/PlayerModel.js';
 
 const _gibBlack = new THREE.Color(0x11_11_11); // same convention as playerKill - colored = alive marker
@@ -116,7 +117,7 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
     gunGameOnKill(b.deps.world, 'local', attackerId, applyGunRung.bind(null, b));
     b.localDied();
     noteKill(attackerId, 'local', opts.weapon ?? (opts.melee ? WeaponType.Melee : undefined));
-    b.hooks.killFeed(attackerId.replace('bot:', ''), 'YOU', false, true,
+    b.hooks.killFeed(attackerId.replace('bot:', ''), settings.get('fps-name') || 'YOU', false, true,
       { shooter: b.teamOf.get(attackerId), target: b.teamOf.get('local'), weapon: opts.weapon, air: opts.air });
     const kt = killTaunt(attackerId, 'YOU');
     botSay(attackerId, kt?.text ?? null, kt?.vgs);
@@ -246,7 +247,9 @@ function killChatter(b: TeamBots, killerId: string, bot: GameBot, weapon?: numbe
     // kn = killer's display name (the {t} of death/props lines),
     // vn = victim's (the {v} of kill lines) - passing kn to killTaunt
     // once made a bot name himself as the fragged one.
-    const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
+    // Offline 'local' shows the chosen nick like the online feed's
+    // roster name does - 'YOU' stays the fallback when unset.
+    const kn = killerId === 'local' ? (settings.get('fps-name') || 'YOU') : killerId.replace('bot:', '');
     const vn = bot.playerId.replace('bot:', '');
     noteKill(killerId === 'local' ? 'local' : killerId, bot.playerId, weapon);
     noteFrag(killerId, bot.playerId); // the one-sided ledger - bully check reads it below
