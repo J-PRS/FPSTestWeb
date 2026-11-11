@@ -1,7 +1,8 @@
 /* oxlint-disable typescript/no-explicit-any -- minimal Projectile/ctx stubs */
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { spawnClusterBomblets, type CombatCtx } from '../game/combat/impact.js';
+import { spawnClusterBomblets } from '../game/combat/impact.js';
+import type { CombatCtx } from '../game/combat.js';
 import { simRngSeed } from '../../../shared/simRand.js';
 
 // PBT on the bomblet scatter - impact.ts:545-590 was 95% untested and

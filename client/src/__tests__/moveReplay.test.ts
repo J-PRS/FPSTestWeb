@@ -80,7 +80,7 @@ describe('MoveSim deterministic replay', (): void => {
     for (let i = 0; i < inputs.length; i += 1) {
       if (i === 400) {snap = interrupted.snapshot();}
       Object.assign(interrupted.input, inputs[i]!);
-      interrupted.update(1 / 60, rng);
+      interrupted.update(1 / 60);
     }
     // A third sim restored FROM the snapshot replays the last 500 steps.
     const restored = new MoveSim(surf, spawn());
@@ -88,11 +88,10 @@ describe('MoveSim deterministic replay', (): void => {
     // snapshot by design - the host replants it exactly like the wire.
     restored.jumpstart = 8;
     restored.restore(snap!);
-    const rngR = lcg32(0x77);
     // Re-feed the post-snapshot input stream - indices 400..899 replayed.
     for (let i = 400; i < inputs.length; i += 1) {
       Object.assign(restored.input, inputs[i]!);
-      restored.update(1 / 60, rngR);
+      restored.update(1 / 60);
     }
     // The rng arg is a dead param (update(dt) ignores it) - the sim is
     // input-deterministic, so the replay needs no stream-position seed.

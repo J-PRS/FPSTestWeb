@@ -217,7 +217,8 @@ describe('netHarness - corpse-window echoes', (): void => {
     const setState = vi.spyOn(h.player.movement, 'setState');
     const update = vi.spyOn(h.player.movement, 'update');
     const setInput = vi.spyOn(h.player.movement, 'setInput');
-    vi.spyOn(h.nm, 'inputsAfter').mockReturnValue([
+    // oxlint-disable-next-line typescript/no-explicit-any -- inputsAfter isn't on the harness's NmWithDispatch surface; the real method is.
+    vi.spyOn(h.nm as any, 'inputsAfter').mockReturnValue([
       { t: performance.now() - 50, input: { forward: 1, right: 0, jump: 0, ski: 0 } },
     ]);
     const stPos = new THREE.Vector3(6, 5, 2);
@@ -238,15 +239,17 @@ describe('netHarness - corpse-window echoes', (): void => {
   it('journal replay clamps each entry dt - mid-journal uses next entry t, tail uses now, hard cap 0.25s', (): void => {
     const update = vi.spyOn(h.player.movement, 'update');
     const now = performance.now();
-    vi.spyOn(h.nm, 'inputsAfter').mockReturnValue([
+    // oxlint-disable-next-line typescript/no-explicit-any -- inputsAfter isn't on the harness's NmWithDispatch surface; the real method is.
+    vi.spyOn(h.nm as any, 'inputsAfter').mockReturnValue([
       { t: now - 900, input: { forward: 1, right: 0, jump: 0, ski: 0 } },   // gap to next: 800ms -> capped 0.25
       { t: now - 100, input: { forward: 0, right: 1, jump: 0, ski: 0 } },   // tail: ~100ms -> 0.1
     ]);
     vi.spyOn(h.player.movement, 'getState').mockReturnValue({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), onGround: true });
     feed(h.nm, { type: 'correction', seq: 1, position: { x: 5, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, inputSeq: 1 } as ServerMessage);
     expect(update).toHaveBeenCalledTimes(2);
-    expect(update.mock.calls[0]![0]).toBeCloseTo(0.25, 3);   // 800ms gap clamped
-    expect(update.mock.calls[1]![0]).toBeCloseTo(0.1, 2);    // tail rides real gap
+    const dts = update.mock.calls as unknown as number[][];
+    expect(dts[0]![0]).toBeCloseTo(0.25, 3);   // 800ms gap clamped
+    expect(dts[1]![0]).toBeCloseTo(0.1, 2);    // tail rides real gap
   });
 
   it('correction carrying a non-finite authority vector is dropped, pos untouched', (): void => {
