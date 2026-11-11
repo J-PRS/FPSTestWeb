@@ -233,6 +233,13 @@ detector" bug class.
   dead-reckoning drift-correction block (jet-hold integration + >40m
   pull-back) is unpinned; the canary test covers the happy path only.
   Open follow-up: a DR-harness test for the correction math.
+- `net/players.ts` pilot: **9.08%** (57 killed / 122 survived / 449
+  no-coverage). Load-bearing survivors: the server-correction funnel
+  (lines 517-540 - snap-threshold edge, inputSeq journal replay,
+  noteRenderSnap delta, vel.set + syncMovement on correction). The
+  reconciliation path - where desyncs actually resolve - has one test
+  grazing it. Open follow-up: a correction-harness test (position error
+  > floor, journal rewind asserts replay of inputsAfter).
 - PBT efficacy: ACM PLS 2025, "An Empirical Evaluation of
   Property-Based Testing in Python" (~50x mutants/test, 76% in first
   20 inputs).
