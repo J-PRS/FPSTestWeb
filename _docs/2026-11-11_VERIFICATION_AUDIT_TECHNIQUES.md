@@ -239,6 +239,13 @@ detector" bug class.
   drop, playback gate, speed-scaled ignore band). Load-bearing survivors
   at 517-540 died; what remains is replay-internal math (dt clamp,
   nextT selection) and the 449-mutant uncovered surface elsewhere.
+- `combat/impact.ts` pilot: **1.12%** (7 killed / 24 survived / 680
+  no-coverage - 95% of the file untested; only the bomblet-authorship
+  tests reach it). Covered slice is healthy; survivors are the
+  uniform-sphere scatter + velocity-inheritance math (545-590) -
+  statistical, needs a seeded-simRand distribution test, not unit pins.
+  Open follow-up: PBT on bomblet scatter (direction uniformity, speed
+  band) rather than Stryker chasing.
 - PBT efficacy: ACM PLS 2025, "An Empirical Evaluation of
   Property-Based Testing in Python" (~50x mutants/test, 76% in first
   20 inputs).
