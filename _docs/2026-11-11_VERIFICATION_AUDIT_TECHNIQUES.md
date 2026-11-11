@@ -228,6 +228,11 @@ detector" bug class.
   `client/stryker.conf.mjs`, report `client/reports/mutation/index.html`.
   Windows caveat: inPlace restore can EPERM on file-locked scratch dirs;
   verify `git status` after every run (mutated source restored fine here).
+- `remoteInterp.ts` pilot: **32.5%** (245 killed / 259 survived / 250
+  no-coverage). Load-bearing survivors cluster at lines 799-830 - the
+  dead-reckoning drift-correction block (jet-hold integration + >40m
+  pull-back) is unpinned; the canary test covers the happy path only.
+  Open follow-up: a DR-harness test for the correction math.
 - PBT efficacy: ACM PLS 2025, "An Empirical Evaluation of
   Property-Based Testing in Python" (~50x mutants/test, 76% in first
   20 inputs).
