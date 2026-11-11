@@ -3,7 +3,8 @@ import fc from 'fast-check';
 import { aoeDamageAt, aoeImpulseAt, hitRadiusAt, lgTickDamage, lgChargeAt } from '../../../shared/combat.js';
 import { effectiveResist } from '../../../shared/perks.js';
 import { gunGameWeapon, gunGameAllows, gunGameRoll, gunGameBucket, gunGameClimax, igunChassis } from '../../../shared/gunGame.js';
-import { WeaponType, beltThrowCost, spendAmmo, roomDirectDamage, IGUN_DIRECT_MULT, type AmmoPool } from '../../../shared/weapons.js';
+import { WeaponType, beltThrowCost, spendAmmo, roomDirectDamage, IGUN_DIRECT_MULT, getWeaponStats, type AmmoPool } from '../../../shared/weapons.js';
+import { WEAPONS } from '../../../shared/weaponRows.js';
 import { classCanFire, NEVER_FIRED } from '../../../shared/botClasses.js';
 
 // fast-check on shared sims - each property asserts a LAW, not a sample.
@@ -184,6 +185,20 @@ describe('shared sim properties', (): void => {
         // dealt weapon, or an igun player could be handed a gun they
         // can't shoulder.
         expect(classCanFire(chassis, dealt)).toBe(true);
+      },
+    ));
+  });
+
+  it('every ladder bucket member resolves a real stats row - no phantom weapons on the ladder', (): void => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 20 }), fc.boolean(),
+      (rung, igun): void => {
+        const r = Math.min(rung, gunGameClimax(igun));
+        for (const w of gunGameBucket(r, igun)) {
+          expect(WEAPONS[w]).toBeDefined();
+          // A missing row would silently arm defaults via getWeaponStats.
+          expect(Number.isFinite(getWeaponStats(w).directDamage)).toBe(true);
+        }
       },
     ));
   });

@@ -255,7 +255,9 @@ export function hitRadiusAt(weaponType: number | undefined, airtime: number): nu
 
   const s = getWeaponStats(weaponType);
 
-  const t = Math.min(Math.max(airtime / s.hitGrow, 0), 1);
+  // hitGrow 0 = instantly full radius (beams, instant proxies) - the
+  // raw division would turn a 0/0 airtime into NaN and poison the hit.
+  const t = s.hitGrow > 0 ? Math.min(Math.max(airtime / s.hitGrow, 0), 1) : 1;
 
   return s.hitMax * t;
 
