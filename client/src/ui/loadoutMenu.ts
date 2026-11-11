@@ -42,6 +42,15 @@ function dropWidth(options: { label: string }[]): number {
 }
 
 let openDrop: HTMLElement | null = null;
+let kitLocked = false;
+
+/** Locked kits hide most cells - the surviving drops go label-width so
+ *  the bar shrink-wraps them; unlocked keeps the option-list floor. */
+function compactDrops(ui: BarUi): void {
+  for (const d of [ui.beltDrop, ui.skillDrop, ui.perkDrop, ui.classDrop, ui.sidearmDrop, ui.packDrop]) {
+    if (d) {d.el.style.minWidth = kitLocked ? '0px' : `${Number(d.el.dataset.loW ?? 0)}px`;}
+  }
+}
 
 interface BarUi {
   slotDrops: Drop[]; beltDrop: Drop | null; skillDrop: Drop | null;
@@ -273,7 +282,12 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     let options = initialOptions;
     let currentV = '';
     const rebuild = (): void => {
-      el.style.minWidth = `${dropWidth(options)}px`;
+      const w = dropWidth(options);
+      // Width lives on the LIST (it's absolutely positioned, can overflow
+      // the face) - under a kit lock the face shrinks to its label.
+      el.dataset.loW = String(w);
+      el.style.minWidth = kitLocked ? '0px' : `${w}px`;
+      list.style.minWidth = `${w}px`;
       list.innerHTML = '';
       for (const o of options) {
         const it = document.createElement('div');
@@ -361,6 +375,8 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     const insta = player.armory.instagib;
     const gg = player.armory.gunGame;
     const {igun} = player.armory;
+    kitLocked = insta || gg;
+    compactDrops(ui);
     if (ui.armorBox) {ui.armorBox.style.display = (insta || igun) ? 'none' : '';}
     if (ui.weaponBox) {ui.weaponBox.style.display = (insta || gg) ? 'none' : '';}
     if (ui.kitBoxA) {ui.kitBoxA.style.display = (insta || gg) ? 'none' : '';}

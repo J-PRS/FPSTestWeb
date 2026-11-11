@@ -7,7 +7,7 @@ import {
   LG_RANGE, LG_POP_DMG_CAP, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN,
   LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT, LG_CHARGE_DECAY_S, lgBounceDmgScale,
 } from '../../core/config.js';
-import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, IGUN_DIRECT_MULT } from '../../../../shared/weapons.js';
 import { lgTickDamage, LG_TICK_BASE, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
 import { lgTrace, pickChain, _lgHit, _lgO, _lgD } from './lightningTrace.js';
 import type { CombatDeps, FireArgs, ExplosionArgs } from '../combat.js';
@@ -412,7 +412,9 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     if (lg.rampP.size > 32) {
       for (const [id, s] of lg.rampP) {if (nowV - s.t > LG_RAMP_WINDOW_S) {lg.rampP.delete(id);}}
     }
-    const tick = lgTickDamage(nV) * dmgScale;
+    // igun: the beam tick pays the direct law too (x10) - mirrors the
+    // server's beamPay, which reads mods.igun the same way.
+    const tick = lgTickDamage(nV) * dmgScale * (deps.world.igun === true ? IGUN_DIRECT_MULT : 1);
     // Same per-tick number creatures get (zapTarget) — the beam on a
     // player was hitmarker-only, which read as "beam does no damage".
     if (tick >= 1) {deps.lazyDamageNumbers().spawn(_lgHit, tick, '#8fdcff', deps.lazyCamera());}

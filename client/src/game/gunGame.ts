@@ -16,6 +16,9 @@ export function gunRungOf(world: { gunRungs?: Map<string, number> }, id: string)
  *  setGunRung so a bad caller can't push past the climax. */
 export function setGunRung(world: WorldState, id: string, rung: number, apply: (id: string, wt: WeaponType) => void): void {
   const r = Math.max(0, Math.min(gunGameClimax(world.igun === true), Math.floor(rung)));
+  // No edge = no redeal - climax kills replaying the swap re-triggered
+  // the draw + cooldown refund (needsRelease killed the spray).
+  if (gunRungOf(world, id) === r) {return;}
   world.gunRungs.set(id, r);
   // Same deal the server rolls - one bucket member, luck not a pick.
   apply(id, gunGameRoll(r, world.igun === true, simRand()));

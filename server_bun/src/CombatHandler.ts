@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, isInstagibWeapon, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow } from '../../shared/weapons.ts';
+import { serverSimmed, isInstagibWeapon, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow, IGUN_DIRECT_MULT } from '../../shared/weapons.ts';
 import { gunGameAllows } from '../../shared/gunGame.ts';
 import type { RoomMods } from '../../shared/protocol.ts';
 import { idSeed } from '../../shared/weaponTable.ts';
@@ -940,7 +940,10 @@ win.violations += 1;
       const n = this.chargeBank.step(playerId, c.playerId);
       const victim = this.playerManager.getPlayer(c.playerId);
       const scale = c.dmgScale ?? 1;
-      const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * scale;
+      // igun pays the direct law on ticks too - the beam economy is its
+      // own funnel, so the x10 lands here, not in roomDirectDamage.
+      const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * scale
+        * (this.deps.mods?.().igun === true ? IGUN_DIRECT_MULT : 1);
       if (victim && !victim.isDead && !this.friendly(playerId, c.playerId)) {
         this.chargeBank.bank(victim, this.chargeBank.withheldFor(n) * scale);
       }

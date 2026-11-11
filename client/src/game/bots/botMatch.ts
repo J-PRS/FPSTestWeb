@@ -1,4 +1,7 @@
 import { MODES,TEAM_COLORS,TEAM_LABEL,CTF_PTS,CTF_DMG_PER_PTS,CTF_FLAG_ZONE_R,bank,type TeamId,type TeamScores,type ModeId} from '../../../../shared/teams.js';
+import { gunGameRoll, igunChassis } from '../../../../shared/gunGame.js';
+import { WeaponType } from '../../../../shared/weapons.js';
+import { simRand } from '../../../../shared/simRand.js';
 import type { GameBot } from './botBrain.js';
 import type { CtfBridge } from './botCtf.js';
 import type { RabbitBridge } from './botRabbit.js';
@@ -20,7 +23,8 @@ export interface MatchHost {
   conquest?: { reset?(): void } | null;
   conquestWin?: string | null;
   deps: {
-    world: { localTeam?: string; killCounts: Map<string, number>; deathCounts: Map<string, number>; remotePlayers: { rename(oldId: string, newId: string): void } };
+    world: { localTeam?: string; killCounts: Map<string, number>; deathCounts: Map<string, number>; remotePlayers: { rename(oldId: string, newId: string): void }; gungame?: boolean; igun?: boolean; gunRungs?: Map<string, number> };
+    lazyPlayer?(): { armory: { setGunGameRung(rung: number, wt?: number): void } };
     lazyHud(): { setTeamScore?(a: number, b: number): void; scoreboardVisible?: boolean; setScoreboardVisible?(v: boolean): void; setScoreboardCountdown?(secLeft: number | null): void };
   };
   hooks: {
@@ -114,6 +118,22 @@ export function resetMatch(m: MatchHost): void {
   // same wipe the wire onMatchStart does or last match's columns linger.
   m.deps.world.killCounts.clear();
   m.deps.world.deathCounts.clear();
+  // Gun-game: fresh match means fresh ladders - rung 0 + a re-rolled
+  // member for every seat, same deal gunGameReset pushes on the wire.
+  if (m.deps.world.gungame) {
+    const igun = m.deps.world.igun === true;
+    m.deps.world.gunRungs?.set('local', 0);
+    m.deps.lazyPlayer?.().armory.setGunGameRung(0, gunGameRoll(0, igun, simRand()));
+    for (const kb of m.bots) {
+      const wt = gunGameRoll(0, igun, simRand());
+      m.deps.world.gunRungs?.set(kb.playerId, 0);
+      if (kb.loadout) {
+        kb.loadout.near = wt; kb.loadout.mid = wt; kb.loadout.far = wt; kb.loadout.side = wt;
+        kb.loadout.belt = WeaponType.Hook;
+        if (igun) {kb.setBotClass(igunChassis(wt));}
+      }
+    }
+  }
   m.ctf?.reset();
   m.rabbit?.reset();
   m.flagrun?.reset();

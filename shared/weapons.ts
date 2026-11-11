@@ -104,7 +104,7 @@ export function roomDirectDamage(weaponType: number, instagib: boolean, airtime?
 }
 
 export const IGUN_DIRECT_MULT = 10;
-export const IGUN_AOE_MULT = 5;
+export const IGUN_AOE_MULT = 10;
 
 export const REPAIR_RANGE = 14;        // beam reach (m)
 export const REPAIR_HEAL_PER_TICK = 5; // per fire tick → ~50 hp/s at 0.1s rate

@@ -1,0 +1,84 @@
+{
+  "name": "iGunGame FFA",
+  "mode": "dm",
+  "standing": true,
+  "igun": true,
+  "winAt": 50,
+  "timeLimitS": 1800,
+  "ptsPlayerKill": 1,
+  "bots": 0,
+  "botFill": 0,
+  "spawns": [
+    {
+      "x": -110,
+      "y": 0,
+      "z": 0,
+      "r": 34
+    },
+    {
+      "x": 110,
+      "y": 0,
+      "z": 0,
+      "r": 34
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -110,
+      "r": 34
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 110,
+      "r": 34
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": -78,
+      "r": 34
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": -78,
+      "r": 34
+    },
+    {
+      "x": -78,
+      "y": 0,
+      "z": 78,
+      "r": 34
+    },
+    {
+      "x": 78,
+      "y": 0,
+      "z": 78,
+      "r": 34
+    }
+  ],
+  "structures": [],
+  "terrain": "rimrock.bin",
+  "heightScale": 1.2,
+  "terrainPreset": 5,
+  "fog": {
+    "color": [
+      0.78,
+      0.66,
+      0.5
+    ],
+    "distance": 160.0,
+    "visible": 820.0
+  },
+  "atmosphere": {
+    "rayleigh": 1.0,
+    "mie": 2.2,
+    "sunIntensity": 1.05
+  },
+  "weather": {
+    "dust": 1.2
+  },
+  "hidden": true,
+  "_notes": "Standing igunffa-1 - rimrock ruleset, igun ladder (roll-per-rung, chassis follows dealt gun, x10 direct / x5 splash), no bots for now. gungame is implied by igun."
+}

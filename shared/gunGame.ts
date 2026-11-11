@@ -8,12 +8,14 @@
 //     one death away from the bottom.
 // Howitzer is excluded from both - it's a deployment toy, not a gun.
 // Mortar and MRVLauncher are out too - fuse/carrier mechanics, not guns.
-// Bombard (specialty siege slug) and RocketLauncher (retired universal
-// flat rocket) are out as well. igun also drops Railgun - precision is
-// the wrong tax mid-climb - so PlasmaCannon folds into the hose family.
+// Bombard (specialty siege slug), Sticky (remote-detonation mines) and
+// RocketLauncher (retired universal flat rocket) are out as well.
+// igun also drops Railgun - precision is the wrong tax mid-climb - so
+// PlasmaCannon folds into the hose family.
 // Defined in WeaponType space - the wire id both ends already speak.
-// Excluded on purpose: sidearms (hold-out pulls), beams (Lightning/
-// Repair/HealBeam/Shocklance adjudicate outside the projectile path),
+// Excluded on purpose: sidearms (hold-out pulls), beams (Repair/
+// HealBeam/Shocklance adjudicate outside the projectile path - Lightning
+// is the exception, igun fields it as a near-pinnacle hose),
 // melee, and every belt throw / deployable - the ladder IS the kit.
 import { WeaponType } from './weaponTable.ts';
 import { WEAPONS } from './weaponRows.js';
@@ -30,7 +32,7 @@ export const GUN_GAME_LADDER: readonly (readonly WeaponType[])[] = [
   [WeaponType.Disc, WeaponType.FastDiscLauncher],                  // disc, arc vs flat
   [WeaponType.Gonne, WeaponType.Cannon, WeaponType.Basilisk],      // same 80m/s arc shell, L/M/H frames
   [WeaponType.Railgun, WeaponType.PlasmaCannon],                   // precision hits
-  [WeaponType.MissileLauncher, WeaponType.Sticky],                 // big booms
+  [WeaponType.MissileLauncher],                                    // big boom
 ];
 
 /** igun: the same roster climbed backwards - kill-ease ascends. Flat
@@ -38,13 +40,13 @@ export const GUN_GAME_LADDER: readonly (readonly WeaponType[])[] = [
  *  earned the hit); the hose trio is the payoff. */
 export const IGUN_LADDER: readonly (readonly WeaponType[])[] = [
   [WeaponType.FastDiscLauncher, WeaponType.BoltLauncher],   // hardest: flat lead, tiny pop
-  [WeaponType.Sticky],                                      // hard: fuse timing
   [WeaponType.Disc],                                        // arc-bounce reads
   [WeaponType.GrenadeLauncher],                             // mid lob
   [WeaponType.Gonne, WeaponType.Cannon, WeaponType.Basilisk], // arc family: same shell, frame is luck
   [WeaponType.MissileLauncher],                             // big boom, low RoF brakes the flow
   [WeaponType.PlasmaGun, WeaponType.Sprinkler, WeaponType.PlasmaCannon], // plasma family - rapid bolts humans track well
   [WeaponType.Flak, WeaponType.Shotgun],                    // very easy: coverage
+  [WeaponType.Lightning],                                   // hitscan beam - almost free kills
   [WeaponType.Chaingun],                                    // pinnacle: hold trigger, spray wins
 ];
 

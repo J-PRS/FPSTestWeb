@@ -182,13 +182,18 @@ export class RoomFactory {
         (Math.random() * 0x1_00_00_00_00) >>> 0, needsAttach);
       // The ctor already seeded populations (mods default empty) — the
       // gates apply post-ctor and on later applySpec reloads.
+      // Spec-declared modifiers fold in with the join-spec ones - that's
+      // how a `standing` map mints an igun/gungame room, since its mint
+      // path (standingRooms -> roomFor(name)) carries no join spec.
+      const gg = gungame || spec?.gungame === true || spec?.igun === true;
+      const ig = gg && (igun || spec?.igun === true);
       room.mods = {};
       if (unlisted) {room.mods.unlisted = true;}
       if (noCreatures) {room.mods.noCreatures = true;}
       if (noBalls) {room.mods.noBalls = true;}
       if (instagib) {room.mods.instagib = true;}
-      if (gungame) {room.mods.gungame = true;}
-      if (igun) {room.mods.igun = true;}
+      if (gg) {room.mods.gungame = true;}
+      if (ig) {room.mods.igun = true;}
       if (noCreatures) {room.creatureSim.pops = {};}
       if (noBalls) {room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
       room.sessions = this.host.sessions;

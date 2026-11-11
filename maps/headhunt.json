@@ -4,6 +4,7 @@
   "standing": true,
   "bots": 10,
   "botFill": 12,
+  "botSkill": "impossible",
   "spawns": [
     {
       "x": -110,

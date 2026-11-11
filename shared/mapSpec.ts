@@ -111,6 +111,17 @@ export interface MapSpec {
   /** Standing lobby: the room mints at boot and never disposes for
    *  emptiness - always joinable, hibernates while nobody's in it. */
   standing?: boolean;
+  /** Spec-minted room modifiers - standing rooms carry them since their
+   *  mint path takes no join spec. igun implies gungame. */
+  gungame?: boolean;
+  igun?: boolean;
+  /** Per-spec match tuning - igun rooms want a longer climb than dm's
+   *  100-pt/10-min contract. Undefined = the mode's own numbers. */
+  winAt?: number;
+  timeLimitS?: number;
+  /** Points per player frag - dm pays 10, which makes "score" a disguised
+   *  frag count. Set 1 to make scoreboard points read as frags. */
+  ptsPlayerKill?: number;
   /** Difficulty band for spawned bots - one tier for the whole lobby, or
    *  {alpha,bravo} to handicap sides differently. Per-bot variance rolls
    *  around the band, so a team's bots aren't clones. */
@@ -696,6 +707,12 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     botFill: clampInt((src as { botFill?: unknown }).botFill, 0, 24, 0, 'botFill') || undefined,
     maxPlayers: clampInt((src as { maxPlayers?: unknown }).maxPlayers, 1, 64, 0, 'maxPlayers') || undefined,
     standing: (src as { standing?: unknown }).standing === true ? true : undefined,
+    gungame: (src as { gungame?: unknown }).gungame === true ? true : undefined,
+    igun: (src as { igun?: unknown }).igun === true ? true : undefined,
+    winAt: clampInt((src as { winAt?: unknown }).winAt, 1, 9999, 0, 'winAt') || undefined,
+    timeLimitS: clampInt((src as { timeLimitS?: unknown }).timeLimitS, 30, 14_400, 0, 'timeLimitS') || undefined,
+    ptsPlayerKill: clampInt((src as { ptsPlayerKill?: unknown }).ptsPlayerKill, 0, 999, -1, 'ptsPlayerKill') >= 0
+      ? clampInt((src as { ptsPlayerKill?: unknown }).ptsPlayerKill, 0, 999, -1, 'ptsPlayerKill') : undefined,
     botSkill: parseBotSkill((src as { botSkill?: unknown }).botSkill),
     ballMix: parseBallMix((src as { ballMix?: unknown }).ballMix),
     // filename-only - the value is resolved under maps/ server-side, so
