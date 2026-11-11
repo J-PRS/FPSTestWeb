@@ -216,11 +216,12 @@ describe('shared sim properties', (): void => {
     fc.assert(fc.property(
       wt,
       (w): void => {
-        const base = roomDirectDamage(w, false, undefined, false);
-        expect(roomDirectDamage(w, false, undefined, true)).toBeCloseTo(base * IGUN_DIRECT_MULT, 5);
+        const wn = w ?? -1;
+        const base = roomDirectDamage(wn, false, undefined, false);
+        expect(roomDirectDamage(wn, false, undefined, true)).toBeCloseTo(base * IGUN_DIRECT_MULT, 5);
         // instagib is a Railgun-only override - every other weapon is untouched.
-        if (w !== WeaponType.Railgun) {
-          expect(roomDirectDamage(w, true)).toBe(base);
+        if (wn !== WeaponType.Railgun) {
+          expect(roomDirectDamage(wn, true)).toBe(base);
         }
       },
     ));
