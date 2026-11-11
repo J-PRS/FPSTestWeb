@@ -50,9 +50,7 @@ describe('RoomProjectiles', () => {
     target.position = { x: 20, y: EYE, z: 0 };
     room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 12 && target.health === target.maxHealth; i++) {
-      room.projectiles.tick(0.05);
-    }
+    for (let i = 0; i < 12; i += 1) {room.projectiles.tick(0.05);}
     expect(mate.health).toBe(mate.maxHealth); // teammate unharmed
     expect(target.health).toBeLessThan(target.maxHealth); // enemy still hit
   });
@@ -147,6 +145,21 @@ describe('RoomProjectiles', () => {
     }
     expect(target.health).toBeLessThan(target.maxHealth);
     expect(flewTicks).toBeGreaterThan(2); // actually flew, not instant pop
+  });
+
+  it('MRV carrier bounces off terrain instead of phasing or popping', () => {
+    const { room, shooter } = arena();
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    // Straight down at the dirt: a fuseOnly+terrainBounce carrier must
+    // survive first contact and keep flying until the ~1.5s fuse -
+    // the pass-through/pop bug made it vanish on the surface.
+    const {projs} = (room.projectiles as unknown as { projs: Map<string, unknown> });
+    room.projectiles.spawn(shooter.id, WeaponType.MRVLauncher,
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0.3, y: -0.95, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 8; i++) {room.projectiles.tick(0.05);} // 0.4s - well past first contact
+    expect(projs.size).toBeGreaterThan(0); // still cooking after touching dirt
+    for (let i = 0; i < 40 && projs.size > 0; i++) {room.projectiles.tick(0.05);}
+    expect(projs.size).toBe(0); // fuse ends it, eventually
   });
 
   it('a slow-moving player closing in still gets hit', () => {

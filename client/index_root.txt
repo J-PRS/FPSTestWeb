@@ -18,10 +18,11 @@ package-lock.json
 package.json
 posedump.html
 public
-reports
 src
+stryker.conf.mjs
 stryker.config.mjs
 tools
 tsconfig.json
 vite.config.js
 vitest.config.ts
+vmdump.html
