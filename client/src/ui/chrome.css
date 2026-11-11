@@ -387,8 +387,12 @@ body.menu-open #frag-msg { display: none !important; }
   align-items: stretch;
   gap: 10px; padding: 12px 18px;
   /* Fill the sheet edge-to-edge — same contract as the settings rows:
-     every group/cell/chip stretches instead of shrink-wrapping text. */
-  width: min(96vw, 900px);
+     every group/cell/chip stretches instead of shrink-wrapping text.
+     fit-content + cap: kit-locked variants (instagib/igun hide most
+     cells) collapse to just the live controls instead of a 900px bar
+     holding two cells. */
+  width: fit-content;
+  max-width: min(96vw, 900px);
   background: var(--ui-bg-sheet);
   border: 1px solid rgb(var(--ui-white-rgb) / 0.10);
   border-radius: var(--ui-r-lg);

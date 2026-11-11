@@ -28,6 +28,7 @@ export interface StatsHost {
   armor: HTMLSpanElement;
   armorBar: HTMLDivElement;
   buffsRow: HTMLDivElement;
+  weaponBar?: HTMLDivElement;
   weaponSlots: HTMLSpanElement[];
   healthBar: HTMLDivElement;
   energyBar: HTMLDivElement;
@@ -133,12 +134,18 @@ export class HudStats {
 
   // Slots are loadout-driven: labels + highlight re-render only on change.
   private tickWeaponSlots(player: Player): void {
-    const loadoutKey = `${player.loadout.join(',')}|${player.weaponIndex}`;
+    const locked = player.armory?.kitLocked === true;
+    const loadoutKey = `${player.loadout.join(',')}|${player.weaponIndex}|${locked ? 1 : 0}`;
     if (loadoutKey === this.lastWeapon) {return;}
     this.lastWeapon = loadoutKey;
+    // Kit locks shoulder one gun - the whole selector row hides; the
+    // single weapon still names itself through the ammo readout.
+    if (this.h.weaponBar) {this.h.weaponBar.style.display = locked ? 'none' : '';}
+    if (locked) {return;}
     player.loadout.forEach((wid, i): void => {
       const s = this.h.weaponSlots[i];
       if (!s) {return;}
+      s.style.display = '';
       s.textContent = `${i + 1} ${HudStats.WEAPON_SHORT[wid] ?? '?'}`;
       s.classList.toggle('active', i === player.weaponIndex);
     });
@@ -167,8 +174,12 @@ export class HudStats {
     // Show only while a round is actually accruing - unlimited pools
     // and full drums get no track at all (an empty sliver parked under
     // every weapon reads as UI cruft).
-    const cap = wid === undefined ? 0 : (getWeaponStats(weaponDef(wid).weaponType).ammoCap ?? 0);
-    const accruing = banked !== undefined && banked < cap;
+    const st = wid === undefined ? undefined : getWeaponStats(weaponDef(wid).weaponType);
+    const cap = st?.ammoCap ?? 0;
+    // Only slow-charge pools earn the sliver - a Howitzer's 6s round
+    // needs the countdown, a plasma gun's sub-second trickle is noise.
+    const regenS = (st?.fireInterval ?? 0.5) * (st?.ammoRegenMult ?? 1);
+    const accruing = banked !== undefined && banked < cap && regenS >= 2;
     (regen.parentElement as HTMLElement).style.display = accruing ? '' : 'none';
     const frac = accruing ? banked! % 1 : 0;
     const pct = `${(frac * 100).toFixed(0)}%`;
