@@ -220,6 +220,29 @@ proved these are unit-testable — a fault-injection soak is the
 system-level version and shares the same "designed recovery, broken
 detector" bug class.
 
+## Execution plan (next few hours, ranked by value-per-hour)
+
+1. **impact.ts bomblet scatter via seeded-simRand PBT** (~30-45 min) -
+   the only 95%-uncovered file left with a statistical shape worth
+   pinning: sphere-direction uniformity (mean/variance), speed band,
+   velocity inheritance. fast-check + seeded simRand, not unit pins.
+   Remaining remoteInterp no-cov surface: pin only interp-buffer
+   pruning + reseat edges, skip unreachable paths.
+2. **Differential replay harness** (~60-90 min) - the codebase's
+   dominant bug class (client-vs-server parity) as a CI assertion:
+   scripted MoveInput stream through client MovementController AND
+   RoomMoveSim on the same MoveSurface, asserting pos/vel/onGround
+   identical per tick; extend to RoomProjectiles vs Projectile for
+   shell parity. Coverage via real sims instead of per-file mocks.
+3. **invEq lattice** (~30 min) - energy pool, belt charges, ammo pool,
+   gunGameAllows consistency - one line per formula site.
+4. **Wrap** (~15 min) - update this doc's landed/remaining status,
+   check.sh gate on the batch, changelog.txt entry.
+
+Deferred: whole-repo Stryker, E2E soak (proves integration not
+properties), server-side Stryker (unofficial bun runner immature),
+impact.ts bulk surface (statistical - PBT not unit tests).
+
 ## Provenance
 
 - Mutation score 46.3% → **47.5%** after pinning occlusion +
