@@ -203,6 +203,15 @@ describe('shared sim properties', (): void => {
     ));
   });
 
+  it('every WEAPONS row has finite damage/radius fields - the whole table, not just the ladder', (): void => {
+    for (const [key, w] of Object.entries(WEAPONS)) {
+      expect(Number.isFinite(w.directDamage), `wt ${key} directDamage`).toBe(true);
+      expect(Number.isFinite(w.aoeDamage), `wt ${key} aoeDamage`).toBe(true);
+      expect(Number.isFinite(w.hitMax), `wt ${key} hitMax`).toBe(true);
+      expect(Number.isFinite(w.hitGrow), `wt ${key} hitGrow`).toBe(true);
+    }
+  });
+
   it('igun pays exactly xIGUN_DIRECT_MULT on every weapon and instagib only touches the Railgun', (): void => {
     fc.assert(fc.property(
       wt,
