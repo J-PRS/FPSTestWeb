@@ -37,6 +37,26 @@ describe('RoomProjectiles', () => {
     expect(target.health).toBeLessThan(target.maxHealth);
   });
 
+  it('a teammate between shooter and target does not eat the bolt', () => {
+    const { room, shooter, target } = arena();
+    // Same-team body in the flight path: friendly damage is refused
+    // anyway, so a block would just swallow the shell.
+    shooter.team = 'alpha';
+    const mate = room.players.addPlayer('mate');
+    mate.team = 'alpha';
+    target.team = 'bravo';
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    mate.position = { x: 10, y: EYE, z: 0 };
+    target.position = { x: 20, y: EYE, z: 0 };
+    room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 12 && target.health === target.maxHealth; i++) {
+      room.projectiles.tick(0.05);
+    }
+    expect(mate.health).toBe(mate.maxHealth); // teammate unharmed
+    expect(target.health).toBeLessThan(target.maxHealth); // enemy still hit
+  });
+
   it('a bolt over a target\'s head whiffs - no fake damage', () => {
     const { room, shooter, target } = arena();
     shooter.position = { x: 0, y: EYE, z: 0 };
