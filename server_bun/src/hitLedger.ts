@@ -56,6 +56,10 @@ export class HitLedger {
     // The kill path stays: killed=true means the victim was alive when
     // the damage landed.
     if (!result.killed && c.playerManager.getPlayer(targetId)?.isDead) {c.hb('drop.deadVictim'); return;}
+    // Zero-damage resolves (soaked, immune, out-of-band splashes) must
+    // not emit playerHit - every client reads the edge as a white-pop
+    // flinch on the victim, so a null hit lies about contact.
+    if (damage <= 0) {c.hb('drop.zeroDamage'); return;}
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) {c.hb('kill');}

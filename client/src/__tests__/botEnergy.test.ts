@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { applyStatus, dropSkill, fuelTick } from '../game/bots/botEnergy.js';
+import { GameBot } from '../game/bots/botBrain.js';
+import * as THREE from 'three';
 import { ENERGY } from '../../../shared/movement.js';
 import { STATUS } from '../../../shared/status.js';
-import type { GameBot } from '../game/bots/botBrain.js';
+import { perkMods } from '../../../shared/perks.js';
 
 const mkBot = (energy = 100): GameBot => ({
   status: 0,
@@ -116,5 +118,61 @@ describe('fuelTick', (): void => {
     b.status = STATUS.SHIELD;
     fuelTick(b, 1, false);
     expect(b.energy).toBe(50); // channel competes for the tank, never fills it
+  });
+});
+
+describe('takeDamageLocal - zero damage gate', (): void => {
+  it('a soaked-to-nothing splash returns false, moves no hp, and never flinches', (): void => {
+    // Prototype-borrow (botFire.ts pattern): takeDamageLocal only reads
+    // isDead/mods/status/energy/botHp and writes botHp/brain/flinch on
+    // the real-damage path - the zero branch must touch none of them.
+    const flinch = vi.fn();
+    const takeHit = vi.fn();
+    const bot = {
+      isDead: false,
+      botHp: 100, botMaxHp: 100,
+      status: 0, energy: 0,
+      mods: perkMods('none'),
+      brain: { takeHit },
+      flinch,
+      lastHitAt: 0,
+    } as unknown as GameBot;
+    expect(GameBot.prototype.takeDamageLocal.call(bot, 0, new THREE.Vector3())).toBe(false);
+    expect(bot.botHp).toBe(100);
+    expect(flinch).not.toHaveBeenCalled();
+    expect(takeHit).not.toHaveBeenCalled();
+  });
+
+  it('a shield that soaks the whole hit flinches nothing either', (): void => {
+    const flinch = vi.fn();
+    const bot = {
+      isDead: false,
+      botHp: 100, botMaxHp: 100,
+      status: STATUS.SHIELD, energy: 100, energyCap: 100,
+      mods: perkMods('none'),
+      brain: { takeHit: vi.fn() },
+      flinch,
+      dropSkill: vi.fn(),
+      lastHitAt: 0,
+    } as unknown as GameBot;
+    expect(GameBot.prototype.takeDamageLocal.call(bot, 10, new THREE.Vector3())).toBe(false);
+    expect(bot.botHp).toBe(100);
+    expect(flinch).not.toHaveBeenCalled();
+  });
+
+  it('real damage still flinches (the gate is not a blanket drop)', (): void => {
+    const flinch = vi.fn();
+    const bot = {
+      isDead: false,
+      botHp: 100, botMaxHp: 100,
+      status: 0, energy: 0,
+      mods: perkMods('none'),
+      brain: { takeHit: vi.fn() },
+      flinch,
+      lastHitAt: 0,
+    } as unknown as GameBot;
+    GameBot.prototype.takeDamageLocal.call(bot, 25, new THREE.Vector3());
+    expect(bot.botHp).toBeLessThan(100);
+    expect(flinch).toHaveBeenCalled();
   });
 });

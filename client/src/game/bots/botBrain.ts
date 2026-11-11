@@ -524,6 +524,10 @@ export class GameBot extends RemotePlayer {
 
     }
 
+    // Soaked to nothing - no hp moved, no flinch. A zero-damage splash
+    // that still white-pops the model lies about contact to the player.
+    if (d <= 0) {return false;}
+
     this.botHp -= d;
     this.lastHitAt = performance.now(); // HELD_BUFF grace - no hoard drip while under fire
 
