@@ -80,8 +80,10 @@ export class SheepMeter {
     // reach the warn channel (same gate the server meter uses).
     if (v.newlyMaxed && isBotId(bot.playerId)) {
       const w = v.why;
+      // dest/foe/busy state at warn-time separates "legal parked hold"
+      // (atPost, no foe) from "brain dead under fire" (idle + bleed).
       this.h.warn(
-        `bot ${bot.playerId} maxed sheep (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)}) at (${bot.pos.x.toFixed(0)},${bot.pos.y.toFixed(0)},${bot.pos.z.toFixed(0)})`);
+        `bot ${bot.playerId} maxed sheep (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)} dest=${s.hasDest ? 'y' : 'n'} foe=${s.foe ? 'y' : 'n'} busy=${s.busy ? 'y' : 'n'}) at (${bot.pos.x.toFixed(0)},${bot.pos.y.toFixed(0)},${bot.pos.z.toFixed(0)})`);
     }
   }
 }
