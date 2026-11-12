@@ -11,6 +11,9 @@ export const TP_FOCUS = 180;  // camera converges on the aim point at this range
 import type { Terrain } from '../world/terrain.js';
 
 const _obTarget = new THREE.Vector3(); // observer drift target — scratch
+const _fmQuat = new THREE.Quaternion();
+const _fmFlat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+const _fmUp = new THREE.Vector3(0, 1, 0);
 
 // Camera paths: first/third-person boom, frozen (demo playback), and the
 // T1/T2 observer free-fly rig — plus the feet gizmo that shares their
@@ -87,6 +90,11 @@ export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, 
 export function updateFeetMarker(v: PlayerVisuals, terrain: Terrain, pos: THREE.Vector3, feetY = pos.y, speed = 0, skiing = false): void {
     const groundY = Math.max(terrain.getHeight(pos.x, pos.z), terrain.getRenderedHeight(pos.x, pos.z));
     v.groundGizmo.position.set(pos.x, groundY + 0.05, pos.z);
+    // Tilt to the terrain normal — a flat ring's 0.7m span digs into any
+    // slope the +0.05 lift can't outrun. Hugging the chord keeps depth
+    // test on, so walls/bodies still occlude (no x-ray ring).
+    _fmQuat.setFromUnitVectors(_fmUp, terrain.getNormal(pos.x, pos.z)).multiply(_fmFlat);
+    v.groundGizmo.quaternion.copy(_fmQuat);
     (v.groundGizmo.material as THREE.MeshBasicMaterial).color.setHex(
       ASW_HEX[aswBucket(feetY - groundY, speed, skiing)]);
   }

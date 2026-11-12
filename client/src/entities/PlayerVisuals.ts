@@ -75,13 +75,15 @@ export class PlayerVisuals {
 
     // Feet marker — soft glowing ring flat on the terrain (reads nicer than a wireframe sphere)
     const gizmoGeo = new THREE.RingGeometry(0.28, 0.36, 32);
-    // depthTest off - the ring hugs the heightfield but the rendered
-    // terrain chord rides ~0.1-0.3m above it on slopes, which clipped the
-    // marker into the hillside. It's a debug decal; draw it on top.
-    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x66_FF_CC, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, depthTest: false });
+    // depthTest ON — the pin rides getRenderedHeight (the real mesh
+    // chord) now, so depthTest:false only made it paint through walls and
+    // players. polygonOffset buys the same slope-edge slack the shadow
+    // blob gets, where the ring's span outruns the +0.05 lift.
+    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x66_FF_CC, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, depthTest: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     this.groundGizmo = new THREE.Mesh(gizmoGeo, gizmoMat);
     this.groundGizmo.rotation.x = -Math.PI / 2;
-    this.groundGizmo.renderOrder = 999;
+    // Same slot as the shadow blob — after terrain, before overlays.
+    this.groundGizmo.renderOrder = 0;
     scene.add(this.groundGizmo);
   }
 
