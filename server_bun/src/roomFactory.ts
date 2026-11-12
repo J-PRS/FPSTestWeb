@@ -223,7 +223,10 @@ export class RoomFactory {
     } else if ((room.mods.noBalls === true) !== noBalls || (room.mods.noCreatures === true) !== noCreatures
         || (room.mods.instagib === true) !== instagib
         || (room.mods.gungame === true) !== gungame || (room.mods.igun === true) !== igun) {
-      if (room.players.getHumanCount() === 0) {
+      // Standing rooms are operator-authored — a bare join request
+      // (mods={}) must not wipe spec-declared gates like igun/gungame
+      // that the mint path folded in.
+      if (!room.standing && room.players.getHumanCount() === 0) {
         // No human contradicts the joiner's gates — a bot-only room just
         // adopts them instead of warning. Same post-ctor gate writes the
         // mint path runs, plus culling the populations already alive.
