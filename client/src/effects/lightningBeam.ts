@@ -288,12 +288,18 @@ export class LightningBeam {
   }
   private writeRibbonPts(mesh: THREE.Mesh, pts: THREE.Vector3[], halfW: number): void {
     const verts = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    // Short-beam tail taper: below ~6m the bolt is a stub and the fat
+    // termination reads wider than the muzzle - pinch the tail toward a
+    // point. Past ~6m the full width applies (normal usage unchanged).
+    const beamLen = pts[SEGS]!.distanceTo(pts[0]!);
+    const tail = Math.min(1, beamLen / 6);
     for (let i = 0; i <= SEGS; i += 1) {
       const p = pts[i]!;
       const dCam = (
         (p.x - this.camPos.x) ** 2 + (p.y - this.camPos.y) ** 2 + (p.z - this.camPos.z) ** 2
       ) ** 0.5;
-      const w = halfW * Math.min(1, Math.max(0.45, dCam / 2));
+      const t = i / SEGS;
+      const w = halfW * Math.min(1, Math.max(0.45, dCam / 2)) * (0.15 + 0.85 * Math.min(1, tail + (1 - tail) * Math.max(0, 1 - t * 1.6)));
       const prev = pts[Math.max(0, i - 1)]!;
       const next = pts[Math.min(SEGS, i + 1)]!;
       _segDir.copy(next).sub(prev).normalize();
