@@ -253,7 +253,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to - set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; instagib?: boolean; gungame?: boolean; igun?: boolean; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind; val?: number; vel?: Vec3 }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string>; udp?: { token: string; port: number } }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; instagib?: boolean; gungame?: boolean; igun?: boolean; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind; val?: number; vel?: Vec3 }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string>; udp?: { token: string; port: number }; serverVersion?: string; serverBuild?: string | null }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: string; armorClass?: string;
       /** Chosen display name (cosmetic - ids are still the identity). */
       name?: string;
@@ -263,7 +263,10 @@ export type ServerMessage =
       health?: number; isDead?: boolean;
       /** Server-known current weapon - remotes draw the real gun before
        *  the first shot edge. Bot loadouts announce it at join. */
-      weapon?: number }
+      weapon?: number;
+      /** Server-declared stale feed - a joiner who is already stale
+       *  announces the ghost, not a fresh body. */
+      stale?: boolean }
   | { type: 'playerLeft'; playerId: string }
   /** u16 wire-id roster for v3 tick frames - arrives on this reliable
    *  lane before any binary frame can reference the ids it adds. */

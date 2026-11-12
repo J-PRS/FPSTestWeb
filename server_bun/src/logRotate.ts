@@ -12,6 +12,9 @@ const MID_RUN_ROLL_BYTES = 32 * 1024 * 1024;
 // Archive cap — rotation bounds the live file but OLD/ grew unbounded,
 // so a spamming appender still filled the disk through the roll itself.
 const OLD_KEEP = 16;
+// Time cap on top of the count cap — a low-volume server keeps 16
+// archives forever otherwise; a week's tail is the forensic window.
+const OLD_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 
 const p2 = (n: number): string => String(n).padStart(2, '0');
 const logStamp = (t: Date): string =>
@@ -25,7 +28,9 @@ function pruneOld(oldDir: string): void {
       .map((f): string => join(oldDir, f))
       .filter((p): boolean => statSync(p).isFile())
       .toSorted((a, b): number => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    const cutoff = Date.now() - OLD_MAX_AGE_MS;
     for (const p of files.slice(OLD_KEEP)) {unlinkSync(p);}
+    for (const p of files.slice(0, OLD_KEEP)) {if (statSync(p).mtimeMs < cutoff) {unlinkSync(p);}}
   } catch { /* pruning is best-effort like rotation itself */ }
 }
 

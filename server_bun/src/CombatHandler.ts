@@ -419,6 +419,13 @@ w.n += 1;
    *  checks) so a forged claim can't paint shots from arbitrary points;
    *  dir stays cosmetic - observers only use it to aim a beam flash. */
   handleShotFired(playerId: string, msg: ShotMsg): void {
+    // Bloom bookkeeping consumes ONE seed per unique claim: the client
+    // grows its predicted cone per pull whether the intent is accepted
+    // or refused, so a reject that skipped the counter desynced every
+    // later shot's jitter (the parity-dmg-echo class). Deduped replay
+    // claims already paid their seed on first arrival.
+    const pre = this.playerManager.getPlayer(playerId);
+    if (pre && !this.shotDup(playerId, msg.shotId, wallNow())) {this.bloomTick(pre, msg, wallNow());}
     const admit = this.shotAdmit(playerId, msg);
     if (admit === null) {return;}
     const { player, now, dir, fireProjectile } = admit;
@@ -692,7 +699,7 @@ win.violations += 1;
       this.deps.emit?.({ type: 'impulse', playerId,
         dv: { x: -base.x * recoil, y: -base.y * recoil, z: -base.z * recoil }, fallBoost: 3 });
     }
-    const ndir = this.bloomAim(playerId, player, msg, base, now);
+    const ndir = this.bloomAim(playerId, msg, base);
     const ownerVel = this.ownerVelOf(player, msg);
     // Back-date the shell's age by the MEASURED uplink transit - the
     // EMA fed by pongs + bounded claim samples, not this claim's stamp
@@ -761,21 +768,32 @@ win.violations += 1;
    *  dir - we draw the seeded cone its predicted shell used, so a
    *  forged "center" claim still lands inside the same scatter.
    *  No shotId = no shared seed = no cone (old clients, relays). */
-  private bloomAim(playerId: string, player: PlayerState, msg: ShotMsg, base: Vec3, now: number): Vec3 {
-    const bs = bloomRadius(player.bloom, player.bloomAt, msg.weaponType ?? -1, now / 1000);
+  private bloomAim(playerId: string, msg: ShotMsg, base: Vec3): Vec3 {
+    const pre = this.bloomPre.get(msg);
     let ndir = base;
-    if (bs.radius > 0) {
+    if (pre && pre.radius > 0) {
       // Server-side sequence seed, NOT the claimed shotId - a client
       // that brute-forces favorable seeds gains nothing (the CSGO
       // random_seed hole). It predicts the same counter per pull.
-      const seq = player.bloomSeq;
-      player.bloomSeq += 1;
-      const [u1, u2] = jitter01(idSeed(playerId) ^ seq);
-      ndir = coneDir(base, u1 * Math.PI * 2, Math.sqrt(u2) * bs.radius);
+      const [u1, u2] = jitter01(idSeed(playerId) ^ pre.seq);
+      ndir = coneDir(base, u1 * Math.PI * 2, Math.sqrt(u2) * pre.radius);
     }
-    player.bloom = bloomGrow(bs.bloom, msg.weaponType ?? -1);
-    player.bloomAt = now / 1000;
     return ndir;
+  }
+
+  /** Per-claim bloom bookkeeping: radius/seed stashed for bloomAim,
+   *  the cone itself decayed→grown→stamped exactly like the client's
+   *  per-pull prediction. Runs once per unique shot claim. */
+  private readonly bloomPre = new WeakMap<ShotMsg, { radius: number; seq: number }>();
+  private bloomTick(player: PlayerState, msg: ShotMsg, now: number): void {
+    if (msg.weaponType === undefined) {return;}
+    const st = getWeaponStats(msg.weaponType);
+    if (!(st.bloomMax || st.spreadBase)) {return;}
+    const bs = bloomRadius(player.bloom, player.bloomAt, msg.weaponType, now / 1000);
+    this.bloomPre.set(msg, { radius: bs.radius, seq: player.bloomSeq });
+    player.bloomSeq += 1;
+    player.bloom = bloomGrow(bs.bloom, msg.weaponType);
+    player.bloomAt = now / 1000;
   }
 
   /** Velocity inherit: the predicted shell draws playerVel*0.5 - using

@@ -7,6 +7,7 @@ import type { KillFeed } from './killFeed.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
+import { SERVER_VERSION, SERVER_BUILD } from './version.ts';
 import type { RoomMods } from '../../shared/protocol.ts';
 import { CONFIG } from './config.ts';
 import { WIRE } from './wire.ts';
@@ -682,7 +683,7 @@ export class MessageHandler {
     playersData: GameStatePlayer[],
     extras?: Record<string, unknown>,
   ): void {
-    this.sendToPlayer(playerId, Object.assign({players: playersData,protocolVersion: PROTOCOL_VERSION}, this.roomEcho(), extras, {type: 'gameState' as const}));
+    this.sendToPlayer(playerId, Object.assign({players: playersData,protocolVersion: PROTOCOL_VERSION,serverVersion: SERVER_VERSION,serverBuild: SERVER_BUILD}, this.roomEcho(), extras, {type: 'gameState' as const}));
   }
 
   /** Broadcast the playerJoined announce once — gates on the flag so a
@@ -711,6 +712,7 @@ export class MessageHandler {
       weapon: player.weapon,
       health: player.health,
       isDead: player.isDead,
+      stale: player.stale || undefined,
     }) as ServerMessage, player.id);
   }
 

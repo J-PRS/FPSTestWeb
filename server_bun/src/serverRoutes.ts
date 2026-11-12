@@ -8,7 +8,10 @@
  */
 import { parse as parseToml } from 'smol-toml';
 import { timingSafeEqual, createHash } from 'node:crypto';
+import { openSync, fstatSync, readSync, closeSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { CONFIG } from './config.ts';
+import { LOGS_DIR } from './clientLogs.ts';
 import { windowAllow } from './windowLimit.ts';
 import type { GameServer } from './GameServer.ts';
 import type { DemoStorage } from './DemoStorage.ts';
@@ -211,6 +214,8 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
 //   POST /admin/end?room=X      force-end the match (leader wins)
 //   POST /admin/heapdump        write a JSC heapsnapshot to _heapdumps/
 //   GET  /admin/rooms           detailed live dump
+//   GET  /admin/logtail?file=X&lines=N&old=1  tail a logs/ file
+//   GET  /admin/logtail?list=1               available log files + sizes
 export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Promise<Response> {
   const want = CONFIG.adminToken;
   if (!want) {return corsResponse('admin disabled (FPS_ADMIN_TOKEN unset)', { status: 403 });}
@@ -219,6 +224,9 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Pro
 
   if (url.pathname === '/admin/rooms' && req.method === 'GET') {
     return json(ctx.gameServer.listRooms(true));
+  }
+  if (url.pathname === '/admin/logtail' && req.method === 'GET') {
+    return logTail(url);
   }
   if (req.method !== 'POST') {return corsResponse('POST only', { status: 405 });}
 
@@ -275,6 +283,43 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Pro
     },
   };
   return ADMIN_ACTIONS[url.pathname]?.() ?? corsResponse('Unknown admin route', { status: 404 });
+}
+
+// Remote log forensics — client_warn/error.log tails without an ssh hop.
+// Basename-only allowlist keeps the read inside logs/ (+OLD/ archives);
+// the tail reads the last 1MB so a 32MB pre-roll file never loads whole.
+const LOG_TAIL_MAX_LINES = 2000;
+const LOG_TAIL_CHUNK = 1024 * 1024;
+const LOG_FILE_RE = /^[\w.-]+\.(log|jsonl)$/;
+function logTail(url: URL): Response {
+  if (url.searchParams.get('list') === '1') {
+    const list = (dir: string, old: boolean): { file: string; bytes: number; mtime: string; old: boolean }[] => {
+      try {
+        return readdirSync(dir)
+          .filter((f) => LOG_FILE_RE.test(f))
+          .map((f) => {
+            const st = statSync(join(dir, f));
+            return { file: f, bytes: st.size, mtime: new Date(st.mtimeMs).toISOString(), old };
+          });
+      } catch {return [];}
+    };
+    return json({ files: [...list(LOGS_DIR, false), ...list(join(LOGS_DIR, 'OLD'), true)] });
+  }
+  const file = url.searchParams.get('file') ?? 'client_error.log';
+  if (!LOG_FILE_RE.test(file)) {return corsResponse('bad file', { status: 400 });}
+  const p = join(url.searchParams.get('old') === '1' ? join(LOGS_DIR, 'OLD') : LOGS_DIR, basename(file));
+  if (!existsSync(p)) {return corsResponse('not found', { status: 404 });}
+  const n = Math.min(LOG_TAIL_MAX_LINES, Math.max(1, Number(url.searchParams.get('lines')) || 200));
+  try {
+    const fd = openSync(p, 'r');
+    try {
+      const {size} = fstatSync(fd);
+      const chunk = Buffer.alloc(Math.min(size, LOG_TAIL_CHUNK));
+      readSync(fd, chunk, 0, chunk.length, size - chunk.length);
+      const lines = chunk.toString('utf8').split('\n').filter((l) => l.length > 0);
+      return corsResponse(lines.slice(-n).join('\n'), { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    } finally {closeSync(fd);}
+  } catch {return corsResponse('read failed', { status: 500 });}
 }
 
 // Demo endpoints: POST /demos/upload, GET /demos/:filename.

@@ -223,7 +223,7 @@ describe('world model <-> protocol conformance', () => {
       .toEqual(new Set([
         'internalId', 'name', 'position', 'rotation', 'velocity', 'isDead',
         'health', 'ping', 'ski', 'jet', 'status', 'team', 'transport', 'armorClass', 'sheep', 'held',
-        'weapon',
+        'weapon', 'stale',
       ]));
   });
 

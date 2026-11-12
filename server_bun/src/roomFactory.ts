@@ -250,7 +250,10 @@ export class RoomFactory {
         // First joiner defines the sim gates — callers warn their joiner.
         logger.warn('Join sim gates differ from room', {
           room: name, wantNoBalls: noBalls, wantNoCreatures: noCreatures,
+          wantInstagib: instagib, wantGungame: gungame, wantIgun: igun,
           roomNoBalls: room.mods.noBalls === true, roomNoCreatures: room.mods.noCreatures === true,
+          roomInstagib: room.mods.instagib === true, roomGungame: room.mods.gungame === true, roomIgun: room.mods.igun === true,
+          standing: room.standing === true,
         });
       }
     }
