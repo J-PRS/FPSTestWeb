@@ -52,7 +52,10 @@ export class BotWatchdog {
   }
 
   step(dt: number, bots: Iterable<WatchBot>): void {
-    this.t += dt;
+    // A hidden-tab stall lands as one giant frame — counting it as its
+    // real span closes travel windows over positions that never ticked,
+    // so every bot reads "stuck" on resume. Clamp to one interval.
+    this.t += Math.min(dt, WD_DT);
     if (this.t < WD_DT) {return;}
     this.t = 0;
     let alive = 0, stuckNow = 0, stuckEval = 0;

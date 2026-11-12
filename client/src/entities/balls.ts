@@ -43,7 +43,7 @@ function ballGeo(): THREE.BufferGeometry {
     // the same wear texture the gun viewmodels get, so edges read worn.
     // Flat per-face normals: the icosahedron's default vertex normals are
     // smooth sphere normals, which hide every edge from the wear detector.
-    const flat = new THREE.IcosahedronGeometry(BALL_BASE_RADIUS, 0).toNonIndexed();
+    const flat = new THREE.IcosahedronGeometry(BALL_BASE_RADIUS, 0); // polyhedra are already non-indexed
     flat.computeVertexNormals();
     const mesh = new THREE.Mesh(flat, ballMat());
     bakeWearOnly(new THREE.Group().add(mesh));

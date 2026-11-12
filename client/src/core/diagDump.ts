@@ -6,6 +6,8 @@
 import { aimProbe } from './aimProbe.js';
 import { terrainDivLine } from '../world/terrain.js';
 import { staleLine } from './staleFiles.js';
+import { deployStamp } from './deployWatch.js';
+import { serverStamp } from '../networking/wireIn.js';
 import { diagLines as netProbeLines } from '../debug/netProbe.js';
 import { parityLines } from '../game/parity.js';
 import { longestGaps } from '../effects/RibbonTrail.js';
@@ -192,6 +194,14 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
     `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
     `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
   ];
+  // Viewmodel row — "where's my gun": group hidden = the gameLoop gate
+  // (dead/3p/spectate/orbit), mesh hidden = the switch envelope never
+  // armed a weapon (the igun rung-0 same-slot case).
+  const vm = ctx.viewModel;
+  if (vm) {
+    const shown = [...vm.weapons.entries()].filter(([, g]): boolean => g.visible).map(([i]): string => WeaponType[i] ?? String(i));
+    lines.push(`vm: group=${vm.group.visible ? 'vis' : 'HIDDEN'} active=${WeaponType[vm.activeWeapon] ?? vm.activeWeapon} shown=[${shown.join(',') || 'none'}]`);
+  }
   // Collider-vs-drawn-surface divergence around the player - the F1
   // overlay's numbers. Chord undercut reads as a positive mean bias.
   const td = terrainDivLine();
@@ -227,6 +237,7 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   lines.push(
     `projectiles: ${ctx.projectiles.length} live`,
     `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
+    `deploy: ${deployStamp()} · server v${serverStamp.version}${serverStamp.build === '?' ? '' : ` (${serverStamp.build})`}`,
     staleLine(),
   );
   // Verbose census - trail/ball/proj/shell row dumps, pool inventories,

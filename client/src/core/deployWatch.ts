@@ -29,6 +29,11 @@ export async function checkDeployNow(): Promise<void> {
   if (await checkVersion() === 'new') {window.location.reload();}
 }
 
+// Boot fetch — even on localhost the Alt+Q dump prints whatever stamp
+// the server served this build as; 'unknown' stays '?'.
+void checkVersion();
+export function deployStamp(): string { return baseline ?? '?'; }
+
 export function watchDeployVersion(opts: { whenIdle?: () => boolean; graceMs?: number } = {}): void {
   if (isLocal) {return;}
   const poll = async (): Promise<void> => {

@@ -62,6 +62,11 @@ export interface StateDebugContext {
 
   teamBots?: () => { bots: { playerId: string; team: string; isDead: boolean; position: { x: number; y: number; z: number }; botHp?: number }[]; teamOf: Map<string, string>; over: string | null; scores: { alpha: number; bravo: number }; ffaScores: Map<string, number> } | null;
 
+  /** First-person viewmodel for the vm row in the diagnostics dump —
+   *  group+mesh visibility answers "where's my gun" in one line. */
+
+  viewModel?: { group: { visible: boolean }; activeWeapon: number; weapons: Map<number, { visible: boolean }> };
+
   /** Scene + view camera for the crosshair aim probe (what's under the reticle). */
 
   getScene?: () => THREE.Scene | null;
@@ -886,6 +891,12 @@ function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
 
 // Call once after networkManager exists (post-init).
 
+/** Alt+Q header registration — runs on every host (the dump is the
+ *  bug-report surface, not a dev hook); wireStateDebug calls it too. */
+export function wireDiagHeader(ctx: StateDebugContext): void {
+  Logger.setDiagnostics((verbose: boolean): string[] => diagLines(ctx, verbose));
+}
+
 export function wireStateDebug(ctx: StateDebugContext): void {
 
   const { networkManager, logger } = ctx;
@@ -1559,7 +1570,7 @@ hashMismatchCount += 1;
 
   // what the server thinks vs what we have.
 
-  Logger.setDiagnostics((verbose: boolean): string[] => diagLines(ctx, verbose));
+  wireDiagHeader(ctx);
 
 
 

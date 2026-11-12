@@ -31,6 +31,9 @@ import { urlParams } from '../core/params.js';
 
 const logger = new ChildLogger('Wire');
 
+/** Last gameState's server stamp - Alt+Q prints it next to deploy:. */
+export const serverStamp = { version: '?', build: '?' };
+
 export class WireIn {
   /** v3 tick-frame roster: u16 -> playerId, fed by 'wireIds' events that
    *  always precede the first frame referencing them (same socket). */
@@ -546,6 +549,8 @@ dropCensus.total += 1;
     this.pendingMissed.clear();
     this.h.dropClaims(false);
     this.h.clearResyncQuiet(); // truth landed - position claims are judged fresh
+    serverStamp.version = data.serverVersion ?? '?';
+    serverStamp.build = data.serverBuild ?? 'dev';
     const serverProto = data.protocolVersion ?? 0;
     if (!this.checkProtocol(serverProto)) {return;}
     try { sessionStorage.removeItem('fps-proto-reload'); } catch { /* no budget to reset */ } // clean connect - reset the budget

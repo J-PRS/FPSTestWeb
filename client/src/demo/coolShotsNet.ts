@@ -89,13 +89,14 @@ m.uploadFailureCount += 1;
 
   // Merge the server's demo list with local clips (by filename)
 export async function fetchFromServer(m: CoolShotManager): Promise<void> {
-    if (!m.serverUrl) {return;}
+    if (!m.serverUrl || performance.now() < m.fetchRetryAt) {return;}
     try {
       const resp = await fetch(`${m.serverUrl}/demos`);
       if (!resp.ok) {
         logger.warn(`Failed to fetch cool shots: HTTP ${resp.status}`);
         return;
       }
+      m.fetchFailureCount = 0;
       const data = await resp.json();
       const serverDemos: CoolShotEntry[] = ((data.demos || []) as ServerDemoRecord[]).map((d) => ({
         id: d.filename,
@@ -117,6 +118,10 @@ export async function fetchFromServer(m: CoolShotManager): Promise<void> {
 
       logger.debug(`[CoolShots] ${m.coolShots.length} entries (top: ${m.coolShots[0]?.projectileLifetime.toFixed(2) ?? 'none'}s)`);
     } catch (error) {
-      logger.warn('Failed to fetch cool shots from server:', error);
+      m.fetchFailureCount += 1;
+      // Back off exponentially (30s→8min cap): unreachable endpoints are
+      // sticky, not transient - and warn only on the first strike.
+      m.fetchRetryAt = performance.now() + Math.min(30_000 * 2 ** (m.fetchFailureCount - 1), 480_000);
+      if (m.fetchFailureCount === 1) {logger.warn('Failed to fetch cool shots from server:', error);}
     }
   }

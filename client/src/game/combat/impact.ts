@@ -890,7 +890,10 @@ function hookConnect(c: CombatCtx, p: Projectile): void {
     // of double-yanking (same contract predictLocalShove keeps).
     const mag = stats.knockbackForce * player.mods.knockbackTaken;
     player.applyPull(anchor, mag, true);
-    deps.world.selfBlastStamps.push({ x: anchor.x, y: anchor.y, z: anchor.z, t: performance.now(), by: 'local', f: mag });
+    // Offline has no echo lane - same `self` contract predictLocalShove
+    // keeps, or expiry reports a phantom kb-echo that could never exist.
+    deps.world.selfBlastStamps.push({ x: anchor.x, y: anchor.y, z: anchor.z, t: performance.now(), by: 'local', f: mag,
+      self: !(deps.lazyNetworkManager()?.isConnected?.() ?? false) });
   }
 }
 

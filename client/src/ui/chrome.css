@@ -414,6 +414,10 @@ body.lobby-open #overlay-center { display: none; }
 #loadout-bar .lo-cells { display: flex; flex-wrap: nowrap; gap: 6px; align-items: flex-end; width: 100%; }
 #loadout-bar .lo-cells.lo-grid2 { display: grid; grid-template-columns: 1fr 1fr; }
 #loadout-bar .lo-cells.lo-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+/* kit-locked (instagib/gungame/igun): sidearm+pack cells hide but the
+   fixed tracks stay — collapse the phantom columns under the lock. */
+#loadout-bar.lo-lock .lo-cells.lo-grid2 { grid-template-columns: 1fr; }
+#loadout-bar.lo-lock .lo-cells.lo-grid3 { grid-template-columns: 1fr 1fr; }
 #loadout-bar .lo-cell { display: flex; flex-direction: column; gap: 3px; align-items: stretch; flex: 1; min-width: 0; }
 #loadout-bar .lo-cap {
   font-size: 0.66rem; letter-spacing: 0.18em; font-weight: 600;

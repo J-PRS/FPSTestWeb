@@ -140,7 +140,7 @@ renderer.setClearColor(FOG_COLOR);
 // every standard material picks it up free (no per-frame cost).
 {
   const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(scene, 0.06).texture;
+  scene.environment = pmrem.fromScene(scene, 0.04).texture; // sigma >~0.04 requests >20 blur samples and clips
   pmrem.dispose();
 }
 
@@ -1478,6 +1478,28 @@ init().then(async (): Promise<void> => {
   const wireDebugTools = (): Promise<void> => import('./dev/devTools.js').then(m =>
     m.wireDebugTools({ networkManager, player, world, entities, terrain, viewModel, demoManager,
       rendererSetup, demoLifecycle, scene, remotes, teamBots, logger, hud }));
+  // Alt+Q diagnostics header rides EVERY host - the dump is the public
+  // bug-report surface (deploy/vm/local lines); only window.__test and
+  // friends below stay dev-gated. Lazy import keeps stateDebug out of
+  // the boot path on hosts that never open the dump.
+  await import('./core/stateDebug.js').then(m => m.wireDiagHeader({
+    networkManager,
+    getPlayer: (): Player => player,
+    remotePlayers: world.remotePlayers,
+    projectiles: world.projectiles,
+    getLastSentPos: remotes.getLastSentPos,
+    world,
+    teamBots: (): TeamBots | null => teamBots,
+    viewModel,
+    getScene: (): typeof scene => scene,
+    getCamera: (): Player['camera'] => player.camera,
+    netCreatures: () => [
+      ...entities.crawlers, ...entities.scarabs, ...entities.rakks, ...entities.rollers,
+      ...entities.gnats, ...entities.snakes, ...entities.banelings, ...entities.totems,
+    ],
+    netDeployables: () => entities.deployables.netEntries(),
+    logger,
+  }));
   // Debug wiring (window.__test, __playRec, stateDebug) - dev hosts only.
   if (devtoolsOn && isDevHost() && (import.meta.env.DEV || urlParams.debug)) {await wireDebugTools();}
   // In-game log mirror - subscribes to Logger once so every later line

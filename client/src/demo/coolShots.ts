@@ -73,6 +73,10 @@ export class CoolShotManager {
   coolShots: CoolShotEntry[] = [];
   serverUrl = '';
   uploadFailureCount = 0;
+  /** Consecutive /demos fetch failures + backoff — a server without the
+   *  endpoint (dev box, CORS) must not warn-spam every poll. */
+  fetchFailureCount = 0;
+  fetchRetryAt = 0;
   private static MAX_UPLOAD_WARNINGS = 3;
 
   onChanged?: (shots: CoolShotEntry[]) => void;

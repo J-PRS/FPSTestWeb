@@ -37,11 +37,8 @@ export interface DevToolsCtx {
 
 let wired = false;
 
-export async function wireDebugTools(c: DevToolsCtx): Promise<void> {
-  if (wired) {return;}
-  wired = true;
-  const { wireStateDebug } = await import('../core/stateDebug.js');
-  wireStateDebug({
+function stateDebugCtx(c: DevToolsCtx): Parameters<typeof import('../core/stateDebug.js').wireDiagHeader>[0] {
+  return {
     networkManager: c.networkManager,
     getPlayer: (): Player => c.player,
     remotePlayers: c.world.remotePlayers,
@@ -49,6 +46,7 @@ export async function wireDebugTools(c: DevToolsCtx): Promise<void> {
     getLastSentPos: c.remotes.getLastSentPos,
     world: c.world,
     teamBots: (): TeamBots | null => c.teamBots,
+    viewModel: c.viewModel,
     getScene: (): THREE.Scene<THREE.Object3DEventMap> => c.scene,
     getCamera: (): THREE.PerspectiveCamera => c.player.camera,
     netCreatures: () => [
@@ -57,7 +55,14 @@ export async function wireDebugTools(c: DevToolsCtx): Promise<void> {
     ],
     netDeployables: () => c.entities.deployables.netEntries(),
     logger: c.logger,
-  });
+  };
+}
+
+export async function wireDebugTools(c: DevToolsCtx): Promise<void> {
+  if (wired) {return;}
+  wired = true;
+  const { wireStateDebug } = await import('../core/stateDebug.js');
+  wireStateDebug(stateDebugCtx(c));
   // Headless/probe hook — the puppeteer scripts in headless-test drive off
   // this (spawn PlayerModels, read player.pos, aim the camera).
   window.__test = {

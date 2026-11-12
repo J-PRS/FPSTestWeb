@@ -376,7 +376,7 @@ bn += 1;
     // Sheep coverage windows run on sim ms advanced ONCE per frame —
     // doing it inside sheepTick scaled every 5s window by the roster
     // size (9 bots → windows fired ~9x too often, cover-dominated max-outs).
-    this.sheep.advance(dt);
+    this.sheep.advance(Math.min(dt, 1)); // stall frames can't bankroll idle windows
     let i = 0;
     for (const bot of this.bots) {this.tickBot(bot, dt, others, bodies, terrain, ((i += 1) - 1));}
   }
@@ -488,7 +488,7 @@ bn += 1;
   private sheepTick(bot: GameBot, acc: number,
     foes: Parameters<GameBot['think']>[1]['enemies'], terrain: Terrain): void {
     const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
-    this.sheep.tick(bot, acc, terrain, { foe: this.senses.foeSeen(bot, foes, terrain), hasDest, dest: bot.lastDest, busy: bot.wantRepair !== null });
+    this.sheep.tick(bot, Math.min(acc, 1), terrain, { foe: this.senses.foeSeen(bot, foes, terrain), hasDest, dest: bot.lastDest, busy: bot.wantRepair !== null });
   }
 
   /** Situation chatter edge — same pools + throttle as the wire path,

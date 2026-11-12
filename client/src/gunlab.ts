@@ -115,7 +115,7 @@ new AtmosphericSky(scene);
 // without something to reflect/refract; same recipe as main.ts.
 {
   const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(scene, 0.06).texture;
+  scene.environment = pmrem.fromScene(scene, 0.04).texture;
   pmrem.dispose();
 }
 // Probes read state.pick AND dump baked attributes off scene - same
