@@ -70,6 +70,8 @@ export interface RemotePlayerState {
   /** Headhunt held-token count - arrives via gameState row + playerHeld
    *  edges; undefined outside headhunt (no badge drawn). */
   held?: number;
+  /** Server-declared stale feed - render ghosted, never hidden. */
+  stale?: boolean;
 }
 
 /**
@@ -115,6 +117,12 @@ export class NetworkManager {
   /** Headhunt held-count edge - roster patch already landed; this is the
    *  local-player + HUD notification half (locals aren't in the map). */
   public onPlayerHeld: ((playerId: string, n: number) => void) | null = null;
+  /** weaponUpdate edge - roster patch already landed; this swaps the
+   *  remote's hand prop to the real silhouette. */
+  public onWeaponUpdate: ((playerId: string, weapon: number) => void) | null = null;
+  /** playerStale edge - roster patch already landed; this ghosts/unghosts
+   *  the remote's body. Server owns the verdict - never a hide. */
+  public onPlayerStale: ((playerId: string, stale: boolean) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean, yank?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined, muted: boolean) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
@@ -1278,6 +1286,16 @@ this.sendDrops += 1;
   sendPerkUpdate(perk: string): void {
     if (!this.connected) {return;}
     this.send({ type: 'perkUpdate', perk });
+  }
+
+  /** Held weapon for the roster `weapon` field - remotes draw the real
+   *  gun instead of the stock prop before the first shot edge. The
+   *  current pick rides out on every gameState (join/reclaim/resync) so
+   *  the server can stamp it even if the swap edge raced the socket. */
+  joinHeld: (() => number | undefined) | null = null;
+  sendHeldWeapon(wt: number | undefined): void {
+    if (!this.connected || wt === undefined) {return;}
+    this.send({ type: 'held', weapon: wt });
   }
 
   /** Post-resync claim mute - see sendResync. */

@@ -61,7 +61,7 @@ import { gunGameRoll } from '../../shared/gunGame.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
 import { shipMatchResult } from './game/matchResults.js';
-import { startDemoStream, cutDemoStream, flushDemoStreamOnUnload } from './game/demoStream.js';
+import { startDemoStream, flushDemoStreamOnUnload } from './game/demoStream.js';
 import { DemoSerializer } from './demo/DemoSerializer.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
@@ -276,6 +276,7 @@ function wireNetworkLocal(): void {
   player.onNetworkInput = (input, rotation): void => networkManager.sendInputMove(input, rotation);
   player.onSkillUse = (): void => networkManager.sendSkillUse(player.skill);
   networkManager.joinSkill = (): string => player.skill;
+  networkManager.joinHeld = (): number => weaponDef(player.loadout[player.weaponIndex]).weaponType;
   player.onRespawn = (hold): void => networkManager.sendRespawn(hold === true);
   // G: online it's a wire claim the server resolves; offline the local
   // flag sims run the identical toss themselves (flagrun + CTF both).
@@ -390,7 +391,7 @@ function wirePlayerStatusHooks(): void {
   // shootable flocks would double the population and resurrect the
   // self-only aggro bug the creature sim fixes.
 
-  wirePlayerHooks({ player, combat, effects, viewModel, speedLines, world, scene, terrain });
+  wirePlayerHooks({ player, combat, effects, viewModel, speedLines, world, scene, terrain, sendHeld: (wt): void => networkManager.sendHeldWeapon(wt) });
   // Arm the viewmodel to the persisted kit's active slot - resetLifeState
   // re-arms on every respawn, but the FIRST life would otherwise open on
   // the default bolt model while the HUD reads the recalled loadout.

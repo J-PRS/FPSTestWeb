@@ -396,6 +396,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'transport', wire: 'str', channel: 'edge', absent: null },
       { name: 'armorClass', wire: 'str', channel: 'edge' },
       { name: 'weapon', wire: 'num', channel: 'edge', absent: null },
+      { name: 'stale', wire: 'bool', channel: 'edge', absent: null }, // declared staleness - ghost, never hide
       { name: 'health', wire: 'num', channel: 'sim' },
       { name: 'isDead', wire: 'bool', channel: 'edge' },
     ],
@@ -425,13 +426,12 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         // melee kill that didn't heal.
         { name: 'steal', wire: 'bool', channel: 'edge', absent: null },
       ],
-      teamUpdate: [
-        { name: 'team', wire: 'str', channel: 'edge' },
-      ],
+      teamUpdate: [{ name: 'team', wire: 'str', channel: 'edge' }],
       // Headhunt: carrier's new held-token total after a grab/drop.
-      playerHeld: [
-        { name: 'n', wire: 'num', channel: 'edge' },
-      ],
+      playerHeld: [{ name: 'n', wire: 'num', channel: 'edge' }],
+      // Mid-life weapon swap - remotes redraw the hand prop pre-shot.
+      weaponUpdate: [{ name: 'weapon', wire: 'num', channel: 'edge' }],
+      playerStale: [{ name: 'stale', wire: 'bool', channel: 'edge' }],
       knockback: [
         { name: 'position', wire: 'vec3', channel: 'sim' },
         { name: 'force', wire: 'num', channel: 'sim' },
@@ -526,6 +526,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // Server-known current weapon (bot loadout / last simmed spawn) -
       // lets a remote draw a real gun before any shot edge reveals it.
       { name: 'weapon', wire: 'num', channel: 'edge', absent: null },
+      { name: 'stale', wire: 'bool', channel: 'edge', absent: null },
     ],
   },
 };
@@ -784,6 +785,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   resync: [],
   classUpdate: [{ name: 'armorClass', wire: 'str' }],
   perkUpdate: [{ name: 'perk', wire: 'str' }],
+  held: [{ name: 'weapon', wire: 'num' }],
   switchRoom: [{ name: 'room', wire: 'str', absent: null }, { name: 'mode', wire: 'str', absent: null }, { name: 'map', wire: 'str', absent: null }, { name: 'bots', wire: 'num', absent: null }, { name: 'unlisted', wire: 'bool', absent: null }, { name: 'noCreatures', wire: 'bool', absent: null }, { name: 'noBalls', wire: 'bool', absent: null }, { name: 'instagib', wire: 'bool', absent: null }, { name: 'gungame', wire: 'bool', absent: null }, { name: 'igun', wire: 'bool', absent: null }],
 };
 

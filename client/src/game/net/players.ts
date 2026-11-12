@@ -148,6 +148,19 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     if (playerId === nm().getLocalPlayerId()) {deps.lazyPlayer().heldTokens = n;}
   };
 
+  // weaponUpdate edge - swap the remote's hand prop to the real gun.
+  networkManager.onWeaponUpdate = (playerId: string, wt: number): void => {
+    deps.world.remotePlayers.get(playerId)?.model.setWeapon(wt);
+  };
+
+  // playerStale edge - server-declared feed staleness: ghost the body,
+  // never hide it (a hidden-but-live body stayed hittable = invisible
+  // target). Despawn stays the server's job via playerLeft.
+  networkManager.onPlayerStale = (playerId: string, stale: boolean): void => {
+    const rp = deps.world.remotePlayers.get(playerId);
+    if (rp) {deps.world.remotePlayers.setStale(rp, stale);}
+  };
+
   networkManager.onPlayerLeft = (playerId: string): void => {
     if (deps.world.remotePlayers.remove(playerId)) {
       logger.info(`Remote player removed (playerLeft): ${playerId}`);

@@ -83,7 +83,7 @@ const DEFAULTS: Schema = {
   'fps-ptrails': true,
   'fps-ribbons': true,
   'fps-dots': true,
-  'fps-wpos': false,
+  'fps-wpos': true,
   'fps-bloom': true,
   'fps-invert-y': false,
   'fps-sens': 0.8, // menu shows 8 → ~12.5cm/360 @800dpi - casual flick default; tuners drop it

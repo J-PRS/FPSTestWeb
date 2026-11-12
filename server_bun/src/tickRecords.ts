@@ -195,6 +195,10 @@ export class TickFanout {
     { playerId: '', position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false, ping: undefined, ski: 0, jet: 0, status: 0, sheep: 0 };
 
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
+  /** Claim silence past this is broadcast as declared-stale — long enough
+   *  to swallow loss/reorder gaps, short enough to matter before the
+   *  idle/afk reapers. */
+  private static readonly STALE_MS = 5000;
   /** v4 masks delta against last-encoded state -- a masked field a lost
    *  frame carried stays stale until it changes again or this forces a
    *  full record (15 ticks = 750ms worst-case drift on a torn link). */
@@ -501,6 +505,14 @@ this.metrics.recordsSuppressed += 1;
     // -- checking hasReceivedPosition before this left unreported ghosts
     // sitting in the roster forever.
     if (this.reapIdle(room, playerId, p, silenceMs)) {return true;}
+    // Claim silence (pings don't count) flips the declared stale bit once —
+    // remotes ghost the body while the server keeps owning liveness. Edge
+    // fires on transition only; the roster field covers joiners.
+    const stale = !p.isBot && p.lastClaimAt !== undefined && now - p.lastClaimAt > TickFanout.STALE_MS;
+    if (stale !== (p.stale === true)) {
+      p.stale = stale;
+      room.broadcast({ type: 'playerStale', playerId, stale });
+    }
     if (!p.isBot && !p.hasReceivedPosition) {return true;}
     const lastSent = room.lastSentPositions.get(playerId);
     return silenceMs > 5000 && lastSent !== undefined && now - lastSent.t < 2000;

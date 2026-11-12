@@ -481,6 +481,7 @@ export class Room {
     const p = this.players.getPlayer(playerId);
     if (!p || p.weapon === weaponType) {return;}
     p.weapon = weaponType;
+    this.broadcastWeapon(playerId);
     this.igunClassSync(playerId);
   }
 
@@ -495,8 +496,16 @@ export class Room {
     // Bucket roll: the rung deals one member - luck, not a pick. The wire
     // carries the draw so the client's locked band mirrors the same gun.
     p.weapon = gunGameRoll(r, this.mods.igun === true, this.rng());
+    this.broadcastWeapon(playerId);
     this.igunClassSync(playerId);
     this.sendToPlayer(playerId, { type: 'gunRung', rung: r, wt: p.weapon });
+  }
+
+  /** Roster `weapon` mid-life twin - remotes swap the hand prop to the
+   *  dealt/picked gun without waiting for the first shot edge. */
+  private broadcastWeapon(playerId: string): void {
+    const wt = this.players.getPlayer(playerId)?.weapon;
+    if (wt !== undefined) {this.broadcast({ type: 'weaponUpdate', playerId, weapon: wt } as ServerMessage);}
   }
 
   /** igun chassis edge: the body follows the rung weapon's tier. Humans
@@ -522,6 +531,7 @@ export class Room {
     if (!p) {return;}
     const r = p.gunRung ?? 0;
     p.weapon = gunGameRoll(r, this.mods.igun === true, this.rng());
+    this.broadcastWeapon(playerId);
     this.igunClassSync(playerId);
     this.sendToPlayer(playerId, { type: 'gunRung', rung: r, wt: p.weapon });
   }
@@ -533,6 +543,7 @@ export class Room {
     for (const p of this.players.getAllPlayers().values()) {
       p.gunRung = 0;
       p.weapon = gunGameRoll(0, this.mods.igun === true, this.rng());
+      this.broadcastWeapon(p.id);
       this.igunClassSync(p.id);
       this.sendToPlayer(p.id, { type: 'gunRung', rung: 0, wt: p.weapon });
     }
@@ -808,7 +819,7 @@ export class Room {
     // think phases, so an answer lands a beat later like real chat.
     this.events.on((e): void => {
       switch (e.type) {
-        case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); const w = (e as { weapon?: number }).weapon; if (w !== undefined) {this.killsByWeapon.set(w, (this.killsByWeapon.get(w) ?? 0) + 1);} const cause = w !== undefined ? `w${w}` : (e.shooterId === 'environment' ? 'env' : e.shooterId === e.targetId ? 'self' : 'other'); this.deathsByCause.set(cause, (this.deathsByCause.get(cause) ?? 0) + 1); this.gunGameOnKill(e.targetId, e.shooterId); break;
+        case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); const w = (e as { weapon?: number }).weapon; if (w !== undefined) {this.killsByWeapon.set(w, (this.killsByWeapon.get(w) ?? 0) + 1);} const cause = w === undefined ? (e.shooterId === 'environment' ? 'env' : e.shooterId === e.targetId ? 'self' : 'other') : `w${w}`; this.deathsByCause.set(cause, (this.deathsByCause.get(cause) ?? 0) + 1); this.gunGameOnKill(e.targetId, e.shooterId); break;
         }
         case 'hit': { this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); break;
         }
@@ -1792,8 +1803,8 @@ excess -= 1;
         econOf: (id): unknown => this.moveSim?.econOf?.(id),
         locoOf: (id): unknown => this.bots?.watchdog?.statsOf?.(id),
       }));
-    } catch (err) {
-      logger.warn('match-results dump failed', { room: this.name, err: String(err) });
+    } catch (error) {
+      logger.warn('match-results dump failed', { room: this.name, err: String(error) });
     }
   }
 

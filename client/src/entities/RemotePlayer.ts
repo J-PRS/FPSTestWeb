@@ -184,15 +184,12 @@ export class RemotePlayer {
       // Shield may have gone up before the GLB landed (sphere fallback)
       // - upgrade it to the contoured shell once the bones exist.
       this.auras.upgradeContoured();
-      // Show collider gizmo for remote players (unless already dead or stale-hidden)
-      if (!this._isDead && !this.staleHidden) {
+      // Show collider gizmo for remote players (unless already dead)
+      if (!this._isDead) {
         this._model.setColliderVisible(true);
       }
-      // Model may have been hidden while the GLB was still loading - reapply
-      if (this.staleHidden) {
-        this._model.setVisible(false);
-      }
-      if (this.cloakGhost) {setCloakGhost(this, true);}
+      // Ghost flags may have landed while the GLB was still loading - reapply
+      if (this.staleHidden || this.cloakGhost) {this._model.setGhost(true);}
       if (this._isDead) {this._model.setScale(this.corpse.scale);}
       this.applyCrown();
   }

@@ -220,6 +220,10 @@ export type ClientMessage =
   // Same rule for the passive pick - banked at respawn so mods (HP,
   // energy, speed) never flip mid-life under the server's nose.
   | { type: 'perkUpdate'; perk: string }
+  // Held-weapon edge: the server's roster `weapon` is otherwise only
+  // learned from fire intents, so a remote draws the stock prop until
+  // the first shot. Cosmetic - no outcome adjudication reads it.
+  | { type: 'held'; weapon: number }
   // Mid-match room hop over the live socket - the server re-seats the
   // session in the target room and answers with a fresh gameState, which
   // the client's existing reconnect path rebuilds from. Same creation
@@ -274,6 +278,13 @@ export type ServerMessage =
   // channel so the tick frame keeps its fixed binary layout. n is the
   // carrier's new total; the team's live score is derived from these.
   | { type: 'playerHeld'; playerId: string; n: number }
+  // Mid-life weapon swap - remotes swap the hand prop to the real
+  // silhouette without waiting for a shot edge (spawn/roster rows
+  // carry the same field for joiners).
+  | { type: 'weaponUpdate'; playerId: string; weapon: number }
+  // Server-declared feed staleness (position claims stopped while the
+  // socket lives) - remotes render the body ghosted, still hittable.
+  | { type: 'playerStale'; playerId: string; stale: boolean }
   // Server system line - renders unstyled (no "name:" prefix) in chat.
   // multi/actor/ann tag announced kills so the client's booth voice
   // can fire without parsing text - ann is a semantic key ('firstblood',
@@ -500,6 +511,8 @@ export interface GameStatePlayer {
   /** Server-known current weapon (bot loadout / last simmed shell) -
    *  remotes draw a real gun, not the placeholder. */
   weapon?: number;
+  /** Server-declared stale feed - remotes ghost the body, never hide it. */
+  stale?: boolean;
 }
 
 export interface SnapshotPlayer {

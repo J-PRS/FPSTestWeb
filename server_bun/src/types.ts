@@ -70,6 +70,10 @@ export interface PlayerState {
    *  lastSeen (pings/stats keep it fresh), an AFK hidden tab that sends
    *  only keepalives goes stale here — /rooms' `active` reads it. */
   lastClaimAt?: WallMs;
+  /** Server-declared stale feed: position claims stopped while the socket
+   *  lives (hidden tab). Broadcast edge + roster field — remotes ghost the
+   *  body, never hide it. Cleared on the next claim. */
+  stale?: boolean;
   pendingRespawn: boolean;
   lastSeq: number;
   lastValidPosition: Vec3;

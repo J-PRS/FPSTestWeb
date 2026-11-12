@@ -27,6 +27,9 @@ export interface PlayerHookCtx {
   world: WorldState;
   scene: THREE.Scene;
   terrain: Terrain;
+  /** Held-weapon wire edge (roster `weapon`) - remotes draw the real
+   *  gun instead of the stock prop. */
+  sendHeld: (wt: number) => void;
 }
 
 export function wirePlayerHooks(c: PlayerHookCtx): void {
@@ -56,7 +59,7 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   sfx.warpJump(to);
   };
   player.onMelee = combat.onMelee;
-  player.onWeaponSwitch = (i): void => { viewModel?.switchWeapon(weaponDef(i).weaponType); sfx.equip(); };
+  player.onWeaponSwitch = (i): void => { const wt = weaponDef(i).weaponType; viewModel?.switchWeapon(wt); sfx.equip(); c.sendHeld(wt); };
   player.onJump = (pos): void => { effects.spawnJumpDust(pos); sfx.jump(); };
   player.onLand = (impactSpeed): void => sfx.land(impactSpeed);
   player.onJetpack = (pos): void => effects.spawnJetpack(pos);

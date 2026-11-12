@@ -429,6 +429,8 @@ this.handlerThrows += 1;
     },
     teamUpdate: (data): void => { this.h.patchRemotePlayer(data.playerId, { team: data.team }); },
     playerHeld: (data): void => { this.h.patchRemotePlayer(data.playerId, { held: data.n }); this.h.onPlayerHeld?.(data.playerId, data.n); },
+    weaponUpdate: (data): void => { this.h.patchRemotePlayer(data.playerId, { weapon: data.weapon }); this.h.onWeaponUpdate?.(data.playerId, data.weapon); },
+    playerStale: (data): void => { this.h.patchRemotePlayer(data.playerId, { stale: data.stale }); this.h.onPlayerStale?.(data.playerId, data.stale); },
     playerRespawn: (data): void => this.handlePlayerRespawn(data),
     playerHit: (data): void => this.handlePlayerHit(data),
     buff: (data): void | undefined => this.h.onBuff?.(data),
@@ -575,6 +577,9 @@ dropCensus.total += 1;
     // Seat is (re)established - replay fire intents a dead lane may have
     // lost. Server dedupes by shotId, so a shot that DID land is a no-op.
     this.h.replayFireIntents(data.room, data.udp);
+    // Same re-announce for the held-weapon roster field - a swap edge
+    // sent while the lane was down never reaches the server.
+    if (data.localPlayerState) {this.h.sendHeldWeapon(this.h.joinHeld?.());}
     // AFK demotion detection: a seat we used to hold answers resync with
     // the bare spectator envelope (no localPlayerState) — combat claims
     // get refused from here on, so the only sane move is to re-join.

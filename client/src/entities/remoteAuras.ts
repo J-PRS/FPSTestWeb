@@ -55,7 +55,7 @@ export class RemoteAuras {
     if (this.shielded && !this.shieldContoured) {
       this.shieldBubble?.dispose();
       this.buildShield();
-      this.shieldBubble!.mesh.visible = !this.h.staleHidden && !this.h.cloakHidden;
+      this.shieldBubble!.mesh.visible = !this.h.cloakHidden;
     }
     const root = this.h.model?.object3D;
     if (!root) {return;}
@@ -96,7 +96,7 @@ export class RemoteAuras {
       this.statusAuras.set(key, a);
     }
     a.on = on;
-    a.bubble.mesh.visible = on && !this.h.cloakHidden && !this.h.staleHidden;
+    a.bubble.mesh.visible = on && !this.h.cloakHidden;
   }
 
   // Medkit channel — green energy hugging the body, same read as the

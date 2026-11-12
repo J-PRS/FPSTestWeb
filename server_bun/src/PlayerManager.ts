@@ -297,7 +297,8 @@ export class PlayerManager {
       // is emit-time only.
       transport: ConnectionManager.udpLive?.(player.id) ? `${player.transport ?? 'ws'}+udp` : player.transport,
       armorClass: player.armorClass,
-      weapon: player.weapon || undefined,
+      weapon: player.weapon, // not `||` - BoltLauncher=0 is a real weapon
+      stale: player.stale || undefined,
     }) as unknown as GameStatePlayer;
   }
 

@@ -1,12 +1,11 @@
 import { SHOOT_REVEAL_S } from '../../../shared/status.js';
 import type { RemotePlayer } from './RemotePlayer.js';
 
-// Visibility gate - who can currently see this remote. Two independent
-// hides: staleness (socket stopped updating; backgrounded tabs keep the
-// socket but stop simulating, auto-reshow on resume) and the
-// server-authoritative cloak (separate flag: a decloak restores
-// visibility even while a stale socket stays hidden). Plus the
-// fire-shimmer ghost: shooting from stealth briefly reveals the model.
+// Visibility gate - who can currently see this remote. Staleness is a
+// server-declared GHOST (the feed went quiet; body stays rendered and
+// hittable — a hidden live body was an invisible target, the worst
+// outcome). The server-authoritative cloak is the only real hide here.
+// Plus the fire-shimmer ghost: shooting from stealth briefly reveals.
 
 export function hideRemote(p: RemotePlayer): void {
   p.model.setVisible(false);
@@ -28,10 +27,13 @@ export function showRemote(p: RemotePlayer): void {
   p.auras.show();
 }
 
-export function setStaleVis(p: RemotePlayer, hidden: boolean): void {
-  if (hidden === p.staleHidden) {return;}
-  p.staleHidden = hidden;
-  if (hidden) {hideRemote(p);} else if (!p.cloakHidden) {showRemote(p);}
+// Server-declared stale feed (playerStale edge): ghost shimmer, never a
+// hide — the body keeps dead-reckoning and stays a valid target until the
+// server's own reap/despawn removes it.
+export function setStaleVis(p: RemotePlayer, stale: boolean): void {
+  if (stale === p.staleHidden) {return;}
+  p.staleHidden = stale;
+  p._model.setGhost(stale || p.cloakGhost);
 }
 
 export function setCloakVis(p: RemotePlayer, hidden: boolean): void {
@@ -42,7 +44,7 @@ export function setCloakVis(p: RemotePlayer, hidden: boolean): void {
     // HUD marker, via ghostT) owes the window its remainder.
     if (p.revealT > 0 && p._loaded) { p.ghostT = p.revealT; p._model.setGhost(true); p.model.setVisible(true); return; }
     hideRemote(p);
-  } else if (!p.staleHidden) {showRemote(p);}
+  } else {showRemote(p);}
 }
 
 // Friendly cloak: a teammate's held cloak renders as the ghost shimmer,
@@ -52,7 +54,7 @@ export function setCloakVis(p: RemotePlayer, hidden: boolean): void {
 export function setCloakGhost(p: RemotePlayer, on: boolean): void {
   if (on === p.cloakGhost) {return;}
   p.cloakGhost = on;
-  p._model.setGhost(on);
+  p._model.setGhost(on || p.staleHidden); // stale shimmer outlives the cloak flag
 }
 
 // Frustum hide: an offscreen rig is detached outright — visible=false
@@ -66,7 +68,7 @@ export function setFrustumVis(p: RemotePlayer, hidden: boolean): void {
   if (hidden) { p.model.setSceneDetached(true); p.auras.hide(); }
   // isDead gate like showRemote: a corpse frustum-re-add must not
   // resurrect the body the kill funnel hid - the standing-dead bug.
-  else if (!p.staleHidden && !p.cloakHidden && !p.isDead) { p.model.setSceneDetached(false); p.model.setVisible(true); p.auras.show(); }
+  else if (!p.cloakHidden && !p.isDead) { p.model.setSceneDetached(false); p.model.setVisible(true); p.auras.show(); }
   else {p.model.setSceneDetached(false);}
 }
 
@@ -86,6 +88,6 @@ export function tickGhostF(p: RemotePlayer, dt: number): void {
   if (p.ghostT <= 0) {return;}
   p.ghostT -= dt;
   if (p.ghostT > 0) {return;}
-  p._model.setGhost(false);
-  if (p.cloakHidden || p.staleHidden || p.isDead) {p.model.setVisible(false);}
+  p._model.setGhost(p.staleHidden || p.cloakGhost); // reveal expiring doesn't wash the stale/cloak shimmer
+  if (p.cloakHidden || p.isDead) {p.model.setVisible(false);}
 }

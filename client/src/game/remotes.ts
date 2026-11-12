@@ -67,6 +67,9 @@ function makeRemoteHooks(deps: RemotesDeps) {
       // Roster-declared weapon - the real gun instead of the placeholder
       // prop for remotes we haven't seen fire yet.
       if (state.weapon !== undefined) {rp.model.setWeapon(state.weapon);}
+      // Roster-declared staleness for joiners - ghosted body, still a
+      // target; live transitions ride the playerStale edge.
+      if (state.stale) {rp.setStaleHidden(true);}
       return rp;
     },
     // Bots are hosted in the room sim - they never ping, so the
@@ -317,18 +320,11 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
     else {remotePlayer.respawn(playerState.position);}
   }
 
-  // Hide stale remote players - backgrounded tabs keep the socket open but
-  // stop sending updates, leaving ghosts standing around. 60s grace covers
-  // genuine packet loss; dead reckoning handles shorter gaps. Players that
-  // never reported ping (>5s without one) are dead sockets - hide them too.
-  const inactive = !deps.world.remotePlayers.active(playerId, remotePlayer, nm.getPlayers().get(playerId));
-  deps.world.remotePlayers.setStale(remotePlayer, inactive);
-  if (inactive) {
-    deps.lazyHud().removePlayerIndicator(playerId);
-    deps.lazyHealthBarSystem().removeBar(playerId);
-    sfxWorld.remoteMoveAudioGone(playerId);
-    return;
-  }
+  // Staleness is server-declared (playerStale edge + roster field): a
+  // quiet feed ghosts the body but it stays rendered and hittable until
+  // the server despawns it. Client-side liveness guesses are gone - they
+  // produced invisible-but-hittable targets.
+  deps.world.remotePlayers.setStale(remotePlayer, playerState.stale === true);
 
   // tick() drives interpolation + dead reckoning and internally advances
   // the AnimationMixer - a second model.update here would 2x animations.

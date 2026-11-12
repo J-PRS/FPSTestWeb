@@ -516,6 +516,29 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     },
   },
 
+  // Held-weapon edge: stamps the roster weapon so remotes draw the real
+  // gun before the first shot. Cosmetic only - no outcome reads it, so
+  // a liar costs his own silhouette. Kit-locked modes (gungame/igun/
+  // instagib) own the weapon server-side; the claim is dead there.
+  held: {
+    limit: { maxCount: 10, windowMs: 1000 },
+    validate: (obj) => {
+      const w = obj.weapon;
+      if (!Number.isInteger(w) || !((w as number) in WEAPONS)) {
+        return { success: false, error: 'weapon must be a WeaponType' };
+      }
+      return { success: true, data: { type: 'held', weapon: w as number } };
+    },
+    handle: (h, id, m): void => {
+      const mods = h.roomInfo.mods?.();
+      if (mods?.gungame === true || mods?.igun === true || mods?.instagib === true) {return;}
+      const p = h.playerManager.getPlayer(id);
+      if (!p || p.weapon === m.weapon) {return;}
+      p.weapon = m.weapon;
+      h.broadcast({ type: 'weaponUpdate', playerId: id, weapon: m.weapon });
+    },
+  },
+
   // Same name/map/mode grammar as the join handshake — a bad name just
   // lands you in 'default', never a rejection. No handle: GameServer
   // intercepts room hops before they reach a room's handler.
