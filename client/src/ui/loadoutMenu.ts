@@ -376,6 +376,9 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     const gg = player.armory.gunGame;
     const {igun} = player.armory;
     kitLocked = insta || gg;
+    // The class is the durable lock signal - inline min-width set before
+    // or after races rebuilds, the CSS rule can't be outrun.
+    document.getElementById('loadout-bar')?.classList.toggle('lo-lock', kitLocked);
     compactDrops(ui);
     if (ui.armorBox) {ui.armorBox.style.display = (insta || igun) ? 'none' : '';}
     if (ui.weaponBox) {ui.weaponBox.style.display = (insta || gg) ? 'none' : '';}

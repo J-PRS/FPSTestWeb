@@ -468,6 +468,12 @@ body.lobby-open #overlay-center { display: none; }
   box-shadow: 0 -6px 24px rgb(var(--ui-black-rgb) / 0.5);
 }
 #loadout-bar .lo-drop.open .lo-list { display: flex; }
+/* Kit-locked bar (instagib/igun/gungame hide most cells): the surviving
+   drops go label-width - the option-list floor lives on .lo-list, not
+   the face. Inline min-width loses to !important, which is the point:
+   the lock class can't be raced by a rebuild ordering. */
+#loadout-bar.lo-lock .lo-drop { min-width: 0 !important; }
+#loadout-bar.lo-lock .lo-cell { flex: 0 0 auto; }
 /* Two-column dropup (perks) — the 10-option stack was taller than the
    menu. Grid, centered on the chip, fixed width so cols don't jitter. */
 #loadout-bar .lo-drop.open .lo-list.cols2 {
