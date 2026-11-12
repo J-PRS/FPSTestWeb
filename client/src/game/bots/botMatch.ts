@@ -2,6 +2,7 @@ import { MODES,TEAM_COLORS,TEAM_LABEL,CTF_PTS,CTF_DMG_PER_PTS,CTF_FLAG_ZONE_R,ba
 import { gunGameRoll, igunChassis } from '../../../../shared/gunGame.js';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { simRand } from '../../../../shared/simRand.js';
+import { cutDemoStream } from '../demoStream.js';
 import type { GameBot } from './botBrain.js';
 import type { CtfBridge } from './botCtf.js';
 import type { RabbitBridge } from './botRabbit.js';
@@ -114,6 +115,7 @@ export function resetMatch(m: MatchHost): void {
     }
   }
   m.dmgPool.clear();
+  cutDemoStream(); // offline match end cuts the demo stream like wire's onMatchStart
   // The frag/death tallies ride kill-edge deltas with no snapshot echo —
   // same wipe the wire onMatchStart does or last match's columns linger.
   m.deps.world.killCounts.clear();

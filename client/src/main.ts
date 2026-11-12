@@ -61,6 +61,7 @@ import { gunGameRoll } from '../../shared/gunGame.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
 import { shipMatchResult } from './game/matchResults.js';
+import { startDemoStream, cutDemoStream, flushDemoStreamOnUnload } from './game/demoStream.js';
 import { DemoSerializer } from './demo/DemoSerializer.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
@@ -781,6 +782,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
  *  capture-related hangs off this one wiring pass. */
 async function initDemo(): Promise<void> {
   demoManager = new DemoManager();
+  startDemoStream(demoManager);
   const {httpUrl} = (await serverEndpoints);
   Logger.initShipping(httpUrl); // WARN+ lines stream to logs/client.log
   demoManager.setServerUrl(httpUrl);
@@ -1497,6 +1499,7 @@ init().then(async (): Promise<void> => {
     // F5 demo save: the rolling recording serializes + keepalive-POSTs
     // to /demos/upload before the tab dies - same pile the cool-shot
     // clips already land in.
+    flushDemoStreamOnUnload();
     try {
       const mgr = demoManager;
       if (mgr && mgr.mode === 'recording' && mgr.coolShotMgr.serverUrl) {

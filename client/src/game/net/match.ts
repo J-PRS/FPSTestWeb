@@ -5,6 +5,7 @@ import type { NetCtx } from './ctx.js';
 import * as sfx from '../../core/sfx.js';
 import { speakAnnounce } from '../../core/tts.js';
 import { MODES, type ModeId } from '../../../../shared/teams.js';
+import { cutDemoStream } from '../demoStream.js';
 
 /** Multi-kill names by chain — the booth reads these, not the feed's
  *  lowercase 'double kill (2)'. Clip = the WARLORD pack sample; quad+
@@ -139,6 +140,7 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     if (dm?.recorder.isRecording) {dm.recorder.matchToken = token;}
   };
   networkManager.onMatchStart = (mode): void => {
+    cutDemoStream(); // new match = new stream session - files group per game
     deps.lazyHud().setScoreboardCountdown?.(null);
     releaseScoreboard();
     // endCleanup reset the flags to 'home' just before this broadcast —
