@@ -71,6 +71,13 @@ const VOLATILE_TYPES = new Set([
 // journaling it spends roster-sized replay bytes for nothing.
 const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'yourAmmo', 'stateHash', 'ping', 'pong', 'srvPing', 'gameState']);
 const VOLATILE_TTL_MS = 3000;
+/** Cosmetic lines -- notices, chat, warns. Their truth (scores, roster,
+ *  gates) reseeds through the reclaim's gameState; the text itself is
+ *  presentation, and replaying it re-fires banners + TTS from a dead
+ *  tab's past. A short window still catches a brief flap's missed frag
+ *  line, an F5 doesn't dump the stale feed. Kill/deploy/flag edges stay
+ *  durable -- killCounts ride their deltas with no snapshot echo. */
+const COSMETIC_TTL = new Map<string, number>([['matchNotice', 15_000], ['chat', 15_000], ['serverWarn', 15_000]]);
 /** FPS_WIRESPY=1 -- emit-time wire forensics (which pids a keepalive/
  *  broadcast actually targets). Hoisted once: env reads on a per-frame
  *  hot path cost a map lookup every send. */
@@ -226,7 +233,7 @@ export class ConnectionManager {
   private outSeq = 0;
   /** JSON frames AND opt-in binary events share the journal + one ev seq
    *  space -- replay preserves causal order regardless of lane. */
-  private journal: { seq: number; data: string | Uint8Array; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
+  private journal: { seq: number; data: string | Uint8Array; only?: string; exclude?: string; volatile?: boolean; ttl?: number; at: number }[] = [];
   static readonly JOURNAL_MAX = 2048;
   /** splice(0,1) per push at saturation memmoves the whole journal every
    *  frame -- evict in chunks so the copy amortizes. Cap is a steady-state
@@ -314,7 +321,8 @@ export class ConnectionManager {
     const data = JSON.stringify(msg);
     if (!NO_JOURNAL_TYPES.has((msg as { type: string }).type)) {
       const volatile_ = VOLATILE_TYPES.has((msg as { type: string }).type);
-      this.journal.push({ seq, data, only, exclude, volatile: volatile_, at: wallNow() });
+      const ttl = volatile_ ? VOLATILE_TTL_MS : COSMETIC_TTL.get((msg as { type: string }).type);
+      this.journal.push({ seq, data, only, exclude, volatile: volatile_, ttl, at: wallNow() });
       if (this.journal.length > ConnectionManager.JOURNAL_MAX + ConnectionManager.JOURNAL_EVICT_CHUNK) {
         const n = this.journal.length - ConnectionManager.JOURNAL_MAX;
         this.journal.splice(0, n);
@@ -333,7 +341,7 @@ export class ConnectionManager {
     this.outSeq += 1;
     // slice() -- emit-time frames live in the shared evScratch ring and
     // recycle after ~128 encodes; the journal retains until replay.
-    this.journal.push({ seq: this.outSeq, data: data.slice(), only, exclude, volatile: volatile_, at: wallNow() });
+    this.journal.push({ seq: this.outSeq, data: data.slice(), only, exclude, volatile: volatile_, ttl: volatile_ ? VOLATILE_TTL_MS : undefined, at: wallNow() });
     if (this.journal.length > ConnectionManager.JOURNAL_MAX + ConnectionManager.JOURNAL_EVICT_CHUNK) {
       const n = this.journal.length - ConnectionManager.JOURNAL_MAX;
       this.journal.splice(0, n);
@@ -358,7 +366,7 @@ export class ConnectionManager {
     // batching them costs one flush instead of one syscall each.
     // (Test mocks have no cork -- flush unbatched there.)
     const stale = (e: (typeof this.journal)[number]): boolean =>
-      e.volatile === true && now - e.at > VOLATILE_TTL_MS;
+      e.ttl !== undefined && now - e.at > e.ttl;
     const eligible = (e: (typeof this.journal)[number]): boolean =>
       e.seq > fromSeq && !stale(e) &&
       (e.only === undefined || e.only === playerId) && e.exclude !== playerId;
