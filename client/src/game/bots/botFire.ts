@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { GameBot, BOT_DMG } from './botBrain.js';
 import { BOT_LOADOUTS, pickBotWeaponSafe } from '../../../../shared/botLoadouts.js';
 import { aimSkillFor } from '../../../../shared/botSkill.js';
+import { pHitFactor } from '../../../../shared/botHitChance.js';
 
 /** cos(20°): settle cone a pull waits inside - see botArsenal SETTLE_COS. */
 const SETTLE_COS = Math.cos(0.35);
@@ -108,10 +109,15 @@ export class BotFire {
     if ((fx * dx + fy * dy + fz * dz) / dist < SETTLE_COS) {return;}
     // Gun game: the ladder owns the pick outright - same rung the server
     // gate would admit, not whatever the loadout drifted to.
+    // Airborne hunt target: ballistic path, splash can't help - the
+    // shared pHitFactor prices fast flat guns up and lobs down, same
+    // physics-driven pick the server arsenal makes.
+    const tVel = this.targetVel(bot.huntTargetId);
+    const airborne = Math.abs(tVel?.y ?? 0) > 4;
     const picked0 = insta ? WeaponType.Railgun
       : gg ? gunGameWeapon(gunRungOf(w, bot.playerId), w.igun === true)
       : pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
-        bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
+        bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) * pHitFactor(t, dist, airborne) : undefined, bot.skill?.courage);
     // Deploy artillery only draws feet-down - same fallback the server's
     // arsenal picks: airborne body + groundedOnly pick = next legal slot,
     // not a dry pull that never fires.
@@ -213,11 +219,25 @@ export class BotFire {
     return rp && !rp.isDead ? rp.pos : null;
   }
 
+  /** Hunt target velocity for the hit-probability scorer - remote
+   *  players carry interp vel; the local player's vel drives the
+   *  moveSim; creatures count as grounded. */
+  private targetVel(targetId: string | null): THREE.Vector3 | null {
+    if (!targetId) {return null;}
+    if (targetId === 'local') { const p = this.host.player(); return p.isDead ? null : (p as unknown as { vel: THREE.Vector3 }).vel; }
+    if (targetId.startsWith('creature:')) {return null;}
+    const rp = this.host.world().remotePlayers.get(targetId);
+    return rp && !rp.isDead ? (rp as unknown as { velocity: THREE.Vector3 }).velocity : null;
+  }
+
   /** Belt throw - a lobbed grenade at the hunt's last-seen spot. Mirrors
    *  ServerBots.throwBelt: real projectile, ballistic pitch, 50% vel
    *  inheritance handled inside the Projectile ctor. */
   throwBelt(bot: GameBot): void {
     bot.wantBelt = false;
+    // Hook is locomotion, not ordnance - mirrors the server gate; the
+    // transit lobs reach lobAt through pickHook's own path.
+    if (bot.loadout?.belt === WeaponType.Hook) {return;}
     const aim = this.targetPos(bot.huntTargetId);
     if (aim) {this.lobAt(bot, aim);}
   }
