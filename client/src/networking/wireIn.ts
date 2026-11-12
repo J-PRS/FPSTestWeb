@@ -66,6 +66,7 @@ export class WireIn {
   /** True once a gameState carried localPlayerState — the demote signal
    *  is a LATER gameState without it (genuine spectators never set it). */
   private hadSeat = false;
+  private demoted = false;
 
   /** Binary hits/kills that arrived before their wireIds minted - a
    *  journaled replay or a gameState race can deliver the damage edge
@@ -101,6 +102,7 @@ export class WireIn {
     this.lastHitSeq = 0;
     this.pendingMissed.clear();
     this.hadSeat = false; // new session, new seat — stale demote memory would double-join
+    this.demoted = false;
   }
 
   /** Wire-feed seam - one message through the live dispatch path, so
@@ -590,11 +592,20 @@ dropCensus.total += 1;
     // get refused from here on, so the only sane move is to re-join.
     // Gated on having held a seat before: a genuine spectator handshake
     // must not rejoin-loop.
-    if (data.localPlayerState) {this.hadSeat = true;}
-    else if (this.hadSeat) {
+    if (data.localPlayerState) {this.hadSeat = true; this.demoted = false;}
+    else if (this.hadSeat || this.demoted) {
       this.hadSeat = false;
-      logger.warn(`gameState has no localPlayerState — seat was demoted, re-joining room=${String(data.room)}`);
-      this.h.reseat();
+      // A hidden tab has no claims to make — reseating now just re-fills
+      // the seat the AFK sweep is trying to free (the 90s demote/rejoin
+      // churn loop) and a later spectator gameState finds hadSeat already
+      // consumed, leaving us a ghost forever. Defer the rejoin to the
+      // next spectator gameState while visible (the un-hide resync).
+      if (document.hidden) {this.demoted = true;}
+      else {
+        this.demoted = false;
+        logger.warn(`gameState has no localPlayerState — seat was demoted, re-joining room=${String(data.room)}`);
+        this.h.reseat();
+      }
     }
     logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
     this.h.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, instagib: data.instagib, gungame: data.gungame, igun: data.igun, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
