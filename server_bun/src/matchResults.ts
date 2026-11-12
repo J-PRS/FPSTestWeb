@@ -37,6 +37,10 @@ export interface MatchResult {
   /** Full replay flushed this room (FPS_DEMO) - result row names its
    *  demo so a balance read can jump straight to the footage. */
   demo?: string;
+  /** Match-level kill economy: which weapons topped the ledger
+   *  (WeaponType → count) and what killed people ('w<wt>'/'env'/'self'). */
+  killsByWeapon?: Record<string, number>;
+  deathsByCause?: Record<string, number>;
   players: PlayerResult[];
 }
 
@@ -46,6 +50,8 @@ export interface ResultsHost {
   name: string; mode?: string; mapSrc?: string;
   createdAt?: number;
   spec?: { name?: string };
+  killsByWeapon?: Map<number, number>;
+  deathsByCause?: Map<string, number>;
   scores?: unknown;
   ffaScores?: Map<string, number>;
   players: { getAllPlayers(): Map<string, { id: string; name?: string; team?: string; isBot?: boolean; armorClass?: string; weapon?: number; gunRung?: number; perk?: string; kills: number; deaths: number; streak?: number; health: number; maxHealth: number; heldTokens?: number }> };
@@ -78,6 +84,8 @@ export function collectServerResult(host: ResultsHost, reason: string, opts: { w
     startedAt: host.createdAt,
     durationMs: host.createdAt !== undefined ? wallNow() - host.createdAt : undefined,
     winner: opts.winner, demo: opts.demo,
+    killsByWeapon: host.killsByWeapon ? Object.fromEntries([...host.killsByWeapon].map(([k, v]): [string, number] => [`w${k}`, v])) : undefined,
+    deathsByCause: host.deathsByCause ? Object.fromEntries(host.deathsByCause) : undefined,
     scores: host.scores !== undefined ? Object.assign({}, host.scores) as Record<string, number>
       : (host.ffaScores ? Object.fromEntries(host.ffaScores) : undefined),
     players,

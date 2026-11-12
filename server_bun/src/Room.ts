@@ -106,6 +106,9 @@ export class Room {
   /** Weapon-attributed kills - soaks read this to separate "the item
    *  earned it" from "the carrier earned it". WeaponType → count. */
   readonly killsByWeapon = new Map<number, number>();
+  /** Death cause tally ('w<wt>' player weapon / 'env' / 'self') - the
+   *  same kill edge, victim-side, so the ledger reads what kills. */
+  readonly deathsByCause = new Map<string, number>();
   /** Room-scoped u16 record ids for v3 tick frames  -  minted lazily on a
    *  player's first record (tickRecords); joiners get the snapshot inside
    *  gameState, everyone else via 'wireIds' deltas broadcast before the
@@ -805,7 +808,7 @@ export class Room {
     // think phases, so an answer lands a beat later like real chat.
     this.events.on((e): void => {
       switch (e.type) {
-        case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); const w = (e as { weapon?: number }).weapon; if (w !== undefined) {this.killsByWeapon.set(w, (this.killsByWeapon.get(w) ?? 0) + 1);} this.gunGameOnKill(e.targetId, e.shooterId); break;
+        case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); const w = (e as { weapon?: number }).weapon; if (w !== undefined) {this.killsByWeapon.set(w, (this.killsByWeapon.get(w) ?? 0) + 1);} const cause = w !== undefined ? `w${w}` : (e.shooterId === 'environment' ? 'env' : e.shooterId === e.targetId ? 'self' : 'other'); this.deathsByCause.set(cause, (this.deathsByCause.get(cause) ?? 0) + 1); this.gunGameOnKill(e.targetId, e.shooterId); break;
         }
         case 'hit': { this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); break;
         }
