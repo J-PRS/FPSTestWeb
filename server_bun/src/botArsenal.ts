@@ -10,6 +10,7 @@ import { classCapsule, classCanFire } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow } from '../../shared/weapons.ts';
 import { gunGameWeapon } from '../../shared/gunGame.ts';
+import { pHitFactor } from '../../shared/botHitChance.ts';
 import { idSeed } from '../../shared/weaponTable.ts';
 import { SELF_SPLASH_MAX,aoeDamageAt, hitRadiusAt } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -419,7 +420,8 @@ s[kind] += 1; this.propels.set(id, s);
     // distance: muzzle sits +1.4y over feet, so a flat 3m gap already reads
     // 3.3m+ in 3D and the band could never open.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-    let wt = this.pickWeapon(lo, distXZ, dist, p.id);
+    const airborne = Math.abs(target.velocity?.y ?? 0) > 4;
+    let wt = this.pickWeapon(lo, distXZ, dist, p.id, airborne);
     // Finisher pull: a wounded target (<25% hp) tempts the easy hold-out
     // instead of another heroic lob - the sidearm is a chip on a thin
     // target. ~40% of discharges take it; the rest stay on the primary,
@@ -797,12 +799,16 @@ s[kind] += 1; this.propels.set(id, s);
     return false;
   }
 
-  pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string): number {
+  pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string, airborne = false): number {
     // Gun-game: the ladder IS the arsenal - kit tables can't offer a
     // weapon the rung gate would refuse anyway.
     if (this.room.mods.gungame === true) {return gunGameWeapon(botId ? this.room.gunRungOf(botId) : 0, this.room.mods.igun === true);}
     const s = botId ? this.skillOfCb(botId) : undefined;
-    const skill = s ? (t: number): number => aimSkillFor(s, t, 0) : undefined;
+    // Hit-probability folded into proficiency: a ballistic target prices
+    // every weapon by flight-time error (splash can't help midair), a
+    // grounded one credits aoe's near-miss damage. pHitFactor is the
+    // shared scorer - situational picks fall out of physics, no table.
+    const skill = s ? (t: number): number => aimSkillFor(s, t, 0) * pHitFactor(t, dist, airborne) : undefined;
     // The wounded-explosive gate lives in shared pickBotWeaponSafe so
     // offline bots get the same self-preservation.
     if (!botId) {return pickBotWeapon(lo, distXZ, dist, skill, s?.courage);}
