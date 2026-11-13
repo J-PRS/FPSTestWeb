@@ -193,6 +193,10 @@ function restoreBodyPosition(ctx: NetCtx, player: LocalPlayer, localPlayerState:
 function applyRestoredVitals(ctx: NetCtx, player: LocalPlayer, localPlayerState: LocalPlayerState): void {
   const { deps, nm } = ctx;
   player.heldTokens = localPlayerState.held ?? 0;
+  // Bloom draw counter is server-truth: a reclaim carries it forward, a
+  // demote reset it - adopting the stamped count keeps the predicted
+  // cone seed locked to the authority's stream either way.
+  if (localPlayerState.bloomSeq !== undefined) {player.bloomSeq = localPlayerState.bloomSeq; player.bloom = 0;}
   if (Number.isFinite(localPlayerState.health)) {player.health = localPlayerState.health;}
   player.armor = Number.isFinite(localPlayerState.armor) ? localPlayerState.armor! : 0;
   player.isDead = localPlayerState.isDead;

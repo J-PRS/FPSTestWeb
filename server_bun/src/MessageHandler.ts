@@ -668,6 +668,7 @@ export class MessageHandler {
         // client predict blasts the server is still refusing to apply.
         protectedMs: Math.max(0, player.protectedUntil - simNow()),
         held: player.heldTokens || undefined,
+        bloomSeq: player.bloomSeq,
       },
     });
 

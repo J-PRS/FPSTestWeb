@@ -547,4 +547,9 @@ export interface LocalPlayerState {
   /** Headhunt held tokens - survives the reconnect so the HUD counter
    *  doesn't zero until the first playerHeld edge. */
   held?: number;
+  /** Server's bloom-cone draw counter - the client predicts the same
+   *  seeded jitter per pull, so a re-seat (reclaim carried the seq, or
+   *  demote reset it to 0) must adopt the authority's count or every
+   *  jittered shot diverges for the rest of the session. */
+  bloomSeq?: number;
 }
