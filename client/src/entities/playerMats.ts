@@ -20,6 +20,36 @@ function mannJointMat(): THREE.MeshStandardMaterial {
   return _mannMetal;
 }
 
+/** Fresnel rim — emissive edge glow injected into a Standard material's
+ *  shader (rim lives on the surface, not a separate shell — a softer read
+ *  than the hull outline). Uniform-driven so color flips cost nothing
+ *  after the one-time program patch. Shared by setRim's loop and the
+ *  ghost-clone path (clone() drops onBeforeCompile, so ghost variants
+ *  re-patch through here or shimmered enemies go rim-less). */
+export function patchRimMat(m: THREE.Material, col: number): void {
+  const sm = m as THREE.MeshStandardMaterial;
+  if (!sm.isMeshStandardMaterial) {return;}
+  // clone() JSON-roundtrips userData — a cloned rimU lands as a dead
+  // {r,g,b} with no setHex; rebuild the uniform rather than trusting it.
+  let u = sm.userData.rimU as { value: THREE.Color } | undefined;
+  if (!u || typeof u.value?.setHex !== 'function') {
+    u = { value: new THREE.Color(0) };
+    sm.userData.rimU = u;
+    const U = u;
+    // Chain, not overwrite - a grunge bake may already own the hook.
+    const prev = sm.onBeforeCompile;
+    sm.onBeforeCompile = (sh, r): void => {
+      prev?.(sh, r);
+      sh.uniforms.uRim = U;
+      sh.fragmentShader = `uniform vec3 uRim;\n${sh.fragmentShader}`.replace(
+        '#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\n totalEmissiveRadiance += uRim * pow(1.0 - saturate(dot(normalize(normal), normalize(vViewPosition))), 3.0);');
+    };
+    sm.needsUpdate = true;
+  }
+  u.value.setHex(col);
+}
+
 /** Per-mesh material pipeline: mannequin reskin recipes, the per-instance
  *  clone cache (so emissive flashes never leak across players sharing a
  *  cached GLB material), the damage-flash mat capture, and the debug
@@ -162,31 +192,12 @@ export class PlayerMats {
    *  AFTER a setRim call patch themselves on entry, so a late-registered
    *  black/atlas material can't sit rim-less while its siblings glow. */
   private rimCol = 0;
+  get rimColor(): number { return this.rimCol; }
 
   setRim(hex: number | null): void {
     const col = hex === null ? 0 : hex;
     this.rimCol = col;
-    for (const m of [...this.clones.values(), ...this.extraRim]) {
-      const sm = m as THREE.MeshStandardMaterial;
-      if (!sm.isMeshStandardMaterial) {continue;}
-      let u = sm.userData.rimU as { value: THREE.Color } | undefined;
-      if (!u) {
-        u = { value: new THREE.Color(0) };
-        sm.userData.rimU = u;
-        const U = u;
-        // Chain, not overwrite - a grunge bake may already own the hook.
-        const prev = sm.onBeforeCompile;
-        sm.onBeforeCompile = (sh, r): void => {
-          prev?.(sh, r);
-          sh.uniforms.uRim = U;
-          sh.fragmentShader = `uniform vec3 uRim;\n${sh.fragmentShader}`.replace(
-            '#include <emissivemap_fragment>',
-            '#include <emissivemap_fragment>\n totalEmissiveRadiance += uRim * pow(1.0 - saturate(dot(normalize(normal), normalize(vViewPosition))), 3.0);');
-        };
-        sm.needsUpdate = true;
-      }
-      u.value.setHex(col);
-    }
+    for (const m of [...this.clones.values(), ...this.extraRim]) {patchRimMat(m, col);}
   }
 
   /** Take a material built outside ownMaterial (the vertexized body

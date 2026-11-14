@@ -21,7 +21,7 @@ import { PlayerCollider } from './playerCollider.js';
 import { PlayerGun } from './playerGun.js';
 import { PlayerDistal } from './playerDistal.js';
 import { PlayerModelLod, smoothShade } from './playerModelLod.js';
-import { PlayerMats } from './playerMats.js';
+import { PlayerMats, patchRimMat } from './playerMats.js';
 import { PoseControl } from './playerPose.js';
 import { bakeVertexAO, enhanceWeaponMaterial } from '../effects/vertexAO.js';
 import { WeaponType } from '../../../shared/weapons.js';
@@ -1456,16 +1456,21 @@ export class PlayerModel {
   // alike, and mutating them would shimmer every gun in the client. This
   // is also why hand-prop mats never need per-model clones.
   private ghostBaseline: Map<THREE.Mesh, THREE.Material | THREE.Material[]> | null = null;
-  private static ghostVariants = new Map<THREE.Material, THREE.Material>();
-  private static ghostOf(m: THREE.Material): THREE.Material {
-    let g = this.ghostVariants.get(m);
+  private static ghostVariants = new Map<string, THREE.Material>();
+  private static ghostOf(m: THREE.Material, rim: number): THREE.Material {
+    // Keyed by source+rim: shared source mats (prop recipes) can ghost
+    // under a red enemy rim and a green friendly one at once, and clone()
+    // drops onBeforeCompile - the fresnel rim is re-injected per variant.
+    const key = `${m.uuid}:${rim}`;
+    let g = this.ghostVariants.get(key);
     if (!g) {
       g = m.clone();
       g.transparent = true;
       g.opacity = 0.28;
       g.depthWrite = false;
-      PlayerModel.ghostVariants.set(m, g);
+      this.ghostVariants.set(key, g);
     }
+    patchRimMat(g, rim);
     return g;
   }
   setGhost(on: boolean): void {
@@ -1477,8 +1482,13 @@ export class PlayerModel {
         const mesh = child as THREE.Mesh;
         const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
         if (!mat) {return;}
+        // The IFF hull rides this.hullMat — ghosting it fades the enemy
+        // outline to 28% exactly when he's stale/half-cloaked (still a
+        // live target). Body shimmers, the silhouette stays hostile-red.
+        if (mat === this.hullMat) {return;}
         this.ghostBaseline!.set(mesh, mat);
-        mesh.material = Array.isArray(mat) ? mat.map((m): THREE.Material<THREE.MaterialEventMap> => PlayerModel.ghostOf(m)) : PlayerModel.ghostOf(mat);
+        const rim = this.mats.rimColor;
+        mesh.material = Array.isArray(mat) ? mat.map((m): THREE.Material<THREE.MaterialEventMap> => PlayerModel.ghostOf(m, rim)) : PlayerModel.ghostOf(mat, rim);
       });
       return;
     }
@@ -1536,6 +1546,16 @@ export class PlayerModel {
       this.mats.extraRim.push(gm.material);
     }
     this.mats.setRim(hex);
+    // Ghost variants are keyed by the rim live at ghost-on - a remote
+    // ghosted before his first team mark wears a rim=0 clone that this
+    // setRim never reaches (variants aren't in the clone registry).
+    // Re-swap the worn clones onto the new rim key.
+    if (this.ghostBaseline) {
+      const rim = this.mats.rimColor;
+      for (const [mesh, mat] of this.ghostBaseline) {
+        mesh.material = Array.isArray(mat) ? mat.map((m): THREE.Material<THREE.MaterialEventMap> => PlayerModel.ghostOf(m, rim)) : PlayerModel.ghostOf(mat, rim);
+      }
+    }
   }
 
   // Inverted-hull outline: per SkinnedMesh a clone sharing the SAME
