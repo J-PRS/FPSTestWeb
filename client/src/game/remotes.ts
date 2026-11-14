@@ -189,10 +189,13 @@ function markIndicator(deps: RemotesDeps, hud: HUD, playerId: string, remotePlay
   // mesh ~2.5m over the logical feet; marking raw position sinks the
   // chevron into the body exactly when the lift is live.
   _markPos.copy(remotePlayer.position); _markPos.y += remotePlayer.renderLift;
-  // A lingering contact marks where he WAS (last-known), ghosted -
-  // never where he is now.
+  // A lingering contact marks where he WAS (last-known), ghosted —
+  // but only while his body isn't on screen. Pinning the marker to a
+  // stale spot while the enemy is plainly rendered detaches it from
+  // the body you can see (and pinning it to him leaks nothing: the
+  // visible body is already detection).
   const mem = Boolean(contact && !contact.fresh);
-  if (mem) {_markPos.set(contact!.x, contact!.y, contact!.z);}
+  if (mem && !remotePlayer.onScreen) {_markPos.set(contact!.x, contact!.y, contact!.z);}
   // Unnamed humans show their id minus the 'player_' prefix - still
   // marks them as a real person vs a bot's HP number.
   hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, mem, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held, name: playerState.name ?? playerId.replace(/^player_/, '') });

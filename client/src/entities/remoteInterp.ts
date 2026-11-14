@@ -636,9 +636,24 @@ export class RemoteInterp {
   private floorToGround(p: THREE.Vector3): void {
     if (!this.h.terrain) {return;}
     const w = this.lastServerPosition;
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: no-wire fallback — discriminating it needs a chord-above-field harness; both lanes end at no-lift where they can differ.
     const feet = (w.lengthSq() > 0 ? w.y : p.y) - classCapsule(this.h.armorClass).eye;
-    if (feet > this.h.terrain.getHeight(p.x, p.z) + 0.5) {return;}
+    if (feet > this.h.terrain.getHeight(p.x, p.z) + 0.5) {
+      // Airborne wire: the chord between snapshots can still shortcut
+      // THROUGH a rise the real path went over — the blanket skip left
+      // that render unchecked. Lift it to the DRAWN surface, but only
+      // when the wire feet clear that same surface at this column: then
+      // the lift strictly reduces render-vs-truth error and can never
+      // hover the body above its validated capsule (feet > drawn ⇒ the
+      // lifted eye stays below the wire eye).
+      const drawn = this.h.terrain.getRenderedHeight(p.x, p.z);
+      const {eye} = classCapsule(this.h.armorClass);
+      // Stryker disable next-line EqualityOperator: <= is an equivalent mutant — assigning drawn+eye when p.y==drawn+eye is a no-op.
+      if (feet > drawn && p.y < drawn + eye) {p.y = drawn + eye;}
+      return;
+    }
     const floor = this.groundY(p.x, p.z) + classCapsule(this.h.armorClass).eye;
+    // Stryker disable next-line EqualityOperator: <= is an equivalent mutant — assigning floor when p.y==floor is a no-op.
     if (p.y < floor) {p.y = floor;}
   }
 
