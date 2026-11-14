@@ -22,6 +22,7 @@ __pycache__
 
 *.demo
 server_bun/demos/*.demo
+server_bun/demos/*.demo.bad
 logs/
 *.jsonl
 client/nul.old
