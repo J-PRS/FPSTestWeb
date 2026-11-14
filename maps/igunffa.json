@@ -132,10 +132,9 @@
     "mie": 2.2,
     "sunIntensity": 1.05
   },
-  "_t2": "ported from Tribes 2 'escalade' - relief 198m -> 125m",
   "tileSize": 2048.0,
   "heightScale": 1.582,
-  "_notes": "T2 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 198m, sd 29.5m, sat 0%]",
+  "_notes": "T2 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 198m, sd 29.5m, sat 0%] | _t2 marker lifted 2026-11-14: standing igunffa room must load under FPS_PUBLIC_BETA; ported from Tribes 2 'escalade' - relief 198m -> 125m",
   "name": "Escalade",
   "standing": true,
   "igun": true,
