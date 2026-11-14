@@ -35,7 +35,14 @@ export function fxJobStats(): Record<string, number> {
 /** Clear the per-job maxes — called per dump so a spike doesn't fossilize. */
 export function fxJobResetMax(): void { fxJobMax.clear(); }
 
-function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
+/** Expensive rungs (shadow recompiles, cloud dome, forced LOD, post
+ *  passes) restore only after this much wall-clock headroom since the
+ *  last shed — industry-standard asymmetric scaling: cheap resScale/VFX
+ *  moves ride the normal ladder, the hitch-cost rungs shed instantly
+ *  and come back slowly. */
+const EXPENSIVE_RESTORE_MS = 180_000;
+
+function autoScale(deps: GameLoopDeps, st: LoopState, dir: number, now: number): void {
   // The SETTINGS toggle is the master switch — an opted-out user keeps
   // their manual pixel/shadow picks no matter how low the fps sits.
   if (!settings.get('fps-autoq')) {return;}
@@ -52,16 +59,35 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   // ladder at level 1, so it never came back).
   const wantShadows = settings.get('fps-shadows') &&
     (next === 0 || (baselineLevel > 0 && next === baselineLevel));
-  if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) {setShadows(deps, wantShadows);}
+  const wantOff = {
+    shadows: !wantShadows,
+    clouds: next >= 3,
+    lod: next >= 3,
+    post: next >= 4,
+  };
+  const cur = st.expOff;
+  let restoring = false, shedding = false;
+  for (const k of ['shadows', 'clouds', 'lod', 'post'] as const) {
+    if (cur[k] && !wantOff[k]) {restoring = true;}
+    if (!cur[k] && wantOff[k]) {shedding = true;}
+  }
+  // A blocked restore keeps that feature shed but must NOT suppress a
+  // newly-needed shed - union of current and wanted offs.
+  const blocked = restoring && now - st.expAt < EXPENSIVE_RESTORE_MS;
+  const off = blocked ? cur : wantOff;
+  if (blocked) {for (const k of ['shadows', 'clouds', 'lod', 'post'] as const) {off[k] = off[k] || wantOff[k];}}
+  if (shedding) {st.expAt = now;}
+  st.expOff = off;
+  if (rendererSetup.renderer.shadowMap.enabled === off.shadows) {setShadows(deps, !off.shadows);}
   applyResTier(deps, st, next, base, baselineLevel);
   // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
   // shades every skyward fragment on a GPU that already can't keep up.
-  deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
+  deps.sceneSetup.volumetricClouds?.setEnabled(!off.clouds);
   // Skinned-vert shed rides the same rung as the sky shader: remote
   // models are the tri-heavy object class, and resScale can't reach
   // vertex cost. Forced lod1 at ≥3; restored on recovery.
-  setForcedRemoteLod(next >= 3 ? 1 : null);
-  shedPostPasses(rendererSetup, next >= 4);
+  setForcedRemoteLod(off.lod ? 1 : null);
+  shedPostPasses(rendererSetup, off.post);
   // Quarks sim is pure CPU — on weak GPUs (usually weak CPUs too, e.g.
   // chromebooks) thin burst density before the pressure curve engages.
   let vfxScale = 1;
@@ -138,7 +164,7 @@ export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnTyp
     // 20s of sustained headroom per step keeps the ladder from bouncing.
     if (1 / rawElapsed > 55) {
       st.headroomAccum += rawElapsed;
-      if (st.headroomAccum > 20) { st.headroomAccum = 0; autoScale(deps, st, +1); }
+      if (st.headroomAccum > 20) { st.headroomAccum = 0; autoScale(deps, st, +1, now); }
     }
   }
   if (st.lowFpsFrames > 10 && now - st.lastFpsDump > 10_000) {
@@ -151,7 +177,7 @@ export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnTyp
     st.cpuBound = jsMs > (st.lowFpsAccum / st.lowFpsFrames) * 1000 * 0.35;
     dumpPerf(deps, st, budget, perf);
     st.lowFpsFrames = 0; st.lowFpsAccum = 0;
-    autoScale(deps, st, -1);
+    autoScale(deps, st, -1, now);
   }
 }
 function gpuId(renderer: THREE.WebGLRenderer): string {
@@ -334,6 +360,10 @@ export function seedGpuTier(deps: GameLoopDeps, st: LoopState): void {
   setForcedRemoteLod(tier >= 3 ? 1 : null);
   shedPostPasses(deps.rendererSetup, tier >= 4);
   setVfxQualityScale(tier >= 4 ? 0.45 : 0.7);
+  // The seed sheds expensive rungs directly - record them so the restore
+  // gate owns the clock, not a surprise mid-match recompile.
+  st.expOff = { shadows: false, clouds: tier >= 3, lod: tier >= 3, post: tier >= 4 };
+  st.expAt = performance.now();
   Logger.warn(`auto-quality: seeded gpu level ${tier} (${gpuId(deps.rendererSetup.renderer)})`);
 }
 
@@ -360,4 +390,6 @@ export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   st.renderAcc = 0;
   st.gpuLevel = 0;
   st.cpuLevel = 0;
+  st.expOff = { shadows: false, clouds: false, lod: false, post: false };
+  st.expAt = 0;
 }

@@ -180,6 +180,14 @@ export interface LoopState {
   /** Auto-quality's runtime render cap at the deepest CPU tier - an
    *  explicit fps-cap always wins; null = no auto cap. */
   autoCap: number | null;
+  /** Which EXPENSIVE features auto-quality has shed (true = off). Sheds
+   *  apply instantly; restores are gated on EXPENSIVE_RESTORE_MS of
+   *  headroom because each is a recompile/asset-swap hitch the fps
+   *  metric can't absorb the cost of - the old symmetric ladder
+   *  ping-ponged full-quality <-> degraded and stuttered every cycle. */
+  expOff: { shadows: boolean; clouds: boolean; lod: boolean; post: boolean };
+  /** Timestamp of the most recent expensive shed - the restore clock. */
+  expAt: number;
   /** Cached interior meshes for the per-frame shadow-caster distance
    *  gate - populated once the __t2interiors group exists, and re-
    *  censused whenever applyInteriors swaps it (map change disposes
@@ -613,7 +621,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // Belt charges ARE the nugget wallet - spawn stock + pickups, spent by
   // throws/deploys. (nuggetsCollected only counts pickups, so the HUD
   // read 0 at spawn even though the belt economy starts at BELT_MAX.)
-  hud.setNuggets(player.beltCharges);
+  hud.setNuggets(player.beltCharges, player.beltProgress);
   hud.setHeld(deps.world.mode === 'headhunt' ? player.heldTokens : null);
   // The run clock only ticks offline - show it only then, else it's a
   // frozen 00:00 under the FPS counter in every match.
@@ -978,7 +986,7 @@ function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number, draw: (
 export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; renderFrame(dt: number): void; } {
   let lastTime = 0;
   let renderElapsed = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, autoCap: null, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, veilLive: false, veilLiveFrames: 0, veilFroze: false, bootWarmup: new BootWarmup() };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, autoCap: null, expOff: { shadows: false, clouds: false, lod: false, post: false }, expAt: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, veilLive: false, veilLiveFrames: 0, veilFroze: false, bootWarmup: new BootWarmup() };
 
   // stats.js perf panels - FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
