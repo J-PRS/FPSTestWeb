@@ -10,10 +10,11 @@
 // Mortar and MRVLauncher are out too - fuse/carrier mechanics, not guns.
 // Bombard (specialty siege slug), Sticky (remote-detonation mines) and
 // RocketLauncher (retired universal flat rocket) are out as well.
-// igun also drops Railgun - precision is the wrong tax mid-climb - so
-// PlasmaCannon folds into the hose family.
+// igun fields Railgun late - a precision tax right before the hoses
+// open up. PlasmaCannon folds into the hose family.
 // Defined in WeaponType space - the wire id both ends already speak.
-// Excluded on purpose: sidearms (hold-out pulls), beams (Repair/
+// Excluded on purpose: classic-gungame sidearms (igun fields the light
+// sidearms as a mid-climb rung), beams (Repair/
 // HealBeam/Shocklance adjudicate outside the projectile path - Lightning
 // is the exception, igun fields it as a near-pinnacle hose),
 // melee, and every belt throw / deployable - the ladder IS the kit.
@@ -41,9 +42,9 @@ export const GUN_GAME_LADDER: readonly (readonly WeaponType[])[] = [
 export const IGUN_LADDER: readonly (readonly WeaponType[])[] = [
   [WeaponType.FastDiscLauncher, WeaponType.BoltLauncher],   // hardest: flat lead, tiny pop
   [WeaponType.Disc],                                        // arc-bounce reads
-  [WeaponType.GrenadeLauncher],                             // mid lob
   [WeaponType.Gonne, WeaponType.Cannon, WeaponType.Basilisk], // arc family: same shell, frame is luck
-  [WeaponType.MissileLauncher],                             // big boom, low RoF brakes the flow
+  [WeaponType.Revolver, WeaponType.Pistol, WeaponType.Blaster], // light sidearms: honest flat slugs, no pop to lean on
+  [WeaponType.Railgun],                                     // precision tax before the easy rungs
   [WeaponType.PlasmaGun, WeaponType.Sprinkler, WeaponType.PlasmaCannon], // plasma family - rapid bolts humans track well
   [WeaponType.Flak, WeaponType.Shotgun],                    // very easy: coverage
   [WeaponType.Lightning],                                   // hitscan beam - almost free kills
@@ -89,11 +90,13 @@ export function gunGameRoll(rung: number, igun: boolean, rand: number): WeaponTy
 
 /** May `wt` fire at `rung` in the given ladder? Any bucket member counts -
  *  the fire gate is broader than the roll because the assigned member is
- *  the only one shouldered anyway. The Hook grapple is the one exemption -
- *  it deals no damage (movement tool, not a rung weapon), so it can't farm
- *  ladder progress and every player keeps their traverse. */
+ *  the only one shouldered anyway. The Hook grapple is exempt - it deals
+ *  no damage (movement tool, not a rung weapon), so it can't farm ladder
+ *  progress and every player keeps their traverse. igun also exempts the
+ *  melee punch - the blast envelope already scales it x10 like every
+ *  other igun hit, and a fists kill is a kill the ladder should count. */
 export function gunGameAllows(rung: number, wt: number, igun = false): boolean {
-  return bucketFor(rung, igun).includes(wt) || wt === WeaponType.Hook;
+  return bucketFor(rung, igun).includes(wt) || wt === WeaponType.Hook || (igun && wt === WeaponType.Melee);
 }
 
 /** igun chassis: the rung weapon's own class tier, so a tier-locked gun
