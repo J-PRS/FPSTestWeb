@@ -2,7 +2,6 @@
 // to each rung and the fastest climb to the Chaingun pinnacle.
 //   bun tests/scenarios/_igunsoak.ts [seeds]
 import { mkRoom, step, pin } from './harness.ts';
-import { WeaponType } from '../../../shared/weapons.ts';
 
 const SEEDS = Number(process.argv[2]) || 3;
 const BOTS = 8;
