@@ -38,12 +38,25 @@ export class UdpLane {
   private portNum = 0;
 
   async listen(port: number): Promise<void> {
-    this.sock = await Bun.udpSocket({
-      port,
-      socket: {
-        data: (_s, buf, port, addr): void => this.onData(buf, port, addr),
-      },
-    }) as UdpSock;
+    // A dev-watch respawn races its predecessor's socket release —
+    // child.exited resolves before Windows frees the datagram port, so
+    // an instant bind reads EADDRINUSE. Give it a few beats, then let
+    // the failure stand (a real squatter deserves the crash).
+    for (let attempt = 0; ; attempt++) {
+      try {
+        this.sock = await Bun.udpSocket({
+          port,
+          socket: {
+            data: (_s, buf, port, addr): void => this.onData(buf, port, addr),
+          },
+        }) as UdpSock;
+        break;
+      } catch (error) {
+        const busy = (error as { code?: string }).code === 'EADDRINUSE' || /in use|EADDRINUSE/i.test(String(error));
+        if (!busy || attempt >= 10) {throw error;}
+        await new Promise((r): void => { setTimeout(r, 300); });
+      }
+    }
     this.portNum = port;
     logger.info('udp lane listening', { port });
   }

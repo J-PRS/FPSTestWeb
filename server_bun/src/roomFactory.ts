@@ -246,8 +246,12 @@ export class RoomFactory {
         logger.info('Bot-only room adopted joiner sim gates', {
           room: name, noBalls, noCreatures, instagib, gungame, igun,
         });
-      } else {
-        // First joiner defines the sim gates — callers warn their joiner.
+      } else if (mods.noBalls === true || mods.noCreatures === true || mods.instagib === true
+          || mods.gungame === true || mods.igun === true) {
+        // First joiner defines the sim gates — callers warn their joiner,
+        // but only when they ASKED for gates. A bare join (mods={}) to a
+        // modded standing room declares nothing and just plays its rules —
+        // warning on it spams every /s/ join to igunffa-1.
         logger.warn('Join sim gates differ from room', {
           room: name, wantNoBalls: noBalls, wantNoCreatures: noCreatures,
           wantInstagib: instagib, wantGungame: gungame, wantIgun: igun,

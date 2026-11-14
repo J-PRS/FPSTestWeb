@@ -2,7 +2,7 @@
 // Saves uploaded demo clips to the demos/ directory and maintains a JSON index.
 
 import { join } from 'node:path';
-import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, readdir, rename } from 'node:fs/promises';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
@@ -73,7 +73,11 @@ export class DemoStorage {
           });
 added += 1;
         } catch (error: unknown) {
-          logger.warn(`Failed to parse orphaned demo ${filename}`, { error: errMsg(error) });
+          logger.warn(`Failed to parse orphaned demo ${filename} — quarantining`, { error: errMsg(error) });
+          // An unparseable file never heals — rename so the next boot's
+          // reconcile skips it instead of re-warning forever.
+          await rename(join(this.demosDir, filename), join(this.demosDir, `${filename}.bad`))
+            .catch((): void => { /* rename failed — it re-warns next boot, harmless */ });
         }
       }
       if (added > 0) {
