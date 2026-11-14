@@ -367,6 +367,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // same-epoch positions instead of subtracting a ping estimate.
       { name: 'age', wire: 'num', channel: 'echo', absent: null },
       { name: 'fizzle', wire: 'bool', channel: 'edge', absent: null }, // chambered refire fade - remove quietly
+      // Authority planted a reclaimable corpse (stats.plants) - replicas
+      // embed at the contact instead of popping. Never re-derived from
+      // position: the wire says so or it didn't happen.
+      { name: 'planted', wire: 'bool', channel: 'edge', absent: null },
     ],
     // Belt-sticky combo: `projectileId` is the RIDER glued dead-center
     // onto `host` - replicas parent to the host's path the same tick.

@@ -26,6 +26,15 @@ const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }):
   return preSnap;
 };
 
+/** The `planted` gone flag IS the authority's world contact - the
+ *  replica's own sweep just hasn't reached it yet (gone lands ~a
+ *  transit early). tryEmbed gates on worldContact, so without this
+ *  stamp planted spears only stick when the replay happened to sweep
+ *  the contact first - on a live link that's a coin flip. */
+const stampPlanted = (p: Projectile, planted: boolean | undefined): void => {
+  if (planted && p.config.embeds !== undefined) {p.worldContact = true;}
+};
+
 
 /** Last weapon + shot count seen per shooter - every remote fire event
  *  funnels through here (botFire markers included), so alt+w can audit
@@ -193,7 +202,7 @@ export function wireProjectiles(ctx: NetCtx): void {
         : srvAge;
       localProjectile.reanchorTo(position, velocity,
         exactAge ?? Math.max(0, localProjectile.age - (nm().serverPingMs ?? nm().getPing()) / 2000));
-      // Demo: the authority just corrected this arc mid-flight — a Bounce
+      // Demo: the authority just corrected this arc mid-flight - a Bounce
       // edge is the format's "re-seat on recorded state" checkpoint, so
       // validators/replay diff against the corrected arc, not the claim's.
       if (localProjectile.demoProjectileId) {
@@ -212,7 +221,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, srvAge?: number, srvT?: number, variant?: number): void => {
     if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
     // Hidden tabs render nothing and the un-hide resync reaps remote
-    // shells anyway — spawning them anyway just piles up a backlog the
+    // shells anyway - spawning them anyway just piles up a backlog the
     // 512 map-cap doesn't cover (the 709-shell drop + TrailDriver churn).
     if (document.hidden) {return;}
     noteWeapon(ownerId, weaponType);
@@ -385,7 +394,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // real one (every blast stamp then misses its knockback echo and the
   // shove lands twice). Snap to the wire point before exploding.
 
-  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, srvAge?: number, fizzle?: boolean): void => {
+  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, srvAge?: number, fizzle?: boolean, planted?: boolean): void => {
     parityProbes.destroysSeen += 1;
     if (deps.world.playbackMode) {return;}
     // Chambered fizzle: the owner's refire faded this shell - both copies
@@ -418,6 +427,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const remoteProjectile = remoteProjectiles.get(projectileId);
     if (remoteProjectile) {
       snapToContact(remoteProjectile, position);
+      stampPlanted(remoteProjectile, planted);
       remoteProjectile.popClass = 'wire'; // the authority's detonation, not a painted contact
       remoteProjectile.explode(); // onExploded records + unmaps
       // Body-hit replica suppressed its predicted blast (ghostBodyPop) -
@@ -482,6 +492,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       } else {
         preSnap = snapToContact(localProjectile, position);
       }
+      stampPlanted(localProjectile, planted);
       // offM as a population - replica-vs-fate distance for every owned
       // shell, not just the ones that painted a ghost hit. Outliers tag
       // weapon + whether the replica already popped on its own contact.

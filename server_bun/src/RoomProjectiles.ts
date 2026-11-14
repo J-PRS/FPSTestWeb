@@ -334,14 +334,14 @@ export class RoomProjectiles {
     }
   }
 
-  private edgeGone(proj: LiveProj, at: Vec3, age: number, fizzle = false): void {
+  private edgeGone(proj: LiveProj, at: Vec3, age: number, fizzle = false, planted = false): void {
     const bin = this.room.connections;
     const n = proj.id.startsWith('sp-') ? Number(proj.id.slice(3)) : Number.NaN;
     if (bin && Number.isFinite(n)) {
-      bin.broadcastBinaryReliable(encodeProjGone({ projId: n, age, position: at, shotId: proj.pull, fizzle }));
+      bin.broadcastBinaryReliable(encodeProjGone({ projId: n, age, position: at, shotId: proj.pull, fizzle, planted }));
       return;
     }
-    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age, fizzle: fizzle || undefined }) as ServerMessage);
+    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age, fizzle: fizzle || undefined, planted: planted || undefined }) as ServerMessage);
   }
 
   /** Planted spear corpses (stats.plants): the terrain/wall contact
@@ -352,7 +352,7 @@ export class RoomProjectiles {
   plant(proj: LiveProj, at: Vec3): void {
     const vl = dhypot3(proj.p.vel.x, proj.p.vel.y, proj.p.vel.z) || 1;
     this.planted.set(proj.id, { pos: { ...at }, dir: { x: proj.p.vel.x / vl, y: proj.p.vel.y / vl, z: proj.p.vel.z / vl }, ownerId: proj.ownerId, weaponType: proj.weaponType, ttl: proj.stats.plants! });
-    this.edgeGone(proj, at, proj.p.age);
+    this.edgeGone(proj, at, proj.p.age, false, true);
   }
 
   private spearSweep(dt: number): void {

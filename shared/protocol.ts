@@ -340,7 +340,10 @@ export type ServerMessage =
       age?: number;
       /** Chambered fizzle: a refire faded the shell - remove quietly,
        *  no blast/damage/chain. Absent = ordinary detonation. */
-      fizzle?: boolean }
+      fizzle?: boolean;
+      /** Authority planted a reclaimable corpse (stats.plants) at the
+       *  contact - replicas embed instead of popping. */
+      planted?: boolean }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number;
       /** §4.7 replica lanes keyed by kind name - `hash` the client
