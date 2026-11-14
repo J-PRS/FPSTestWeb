@@ -52,8 +52,16 @@ export function pickChain(deps: CombatDeps, from: THREE.Vector3, exclude: (typeo
 function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o: THREE.Vector3, d: THREE.Vector3): string | null {
   traceT.t = hitT;
   let hitId: string | null = null;
+  // Teammates pass through, same as the server's beamSweep default
+  // (includeTeammates=false): the authority never judges them, so latching
+  // the visual bolt on a friendly was a lie - the beam detached-looking
+  // attach point was a hit the server would never pay. Wire team resolves
+  // the same way fillMapBlips does; teamless/FFA remotes stay hittable.
+  const wirePlayers = deps.lazyNetworkManager?.().getPlayers?.();
   for (const [pid, rp] of deps.world.remotePlayers) {
     if (rp.isDead) {continue;}
+    const team = (rp as { team?: string }).team ?? wirePlayers?.get(pid)?.team;
+    if (team !== undefined && team === deps.world.localTeam) {continue;}
     // Ray vs the class capsule (shared/botClasses - the same shape the
     // server validates) at the GHOST epoch - the server judges the victim
     // ~0.7·renderDelay behind live; the rendered body is ~150ms stale
@@ -175,8 +183,24 @@ function bounceLeg(deps: CombatDeps): {
     const d2 = _lgBend.distanceToSquared(t.pos) - (t.hitRadius ?? t.radius) ** 2;
     if (d2 < bestD2) { bestD2 = d2; bTarget = t; bPlayer = null; _lgTo.copy(t.pos); }
   }
-  for (const [pid, rp] of deps.world.remotePlayers) {
+  const picked = pickBouncePlayer(deps, bestD2);
+  if (picked) { bPlayer = picked; bTarget = null; }
+  if (!bTarget && !bPlayer) {return null;}
+  _lgHit.copy(_lgTo);
+  return { hitT: _lgBend.distanceTo(_lgHit), hitTarget: bTarget, hitPlayerId: bPlayer, bend: _lgBend };
+}
+
+/** Nearest live ENEMY remote within range of _lgBend - ghost-epoch
+ *  capsule midpoint, same teammate pass-through as the straight leg and
+ *  the server's bounce pick. Winner's midpoint lands in _lgTo. */
+function pickBouncePlayer(deps: CombatDeps, initD2: number): string | null {
+  const wirePlayers = deps.lazyNetworkManager?.().getPlayers?.();
+  let pid: string | null = null;
+  let bestD2 = initD2;
+  for (const [id, rp] of deps.world.remotePlayers) {
     if (rp.isDead) {continue;}
+    const team = (rp as { team?: string }).team ?? wirePlayers?.get(id)?.team;
+    if (team !== undefined && team === deps.world.localTeam) {continue;}
     // Ghost epoch (server's lag-comp rewind), not the rendered body -
     // eye height; measure to the capsule midpoint so a contact at the
     // feet still catches a standing enemy.
@@ -184,11 +208,9 @@ function bounceLeg(deps: CombatDeps): {
     const gp = rp.ghostPosition?.(_lgGhost, _lgTransit) ?? rp.position;
     _lgD2.set(gp.x, gp.y - cap.eye + cap.height * 0.5, gp.z);
     const d2 = _lgBend.distanceToSquared(_lgD2) - cap.radius * cap.radius;
-    if (d2 < bestD2) { bestD2 = d2; bTarget = null; bPlayer = pid; _lgTo.copy(_lgD2); }
+    if (d2 < bestD2) { bestD2 = d2; pid = id; _lgTo.copy(_lgD2); }
   }
-  if (!bTarget && !bPlayer) {return null;}
-  _lgHit.copy(_lgTo);
-  return { hitT: _lgBend.distanceTo(_lgHit), hitTarget: bTarget, hitPlayerId: bPlayer, bend: _lgBend };
+  return pid;
 }
 
 // Ray-vs-sphere entry distance along _lgD for the to-target vector in
