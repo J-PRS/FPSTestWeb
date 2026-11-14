@@ -301,6 +301,7 @@ export class NetworkManager {
     this.onlineExpected = true;
     this.lastUrl = url;
     serverStamp.url = url; // Alt+Q names the endpoint — "which box am I on"
+    (window as { __serverStamp?: typeof serverStamp }).__serverStamp = serverStamp;
     this.lastFactory = makeTransport;
     this.lastResolveUrl = resolveUrl;
     this.lastRxAt = Date.now();

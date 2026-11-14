@@ -464,7 +464,8 @@ else if (m === 'error') {lvl = LogLevel.ERROR;}
       // Shift+Alt+Q: game-state dump (scoreboard/ASW), not logs.
       if (e.shiftKey) {
         const dump = (window as { __gameDump?: () => string[] }).__gameDump?.() ?? [];
-        const text = `=== GAME STATE ===\n${dump.join('\n')}`;
+        const srv = (window as { __serverStamp?: { url?: string } }).__serverStamp;
+        const text = `=== GAME STATE ===\nserver: ${srv?.url ?? '?'}\n${dump.join('\n')}`;
         navigator.clipboard.writeText(text).then((): void => { toast(`Game state copied (${dump.length} rows)`); },
           (): void => { console.log(text); toast('Clipboard unavailable — dumped to console', false); }).catch((): void => undefined);
         return;
