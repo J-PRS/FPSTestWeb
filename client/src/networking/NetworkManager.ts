@@ -13,7 +13,7 @@ import type { TeamId } from '../../../shared/teams.js';
 import { ClaimLedger, noteMutedClaim } from './claimLedger.js';
 import { confirmDamageEcho, sweepDamageEchoes } from '../game/parity.js';
 import { InputStream } from './inputStream.js';
-import { WireIn } from './wireIn.js';
+import { WireIn, serverStamp } from './wireIn.js';
 import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/worldModel.js';
 import { armLoafDiag } from './loafDiag.js';
 import { recWireOut } from '../core/telemetry.js';
@@ -300,6 +300,7 @@ export class NetworkManager {
   connect(url: string, makeTransport?: TransportFactory, resolveUrl?: () => Promise<string | null>): Promise<void> {
     this.onlineExpected = true;
     this.lastUrl = url;
+    serverStamp.url = url; // Alt+Q names the endpoint — "which box am I on"
     this.lastFactory = makeTransport;
     this.lastResolveUrl = resolveUrl;
     this.lastRxAt = Date.now();

@@ -358,6 +358,11 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   }
 
+  // Embed shells (javelin) plant their thunk on terrain but on flesh
+  // only the shooter's marker tick played - the skewer itself needs a
+  // voice at the victim or a hit reads as silent.
+  if (p.config.embeds !== undefined) {sfx.fleshHitAt(hitPos);}
+
   const airborne = targetPlayer
 
     ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6

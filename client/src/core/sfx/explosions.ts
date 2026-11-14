@@ -181,6 +181,31 @@ export function explosionAt(pos: THREE.Vector3, big: boolean, weaponType?: numbe
 
 
 
+/** Spear-into-flesh voice — the terrain thunk's clang/spark reads dirt;
+ *  a dropped-rate thud + hurt yelp reads body. Positional so victims and
+ *  bystanders hear the skewer, not just the shooter's marker tick. */
+export function fleshHitAt(pos: THREE.Vector3): void {
+
+  const c = ctx();
+
+  if (!c) {return;}
+
+  const inNode = audio.worldInput(pos);
+
+  if (!inNode) {return;}
+
+  const g = c.createGain(); g.connect(inNode);
+
+  try {
+
+    if (!play(g, 0.7, inNode)) { audio.freeInput(inNode); return; }
+
+    layer(g, [['hurt', 0.8, 0.9], ['thud_big', 0.7, 0.55, 300]]);
+
+  } finally { audio.emitterPitch = 1; }
+
+}
+
 // Per-weapon explosion identities — same physics, different voice so you
 
 // can hear WHAT blew up, not just that something did.

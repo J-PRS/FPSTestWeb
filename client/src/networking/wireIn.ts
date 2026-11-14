@@ -32,7 +32,7 @@ import { urlParams } from '../core/params.js';
 const logger = new ChildLogger('Wire');
 
 /** Last gameState's server stamp - Alt+Q prints it next to deploy:. */
-export const serverStamp = { version: '?', build: '?' };
+export const serverStamp = { version: '?', build: '?', url: '?' };
 
 export class WireIn {
   /** v3 tick-frame roster: u16 -> playerId, fed by 'wireIds' events that

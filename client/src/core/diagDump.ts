@@ -237,7 +237,7 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   lines.push(
     `projectiles: ${ctx.projectiles.length} live`,
     `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
-    `deploy: ${deployStamp()} · server v${serverStamp.version}${serverStamp.build === '?' ? '' : ` (${serverStamp.build})`}`,
+    `deploy: ${deployStamp()} · server v${serverStamp.version}${serverStamp.build === '?' ? '' : ` (${serverStamp.build})`} · ${serverStamp.url}`,
     staleLine(),
   );
   // Verbose census - trail/ball/proj/shell row dumps, pool inventories,
