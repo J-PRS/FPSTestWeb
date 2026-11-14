@@ -26,7 +26,7 @@ export class BotWatchdog {
   private readonly logic = new Map<string, THREE.Vector3>();
   private readonly render = new Map<string, THREE.Vector3>();
   private readonly stalled = new Set<string>();
-  // Displacement anchor — where the bot stood ~WD_STUCK_T ago. A bot
+  // Displacement anchor - where the bot stood ~WD_STUCK_T ago. A bot
   // stuck in a corner keeps producing WD_DT motion deltas (jiggle,
   // repulsion pushback), so the stall test is NET displacement over a
   // longer window: pacing in a 3m circle cancels out, real travel doesn't.

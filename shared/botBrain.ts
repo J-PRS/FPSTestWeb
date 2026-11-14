@@ -393,6 +393,7 @@ export class BotBrain {
    *  face; pickDest steers feet to the gap/low section the probe found. */
   breachGoal: BotVec = { x: 0, y: 0, z: 0 };
   breachUntil = 0;
+  breachSrc = '';
   readonly h: HuntState;
   flinchT = 0;
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
@@ -963,7 +964,7 @@ export class BotBrain {
     if (ctx.id && traceId && ctx.id.includes(traceId)
       && ctx.objective && Math.hypot(pos.x - ctx.objective.x, pos.z - ctx.objective.z) > 30) {
       const spd = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.y, ctx.vel.z) : 0;
-      const bg = this.breachUntil > now ? ` bg=${f(this.breachGoal)}` : '';
+      const bg = this.breachUntil > now ? ` bg=${this.breachSrc}:${f(this.breachGoal)}` : '';
       // oxlint-disable-next-line no-console
       console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} ej=${this.escapeS.escapeJetT.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}${bg}`);
     }
@@ -1087,6 +1088,7 @@ export class BotBrain {
           if (gate) {
             this.breachGoal = gate;
             this.breachUntil = now + 20_000;
+            this.breachSrc = 'egress';
           }
         }
       }
@@ -1111,6 +1113,7 @@ export class BotBrain {
             const g = dirXZ(this.goalS.goal.x - pos.x, this.goalS.goal.z - pos.z);
             this.breachGoal = { x: pos.x - g.x * 14, y: pos.y, z: pos.z - g.z * 14 };
             this.breachUntil = now + 4000;
+            this.breachSrc = 'wedge';
             this.goalClimbs = 0;
           } else {
             this.wallResponse(ctx, pos, now);
@@ -1206,6 +1209,7 @@ export class BotBrain {
     if (gate) {
       this.breachGoal = gate;
       this.breachUntil = now + 20_000;
+      this.breachSrc = 'gate';
       this.goalClimbs = 0;
       return;
     }
@@ -1215,22 +1219,34 @@ export class BotBrain {
 this.goalClimbs += 1;
     } else {
       let breach = wallTop === null ? null : breachAlongWall(ctx, pos, this.goalS.goal);
-      if (!breach && ctx.route && this.goalS.goal) {
-        // The face probe only scans ±60m - a fortress wall's real
-        // opening can sit farther along. The structure-aware flood
-        // already threads it; take the next hop as the waypoint rather
-        // than forfeiting to a re-approach loop - but only a hop the
-        // bot can actually walk to: a cell center sitting behind wall
-        // geometry re-arms the same pin it was meant to break.
+      // The face probe only scans ±60m - a fortress wall's real
+      // opening can sit farther along. The structure-aware flood
+      // already threads it; take the next hop as the waypoint rather
+      // than forfeiting to a re-approach loop - but only a hop the
+      // bot can actually walk to: a cell center sitting behind wall
+      // geometry re-arms the same pin it was meant to break.
+      // Only on a real wall: with nothing on the goal line the flood
+      // still emits hops (terrain deflects it), and chasing them
+      // overrides a moving skier's route every stall window - the
+      // peaks capper orbited flood hops 600m+ out for 80s.
+      if (!breach && wallTop !== null && ctx.route && this.goalS.goal) {
         const hop = ctx.route(pos.x, pos.z, this.goalS.goal.x, this.goalS.goal.z, 90);
         if (hop && !segSolidHit(
           { x: pos.x, y: pos.y + 1, z: pos.z },
           { x: hop.x, y: pos.y + 1, z: hop.z },
           ctx.solids ?? [], ctx.solidIndex ?? undefined, ctx.team)) {breach = hop;}
       }
+      // A waypoint farther from the goal than the bot is backwards - the
+      // breach exists to find the gap in the wall BETWEEN pos and goal,
+      // and an off-path "gap" just marches the stall away from the goal
+      // and re-arms forever (peaks capper orbited phantom waypoints
+      // 600m out for 80s+, flag untouched).
+      if (breach && this.goalS.goal
+        && dist3(breach, this.goalS.goal) >= dist3(pos, this.goalS.goal)) {breach = null;}
       if (breach) {
         this.breachGoal = breach;
         this.breachUntil = now + 25_000;
+        this.breachSrc = 'hop';
       } else {
         this.goalS.wanderT = 0;
       }

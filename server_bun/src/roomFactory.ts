@@ -17,7 +17,7 @@ import type { RoomMods } from '../../shared/protocol.ts';
 import { ResultSigner, SIGN_SECRET, nextMatchId } from './resultSigner.ts';
 
 export interface RoomFactoryHost {
-  /** Live room index — created rooms register here before returning. */
+  /** Live room index - created rooms register here before returning. */
   rooms: Map<string, Room>;
   /** Session lifecycle owner — rooms read grace state through it. */
   sessions: SessionRegistry;

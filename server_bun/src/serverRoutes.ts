@@ -1,5 +1,5 @@
 /**
- * serverRoutes — every HTTP route handler for the game server: the
+ * serverRoutes - every HTTP route handler for the game server: the
  * plain-GET table, the admin API, demo upload/download, and the map-bin
  * distribution endpoint. server.ts keeps the transport wiring
  * (Bun.serve + WS/RTC/WT sockets); this owns "what the HTTP surface
@@ -30,7 +30,7 @@ export interface HttpCtx {
   rtcRelay: RtcRelay;
   /** DER SHA-256 of the WebTransport cert, once the WT block has read it. */
   wtCertHash(): string | null;
-  /** Client IP for per-caller throttle tables — Bun's server.requestIP. */
+  /** Client IP for per-caller throttle tables - Bun's server.requestIP. */
   requestIP?(req: Request): { address: string } | null;
 }
 

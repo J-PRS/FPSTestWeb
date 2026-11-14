@@ -1,5 +1,5 @@
 /**
- * logRotate — size-triggered mid-run log rolling. Boot-time rotation
+ * logRotate - size-triggered mid-run log rolling. Boot-time rotation
  * (rotateLogs in clientLogs) leaves a long-lived server with forever
  * logs; any appender calls rotateLogIfBig before writing so a hot file
  * rolls mid-run too. Kept import.meta/dir-free so anything can import

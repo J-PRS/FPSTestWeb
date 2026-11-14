@@ -1,4 +1,4 @@
-/** matchResults — one JSON file per game end / room close so balancing
+/** matchResults - one JSON file per game end / room close so balancing
  *  reads come from a pile of real outcomes, not memory. Server rooms
  *  dump on endMatch AND dispose (a room that never reached a finish
  *  still leaves its mid-match state); offline clients POST their local
@@ -82,12 +82,12 @@ export function collectServerResult(host: ResultsHost, reason: string, opts: { w
     map: host.spec?.name ?? host.mapSrc,
     endedAt: wallNow(), reason,
     startedAt: host.createdAt,
-    durationMs: host.createdAt !== undefined ? wallNow() - host.createdAt : undefined,
+    durationMs: host.createdAt === undefined ? undefined : wallNow() - host.createdAt,
     winner: opts.winner, demo: opts.demo,
     killsByWeapon: host.killsByWeapon ? Object.fromEntries([...host.killsByWeapon].map(([k, v]): [string, number] => [`w${k}`, v])) : undefined,
     deathsByCause: host.deathsByCause ? Object.fromEntries(host.deathsByCause) : undefined,
-    scores: host.scores !== undefined ? Object.assign({}, host.scores) as Record<string, number>
-      : (host.ffaScores ? Object.fromEntries(host.ffaScores) : undefined),
+    scores: host.scores === undefined ? (host.ffaScores ? Object.fromEntries(host.ffaScores) : undefined)
+      : Object.assign({}, host.scores) as Record<string, number>,
     players,
   };
 }

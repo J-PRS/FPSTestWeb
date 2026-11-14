@@ -10,7 +10,7 @@ export const TP_UP = 1.7;     // constant lift - keeps the body under the crossh
 export const TP_FOCUS = 180;  // camera converges on the aim point at this range
 import type { Terrain } from '../world/terrain.js';
 
-const _obTarget = new THREE.Vector3(); // observer drift target — scratch
+const _obTarget = new THREE.Vector3(); // observer drift target - scratch
 
 // Camera paths: first/third-person boom, frozen (demo playback), and the
 // T1/T2 observer free-fly rig — plus the feet gizmo that shares their

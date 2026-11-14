@@ -284,7 +284,17 @@ export class BotSteer {
         { x: pos.x, y: pos.y + 1, z: pos.z },
         { x: pos.x + dx * pa, y: pos.y + 1, z: pos.z + dz * pa },
         ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
-      if (hit) {danger = Math.min(1, danger + 1.2 - hit.t);}
+      if (hit) {
+        // A face the mount band clears is a step, not a wall: the
+        // stand's own dais (~3m) used to mask every goalward slot and
+        // orbit the runner around its own objective (peaks capRun:
+        // 0 caps, hops circling the stand). Re-probe at mount height.
+        const step = segSolidHit(
+          { x: pos.x, y: pos.y + T.steer.mountRise, z: pos.z },
+          { x: pos.x + dx * pa, y: pos.y + T.steer.mountRise, z: pos.z + dz * pa },
+          ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+        if (step) {danger = Math.min(1, danger + 1.2 - hit.t);}
+      }
     }
 
     // Commitment leash: a posted anchor's field is bounded by its post —

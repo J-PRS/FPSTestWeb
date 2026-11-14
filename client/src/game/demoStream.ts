@@ -1,5 +1,5 @@
 /** Demo stream: the rolling recorder ships 10s slices to the local
- *  server as it runs — crash-safe by construction (each POST lands a
+ *  server as it runs - crash-safe by construction (each POST lands a
  *  complete playable .demo on disk), no 64KB keepalive cliff at F5.
  *  A match end cuts the session so files group per game:
  *  stream_<session>_<seq>.demo. */

@@ -36,7 +36,7 @@ import { commitTarget } from '../../../shared/creatureSim.js';
 
 // the diff fires before any health-bearing tick record lands. Track
 
-// 100 — young until the first real echo arrives.
+// 100 - young until the first real echo arrives.
 
 const healthSeen = new Set<string>();
 
@@ -54,7 +54,7 @@ export interface StateDebugContext {
 
   getLastSentPos(): { x: number; y: number; z: number };
 
-  /** Match state — mode/team/scores/playback, for the diagnostics dump. */
+  /** Match state - mode/team/scores/playback, for the diagnostics dump. */
 
   world?: { mode?: string; localTeam?: string; teamScores?: { alpha: number; bravo: number } | null; ffaScores?: Map<string, number>; matchEndsAt?: number | null; playbackMode?: boolean; flagStates?: Record<string, 'home' | 'carried' | 'dropped' | undefined>; flagMarkers?: Map<string, { carrier: string | null }>; netPickups?: Map<number, { kind: string }> };
 

@@ -1,7 +1,7 @@
 // Auto-reload when a new client deploys: _surge_deploy.bat stamps
 // public/version.txt each build; poll it and reload on change so
 // connected clients don't run a stale bundle against a live server.
-// The reload defers to the next natural break (whenIdle — the
+// The reload defers to the next natural break (whenIdle - the
 // intermission between matches) so a deploy doesn't yank a live
 // match; graceMs bounds the wait. Skipped on localhost (dev rebuilds
 // shouldn't yank the page).

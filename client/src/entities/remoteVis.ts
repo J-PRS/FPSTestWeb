@@ -3,7 +3,7 @@ import type { RemotePlayer } from './RemotePlayer.js';
 
 // Visibility gate - who can currently see this remote. Staleness is a
 // server-declared GHOST (the feed went quiet; body stays rendered and
-// hittable — a hidden live body was an invisible target, the worst
+// hittable - a hidden live body was an invisible target, the worst
 // outcome). The server-authoritative cloak is the only real hide here.
 // Plus the fire-shimmer ghost: shooting from stealth briefly reveals.
 
@@ -14,7 +14,7 @@ export function hideRemote(p: RemotePlayer): void {
 }
 
 export function showRemote(p: RemotePlayer): void {
-  // Dead bodies never come back through the vis paths — a stale-socket
+  // Dead bodies never come back through the vis paths - a stale-socket
   // resume, decloak, or frustum re-add firing after the kill funnel's
   // hide is how a corpse stays posed standing for the whole dead
   // window. Respawn clears isDead before it shows, so this can't eat

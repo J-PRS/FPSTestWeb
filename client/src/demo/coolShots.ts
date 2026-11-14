@@ -31,7 +31,7 @@ interface PendingClip {
   clipStart: number;
   clipEnd: number;
   projectileLifetime: number;
-  /** Recording time when the (first) shot was fired — for the battle log. */
+  /** Recording time when the (first) shot was fired - for the battle log. */
   shotTime: number;
   description: string;
   chainCount: number;

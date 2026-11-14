@@ -21,7 +21,7 @@ const _airTint = new THREE.Color(0.75, 0.85, 1);
 export class PlayerVisuals {
   private shadowBlob: THREE.Mesh;
   groundGizmo: THREE.Mesh;
-  // Same faint air trail remotes get — your own arc is only readable in
+  // Same faint air trail remotes get - your own arc is only readable in
   // third person, so emission gates on that flag (dots spawn behind you).
   private airTrail: BallTrailDots | null = null;
 

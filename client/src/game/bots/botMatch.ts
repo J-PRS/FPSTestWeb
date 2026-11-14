@@ -7,7 +7,7 @@ import type { GameBot } from './botBrain.js';
 import type { CtfBridge } from './botCtf.js';
 import type { RabbitBridge } from './botRabbit.js';
 
-/** What the match referee reads/mutates — flat fields on TeamBots. */
+/** What the match referee reads/mutates - flat fields on TeamBots. */
 export interface MatchHost {
   scores: TeamScores;
   ffaScores: Map<string, number>;

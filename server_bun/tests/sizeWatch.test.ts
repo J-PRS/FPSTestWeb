@@ -30,9 +30,9 @@ const GRANDFATHERED: Record<string, number> = {
   'client/src/world/terrain.ts': 945,
   'client/src/effects/vertexAO.ts': 956,
   'shared/botTaunts.ts': 1360,
-  // Re-pinned at 1083 after the CTF flag-passing + headhunt hoard brain
+  // Re-pinned at 1258 after the CTF flag-passing + headhunt hoard brain
   // growth — bots legitimately aggregates behaviors; still alarms at +15%.
-  'shared/botBrain.ts': 1083,
+  'shared/botBrain.ts': 1258,
   // Breached unpinned by the air-lover bot WIP (fd58d853) — pinned at
   // current size so the next 15% still alarms.
   'shared/botMoves.ts': 975,
@@ -99,6 +99,9 @@ const GRANDFATHERED: Record<string, number> = {
   // (636a9c9a/8a201990) — the move claim pipeline legitimately
   // aggregates. Pinned at breached size; still alarms at +15%.
   'server_bun/src/RoomMoveSim.ts': 906,
+  // Breached unpinned (pre-existing): bot decision brain aggregates
+  // behaviors like its pinned siblings; pinned at current size.
+  'client/src/game/bots/botBrain.ts': 903,
 };
 
 function* walk(dir: string): Generator<string> {

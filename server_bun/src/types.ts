@@ -1,4 +1,4 @@
-// Wire-facing message + entity types live in shared/protocol.ts — the
+// Wire-facing message + entity types live in shared/protocol.ts - the
 // single source of truth for both client and server. Re-exported here so
 // existing `from './types.ts'` imports keep working.
 import type { Vec3, Rotation, TransportKind } from '../../shared/protocol.ts';
