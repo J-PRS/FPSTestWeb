@@ -384,9 +384,19 @@ export function wireProjectiles(ctx: NetCtx): void {
   // real one (every blast stamp then misses its knockback echo and the
   // shove lands twice). Snap to the wire point before exploding.
 
-  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, srvAge?: number): void => {
+  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, srvAge?: number, fizzle?: boolean): void => {
     parityProbes.destroysSeen += 1;
     if (deps.world.playbackMode) {return;}
+    // Chambered fizzle: the owner's refire faded this shell - both copies
+    // shrink out via explode() (trail fade, no blast paint), and no
+    // parity/shove bookkeeping: the shell's fate was never a detonation.
+    if (fizzle) {
+      const rp = remoteProjectiles.get(projectileId);
+      if (rp) {rp.popClass = 'wire'; rp.explode();}
+      const reg = deps.world.projectileRegistry;
+      (reg.byId.get(projectileId) ?? (shotId ? reg.byShotId.get(shotId) : undefined))?.explode();
+      return;
+    }
     // Kill remote projectile (explode so trail particles fade out naturally).
     // Delete the map entry now - the visual fade lives on world.projectiles,
     // not this map; keeping dead entries leaks one record per shot ever fired.

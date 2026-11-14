@@ -10,7 +10,7 @@
  * name, never scattered).
  */
 
-export type PerkId = 'none' | 'featherjets' | 'plated' | 'armored' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall' | 'jumpstart' | 'slugger' | 'recon';
+export type PerkId = 'none' | 'featherjets' | 'plated' | 'armored' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall' | 'jumpstart' | 'slugger' | 'recon' | 'chambered';
 
 export interface PerkMods {
   /** Jet fuel burn multiplier (1 = normal, 0.7 = 30% thriftier). */
@@ -67,9 +67,16 @@ export interface PerkMods {
    *  stays on your IFF after it breaks sight (1 = base linger). Server-
    *  stamped per viewer - teammates never inherit your memory. */
   intelLinger: number;
+  /** Chambered: at most one live projectile per owner - spawning a new
+   *  shell silently fades the previous one (no blast). 0 = off. */
+  singleChamber: number;
+  /** Chambered: direct-hit bonus fraction the flying shell earns,
+   *  ramping 0 → this across the weapon's full fire interval in 0.1s
+   *  bands (1 = +100% by refire time). */
+  flyRamp: number;
 }
 
-const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0, jumpstart: 0, platingPer: 10, hpPlating: 0, projSpeedCap: 0, intelLinger: 1 };
+const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0, jumpstart: 0, platingPer: 10, hpPlating: 0, projSpeedCap: 0, intelLinger: 1, singleChamber: 0, flyRamp: 0 };
 
 /** Regenerator wind-up: the ramp only accrues after this many unhurt
  *  seconds — sustained combat denies the perk entirely instead of
@@ -95,9 +102,30 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   jumpstart:   { name: 'Jumpstart',   blurb: 'Ski launch: pressing ski boosts +8 m/s, up to run speed +8', mods: { jumpstart: 8 } },
   slugger:      { name: 'Slugger',     blurb: 'Shells capped at 120 m/s - capped speed pays back up to 1.5x direct damage', mods: { projSpeedCap: 120 } },
   recon:       { name: 'Recon',       blurb: 'Contacts you spot yourself linger 3x longer on your IFF', mods: { intelLinger: 3 } },
+  chambered:   { name: 'Chambered',   blurb: 'One shell in the air - refiring fades the last; direct hits grow with flight time, 2x by refire time', mods: { singleChamber: 1, flyRamp: 1 } },
 };
 
-export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'armored', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall', 'jumpstart', 'slugger', 'recon'];
+export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'armored', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall', 'jumpstart', 'slugger', 'recon', 'chambered'];
+
+/** Chambered applies only to deliberate guns - below this interval a
+ *  pull neither fades the in-flight shell nor earns the ramp. */
+export const CHAMBERED_MIN_INTERVAL = 0.35;
+
+/** Is this pull inside the perk's rules? Missing stats count as eligible
+ *  (unknown weapons keep the old always-on behavior). */
+export function chamberedEligible(fireIntervalS: number | undefined): boolean {
+  return (fireIntervalS ?? CHAMBERED_MIN_INTERVAL) >= CHAMBERED_MIN_INTERVAL;
+}
+
+/** Chambered fly-time ramp: 1 + flyRamp * (bandedAirtime / interval),
+ *  airtime quantized down to 0.1s bands so the dealt number reads the
+ *  flight time back (a 1.7x hit on a 1s gun WAS a 0.7s shot). Both ends
+ *  compute it off the shell's airtime - no wire field needed. */
+export function flyRampMult(mods: PerkMods, airtimeS: number | undefined, fireIntervalS: number): number {
+  if (mods.singleChamber <= 0 || airtimeS === undefined || !chamberedEligible(fireIntervalS)) {return 1;}
+  const banded = Math.floor(airtimeS / 0.1 + 1e-6) * 0.1; // 0.6/0.1 lands 5.9999 in fp - nudge keeps exact bands
+  return 1 + Math.min(1, banded / fireIntervalS) * mods.flyRamp;
+}
 
 export function perkMods(id: string | undefined | null): PerkMods {
   const p = PERKS[(id ?? 'none') as PerkId];

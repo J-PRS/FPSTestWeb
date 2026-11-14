@@ -345,7 +345,7 @@ this.handlerThrows += 1;
   private onProjGone(data: Uint8Array): void {
     const g = decodeProjGone(data);
     if (g) {
-      try { this.h.onProjectileDestroyed?.(`sp-${g.projId}`, g.shotId, g.position, g.age); }
+      try { this.h.onProjectileDestroyed?.(`sp-${g.projId}`, g.shotId, g.position, g.age, g.fizzle); }
       catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projGone: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
     }
   }
@@ -454,7 +454,7 @@ this.handlerThrows += 1;
     jetpack: (data): void | undefined => this.h.onPlayerJetpack?.(data.playerId, data.position),
     projectileCreated: (data): void | undefined => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet, data.age, data.t),
     playerShot: (data): void | undefined => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
-    projectileDestroyed: (data): void | undefined => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId, data.position ?? undefined, data.age ?? undefined),
+    projectileDestroyed: (data): void | undefined => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId, data.position ?? undefined, data.age ?? undefined, data.fizzle === true),
     snapshot: (data): void | undefined => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
     stateHash: (data): void | undefined => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.replica),
     correction: (data): void => this.h.handleCorrection(data),

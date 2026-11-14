@@ -364,6 +364,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // `arrivalAge − srvAge` ahead of the fate, so trajDiv can compare
       // same-epoch positions instead of subtracting a ping estimate.
       { name: 'age', wire: 'num', channel: 'echo', absent: null },
+      { name: 'fizzle', wire: 'bool', channel: 'edge', absent: null }, // chambered refire fade - remove quietly
     ],
     // Belt-sticky combo: `projectileId` is the RIDER glued dead-center
     // onto `host` - replicas parent to the host's path the same tick.

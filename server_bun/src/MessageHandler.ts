@@ -240,6 +240,8 @@ export interface RoomInfo {
    *  the LiveProj id or null when the weapon has no body. Only
    *  server-simmed weapons route here. */
   fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number) => string | null;
+  /** Chambered perk: any admitted pull fades the shooter's live shells. */
+  fizzleProjectiles?: (ownerId: string) => void;
   /** Beam-intent resolution — the honest ray a Lightning tick strikes
    *  (terrain/wall/player/creature, earliest wins). Room.beamSweep. */
   beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates?: boolean) => BeamContact | null;
@@ -275,6 +277,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     envRange: roomInfo?.envRange,
     preyNear: roomInfo?.preyNear,
     fireProjectile: roomInfo?.fireProjectile,
+    fizzleProjectiles: roomInfo?.fizzleProjectiles,
     beamSweep: roomInfo?.beamSweep,
     ballHit: roomInfo?.ballHit,
     crawlerHit: roomInfo?.crawlerHit,

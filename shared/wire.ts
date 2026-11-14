@@ -1166,11 +1166,15 @@ export interface WireProjGone {
   age: number;
   position: WireVec3;
   shotId: string | undefined;
+  /** Chambered fizzle: the shell faded on a refire - remove it without
+   *  blast VFX/audio, damage, or chain pops. Trailing byte so old
+   *  readers (and fuzz seeds) round-trip clean. */
+  fizzle?: boolean;
 }
 
 export function encodeProjGone(g: WireProjGone): Uint8Array {
   const sid = g.shotId === undefined ? null : ENC.encode(g.shotId);
-  const len = 22 + (sid ? 1 + sid.length : 0);
+  const len = 22 + (sid ? 1 + sid.length : 0) + (g.fizzle ? 1 : 0);
   const { u8, dv } = evScratch(len);
   const b = u8.byteOffset;
   let o = 0;
@@ -1178,7 +1182,8 @@ export function encodeProjGone(g: WireProjGone): Uint8Array {
   dv.setUint32(b + o, g.projId >>> 0, true); o += 4;
   dv.setFloat32(b + o, g.age, true); o += 4;
   dv.setFloat32(b + o, g.position.x, true); dv.setFloat32(b + o + 4, g.position.y, true); dv.setFloat32(b + o + 8, g.position.z, true); o += 12;
-  if (sid) { u8[o++] = sid.length; u8.set(sid, o); }
+  if (sid) { u8[o] = sid.length; o += 1; u8.set(sid, o); o += sid.length; }
+  if (g.fizzle) { u8[o] = 1; }
   return u8.subarray(0, len);
 }
 
@@ -1193,10 +1198,11 @@ export function decodeProjGone(u8: Uint8Array): WireProjGone | null {
   if (o < u8.length) {
     const n = d.getUint8(o++);
     if (o + n > u8.length) {return null;}
-    shotId = DEC.decode(u8.subarray(o, o + n));
+    shotId = DEC.decode(u8.subarray(o, o + n)); o += n;
   }
   if (!Number.isFinite(age) || !Number.isFinite(position.x + position.y + position.z)) {return null;}
-  return { projId, age, position, shotId };
+  const fizzle = o < u8.length ? d.getUint8(o) === 1 : false;
+  return { projId, age, position, shotId, fizzle };
 }
 
 

@@ -33,6 +33,7 @@ import * as sfx from '../../core/sfx.js';
 import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE, SPLAT_MAX } from '../../core/config.js';
 
 import { WeaponType, directHitAoeBonus, roomDirectDamage, getWeaponStats, serverSimmed, IGUN_AOE_MULT } from '../../../../shared/weapons.js';
+import { flyRampMult } from '../../../../shared/perks.js';
 
 import { expectDamageEcho, projWireAt } from '../parity.js';
 
@@ -53,6 +54,12 @@ import { processProjectileExplosion, type CombatCtx, type CombatDeps } from '../
 
 import type { Targetable } from '../../entities/balls.js';
 import { simRand } from '../../../../shared/simRand.js';
+
+/** Chambered fly-time multiplier on a direct hit - shared by player and
+ *  ball payment so predicted numbers stay identical to the verdict. */
+function chamberedMult(deps: CombatDeps, p: Projectile): number {
+  return flyRampMult(deps.lazyPlayer().mods, p.directHit ? p.hitAge : undefined, getWeaponStats(p.config.weaponType).fireInterval ?? 0.5);
+}
 
 const _splatPos = new THREE.Vector3();
 const _claimTarget = new THREE.Vector3();
@@ -282,7 +289,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
 
-  const directDamage = roomDirectDamage(p.config.weaponType, deps.world.instagib, p.directHit ? p.hitAge : undefined, deps.world.igun) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1);
+  const directDamage = roomDirectDamage(p.config.weaponType, deps.world.instagib, p.directHit ? p.hitAge : undefined, deps.world.igun) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1) * chamberedMult(deps, p);
 
   // Personal feedback (numbers/marker/score) is for shells I fired - a
 
@@ -397,7 +404,7 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: Targetable): vo
 
   // Airtime ramp is body-contact only - wake hits pay flat directDamage.
 
-  const dmg = roomDirectDamage(p.config.weaponType, deps.world.instagib, p.directHit ? p.hitAge : undefined, deps.world.igun) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1);
+  const dmg = roomDirectDamage(p.config.weaponType, deps.world.instagib, p.directHit ? p.hitAge : undefined, deps.world.igun) * deps.lazyPlayer().mods.directDamage * (p.directBonus ?? 1) * chamberedMult(deps, p);
 
   if (p.config.weaponType === WeaponType.Chaingun) {chaingunBank(c, p, ball);}
 

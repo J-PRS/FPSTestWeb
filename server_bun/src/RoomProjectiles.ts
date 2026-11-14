@@ -33,7 +33,7 @@ import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shar
 import type { PlayerManager } from './PlayerManager.ts';
 import type { MessageHandler } from './MessageHandler.ts';
 import { stepContact, dischargeRay } from './projContact.ts';
-import { perkMods } from '../../shared/perks.ts';
+import { perkMods, flyRampMult, chamberedEligible } from '../../shared/perks.ts';
 import { weaponStats } from './weaponStats.ts';
 import { encodeProjSpawn, encodeProjGone } from '../../shared/wire.ts';
 
@@ -221,6 +221,11 @@ export class RoomProjectiles {
     const stats = getWeaponStats(weaponType);
     const burst = stats?.burst ?? 1;
     const spread = stats?.pelletSpread ?? 0;
+    // Chambered: the new pull fades the owner's previous shells. Lives
+    // here (not spawnOne) so a pellet fan doesn't fizzle its own siblings;
+    // CombatHandler also calls fizzleOwner for beam/melee/hitscan pulls.
+    if (stats && stats.speed > 0 && chamberedEligible(stats.fireInterval)
+      && perkMods(this.room.players.getPlayer(ownerId)?.perk).singleChamber > 0) {this.fizzleOwner(ownerId);}
     if (burst <= 1 || spread <= 0) {return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId, undefined, lagS);}
     // One pull = one nonce for every pellet - unclaimed (bot) fans get a
     // minted pull id so the ledger can dedupe connects per trigger pull.
@@ -307,14 +312,24 @@ export class RoomProjectiles {
     }) as ServerMessage);
   }
 
-  private edgeGone(proj: LiveProj, at: Vec3, age: number): void {
+  /** Chambered fizzle: retire every live shell this owner has flying -
+   *  gone edge with the fizzle flag, no blast, no noise, no chain pops. */
+  fizzleOwner(ownerId: string): void {
+    for (const old of this.projs.values()) {
+      if (old.ownerId !== ownerId) {continue;}
+      this.projs.delete(old.id);
+      this.edgeGone(old, old.p.pos, old.p.age, true);
+    }
+  }
+
+  private edgeGone(proj: LiveProj, at: Vec3, age: number, fizzle = false): void {
     const bin = this.room.connections;
     const n = proj.id.startsWith('sp-') ? Number(proj.id.slice(3)) : Number.NaN;
     if (bin && Number.isFinite(n)) {
-      bin.broadcastBinaryReliable(encodeProjGone({ projId: n, age, position: at, shotId: proj.pull }));
+      bin.broadcastBinaryReliable(encodeProjGone({ projId: n, age, position: at, shotId: proj.pull, fizzle }));
       return;
     }
-    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age }) as ServerMessage);
+    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age, fizzle: fizzle || undefined }) as ServerMessage);
   }
 
   tick(dt: number): void {
@@ -437,18 +452,21 @@ export class RoomProjectiles {
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
     const rampAge = bodyDirect ? proj.p.age : undefined;
+    // Chambered fly ramp on direct lines - player hits pay it inside
+    // botAttack; creature hits multiply here off the owner's perk.
+    const fly = flyRampMult(perkMods(this.room.players.getPlayer(proj.ownerId)?.perk), rampAge, proj.stats.fireInterval ?? 0.5) * proj.directBonus;
 
     if (directHitId) {this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge, proj.pull);}
     // A shell that lands on a creature deals its direct line, then the
     // blast splashes the rest of the swarm - same outcome a player-caused
     // hit + aoeShot pair produces, minus the claims.
     if (ballId !== undefined) {
-      const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * proj.directBonus;
+      const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * fly;
       const killed = this.room.ballSim?.handleHit(proj.ownerId, ballId, dmg).killed ?? false;
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
     if (crawlerId !== undefined) {
-      const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * proj.directBonus;
+      const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * fly;
       const killed = this.room.creatureSim?.handleHit(proj.ownerId, crawlerId, dmg).killed ?? false;
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }

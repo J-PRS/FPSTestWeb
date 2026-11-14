@@ -12,7 +12,7 @@ import type { FragMessages } from '../ui/FragMessages.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { setupInputTracking } from '../utils/InputTracking.js';
-import { createFire } from './combat/fire.js';
+import { createFire, fadeChambered } from './combat/fire.js';
 import type { WeaponDef } from '../weapons.js';
 import type { FireEvent } from '../entities/Player.js';
 import { createBlastForce } from './blastForce.js';
@@ -188,6 +188,7 @@ export function createCombat(deps: CombatDeps) {
           pos: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
         });
       }
+      if (def.kind === 'beam' || def.kind === 'fan') {fadeChambered(deps, def.weaponType);} // chambered: any pull fades the last shell
       if (def.kind === 'beam') {
         if (def.weaponType === WeaponType.Repair) {rep.repair(e);}
         else if (def.weaponType === WeaponType.Shocklance) {lance.lance(e);}

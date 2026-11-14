@@ -201,7 +201,7 @@ export function watch(room: Room, now?: () => number): { count: (type: string, k
         weaponType: ps.weaponType, shotId: ps.shotId, pellet: ps.pellet, age: ps.age, position: ps.position, velocity: ps.velocity } as unknown as ServerMessage);
     }
     const pg = decodeProjGone(data);
-    if (pg) {msgs.push({ type: 'projectileDestroyed', projectileId: `sp-${pg.projId}`, position: pg.position, shotId: pg.shotId } as unknown as ServerMessage);}
+    if (pg) {msgs.push({ type: 'projectileDestroyed', projectileId: `sp-${pg.projId}`, position: pg.position, shotId: pg.shotId, fizzle: pg.fizzle } as unknown as ServerMessage);}
     prevBin(data);
   };
   return {

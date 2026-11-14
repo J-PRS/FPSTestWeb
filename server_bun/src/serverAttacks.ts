@@ -3,7 +3,7 @@ import { getWeaponStats, WeaponType, scaledDirectDamage, isInstagibWeapon, INSTA
 import { gunGameAllows } from '../../shared/gunGame.ts';
 import { healPool } from './healPool.ts';
 import { lgTickDamage } from '../../shared/combat.ts';
-import { perkMods } from '../../shared/perks.ts';
+import { perkMods, flyRampMult } from '../../shared/perks.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
 import { wallNow , wallMs} from './wallClock.ts';
@@ -79,7 +79,10 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
     // identically on both ends (spawn clamps, hit pays back).
     const sm = perkMods(shooter.perk);
     const slug = sm.projSpeedCap > 0 && stats.speed > sm.projSpeedCap ? Math.min(1.5, stats.speed / sm.projSpeedCap) : 1;
-    let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * sm.directDamage * slug;
+    // Chambered fly ramp: airtime is the shell's real age - the pull's
+    // patience pays up to flyRamp on the direct line only.
+    const fly = flyRampMult(sm, airtime, stats.fireInterval ?? 0.5);
+    let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * sm.directDamage * slug * fly;
     // Instagib/igun: the flat 200 slug - airtime ramp, perk multipliers
     // and the slugger speed bonus all sit out. igun pays it on EVERY
     // weapon (the ladder's difficulty is handling, not damage).

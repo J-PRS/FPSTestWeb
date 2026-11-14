@@ -23,6 +23,7 @@ import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
 import { swingArcView } from '../../effects/swingTrails.js';
 import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed, payShotCost, spendAmmo, jitter01, coneDir } from '../../../../shared/weapons.js';
+import { chamberedEligible } from '../../../../shared/perks.js';
 import { classCanFire } from '../../../../shared/botClasses.js';
 import { idSeed } from '../../../../shared/weaponTable.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
@@ -76,6 +77,20 @@ export function histAt(hist: WorldState['localPosHistory'], backMs: number): Wor
 }
 
 
+
+/** Chambered: a pull fades the owner's previous predicted shells -
+ * explode() is the quiet shrink-out (no blast paint); the server's
+ * fizzle edge lands a transit later to retire the echoed replica. */
+export function fadeChambered(deps: CombatDeps, weaponType: number): void {
+  if (deps.lazyPlayer().mods.singleChamber <= 0) {return;}
+  // Sub-interval guns are exempt from the perk entirely - a fast pull
+  // must not fade the shell it never earned a ramp on.
+  if (!chamberedEligible(getWeaponStats(weaponType)?.fireInterval)) {return;}
+  // Owner-scoped, not isRemote: offline every shell is a local sim, but
+  // bots' carry shooterId while the local player's predicted shells
+  // leave it null - a chambered pull must not pop a bot's bolt too.
+  for (const old of deps.world.projectiles) {if (!old.isRemote && old.shooterId == null && !old.exploded) {old.explode();}}
+}
 
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined {
   // Same law as combat.ts's onWeaponFire gate: a weapon the authority
@@ -138,6 +153,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     ? Object.assign({}, config, { speed: cap, maxLifetime: (config.maxLifetime ?? 12) * (config.speed / cap) })
     : config;
   const bonus = cap > 0 && config.speed > cap ? Math.min(1.5, config.speed / cap) : 1;
+  fadeChambered(deps, config.weaponType);
   const p = new Projectile(deps.lazyScene(), _spawnOrigin, spawnDir, e.playerVel, cfg2);
   p.directBonus = bonus;
   deps.world.projectiles.push(p);
@@ -460,6 +476,7 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
 // Melee sweep — the arc check happens around a point pushed forward
 // centered ahead of the fist so the puncher is outside its own radius.
 function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
+  fadeChambered(deps, WeaponType.Melee);
   const player = deps.lazyPlayer();
   const stats = getWeaponStats(WeaponType.Melee);
   player.lastFireAt = performance.now(); // decloak-on-fire — see spawnProjectile

@@ -29,7 +29,7 @@ import { weaponStats } from './weaponStats.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 import { tauntRand } from '../../shared/botRand.ts';
 import { lgTickDamage, lgChargeAt, LG_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT } from '../../shared/combat.ts';
-import { perkMods } from '../../shared/perks.ts';
+import { perkMods, chamberedEligible } from '../../shared/perks.ts';
 
 
 /** What a beam intent's honest ray struck - the room resolves earliest
@@ -125,6 +125,8 @@ export interface CombatDeps {
   /** Fire-intent → authoritative shell spawn (RoomProjectiles). Only
    *  SERVER_SIMMED_WEAPONS route here; returns the LiveProj id. */
   fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number) => string | null;
+  /** Chambered perk: any admitted pull fades the shooter's live shells. */
+  fizzleProjectiles?: (ownerId: string) => void;
   /** Beam-intent resolution - the honest ray against terrain, walls,
    *  players, and creatures; earliest contact wins. Absent = beam
    *  intents stay cosmetic relays only. */
@@ -429,6 +431,11 @@ w.n += 1;
     const admit = this.shotAdmit(playerId, msg);
     if (admit === null) {return;}
     const { player, now, dir, fireProjectile } = admit;
+    // Chambered: ANY admitted pull (beam, melee, hitscan, or the simmed
+    // spawn below, which re-checks for direct-spawn callers) fades the
+    // owner's in-flight shell before the new shot resolves - except
+    // sub-0.35s weapons, which the perk leaves untouched entirely.
+    if (perkMods(player.perk).singleChamber > 0 && chamberedEligible(getWeaponStats(msg.weaponType)?.fireInterval)) {this.deps.fizzleProjectiles?.(playerId);}
     if (msg.weaponType === WeaponType.Melee && dir) {
       this.meleeIntent(playerId, player, msg, dir);
       return;

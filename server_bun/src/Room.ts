@@ -1311,6 +1311,7 @@ export class Room {
       admitQueue: (pid, ids): void => { this.admitPending.set(pid, ids); },
       floodPause: (pid, ms): void => this.connections.floodPause(pid, ms),
       fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS),
+      fizzleProjectiles: (pid): void => this.projectiles.fizzleOwner(pid),
       beamSweep: (pid, muzzle, dir, range, includeTeammates): BeamContact | null => this.beamSweep(pid, muzzle, dir, range, includeTeammates),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
       crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),

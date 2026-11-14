@@ -5,7 +5,6 @@
 .git
 .gitattributes
 .githooks
-.github
 .gitignore
 .openchamber
 .oxlintrc.audit.json

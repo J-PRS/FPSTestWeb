@@ -332,7 +332,10 @@ export type ServerMessage =
       position?: Vec3;
       /** Server shell's age at detonation - lets the parity ledger
        *  compare same-epoch positions instead of a ping estimate. */
-      age?: number }
+      age?: number;
+      /** Chambered fizzle: a refire faded the shell - remove quietly,
+       *  no blast/damage/chain. Absent = ordinary detonation. */
+      fizzle?: boolean }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number;
       /** §4.7 replica lanes keyed by kind name - `hash` the client

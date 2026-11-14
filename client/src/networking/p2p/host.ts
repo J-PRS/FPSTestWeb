@@ -89,6 +89,7 @@ export class P2PHost {
     teamSpawns: () => this.playerManager.teamSpawns,
     fireProjectile: (pid, wt, origin, dir, vel, shotId): string | null =>
       this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
+    fizzleProjectiles: (pid): void => this.projectiles.fizzleOwner(pid),
     beamSweep: (pid, muzzle, dir, range) =>
       beamSweepRay({
         players: this.playerManager,

@@ -38,7 +38,7 @@ describe('perks', () => {
     const zero = perkMods('none');
     // platingPer is a divisor (10), not a multiplier — its neutral row
     // is neither 0 nor 1, so it gets its own case.
-    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal', 'fallSoak', 'jumpstart', 'hpPlating', 'projSpeedCap']);
+    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal', 'fallSoak', 'jumpstart', 'hpPlating', 'projSpeedCap', 'singleChamber', 'flyRamp']);
     for (const k of MOD_KEYS) {
       expect(zero[k], k).toBe(k === 'platingPer' ? 10 : (ADDITIVE.has(k) ? 0 : 1));
     }
