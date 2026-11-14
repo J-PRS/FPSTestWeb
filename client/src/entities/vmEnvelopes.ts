@@ -185,23 +185,31 @@ export class VmEnvelopes {
     this.switchT += dt;
     const t = this.switchT;
     if (t < SWITCH_LOWER_TIME) {return t / SWITCH_LOWER_TIME;}
-    if (this.pendingWeapon >= 0 && this.pendingWeapon !== this.h.activeWeapon) {
-      const prev = this.h.weapons.get(this.h.activeWeapon);
-      if (prev) {prev.visible = false;}
-      this.h.activeWeapon = this.pendingWeapon;
+    // The show edge runs even when pending === active: a mid-dip retarget
+    // to the already-active weapon skipped the swap entirely and left a
+    // built-hidden model invisible forever (the invisible bolt launcher).
+    if (this.pendingWeapon >= 0) {
+      const swapped = this.pendingWeapon !== this.h.activeWeapon;
+      if (swapped) {
+        const prev = this.h.weapons.get(this.h.activeWeapon);
+        if (prev) {prev.visible = false;}
+        this.h.activeWeapon = this.pendingWeapon;
+      }
       const next = this.h.weapons.get(this.h.activeWeapon);
       if (next) {next.visible = true;}
-      // The field shell wraps the OLD gun's silhouette — re-wrap the new one.
-      if (this.h.shieldShells.length > 0) { this.h.setShield(false); this.h.setShield(true, this.h.shellColor); }
-      // Park the flash at the muzzle NODE — the old z-only park left the
-      // quads on the group centerline, buried inside guns whose bore is
-      // offset in x/y (plasma repeater's muzzle is off-center).
-      if (this.h.muzzleGroupPos(this.h.activeWeapon, _flashPark)) {
-        this.h.flashMesh.position.copy(_flashPark);
-        this.h.flashMesh2.position.copy(_flashPark);
-      } else {
-        this.h.flashMesh.position.z = this.h.muzzleZ(this.h.activeWeapon);
-        this.h.flashMesh2.position.z = this.h.flashMesh.position.z;
+      if (swapped) {
+        // The field shell wraps the OLD gun's silhouette — re-wrap the new one.
+        if (this.h.shieldShells.length > 0) { this.h.setShield(false); this.h.setShield(true, this.h.shellColor); }
+        // Park the flash at the muzzle NODE — the old z-only park left the
+        // quads on the group centerline, buried inside guns whose bore is
+        // offset in x/y (plasma repeater's muzzle is off-center).
+        if (this.h.muzzleGroupPos(this.h.activeWeapon, _flashPark)) {
+          this.h.flashMesh.position.copy(_flashPark);
+          this.h.flashMesh2.position.copy(_flashPark);
+        } else {
+          this.h.flashMesh.position.z = this.h.muzzleZ(this.h.activeWeapon);
+          this.h.flashMesh2.position.z = this.h.flashMesh.position.z;
+        }
       }
     }
     const dip = Math.max(0, 1 - (t - SWITCH_LOWER_TIME) / SWITCH_RAISE_TIME);

@@ -47,6 +47,18 @@ describe('VmEnvelopes.switchWeapon', (): void => {
     expect(env.tick(0.1).switchDip).toBe(0);
   });
 
+  it('a mid-dip retarget to the active weapon still shows it (respawn race)', (): void => {
+    const h = mkHost([0, 1]);
+    const env = new VmEnvelopes(h);
+    env.switchWeapon(1);   // dip lowers toward 1 — active is still 0
+    env.tick(0.05);        // mid-lower, before the swap point (LOWER_TIME=0.12)
+    env.switchWeapon(0);   // igun rung re-arms the already-active weapon
+    env.tick(0.15);        // past the bottom — the old !== guard skipped the show
+    expect(h.activeWeapon).toBe(0);
+    expect(h.weapons.get(0)!.visible).toBe(true);
+    expect(h.weapons.get(1)!.visible).toBe(false);
+  });
+
   it('a real switch still hides the old gun and shows the new one', (): void => {
     const h = mkHost([0, 1]);
     h.weapons.get(0)!.visible = true;
