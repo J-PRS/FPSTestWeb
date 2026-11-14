@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { getHeightmapData, getHeightfield, getWorldScale, getHeightScale, sampleHeight, sampleNormal, sampleHeightVisual, sampleHeightLod } from './heightmap.js';
+import { getHeightmapData, getHeightfield, getWorldScale, getHeightScale, sampleHeight, sampleNormal, sampleHeightVisual, sampleHeightLod, CDLOD_NODE_DIVS } from './heightmap.js';
 import { registerDiag } from '../core/fxDiag.js';
 import { terrainVert, terrainFrag } from './terrainShaders.js';
 import { mkTerrainOccluder } from './terrainWire.js';
 import { urlParams } from '../core/params.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
 import { clipmapSurfaceHeight, type ClipmapSurfaceLevel } from './clipmapSurface.js';
+import { TerrainCdlod } from './terrainCdlod.js';
 
 // Heightmap loading/sampling + the shared Heightfield live in heightmap.ts -
 // re-export so existing '../world/terrain.js' imports stay valid.
@@ -13,6 +14,13 @@ export { getHeightfield } from './heightmap.js';
 
 const HSCALE = TERRAIN_HEIGHT_SCALE;
 const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
+
+// One-hot Vector4 heightmap channel selector (k outside 0..3 = zeros).
+function oneHot4(k: number): THREE.Vector4 {
+  const v = new THREE.Vector4();
+  if (k >= 0 && k < 4) {v.setComponent(k, 1);}
+  return v;
+}
 
 // F1 overlay for the DRAWN clipmap - flat cyan lines, no shading, so a
 // divergent visual surface reads at a glance. Must mirror the solid
@@ -139,6 +147,10 @@ export class Terrain {
   static dbg: Terrain | null = null;
   private scene: THREE.Scene;
   private levels: ClipmapLevel[] = [];
+  // ?terrainlod=cdlod: error-driven node LOD replaces the ring clipmap
+  // (see terrainCdlod.ts). Ring meshes stay built but hidden - they keep
+  // owning the shared uniform objects the node materials borrow.
+  private cdlod: TerrainCdlod | null = null;
   private surfaceLevels: ClipmapSurfaceLevel[] = [];
   private remotePatches: { mesh: THREE.Mesh; lastX: number; lastZ: number; surfaceVersion: number }[] = [];
   private remotePatchMaterial: THREE.ShaderMaterial | null = null;
@@ -261,7 +273,7 @@ export class Terrain {
         // TERRAIN_PRESET picks the palette at COMPILE time - a runtime
         // uniform meant every program compiled all six preset branches.
         defines: { TERRAIN_PRESET: 1 },
-        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },heightSel:      { value: new THREE.Vector4(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0, i === 3 ? 1 : 0) },parentSel:      { value: new THREE.Vector4(i + 1 === 0 ? 1 : 0, i + 1 === 1 ? 1 : 0, i + 1 === 2 ? 1 : 0, i + 1 === 3 ? 1 : 0) },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },fogDir:          { value: this.fogDirOn ? 1 : 0 },fogRamp:         { value: this.fogRampVecs },fogRampN:        { value: this.fogRampN },fogVolC:         { value: this.fogVolCVecs },fogVolD:        { value: this.fogVolDArr },fogVolN:         { value: this.fogVolN },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },scorchY:         { value: this.scorchYArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },mistTime:       { value: 0 },mistAnim:       { value: this.mistAnimOn ? 1 : 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
+        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },heightSel:      { value: oneHot4(i) },parentSel:      { value: oneHot4(i + 1) },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },morphRange:      { value: new THREE.Vector2(1e9, 1e9) },morphSides:      { value: new THREE.Vector4(1, 1, 1, 1) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },fogDir:          { value: this.fogDirOn ? 1 : 0 },fogRamp:         { value: this.fogRampVecs },fogRampN:        { value: this.fogRampN },fogVolC:         { value: this.fogVolCVecs },fogVolD:        { value: this.fogVolDArr },fogVolN:         { value: this.fogVolN },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },scorchY:         { value: this.scorchYArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },mistTime:       { value: 0 },mistAnim:       { value: this.mistAnimOn ? 1 : 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
       });
 
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
@@ -330,11 +342,21 @@ export class Terrain {
       parentSample: i + 1 < this.levels.length ? (x: number, z: number): number => sampleHeightLod(i + 1, x, z) : undefined,
     }));
 
+    if (urlParams.get('terrainlod') === 'cdlod') {
+      this.initCdlod();
+    }
+
     Terrain.dbg = this;
     registerDiag('terrainDiv', (): { terrainDiv: Record<string, unknown>; } => ({ terrainDiv: this.divergenceStats() }));
     registerDiag('terrainRemoteDetail', (): { terrainRemoteDetail: Record<string, number> } => ({
       terrainRemoteDetail: Object.assign({}, this.remotePatchStats, { drawCalls: this.remotePatchStats.active }),
     }));
+  }
+
+  private initCdlod(): void {
+    this.cdlod = new TerrainCdlod(this.scene, this.levels[0]!.material,
+      createFlatGridGeometry(CDLOD_NODE_DIVS, 0));
+    for (const level of this.levels) {level.mesh.visible = false;}
   }
 
   /** Re-aim the baked sun without a rebuild - per-map `atmosphere.timeOfDay`.
@@ -406,6 +428,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
         m.needsUpdate = true;
       }
     }
+    this.cdlod?.markForRecompile();
   }
 
   /** Per-map vertical gain (spec.heightScale): uniforms only - the
@@ -506,6 +529,10 @@ n += 1; sum += d; sumAbs += Math.abs(d);
         surfaceLevel.parentOriginX = parentX;
         surfaceLevel.parentOriginZ = parentZ;
       }
+    }
+    if (this.cdlod) {
+      this.cdlod.update(px, pz);
+      this.remoteSurfaceVersion = this.cdlod.surfaceVersion;
     }
 
     // Upload scorch decal slots (shared Float32Array across all level materials)
@@ -754,7 +781,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   private fogVolN = 0;
 
   setFogVolumes(vols: { x: number; z: number; r: number; d: number; y?: number }[] | null): void {
-    const list = vols?.slice(0, 4) ?? [];
+    const list = urlParams.get('fogvol') === 'off' ? [] : (vols?.slice(0, 4) ?? []);
     this.fogVolN = list.length;
     for (let i = 0; i < 4; i += 1) {
       const v = list[i];
@@ -774,8 +801,9 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 
   setMistAnim(on: boolean): void {
-    this.mistAnimOn = on;
-    for (const level of this.levels) {level.material.uniforms.mistAnim.value = on ? 1 : 0;}
+    const eff = on && urlParams.get('mist') !== 'off';
+    this.mistAnimOn = eff;
+    for (const level of this.levels) {level.material.uniforms.mistAnim.value = eff ? 1 : 0;}
   }
 
   // spec.fog.ramp stops: {t, color} sorted by t, max 6 — shared array is
@@ -802,6 +830,8 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     this.remotePatches = [];
     this.remotePatchMaterial?.dispose();
     this.remotePatchMaterial = null;
+    this.cdlod?.dispose();
+    this.cdlod = null;
     for (const level of this.levels) {
       this.scene.remove(level.mesh);
       level.material.dispose();
@@ -937,6 +967,9 @@ n += 1; sum += d; sumAbs += Math.abs(d);
    *  vertex morphing to the parent ring. Not authoritative gameplay
    *  ground: this surface varies with the viewer's snapped ring origins. */
   getRenderedHeight(wx: number, wz: number): number {
+    if (this.cdlod && this.cdlod.surfaceNodes.length > 0) {
+      return clipmapSurfaceHeight(this.cdlod.surfaceNodes, wx, wz, this.getHeight);
+    }
     return clipmapSurfaceHeight(this.surfaceLevels, wx, wz, this.getHeight);
   }
 }

@@ -13,6 +13,17 @@ export const terrainVert = /* glsl */`
   uniform float gridSpacing;   // REAL vertex spacing of this level's mesh
   uniform float parentSpacing; // next-coarser level's real vertex spacing (0 = outermost)
   uniform vec2 parentOrigin;   // next-coarser level's snapped gridOrigin
+  // CDLOD per-vertex distance morph (Strugar): x = morph start distance,
+  // y = morph end (the LOD range edge). Each vertex blends onto the
+  // parent chord through the last slice of its node's range band, so a
+  // level swap happens after the surfaces already coincide. Rings pass
+  // (1e9, 1e9) = off.
+  uniform vec2 morphRange;
+  // Per-side weld mask (x-, x+, z-, z+): 1 = morph this side's outer band
+  // onto the parent chord. CDLOD only welds sides facing a strictly
+  // coarser neighbour - finer/equal neighbours weld onto US, so pulling
+  // our edge to the grandparent chord there opens a trench. Rings = 1111.
+  uniform vec4 morphSides;
 
   varying vec3 vNormal;
   varying vec3 vWorldPos;
@@ -67,12 +78,23 @@ export const terrainVert = /* glsl */`
   float getMorphHeight(vec2 worldXZ) {
     float h = sampleHeightGPU(worldXZ);
     if (parentSpacing <= 0.0) return h;
-    vec2 d = abs(worldXZ - gridOrigin);
-    float dist = max(d.x, d.y);
+    vec2 d = worldXZ - gridOrigin;
     float halfOuter = levelScale * 0.5;
     float morphStart = halfOuter - parentSpacing * 2.0;
-    if (dist <= morphStart) return h;
-    return mix(h, parentChord(worldXZ), smoothstep(morphStart, halfOuter, dist));
+    // Per-side weld: only morph bands whose neighbour across that edge is
+    // coarser (morphSides); corners take the max of their two sides.
+    float sideX = d.x < 0.0 ? morphSides.x : morphSides.y;
+    float sideZ = d.y < 0.0 ? morphSides.z : morphSides.w;
+    float w = max(
+      abs(d.x) <= morphStart ? 0.0 : smoothstep(morphStart, halfOuter, abs(d.x)) * sideX,
+      abs(d.y) <= morphStart ? 0.0 : smoothstep(morphStart, halfOuter, abs(d.y)) * sideZ);
+    // Distance morph: 3D eye distance of THIS vertex vs the node's LOD
+    // range - the far side of a node morphs before the near side, which
+    // is what makes CDLOD transitions continuous (Strugar Fig.5).
+    float eyeDist = distance(vec3(worldXZ.x, h, worldXZ.y), cameraPosition);
+    w = max(w, clamp((eyeDist - morphRange.x) / max(morphRange.y - morphRange.x, 0.001), 0.0, 1.0));
+    if (w <= 0.0) return h;
+    return mix(h, parentChord(worldXZ), w);
   }
 
   void main() {
@@ -226,11 +248,16 @@ export const terrainFrag = /* glsl */`
     float rdy = delta.y / dist;
     float a = HF_D0 * exp(-HF_K * max(ro.y - HF_FLOOR, 0.0));
     if (mistAnim > 0.5) {
-      // Drifting density - two scrolling noise octaves sampled mid-ray so
-      // banks vary across the screen; wind-matched drift (~2.5m/s) shares
-      // direction with the ground-mist cards and cloud decks.
-      vec3 mid = ro + delta * (dist * 0.5);
-      vec2 np = mid.xz * 0.008 + vec2(1.0, 0.1) * mistTime * 0.02;
+      // Drifting density - two scrolling noise octaves; wind-matched
+      // drift (~2.5m/s) shares direction with the ground-mist cards and
+      // cloud decks. Sampled at the ray's terrain END point, not mid-ray:
+      // mid-ray anchors the bank pattern to a point that tracks the
+      // camera, so the density modulation slid over the surface whenever
+      // the viewer translated (the "caustics" artifact). End-point
+      // sampling pins the banks to the world - they still drift on
+      // mistTime but can't crawl underfoot.
+      vec3 hit = ro + delta;
+      vec2 np = hit.xz * 0.008 + vec2(1.0, 0.1) * mistTime * 0.02;
       float n = noise(np) * 0.7 + noise(np * 2.7 + vec2(0.0, mistTime * 0.013)) * 0.3;
       a *= 0.55 + 0.9 * n;
     }
@@ -339,6 +366,14 @@ export const terrainFrag = /* glsl */`
       wp = m2 * wp;
     }
     return v;
+  }
+
+  // Wavelength AA for raw noise terms that have no octave band-limit:
+  // full strength while the wavelength spans >=4 px, gone by 2 px
+  // (Nyquist). Without it, ~1m procedural detail is sub-pixel by ~300m
+  // and shimmers as the camera translates - the distant "caustics".
+  float bandkeep(float wl, float pixWl) {
+    return 1.0 - smoothstep(0.5, 1.0, pixWl * 2.0 / max(wl, 1e-4));
   }
 
   uniform vec4 scorchData[16]; // x, z, radius, intensity (w<=0 = unused slot)
@@ -609,7 +644,8 @@ export const terrainFrag = /* glsl */`
           col *= mix(1.0, dl, detFade * clamp(wsum, 0.0, 1.0));
         }
       }
-      float detail = noise(uvFin) * 0.5 + noise(uvMed) * 0.5;
+      float detail = noise(uvFin) * 0.5 * bandkeep(1.4, length(vWorldPos - vCameraPos) * 0.0022)
+                   + noise(uvMed) * 0.5;
       col *= 0.82 + 0.36 * detail;
       col *= 1.0 - scorchMask(vWorldPos);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
@@ -653,10 +689,11 @@ export const terrainFrag = /* glsl */`
       // Warp medium + micro too - unwarped fixed-frequency noise reads as
       // tiling at ground level even though nothing literally repeats
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * warp);
-      float micro  = noise(uvFin + warp * 2.0) * 0.5 + noise(uvFin * 2.8 + warp * 3.5 + 1.7) * 0.5;
+      float pixWlD = length(vWorldPos - vCameraPos) * 0.0022;
+      float micro  = (noise(uvFin + warp * 2.0) * 0.5 + noise(uvFin * 2.8 + warp * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWlD);
       float cell   = worley(uvMed * 1.4 + warp * 0.6);
-      float triRock = triplanarNoise(vWorldPos, 0.22);
-      float triDetail = triplanarNoise(vWorldPos, 0.85);
+      float triRock = triplanarNoise(vWorldPos, 0.22) * bandkeep(4.5, pixWlD);
+      float triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWlD);
       // Patchiness: low-freq mask varies detail amplitude across the map so
       // every square meter doesn't share identical noise statistics
       float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.008));
@@ -757,9 +794,10 @@ export const terrainFrag = /* glsl */`
       // Sub-2m terms: gated, not faded - a far pixel pays zero for them.
       float micro = 0.0, blade = 0.0, triDetail = 0.0;
       if (detFade > 0.0) {
-        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
-        blade = noise(uvFin * 4.0 + r * 2.0);
-        triDetail = triplanarNoise(vWorldPos, 0.85);
+        float pixWlG = length(vWorldPos - vCameraPos) * 0.0022;
+        micro = (noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWlG);
+        blade = noise(uvFin * 4.0 + r * 2.0) * bandkeep(0.35, pixWlG);
+        triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWlG);
       }
       // Per-clump id hash: stable hue jitter across grass tufts (same
       // domain as a worley grid, but without the 9-tap distance loop).

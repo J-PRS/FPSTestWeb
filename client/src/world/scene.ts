@@ -124,14 +124,30 @@ export function createScene(): SceneSetup {
   }
 
   /** Camera-dependent mood pass — the shader knows where the sun is. */
+  const _fwd = new THREE.Vector3();
+  const _right = new THREE.Vector3();
+  const _up = new THREE.Vector3();
+  const WORLD_UP = new THREE.Vector3(0, 1, 0);
   function updateCamera(camera: THREE.Camera): void {
     sunShafts?.update(camera, atmosphericSky.getSunPosition());
     // Shadow frustum follows the viewer: a map-wide 2.4km ortho box only
     // has ~1.2m/texel — every slope acnes — and stops covering off-center
-    // play entirely. Snapping the target to a ~2m grid keeps texels from
-    // shimmering while it tracks.
+    // play entirely. Snap must happen in LIGHT space on texel
+    // boundaries: world-axis snapping still slides the texel grid under
+    // the sun's projection, which repaints shadow acne across slopes as
+    // the viewer translates (Stable CSM / texel-grid snapping).
     const c = camera.position;
-    sun.target.position.set(Math.round(c.x / 2) * 2, 0, Math.round(c.z / 2) * 2);
+    _fwd.copy(atmosphericSky.getSunDirection()).negate(); // light travel dir
+    _right.crossVectors(_fwd, WORLD_UP).normalize();
+    _up.crossVectors(_right, _fwd).normalize();
+    const texel = (SHADOW_CAMERA_SIZE * 2) / SHADOW_MAP_SIZE;
+    const lx = Math.round(c.dot(_right) / texel) * texel;
+    const ly = Math.round(c.dot(_up) / texel) * texel;
+    const lz = c.dot(_fwd);
+    sun.target.position.set(
+      _right.x * lx + _up.x * ly + _fwd.x * lz,
+      _right.y * lx + _up.y * ly + _fwd.y * lz,
+      _right.z * lx + _up.z * ly + _fwd.z * lz);
     sun.target.updateMatrixWorld();
     sun.position.copy(atmosphericSky.getSunPosition()).add(sun.target.position);
   }

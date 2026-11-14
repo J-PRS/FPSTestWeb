@@ -1,6 +1,6 @@
 {
   "name": "fps-server-bun",
-  "version": "0.1.220",
+  "version": "0.1.221",
   "type": "module",
   "scripts": {
     "dev": "bun dev-watch.ts",

@@ -12,13 +12,31 @@ export interface ClipmapSurfaceLevel {
   sample?: (x: number, z: number) => number;
   /** The parent ring's own sampler - its chord lives on ITS surface. */
   parentSample?: (x: number, z: number) => number;
+  /** CDLOD per-vertex distance morph range [start, end] - mirrors
+   *  terrainVert morphRange. Undefined = off (ring clipmap). */
+  morphRange?: [number, number];
+  /** CDLOD per-side weld mask (x-, x+, z-, z+); undefined = all sides
+   *  (ring clipmap). See terrainVert morphSides. */
+  morphSides?: [number, number, number, number];
+}
+
+// Camera position for the CDLOD per-vertex distance morph on the CPU
+// mirror - updated from Terrain.update via setSurfaceCamera.
+let surfaceCamX = 0;
+let surfaceCamY = 0;
+let surfaceCamZ = 0;
+export function setSurfaceCamera(x: number, y: number, z: number): void {
+  surfaceCamX = x;
+  surfaceCamY = y;
+  surfaceCamZ = z;
 }
 
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
 const cacheX = new Float64Array(32);
 const cacheZ = new Float64Array(32);
 const cacheH = new Float64Array(32);
-const cacheF: (((x: number, z: number) => number) | null)[] = new Array(32).fill(null);
+const cacheF: (((x: number, z: number) => number) | null)[] =
+  Array.from({ length: 32 }, (): ((x: number, z: number) => number) | null => null);
 let cacheN = 0;
 
 // Calls are synchronous on the render thread; a fixed scratch avoids per-query
@@ -62,9 +80,18 @@ function morphedVertex(x: number, z: number, level: ClipmapSurfaceLevel,
   const smp = level.sample ?? sample;
   const h = readCached(smp, x, z);
   if (level.parentSpacing <= 0) {return h;}
-  const edgeDistance = Math.max(Math.abs(x - level.originX), Math.abs(z - level.originZ));
+  const dx = x - level.originX, dz = z - level.originZ;
   const half = level.levelScale * 0.5;
-  const blend = smoothstep(half - level.parentSpacing * 2, half, edgeDistance);
+  const start = half - level.parentSpacing * 2;
+  const sides = level.morphSides ?? [1, 1, 1, 1];
+  let blend = Math.max(
+    smoothstep(start, half, Math.abs(dx)) * (dx < 0 ? sides[0] : sides[1]),
+    smoothstep(start, half, Math.abs(dz)) * (dz < 0 ? sides[2] : sides[3]));
+  if (level.morphRange) {
+    const eyeDist = Math.hypot(x - surfaceCamX, h - surfaceCamY, z - surfaceCamZ);
+    const [ms, me] = level.morphRange;
+    blend = Math.max(blend, clamp01((eyeDist - ms) / Math.max(me - ms, 0.001)));
+  }
   if (blend <= 0) {return h;}
   const parent = triangleHeight(x, z, level.parentSpacing, level.parentOriginX, level.parentOriginZ,
     (px, pz) => readCached(level.parentSample ?? sample, px, pz));

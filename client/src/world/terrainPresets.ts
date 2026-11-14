@@ -16,6 +16,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
     // grainFade is the outer gate: past ~140m even the coarsest octave is
     // under a pixel, so we drop the whole layer and skip the work.
     float camDist = length(vWorldPos - vCameraPos);
+    float pixWl = camDist * 0.0022;
     float grainFade = 1.0 - smoothstep(50.0, 140.0, camDist);
 
     // --- snow preset: bright glacier white over cold rock (Whiteout) ---
@@ -28,9 +29,9 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
       float micro = 0.0, sparkle = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
       if (detFade > 0.0) {
-        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
-        sparkle = noise(uvFin * 6.0 + r * 4.0);
-        triDetail = triplanarNoise(vWorldPos, 0.85);
+        micro = (noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWl);
+        sparkle = noise(uvFin * 6.0 + r * 4.0) * bandkeep(0.25, pixWl);
+        triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWl);
       }
       if (grainFade > 0.0) {
         // Warp the detail octaves by the existing macro warp (q) so they don't
@@ -109,9 +110,9 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
       float micro = 0.0, triRock = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
       if (detFade > 0.0) {
-        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
-        triRock = triplanarNoise(vWorldPos, 0.22);
-        triDetail = triplanarNoise(vWorldPos, 0.85);
+        micro = (noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWl);
+        triRock = triplanarNoise(vWorldPos, 0.22) * bandkeep(4.5, pixWl);
+        triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWl);
       }
       if (grainFade > 0.0) {
         // Warp the detail octaves by the existing macro warp (q) so they don't
@@ -205,9 +206,9 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
       float micro = 0.0, triRock = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
       if (detFade > 0.0) {
-        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
-        triRock = triplanarNoise(vWorldPos, 0.22);
-        triDetail = triplanarNoise(vWorldPos, 0.85);
+        micro = (noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWl);
+        triRock = triplanarNoise(vWorldPos, 0.22) * bandkeep(4.5, pixWl);
+        triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWl);
       }
       if (grainFade > 0.0) {
         // Warp the detail octaves by the existing macro warp (q) so they don't
@@ -281,8 +282,8 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
       float micro = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
       if (detFade > 0.0) {
-        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
-        triDetail = triplanarNoise(vWorldPos, 0.85);
+        micro = (noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWl);
+        triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWl);
       }
       if (grainFade > 0.0) {
         // Warp the detail octaves by the existing macro warp (q) so they don't
@@ -361,9 +362,9 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
       float micro = 0.0, triRock = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
       if (detFade > 0.0) {
-        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
-        triRock = triplanarNoise(vWorldPos, 0.22);
-        triDetail = triplanarNoise(vWorldPos, 0.85);
+        micro = (noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWl);
+        triRock = triplanarNoise(vWorldPos, 0.22) * bandkeep(4.5, pixWl);
+        triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWl);
       }
       if (grainFade > 0.0) {
         grain = detailFbm(vWorldPos.xz + (q - 0.5) * 6.0, camDist, 2.0);
@@ -437,9 +438,9 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
       float micro = 0.0, triRock = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
       if (detFade > 0.0) {
-        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
-        triRock = triplanarNoise(vWorldPos, 0.22);
-        triDetail = triplanarNoise(vWorldPos, 0.85);
+        micro = (noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWl);
+        triRock = triplanarNoise(vWorldPos, 0.22) * bandkeep(4.5, pixWl);
+        triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWl);
       }
       if (grainFade > 0.0) {
         grain = detailFbm(vWorldPos.xz + (q - 0.5) * 6.0, camDist, 2.0);
@@ -523,8 +524,8 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
       float micro = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
       if (detFade > 0.0) {
-        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
-        triDetail = triplanarNoise(vWorldPos, 0.85);
+        micro = (noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5) * bandkeep(0.5, pixWl);
+        triDetail = triplanarNoise(vWorldPos, 0.85) * bandkeep(1.2, pixWl);
       }
       if (grainFade > 0.0) {
         grain = detailFbm(vWorldPos.xz + (q - 0.5) * 6.0, camDist, 2.0);

@@ -228,8 +228,73 @@ export function getHeightmapData(): { data: Uint8ClampedArray; size: number } | 
 // above the collider anywhere in its cell. Residual flips to "slightly
 // above a coarsened dip" - shootable-honest. C6 in
 // _docs/UPHEAVAL/CANDIDATES.md. Only R feeds the min (lips included).
-const LOD_SPACINGS_M = [0, 10, 40, 80]; // channel = clipmap level; 0 = exact R
+// ?terrainlod=cdlod switches terrain to error-driven node LOD (CDLOD):
+// node vert spacings are x2 (5/10/20/40) instead of the ring chord
+// reaches (10/40/80), so the min-pool channels repack to match. Boot-time
+// flag only - the pack happens once per heightmap arrival.
+const CDLOD_ON = urlParams.get('terrainlod') === 'cdlod';
+const LOD_SPACINGS_M = CDLOD_ON ? [0, 10, 20, 40] : [0, 10, 40, 80]; // channel = level; 0 = exact R
 let hmPackedSrc: Uint8ClampedArray | null = null;
+
+// --- CDLOD node error bounds ----------------------------------------------
+// Per-node geometric error for the error-driven LOD selector: half the
+// (max-min) byte range of the field over the node's footprint - the bound
+// on how far a level-L node chord can deviate from the field. Stored in
+// BYTES (converted to meters at query via the same scale as sampleChannel)
+// because hmScale is set per map after the pack.
+export const CDLOD_SPACINGS_M = [5, 10, 20, 40];
+export const CDLOD_NODE_DIVS = 32; // cells per node side; extent = 32*spacing
+const lodNodeErr: Uint8Array[] = [];
+const lodNodeCols = [0, 0, 0, 0];
+const lodNodeTexels = [0, 0, 0, 0];
+
+/** Half the (max-min) R range over one node's texel footprint - the
+ *  bound on chord-vs-field deviation the LOD selector scores against. */
+function nodeErrAt(src: Uint8ClampedArray, N: number, nx: number, nz: number, nt: number): number {
+  let mn = 255, mx = 0;
+  for (let z = 0; z < nt; z += 1) {
+    const row = ((nz * nt + z) % N) * N;
+    for (let x = 0; x < nt; x += 1) {
+      const v = src[(row + ((nx * nt + x) % N)) * 4]!;
+      if (v < mn) {mn = v;}
+      if (v > mx) {mx = v;}
+    }
+  }
+  return (mx - mn) >> 1;
+}
+
+function packLodNodeErr(src: Uint8ClampedArray, N: number): void {
+  const texel = hmWorldScale / N;
+  for (let lod = 0; lod < CDLOD_SPACINGS_M.length; lod += 1) {
+    const nt = Math.max(1, Math.round(CDLOD_SPACINGS_M[lod]! * CDLOD_NODE_DIVS / texel));
+    const cols = Math.ceil(N / nt);
+    const arr = new Uint8Array(cols * cols);
+    for (let nz = 0; nz < cols; nz += 1) {
+      for (let nx = 0; nx < cols; nx += 1) {
+        arr[nz * cols + nx] = nodeErrAt(src, N, nx, nz, nt);
+      }
+    }
+    lodNodeErr[lod] = arr;
+    lodNodeCols[lod] = cols;
+    lodNodeTexels[lod] = nt;
+  }
+}
+
+/** Error bound (meters) of a level-L CDLOD node containing world point
+ *  (wx,wz). Node lattice min-corners sit at -hmWorldScale/2 + k*extent so
+ *  they align with heightmap texels; the bound wraps with the field. */
+export function cdlodNodeError(lod: number, wx: number, wz: number): number {
+  const d = hmVisual ?? hmData;
+  const cols = lodNodeCols[lod];
+  if (!d || !cols) {return 0;}
+  packLodMin(d);
+  const nt = lodNodeTexels[lod]!;
+  const u = (((wx / hmWorldScale) % 1 + 1) % 1) * hmSize;
+  const v = (((wz / hmWorldScale) % 1 + 1) % 1) * hmSize;
+  const nx = Math.min(cols - 1, Math.floor(u / nt));
+  const nz = Math.min(cols - 1, Math.floor(v / nt));
+  return lodNodeErr[lod]![nz * cols + nx]! / TERRAIN_HEIGHTMAP_DIVISOR * HSCALE * hmScale;
+}
 
 function packLodMin(src: Uint8ClampedArray): void {
   if (hmPackedSrc === src || !hmSize) {return;}
@@ -244,6 +309,7 @@ function packLodMin(src: Uint8ClampedArray): void {
     poolMinAxis(src, 0, tmp, 0, r, true);
     poolMinAxis(tmp, 0, src, lod, r, false);
   }
+  if (CDLOD_ON) {packLodNodeErr(src, N);}
   hmPackedSrc = src;
 }
 
