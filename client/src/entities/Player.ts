@@ -13,7 +13,7 @@ import { inv } from '../../../shared/invariants.js';
 import { PlayerStatus } from './playerStatus.js';
 
 import { MovementController, type MovementState } from './movement.js';
-import { type WeaponDef, weaponDef } from '../weapons.js';
+import { type WeaponDef } from '../weapons.js';
 import { settings } from '../core/settings.js';
 import * as read from './playerRead.js';
 import { PlayerInput } from './player/input.js';
@@ -23,7 +23,7 @@ import * as imp from './playerImpulse.js';
 import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout, type SidearmId } from './playerLoadout.js';
 import { PACK_KINDS, type DeployKind } from '../../../shared/deployables.js';
-import { BELT_MAX } from '../../../shared/weapons.js';
+import { BELT_MAX, BELT_REGEN_S } from '../../../shared/weapons.js';
 import { heldBuffRates, POWERUP } from '../../../shared/pickups.js';
 import { ENERGY, MOVEMENT_CONFIG } from '../../../shared/movement.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
@@ -76,8 +76,10 @@ export class Player {
   /** Last local hp drop — the client-side mirror of the server's
    *  lastDamageAt, gating HELD_BUFF's grace window. */
   private _heldHurtT = 0;
-  /** Fractional belt-charge drip for the predicted headhunt hoard buff. */
+  /** Fractional belt-charge drip — ambient regen + predicted hoard buff. */
   private _beltAcc = 0;
+  /** Progress toward the next ambient belt charge, for the HUD sliver. */
+  get beltProgress(): number { return this.beltCharges >= BELT_MAX ? 0 : Math.min(1, this._beltAcc); }
   private crown: HeldCrown | null = null;
   private _crownFeet = new THREE.Vector3();
   /** Server-owned bonus pool (powerup drops) — absorbs most of a hit
@@ -814,8 +816,13 @@ export class Player {
         this.health = Math.min(this.maxHealth, this.health + hb.hp * dt);
         this.armor = Math.min(POWERUP.maxArmor, this.armor + hb.armor * dt);
       }
-      this._beltAcc += hb.belt * dt;
-      if (this._beltAcc >= 1 && this.beltCharges < BELT_MAX) {this.beltCharges += 1; this._beltAcc -= 1;}
+    }
+    // Belt income is predicted for every channel — the ambient drip
+    // (BELT_REGEN_S/piece) plus the hoard rate, same math the server
+    // runs in tickRecords. A rejected throw is the correction.
+    if (!this.isDead && this.beltCharges < BELT_MAX) {
+      this._beltAcc += (hb.belt + 1 / BELT_REGEN_S) * dt;
+      if (this._beltAcc >= 1) {this.beltCharges += 1; this._beltAcc -= 1;}
     }
     // Every ingest gate protects the wire paths — this is the local
     // write-side catch: a NaN pool can't heal through Math.min and

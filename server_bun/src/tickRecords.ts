@@ -10,7 +10,7 @@ import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, v
 import { STATUS, SHOOT_REVEAL_S } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { heldBuffRates, POWERUP } from '../../shared/pickups.ts';
-import { BELT_MAX, ammoOf, WEAPONS } from '../../shared/weapons.ts';
+import { BELT_MAX, BELT_REGEN_S, ammoOf, WEAPONS } from '../../shared/weapons.ts';
 import { logger } from './logger.ts';
 import type { PlayerState } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
@@ -547,8 +547,10 @@ this.metrics.recordsIdleReaped += 1;
     const hb = heldBuffRates(p.heldTokens, simT - p.lastDamageAt);
     heal += hb.hp / CONFIG.tickRate;
     if (hb.armor > 0) {p.armor = Math.min(POWERUP.maxArmor, p.armor + hb.armor / CONFIG.tickRate);}
-    if (hb.belt > 0 && p.beltCharges < BELT_MAX) {
-      p.beltAcc += hb.belt / CONFIG.tickRate;
+    // Ambient drip (BELT_REGEN_S per charge) stacks with the hoard rate —
+    // both feed the same fractional accrual.
+    if (!p.isDead && p.beltCharges < BELT_MAX) {
+      p.beltAcc += (hb.belt + 1 / BELT_REGEN_S) / CONFIG.tickRate;
       if (p.beltAcc >= 1) {
         const n = Math.min(BELT_MAX - p.beltCharges, Math.floor(p.beltAcc));
         p.beltCharges += n;

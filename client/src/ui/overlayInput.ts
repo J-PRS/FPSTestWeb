@@ -12,7 +12,7 @@ export interface OverlayInputDeps {
   overlay: HTMLElement;
   rendererCanvas: HTMLCanvasElement;
   lazyDemoManager: () => DemoManager | null;
-  lazyHud: () => HUD;
+  lazyHud: () => HUD | undefined;
   logger: ChildLogger;
   isGameStarted: () => boolean;
   lazyPlayer: () => Player;
@@ -150,11 +150,11 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
     if (isCapturing()) {return;}
     if (matchCode('scoreboard', e.code)) {
       e.preventDefault();
-      deps.lazyHud().setScoreboardVisible(true);
+      deps.lazyHud()?.setScoreboardVisible(true);
       return;
     }
     if (matchCode('commandMap', e.code) && deps.isGameStarted()) {
-      deps.lazyHud().toggleCommandMap();
+      deps.lazyHud()?.toggleCommandMap();
       return;
     }
     const dm = deps.lazyDemoManager();
@@ -170,7 +170,7 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
   document.addEventListener('keyup', (e): void => {
     if (matchCode('scoreboard', e.code)) {
       e.preventDefault();
-      deps.lazyHud().setScoreboardVisible(false);
+      deps.lazyHud()?.setScoreboardVisible(false);
     }
     if (e.code === 'F6') {
       deps.lazyDemoManager()?.toggleUI();

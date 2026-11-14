@@ -22,6 +22,7 @@ export class HUD {
   health: HTMLSpanElement  // public — HudStats family paints it;
   energy: HTMLSpanElement  // public — HudStats family paints it;
   private ammo: HTMLSpanElement;
+  private beltFill!: HTMLElement;
   speed: HTMLSpanElement  // public — HudStats family paints it;
   speedH: HTMLSpanElement  // public — HudStats family paints it;
   speedV: HTMLSpanElement  // public — HudStats family paints it;
@@ -64,6 +65,7 @@ export class HUD {
     this.health = d.health;
     this.energy = d.energy;
     this.ammo = d.ammo;
+    this.beltFill = d.beltFill;
     this.speed = d.speed;
     this.speedH = d.speedH;
     this.speedV = d.speedV;
@@ -268,9 +270,10 @@ export class HUD {
     ch.setMatchStatus(this, msLeft, flags);
   }
 
-  /** Nuggets collected — DOM write only on change */
-  setNuggets(n: number): void {
+  /** Nuggets collected + regen sliver — DOM writes only on change */
+  setNuggets(n: number, regenFrac = 0): void {
     this.stats.setText(this.ammo, 'nuggets', String(n));
+    this.stats.setStyle(this.beltFill, 'beltfill', 'transform', `scaleX(${regenFrac.toFixed(3)})`);
   }
 
   /** Headhunt held tokens — the prominent counter above the stat block.

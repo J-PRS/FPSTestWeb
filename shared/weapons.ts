@@ -140,6 +140,7 @@ export const LANCE_CADENCE_S = 2;
 // deploy: the nuggets you pick up ARE the ordnance you carry.
 export const BELT_MAX = 5;        // spawn stock AND the pickup cap
 export const BELT_THROW_COST = 1; // per belt toss
+export const BELT_REGEN_S = 10;   // ambient drip — one charge back per N seconds
 
 /** Power-class weapons: a kill on DIRECT contact bursts the body into
  *  its chunk gibs. Splash from the same gun (and all bullet/hitscan

@@ -104,6 +104,15 @@
    (nuggets+energy) right. */
 #hud-bc .labels .vpair { display: flex; align-items: baseline; gap: 10px; }
 #hud-bc .labels .vpair .v { margin-left: 0; }
+/* Belt-regen sliver — the same hairline track the speedo cells ride,
+   gold fill matching the nugget count above it. */
+#hud-bc .vcell { display: flex; flex-direction: column; }
+#hud-bc .vunder { height: 1px; background: rgba(255,255,255,0.10); margin-top: 1px; }
+#hud-bc .vunder i {
+  display: block; height: 100%;
+  background: #ffd54a;
+  transform-origin: left; transform: scaleX(0);
+}
 #hud-bc .bar-wrap {
   width: 100%; height: 8px;
   background: rgba(10,14,20,0.55);
@@ -506,10 +515,10 @@
 }
 /* End-of-match banner (#frag-msg) sits above the centered scoreboard
    instead of overlapping its top rows — the board grows from center. */
-body:has(#hud.sb-open) #hud-reg-uc { top: 12%; }
+body.sb-open #hud-reg-uc { top: 12%; }
 /* Healthbars have the same problem one level up: #healthbar-container is
    appended to body AFTER #hud, so it paints over the board/map. */
-body:has(#hud.sb-open) #healthbar-container,
+body.sb-open #healthbar-container,
 body:has(#hud.cm-open) #healthbar-container {
   opacity: 0;
 }

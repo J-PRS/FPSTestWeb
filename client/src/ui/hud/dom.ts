@@ -7,6 +7,7 @@ export interface HudDom {
   health: HTMLSpanElement;
   energy: HTMLSpanElement;
   ammo: HTMLSpanElement;
+  beltFill: HTMLElement;
   speed: HTMLSpanElement;
   speedH: HTMLSpanElement;
   speedV: HTMLSpanElement;
@@ -49,12 +50,7 @@ export interface HudDom {
   connBanner: HTMLDivElement;
 }
 
-export function createHudDom(): HudDom {
-
-
-    const el = document.createElement('div');
-    el.id = 'hud';
-    el.innerHTML = `
+const HUD_HTML = `
       <div id="hud-reg-tl">
         <div id="killfeed"></div>
         <div id="player-list"></div>
@@ -88,7 +84,7 @@ export function createHudDom(): HudDom {
             <span class="spd-cell"><i>H</i><b id="spd-h">0</b></span>
             <span class="spd-cell"><i>V</i><b id="spd-v">0</b></span>
           </div>
-          <span class="vpair"><span class="v" id="ammo">0</span><span class="v" id="nrg">60</span></span>
+          <span class="vpair"><span class="vcell"><span class="v" id="ammo">0</span><span class="vunder"><i id="belt-fill"></i></span></span><span class="v" id="nrg">60</span></span>
           <span hidden><span class="v" id="kills">0</span></span>
         </div>
         <div class="bar-wrap hp"><div class="bar-ghost" id="health-ghost"></div><div class="bar-fill" id="health-bar"></div><div class="bar-fill armor-fill" id="armor-bar"></div></div>
@@ -117,11 +113,17 @@ export function createHudDom(): HudDom {
         <div id="sb-countdown"></div>
       </div>
     `;
+
+export function createHudDom(): HudDom {
+    const el = document.createElement('div');
+    el.id = 'hud';
+    el.innerHTML = HUD_HTML;
     document.body.append(el);
 
     const health = el.querySelector('#hp')! as HTMLSpanElement;
     const energy = el.querySelector('#nrg')! as HTMLSpanElement;
     const ammo = el.querySelector('#ammo')! as HTMLSpanElement;
+    const beltFill = el.querySelector('#belt-fill')! as HTMLElement;
     const speed = el.querySelector('#spd')! as HTMLSpanElement;
     const speedH = el.querySelector('#spd-h')! as HTMLSpanElement;
     const speedV = el.querySelector('#spd-v')! as HTMLSpanElement;
@@ -141,10 +143,13 @@ export function createHudDom(): HudDom {
     const dmgVignette = el.querySelector('#dmg-vignette')! as HTMLDivElement;
     const dmgEdge = el.querySelector('#dmg-edge')! as HTMLDivElement;
     const dmgDir = el.querySelector('#dmg-dir')! as HTMLDivElement;
+    const scoreboard = el.querySelector('#scoreboard')! as HTMLDivElement;
     // Reparent edge effects to <body>: inside the HUD container a
     // transformed/letterboxed parent anchors fixed/absolute elements to
     // IT, not the viewport — that's the detached-mid-screen vignette.
-    document.body.append(dmgVignette, dmgEdge, dmgDir);
+    // Scoreboard rides <body> too: death hides all of #hud, and a Tab
+    // while dead must still pull the board up.
+    document.body.append(dmgVignette, dmgEdge, dmgDir, scoreboard);
     const dmgDirArc = dmgDir.querySelector('.arc')! as HTMLDivElement;
     const ghostBar = el.querySelector('#health-ghost')! as HTMLDivElement;
     const playerList = el.querySelector('#player-list')! as HTMLDivElement;
@@ -156,8 +161,7 @@ export function createHudDom(): HudDom {
     const armor = el.querySelector('#armor')! as HTMLSpanElement;
     const armorBar = el.querySelector('#armor-bar') as HTMLDivElement;
     const buffsRow = el.querySelector('#buffs')! as HTMLDivElement;
-    const scoreboard = el.querySelector('#scoreboard')! as HTMLDivElement;
-    const sbRows = el.querySelector('#sb-rows')! as HTMLElement;
+    const sbRows = scoreboard.querySelector('#sb-rows')! as HTMLElement;
     const teamScore = el.querySelector('#team-score')! as HTMLDivElement;
     const heldCount = el.querySelector('#held-count')! as HTMLDivElement;
     const tsA = el.querySelector('#ts-a')! as HTMLElement;
@@ -180,7 +184,7 @@ export function createHudDom(): HudDom {
   ammo.textContent = '0';
   ammo.style.color = '#ffd54a'; // gold, matching the pickup
 
-  return { el, health, energy, ammo, speed, speedH, speedV, kills, state, ping, loss, jitter,
+  return { el, health, energy, ammo, beltFill, speed, speedH, speedV, kills, state, ping, loss, jitter,
     fps, crosshair, bloomRing, sheepReadout, energyReadout, groundReadout, hitMarker, dmgVignette, dmgEdge, dmgDir, dmgDirArc, ghostBar,
     playerList, ballCountEl, timerEl, weaponBar, weaponSlots, healthBar, energyBar, wammoReadout, wammoRegenFill,
     armor, armorBar, buffsRow,

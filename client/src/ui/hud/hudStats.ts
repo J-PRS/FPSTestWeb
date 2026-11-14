@@ -348,6 +348,14 @@ this.fpsFrames += 1;
     el.textContent = value;
   }
 
+  /** Same change-gate as setText, for style props (the belt sliver's
+   *  scaleX would otherwise dirty the element every frame). */
+  setStyle(el: HTMLElement, key: string, prop: 'transform', value: string): void {
+    if (this.lastText[key] === value) {return;}
+    this.lastText[key] = value;
+    el.style[prop] = value;
+  }
+
   /** Local player took damage — vignette pulse scaled to the hit, plus a
    *  directional arc pointing at the source when we know where it is. */
   damage(fromPos: THREE.Vector3 | null, damage: number): void {
