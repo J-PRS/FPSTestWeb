@@ -215,7 +215,81 @@ export function sampleHeightVisual(wx: number, wz: number): number {
  *  gameplay would sample honestly). */
 export function getHeightmapData(): { data: Uint8ClampedArray; size: number } | null {
   const d = hmVisual ?? hmData;
+  if (d) {packLodMin(d);}
   return d ? { data: d, size: hmSize } : null;
+}
+
+// --- LOD min channels ------------------------------------------------------
+// Coarse clipmap rings draw chords over up-to-40m cells; the chord interior
+// can hang above the sim surface and swallow remotes/pickups (the "buried
+// under terrain" class). G/B/A carry a min-pool of R at each coarse level's
+// reach (10/40/80m - the real vertSpacing chords, not the nominal cell);
+// a level's vertex samples its own channel, so the drawn triangle is never
+// above the collider anywhere in its cell. Residual flips to "slightly
+// above a coarsened dip" - shootable-honest. C6 in
+// _docs/UPHEAVAL/CANDIDATES.md. Only R feeds the min (lips included).
+const LOD_SPACINGS_M = [0, 10, 40, 80]; // channel = clipmap level; 0 = exact R
+let hmPackedSrc: Uint8ClampedArray | null = null;
+
+function packLodMin(src: Uint8ClampedArray): void {
+  if (hmPackedSrc === src || !hmSize) {return;}
+  const N = hmSize;
+  const texel = hmWorldScale / N;
+  const tmp = new Uint8Array(N * N);
+  for (let lod = 1; lod < LOD_SPACINGS_M.length; lod += 1) {
+    // Texel radius covering every texel that can influence a 5m-lattice
+    // point inside a vertex's +-s window (vertex bilinear touches texels
+    // +-T of it, each lattice point touches +-T of itself): s+2T.
+    const r = Math.ceil((LOD_SPACINGS_M[lod]! + 2 * texel) / texel);
+    poolMinAxis(src, 0, tmp, 0, r, true);
+    poolMinAxis(tmp, 0, src, lod, r, false);
+  }
+  hmPackedSrc = src;
+}
+
+/** One separable min-pool pass: horiz pools R-field texels into a flat
+ *  scratch row, vert pools scratch back into the `outChan` RGBA lane. */
+function poolMinAxis(inp: Uint8ClampedArray | Uint8Array, inChan: number, out: Uint8ClampedArray | Uint8Array, outChan: number, r: number, horiz: boolean): void {
+  const N = hmSize;
+  for (let z = 0; z < N; z += 1) {
+    const row = z * N;
+    for (let x = 0; x < N; x += 1) {
+      let m = 255;
+      for (let d = -r; d <= r; d += 1) {
+        const i = horiz ? row + ((x + d) % N + N) % N : (((z + d) % N + N) % N) * N + x;
+        const v = inp[horiz ? i * 4 + inChan : i]!;
+        if (v < m) {m = v;}
+      }
+      out[horiz ? row + x : (row + x) * 4 + outChan] = m;
+    }
+  }
+}
+
+/** Min-pooled field read for clipmap level `lod` (1..3). Same texel-center
+ *  bilinear as sampleHeightmap so the CPU mirror equals the GPU vertex. */
+export function sampleHeightLod(lod: number, wx: number, wz: number): number {
+  const d = hmVisual ?? hmData;
+  if (!d || !hmSize) {return 0;}
+  packLodMin(d);
+  return sampleChannel(d, lod, wx, wz);
+}
+
+function sampleChannel(d: Uint8ClampedArray, chan: number, wx: number, wz: number): number {
+  const u = (((wx / hmWorldScale) % 1) + 1) % 1 * hmSize - 0.5;
+  const v = (((wz / hmWorldScale) % 1) + 1) % 1 * hmSize - 0.5;
+  const x0 = ((Math.floor(u) % hmSize) + hmSize) % hmSize;
+  const z0 = ((Math.floor(v) % hmSize) + hmSize) % hmSize;
+  const x1 = (x0 + 1) % hmSize;
+  const z1 = (z0 + 1) % hmSize;
+  const fx = u - Math.floor(u);
+  const fz = v - Math.floor(v);
+  const at = (x: number, z: number): number => d[(z * hmSize + x) * 4 + chan]! / TERRAIN_HEIGHTMAP_DIVISOR;
+  const h =
+    at(x0, z0) * (1 - fx) * (1 - fz) +
+    at(x1, z0) * fx * (1 - fz) +
+    at(x0, z1) * (1 - fx) * fz +
+    at(x1, z1) * fx * fz;
+  return h * HSCALE * hmScale;
 }
 
 // --- visual-only sediment lips -------------------------------------------

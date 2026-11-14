@@ -20,9 +20,21 @@ export const terrainVert = /* glsl */`
 
   #include <shadowmap_pars_vertex>
 
+  // R is the exact field; G/B/A carry a min-pool of it at each coarse
+  // level's reach, so a coarse chord can never hang above the collider
+  // (the remote-under-terrain class - heightmap.ts packLodMin). level i
+  // reads channel i; the parent chord reads channel i+1.
+  uniform vec4 heightSel;
+  uniform vec4 parentSel;
+
   float sampleHeightGPU(vec2 worldXZ) {
     vec2 uv = fract(worldXZ / hmWorldScale);
-    return texture2D(heightMap, uv).r * hScale;
+    return dot(texture2D(heightMap, uv), heightSel) * hScale;
+  }
+
+  float sampleParentGPU(vec2 worldXZ) {
+    vec2 uv = fract(worldXZ / hmWorldScale);
+    return dot(texture2D(heightMap, uv), parentSel) * hScale;
   }
 
   // The parent ring's drawn surface: a two-triangle linear chord of the
@@ -39,10 +51,10 @@ export const terrainVert = /* glsl */`
     vec2 cell0 = floor(local / parentSpacing) * parentSpacing;
     vec2 f = (local - cell0) / parentSpacing;
     vec2 c00 = parentOrigin + cell0;
-    float s00 = sampleHeightGPU(c00);
-    float s10 = sampleHeightGPU(c00 + vec2(parentSpacing, 0.0));
-    float s01 = sampleHeightGPU(c00 + vec2(0.0, parentSpacing));
-    float s11 = sampleHeightGPU(c00 + vec2(parentSpacing, parentSpacing));
+    float s00 = sampleParentGPU(c00);
+    float s10 = sampleParentGPU(c00 + vec2(parentSpacing, 0.0));
+    float s01 = sampleParentGPU(c00 + vec2(0.0, parentSpacing));
+    float s11 = sampleParentGPU(c00 + vec2(parentSpacing, parentSpacing));
     return f.x + f.y <= 1.0
       ? s00 + (s10 - s00) * f.x + (s01 - s00) * f.y
       : s11 + (s10 - s11) * (1.0 - f.y) + (s01 - s11) * (1.0 - f.x);

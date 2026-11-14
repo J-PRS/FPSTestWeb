@@ -226,3 +226,68 @@ ew Ball(...).
   all pass (38 tests). No wire change, no deletion, rollback = revert the
   factory call site. Remaining 5 kinds (deploy/flag/pickup/creature/player)
   still hand-build; next pilot extends the registry to one of them.
+
+### C6 — One position authority per rendered thing (marker anchors + ground truth)
+- **Status**: LANDED 2026-11-13 — anchors half landed with the
+  `onScreen`-gated mem-marker fix in remotes.ts (all three indicator
+  writers now anchor `body.position + renderLift`; contact coords only
+  survive as the designed last-known feature while no body is on
+  screen). Ground half landed as `packLodMin` in heightmap.ts: the
+  height texture's free G/B/A channels carry a separable min-pool of R
+  at each coarse ring's reach (10/40/80m vertSpacing), each level's
+  vertex shader selects its channel via one-hot `heightSel`/`parentSel`,
+  and `clipmapSurfaceHeight` mirrors per-level samplers CPU-side. The
+  drawn surface is now a provable lower bound of the collider (bound
+  pinned by lodMin.test.ts). Verified: buttes horizon shot reads
+  natural — no skyline scalloping; 758 client tests + tsc clean.
+- **Status (prior)**: RANKED 2026-11-13 — evidence is two same-class bugs in
+  five days, fresh, not theoretical.
+- **The class**: anything the screen shows has ONE owner that decides
+  where it is. Twice now a second owner positioned it:
+  - 2026-11-08 changelog: IFF marker flicker — headhuntBadges wrote
+    `position+1.6`, remotes lane wrote `position+renderLift`, same id.
+  - 2026-11-13: detached marker — intel `contact.x/y/z` overwrote the
+    body anchor for stale contacts while the body was on-screen.
+  - Sibling: remote under-terrain — sim `getHeight`/`hmChord` vs drawn
+    clipmap `getRenderedHeight`, two "ground" truths; F1 patch lifted
+    the *remote* case but pickups/corpses/balls/deployables still can
+    bury, and wire-below-drawn dips remain honest-but-invisible.
+- **The upheaval (two halves, one rule)**:
+  - **Anchors**: `indicators` may only ever be fed positions the body
+    replica itself produced (`remotePlayer.position + renderLift` or
+    nothing). Intel contacts carry *detection state* (fresh/mem/stale
+    styling), never coordinates. "Either the body owns the point or
+    nobody draws it" — a detached marker becomes unexpressible.
+  - **Ground**: min-filter the clipmap LOD height reduction so the
+    drawn surface is a provable LOWER bound of the sim surface. "Under
+    terrain" stops existing for every entity kind at once — no
+    per-kind patch. Residual flips to "slightly above a coarsened dip",
+    which is shootable-honest.
+- **What dies**: the marker-detach class (2 occurrences/5 days); the
+  F1 conditional lift's residual cases; every future "X renders inside
+  terrain" report for any entity kind.
+- **Costs**: anchors — intel markers can no longer hold a last-known
+  spot for an off-screen fresh contact, but that's allowed: mem markers
+  keep `contact` coords (no body to contradict). The rule
+  is only that a coordinate source loses to a live body, always.
+  Ground — distant terrain reads very slightly deflated; min-filter
+  can exaggerate thin spikes downward (one low vertex drags a cell);
+  a percentile filter (say p5) instead of hard min is the cheap
+  fallback if that reads badly.
+- **Pilot**: anchors first — it's ~30 lines: strip coordinate reads
+  from the intel-contact path in remotes.ts so contact only gates
+  styling/visibility; observable verdict = a stale-contact sweep while
+  the body is on-screen can never move the marker off the body
+  (headless repro: force contact.fresh=false with body on-screen).
+  Ground second — pilot on the mid-ring cell reduction only;
+  falsifier = distant skyline visibly scallops or bodies float >2m on
+  typical map cells.
+- **Rollback**: both halves are local-render only; wire untouched.
+
+## Open hunt areas (unscored leads) — addendum 2026-11-13
+- Remote-presentation lane count keeps growing: interp / DR simStep /
+  edge-replay MoveSim (C4 pilot) / floorToGround floors now all own a
+  slice of "where is this remote". C5's remote-replica unification is
+  the structural answer; watch whether edge-replay eats interp's role
+  first — if it does, floorToGround and half of remoteInterp can die
+  rather than be unified.
