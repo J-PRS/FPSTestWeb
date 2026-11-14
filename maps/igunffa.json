@@ -1,0 +1,147 @@
+{
+  "mode": "dm",
+  "spawns": [
+    {
+      "x": 126.7,
+      "y": 0,
+      "z": 68.0,
+      "r": 73.2
+    },
+    {
+      "x": 331.5,
+      "y": 0,
+      "z": 159.3,
+      "r": 73.2
+    },
+    {
+      "x": 498.0,
+      "y": 0,
+      "z": 9.4,
+      "r": 36.6
+    },
+    {
+      "x": 583.3,
+      "y": 0,
+      "z": 1.4,
+      "r": 22.0,
+      "w": 150.0
+    },
+    {
+      "x": 412.5,
+      "y": 0,
+      "z": -208.7,
+      "r": 36.6
+    },
+    {
+      "x": 126.7,
+      "y": 0,
+      "z": 68.0,
+      "r": 73.2
+    },
+    {
+      "x": 331.5,
+      "y": 0,
+      "z": 159.3,
+      "r": 73.2
+    },
+    {
+      "x": 498.0,
+      "y": 0,
+      "z": 9.4,
+      "r": 36.6
+    },
+    {
+      "x": 583.3,
+      "y": 0,
+      "z": 1.4,
+      "r": 22.0
+    },
+    {
+      "x": 412.5,
+      "y": 0,
+      "z": -208.7,
+      "r": 36.6
+    }
+  ],
+  "terrain": "t2/escalade/terrain.bin",
+  "terrainPreset": 5,
+  "fog": {
+    "color": [
+      0.78,
+      0.66,
+      0.5
+    ],
+    "distance": 160.0,
+    "visible": 820.0,
+    "dirTint": true,
+    "ramp": [
+      [
+        0.0,
+        0.85,
+        0.76,
+        0.62
+      ],
+      [
+        0.35,
+        0.78,
+        0.66,
+        0.5
+      ],
+      [
+        0.7,
+        0.68,
+        0.54,
+        0.4
+      ],
+      [
+        1.0,
+        0.58,
+        0.46,
+        0.34
+      ]
+    ],
+    "volumes": [
+      {
+        "x": 0,
+        "z": 0,
+        "r": 60,
+        "d": 0.004
+      },
+      {
+        "x": 0,
+        "z": -70,
+        "r": 50,
+        "d": 0.005
+      },
+      {
+        "x": 70,
+        "z": 0,
+        "r": 50,
+        "d": 0.005
+      },
+      {
+        "x": -70,
+        "z": 70,
+        "r": 50,
+        "d": 0.005
+      }
+    ]
+  },
+  "atmosphere": {
+    "rayleigh": 1.0,
+    "mie": 2.2,
+    "sunIntensity": 1.05
+  },
+  "_t2": "ported from Tribes 2 'escalade' - relief 198m -> 125m",
+  "tileSize": 2048.0,
+  "heightScale": 1.582,
+  "_notes": "T2 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 198m, sd 29.5m, sat 0%]",
+  "name": "Escalade",
+  "standing": true,
+  "igun": true,
+  "winAt": 50,
+  "timeLimitS": 1800,
+  "ptsPlayerKill": 1,
+  "bots": 0,
+  "botFill": 0
+}
