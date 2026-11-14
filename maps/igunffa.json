@@ -93,7 +93,7 @@
       "r": 14
     }
   ],
-  "terrain": "t2/escalade/terrain.bin",
+  "terrain": "escalade.bin",
   "terrainPreset": 5,
   "fog": {
     "color": [
@@ -164,7 +164,7 @@
   },
   "tileSize": 2048,
   "heightScale": 1.582,
-  "_notes": "T2 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 198m, sd 29.5m, sat 0%] | _t2 marker lifted 2026-11-14: standing igunffa room must load under FPS_PUBLIC_BETA; ported from Tribes 2 'escalade' - relief 198m -> 125m",
+  "_notes": "T2 port - ported terrain (retail game heightmap) - no gen recipe, the bin IS the source of truth [audit: rel 198m, sd 29.5m, sat 0%] | _t2 marker lifted 2026-11-14 + terrain moved out of gated t2/ ns 2026-11-15: standing igunffa room must load AND serve under FPS_PUBLIC_BETA; ported from Tribes 2 'escalade' - relief 198m -> 125m",
   "name": "Escalade",
   "standing": true,
   "igun": true,
