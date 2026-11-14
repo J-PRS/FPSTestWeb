@@ -352,6 +352,11 @@ export class RoomProjectiles {
   plant(proj: LiveProj, at: Vec3): void {
     const vl = dhypot3(proj.p.vel.x, proj.p.vel.y, proj.p.vel.z) || 1;
     this.planted.set(proj.id, { pos: { ...at }, dir: { x: proj.p.vel.x / vl, y: proj.p.vel.y / vl, z: proj.p.vel.z / vl }, ownerId: proj.ownerId, weaponType: proj.weaponType, ttl: proj.stats.plants! });
+    // The shell is dead - the planted record IS its corpse. Leaving it
+    // live let it keep sweeping: every tick re-planted a deeper contact
+    // until ttl, so the reclaimable body ended up under the map where
+    // no owner could ever walk within reach of it.
+    this.projs.delete(proj.id);
     this.edgeGone(proj, at, proj.p.age, false, true);
   }
 
