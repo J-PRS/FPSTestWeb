@@ -21,6 +21,7 @@ public
 src
 stryker.conf.mjs
 stryker.config.mjs
+stryker.remoteinterp.conf.mjs
 tools
 tsconfig.json
 vite.config.js
