@@ -376,8 +376,10 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
             ownerPos.x, ownerPos.y - 1.8, ownerPos.z,
             p.pos.x, p.pos.y, p.pos.z,
             p.pos.x - d.x * 3.3, p.pos.y - d.y * 3.3, p.pos.z - d.z * 3.3) < 1) {
-          p.glue.harvest();
-          if (pl && offline) {
+          // Pay on the harvest edge only - embedded stays true through
+          // the flash/fade, so gating on reach alone re-paid + re-chimed
+          // every frame of the shrink (the "5x pickup sound" bug).
+          if (p.glue.harvest() && pl && offline) {
             pl.beltCharges = Math.min(BELT_MAX, pl.beltCharges + 1);
             sfx.powerup('gem');
           }

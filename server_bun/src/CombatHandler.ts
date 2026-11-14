@@ -476,6 +476,12 @@ w.n += 1;
    *  dead (verdict or silent drop already emitted). */
   private shotAdmit(playerId: string, msg: ShotMsg): { player: PlayerState; now: number; dir: Vec3 | undefined; fireProjectile: NonNullable<CombatDeps['fireProjectile']> | undefined } | null {
     const player = this.playerManager.getPlayer(playerId);
+    const now = wallNow();
+    // Dedupe BEFORE the dead-check: a reclaim replay arriving post-death
+    // for a shot already credited must silent-drop like an alive dup -
+    // rejecting it screams "predicted damage never applied" over damage
+    // that was in fact applied (2026-11-14 dead-shot replay report).
+    if (this.shotDup(playerId, msg.shotId, now)) {return null;}
     // A dead-shooter claim is a client dead-gate breach - counted on the
     // handler ledger (inv stays out: handler-level tests legitimately
     // exercise this path, the breach signal is the reject verdict).
@@ -484,13 +490,8 @@ w.n += 1;
       this.reject(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId);
       return null;
     }
-    const now = wallNow();
     if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) {this.deps.uplinkNote?.(playerId, msg.fireAt);}
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
-    // Reclaim replays resend recent fire intents - a pull already spawned
-    // under this nonce is a no-op, not a second shell. Dropping silently
-    // (not rejecting) is correct: the first intent's verdict already flew.
-    if (this.shotDup(playerId, msg.shotId, now)) {return null;}
     const fireProjectile = dir && serverSimmed(msg.weaponType) && !CombatHandler.BEAM_INTENT_WEAPONS.has(msg.weaponType!) ? this.deps.fireProjectile : undefined;
     // Weapon gate, in order: gungame's ladder owns the check outright
     // (it crosses class tiers on purpose); every other room keeps the

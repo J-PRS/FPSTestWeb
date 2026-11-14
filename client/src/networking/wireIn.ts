@@ -584,7 +584,7 @@ dropCensus.total += 1;
     this.h.remoteReset(data.players);
     // Seat is (re)established - replay fire intents a dead lane may have
     // lost. Server dedupes by shotId, so a shot that DID land is a no-op.
-    this.h.replayFireIntents(data.room, data.udp);
+    this.h.replayFireIntents(data.room, data.udp, data.localPlayerState?.isDead === true);
     // Same re-announce for the held-weapon roster field - a swap edge
     // sent while the lane was down never reaches the server.
     if (data.localPlayerState) {this.h.sendHeldWeapon(this.h.joinHeld?.());}
@@ -760,7 +760,7 @@ dedupCensus.hitSeqDrops += 1;
       this.h.patchRemotePlayer(data.targetId, { isDead: false });
     }
     noteVictimRespawn(data.targetId);
-    this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor, wasPredicted);
+    this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor, wasPredicted, data.shotId);
   }
 
   private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {

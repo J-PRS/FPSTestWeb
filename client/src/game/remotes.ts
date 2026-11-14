@@ -176,11 +176,12 @@ function markIndicator(deps: RemotesDeps, hud: HUD, playerId: string, remotePlay
   // teamless modes leave `team` undefined so nothing turns friendly.
   const friendly = Boolean(playerState.team) && playerState.team === deps.world.localTeam;
   // IFF gate: in connected play an enemy marker exists only while the
-  // server's intel feed detects him (sensor net or allied LOS). Tilde
-  // overlays / F1 / offline play bypass - debug visibility, not law.
+  // server's intel feed detects him (sensor net or allied LOS). igunffa
+  // is the casual lane - markers always on, no LOS/intel requirement.
+  // Tilde overlays / F1 / offline play bypass - debug visibility, not law.
   const nm = deps.lazyNetworkManager();
   const contact = friendly ? undefined : intelContact(playerId);
-  const seeAll = !nm.isConnected() || debugOverlaysOn() || urlParams.debug;
+  const seeAll = !nm.isConnected() || deps.world.igun || debugOverlaysOn() || urlParams.debug;
   if (!friendly && !seeAll && !contact) {
     hud.removePlayerIndicator(playerId);
     return;

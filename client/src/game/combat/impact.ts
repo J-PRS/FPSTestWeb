@@ -504,6 +504,7 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
 
     if (demoManager?.isRecording && p.hitAge > 0.2) {
 
+      p.coolShotFired = true;
       demoManager.autoClipOnHit(p.hitAge, 0.2, undefined, undefined, undefined, {
         weapon: p.config.displayName, distance: p.hitDistance,
         // Same acc·dist·air·refire the HUD frag score uses — the tile ranks by it.

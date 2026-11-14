@@ -161,6 +161,9 @@ export class Projectile {
   /** Local player's armor class - the body sweep needs its capsule. */
   localClass: (() => string | undefined) | null = null;
   demoProjectileId = 0; // demo recording tracking ID
+  /** Cool-shot clip already fired (local-sweep hit) - the wire-confirmed
+   *  fallback in net/players.ts reads this so a shell never clips twice. */
+  coolShotFired = false;
   /** Demo bounce checkpoint hook — set by the lane that owns this shell's
    *  recording (local demoProjectileId vs remote serverId map). Fires after
    *  a successful terrain bounce so the recorded arc re-seats on the

@@ -99,7 +99,7 @@ export class NetworkManager {
   joinSkill: (() => string) | null = null;
   /** REMOTE players only - local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
-  public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number, predicted?: boolean) => void) | null = null;
+  public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number, predicted?: boolean, shotId?: string) => void) | null = null;
   public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean) => void) | null = null;
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
@@ -1223,7 +1223,7 @@ this.sendDrops += 1;
   /** Called by wireIn's gameState handler - the seat is (re)established.
    *  Resends fire intents the dead lane may have lost; entries from a
    *  different room (a hop) or older than the window are dropped. */
-  replayFireIntents(room?: string, udp?: { token: string; port: number }): void {
+  replayFireIntents(room?: string, udp?: { token: string; port: number }, dead?: boolean): void {
     this.netRoom = room;
     // A native-shell server offered the volatile lane - adopt it. ws
     // stays the control lane; only volatile binary reroutes.
@@ -1233,6 +1233,9 @@ this.sendDrops += 1;
     const now = performance.now();
     for (const e of entries) {
       if (e.room !== room || now - e.t >= NetworkManager.FIRE_REPLAY_MS) {continue;}
+      // A dead seat's shot claims can never credit - replaying one only
+      // manufactures a 'shooter dead' reject + rollback on the wire.
+      if (dead && (e.msg.type === 'shotFired' || e.msg.type === 'aoeShot')) {continue;}
       this.intentReplays += 1;
       this.send(e.msg);
     }

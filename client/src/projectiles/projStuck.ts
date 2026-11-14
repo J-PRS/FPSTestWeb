@@ -157,10 +157,13 @@ export class ProjStuck {
 
   /** Reclaimed by its owner (server edge or the offline mirror): flash
    *  white then fade to transparent - reads as "picked up", never to be
-   *  confused with the shrink-away expiry. */
-  harvest(): void {
-    if (!this.embedded || this.harvestAge >= 0) {return;}
+   *  confused with the shrink-away expiry. Returns true only on the edge
+   *  so callers can pay once - embedded stays true through the fade, and
+   *  a per-frame pay loop rings the chime N times for one corpse. */
+  harvest(): boolean {
+    if (!this.embedded || this.harvestAge >= 0) {return false;}
     this.harvestAge = 0;
+    return true;
   }
   private harvestAge = -1;
   private ghost: THREE.Mesh | null = null;

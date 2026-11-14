@@ -14,7 +14,8 @@ import { noteLocalSnap } from '../gameLoop.js';
 import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
 import { parityMiss, kbEchoHorizon, kbStampDeadline } from '../parity.js';
 import { recCorrection } from '../../core/telemetry.js';
-import { lastWeaponByPlayer } from './projectiles.js';
+import { lastWeaponByPlayer, clipMetaForShot } from './projectiles.js';
+import { shotScore, computeAccuracy } from '../../projectiles/index.js';
 import { markLocalSeated, isSessionVeiled } from './world.js';
 import { setIntel } from '../intel.js';
 import type { NetCtx } from './ctx.js';
@@ -174,7 +175,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
 
 
 /** Wire playerHit → health/death feedback + the demo's damage edge. */
-function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage: number, health: number, opts?: { armor?: number; predicted?: boolean }): void {
+function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage: number, health: number, opts?: { armor?: number; predicted?: boolean; shotId?: string }): void {
   const armor = opts?.armor;
   const predicted = opts?.predicted;
   const { deps, nm } = ctx;
@@ -191,7 +192,25 @@ function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage:
   deps.world.remotePlayers.get(targetId)?.flinch();
   // Server-confirmed hit on a remote: flash the marker even when client
   // prediction didn't (e.g. lag-comp rewound the victim into the shot).
-  if (shooterId === nm().getLocalPlayerId()) {confirmLocalHit(ctx, targetId, damage, predicted);}
+  if (shooterId === nm().getLocalPlayerId()) {
+    confirmLocalHit(ctx, targetId, damage, predicted);
+    // Wire-confirmed clip fallback: the wire `gone` beat this shell's
+    // local sweep to the contact (live-link race), so its cool-shot
+    // gate never marked. The hit's shotId binds the same nonce the
+    // shell claimed - a stashed meta means it DID hit a body.
+    if (opts?.shotId) {
+      const meta = clipMetaForShot(opts.shotId);
+      if (meta) {
+        const dm = deps.lazyDemoManager?.();
+        if (dm?.isRecording) {
+          dm.autoClipOnHit(meta.age, 0.2, undefined, undefined, undefined, {
+            weapon: meta.displayName, distance: meta.distance,
+            score: shotScore(computeAccuracy(meta.hitAccuracy, meta.directHit), meta.distance, meta.age, meta.weaponType),
+          });
+        }
+      }
+    }
+  }
 }
 
 /** Every credited hit lands in the demo - demodiff pairs it 1:1 with
@@ -445,8 +464,8 @@ function wirePlayerCombat(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
   const {logger} = deps;
 
-  networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor, predicted): void =>
-    handleWireHit(ctx, shooterId, targetId, damage, health, { armor, predicted });
+  networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor, predicted, shotId): void =>
+    handleWireHit(ctx, shooterId, targetId, damage, health, { armor, predicted, shotId });
 
   networkManager.onShotRejected = makeShotRejectedHandler(ctx, networkManager);
 

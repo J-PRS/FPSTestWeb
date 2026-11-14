@@ -35,6 +35,29 @@ const stampPlanted = (p: Projectile, planted: boolean | undefined): void => {
   if (planted && p.config.embeds !== undefined) {p.worldContact = true;}
 };
 
+/** Own shells that died without a local-sweep hit: the wire `gone` beats
+ *  the replica's collision pass to the contact by ~a transit on a live
+ *  link, so the cool-shot gate (hitPlayerId/hitBall) never marks them.
+ *  The playerHit echo carries the same shotId - if it lands, the shell
+ *  DID hit a body and net/players.ts clips it off this stash instead. */
+export interface PendingClipMeta { age: number; distance: number; displayName: string; weaponType: number; directHit: boolean; hitAccuracy: number; t: number }
+const pendingClipMeta = new Map<string, PendingClipMeta>();
+export function clipMetaForShot(shotId: string): PendingClipMeta | undefined {
+  const m = pendingClipMeta.get(shotId);
+  if (m && performance.now() - m.t < 5000) {pendingClipMeta.delete(shotId); return m;}
+  pendingClipMeta.delete(shotId);
+  return undefined;
+}
+function stashClipMeta(p: Projectile): void {
+  if (!p.demoProjectileId || p.coolShotFired || !p.shotId) {return;}
+  pendingClipMeta.set(p.shotId, {
+    age: p.age, distance: p.pos.distanceTo(p.shotOrigin),
+    displayName: p.config.displayName, weaponType: p.config.weaponType,
+    directHit: p.directHit, hitAccuracy: p.hitAccuracy, t: performance.now(),
+  });
+  for (const [k, m] of pendingClipMeta) {if (performance.now() - m.t > 5000) {pendingClipMeta.delete(k);}}
+}
+
 
 /** Last weapon + shot count seen per shooter - every remote fire event
  *  funnels through here (botFire markers included), so alt+w can audit
@@ -503,6 +526,7 @@ export function wireProjectiles(ctx: NetCtx): void {
         if (localProjectile.bouncesTaken > 0) {parityProbes.trajBounced = (parityProbes.trajBounced ?? 0) + 1;}
         else {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age, localProjectile.boundAtAge, srvAge, localProjectile.mirrored);}
       }
+      stashClipMeta(localProjectile);
       localProjectile.explode();
       // Same ghostBodyPop repaint as the replica branch above - MY shell's
       // predicted blast was suppressed for the wire's contact point too.
