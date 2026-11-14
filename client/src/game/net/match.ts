@@ -24,7 +24,8 @@ const multiClip = (n: number): string => {
  *    25 Godlike · 30 Wicked Sick (re-announces every +5 past 30)
  *
  *  WARLORD coverage gaps → our substitutions:
- *    killing spree → killshot     (pack has no 'killing spree' line)
+ *    killing spree → TTS          (pack has no 'killing spree' line;
+ *                                  'killshot' said the wrong word)
  *    wicked sick   → annihilation (no 'wicked sick'; also the quad+
  *                                  multi-kill clip — both are
  *                                  lobby-destruction moments)
@@ -34,7 +35,7 @@ const multiClip = (n: number): string => {
  *  Missing a clip entirely → speakAnnounce falls back to system TTS. */
 const ANNOUNCE: Record<string, { banner: string; clip?: string }> = {
   firstblood: { banner: 'FIRST BLOOD', clip: 'announce_firstblood' },
-  killing_spree: { banner: 'KILLING SPREE', clip: 'announce_killshot' },
+  killing_spree: { banner: 'KILLING SPREE' },
   rampage: { banner: 'RAMPAGE', clip: 'announce_rampage' },
   dominating: { banner: 'DOMINATING', clip: 'announce_dominating' },
   unstoppable: { banner: 'UNSTOPPABLE', clip: 'announce_unstoppable' },

@@ -79,7 +79,7 @@ type Schema = {
 const DEFAULTS: Schema = {
   'fps-pixelated': 0,
   'fps-postpro': true,
-  'fps-wake': true,
+  'fps-wake': false,
   'fps-ptrails': true,
   'fps-ribbons': true,
   'fps-dots': true,

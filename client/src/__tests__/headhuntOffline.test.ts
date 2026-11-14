@@ -27,7 +27,7 @@ const mkHost = (extra?: Partial<MatchHost>): MatchHost => {
     ctf: { reset: vi.fn() },
     rabbit: { reset: vi.fn() },
     flagrun: { reset: vi.fn() },
-    deps: { world: {}, lazyHud: () => ({ setTeamScore: vi.fn() }) },
+    deps: { world: { killCounts: new Map(), deathCounts: new Map() }, lazyHud: () => ({ setTeamScore: vi.fn() }) },
     hooks: { killFeed: vi.fn(), remoteKillFeed: vi.fn(), dropNuggets: vi.fn() },
     respawnBot: vi.fn(),
     rekeyBot: vi.fn(),

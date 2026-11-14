@@ -29,7 +29,7 @@ const mkHost = (): { m: MatchHost; bots: GameBot[]; } => {
     rabbit: { reset: vi.fn() },
     flagrun: { reset: vi.fn() },
     spec: { label: 'test' },
-    deps: { world: {}, lazyHud: () => ({ setTeamScore: vi.fn() }) },
+    deps: { world: { killCounts: new Map([['local', 3], ['a', 1]]), deathCounts: new Map([['local', 2], ['b', 4]]) }, lazyHud: () => ({ setTeamScore: vi.fn() }) },
     hooks: { killFeed: vi.fn(), remoteKillFeed: vi.fn() },
     respawnBot: vi.fn(),
     rekeyBot: vi.fn(),
@@ -46,6 +46,9 @@ describe('resetMatch purges per-match state', (): void => {
     expect(m.scores.alpha + m.scores.bravo).toBe(0);
     for (const v of m.ffaScores.values()) {expect(v).toBe(0);}
     expect(m.dmgPool.size).toBe(0);
+    // Kill-edge tallies drain too — last match's K/D can't linger.
+    expect(m.deps.world.killCounts.size).toBe(0);
+    expect(m.deps.world.deathCounts.size).toBe(0);
     expect((m.ctf as { reset: unknown }).reset).toHaveBeenCalled();
     expect((m.rabbit as { reset: unknown }).reset).toHaveBeenCalled();
     expect((m.flagrun as { reset: unknown }).reset).toHaveBeenCalled();
