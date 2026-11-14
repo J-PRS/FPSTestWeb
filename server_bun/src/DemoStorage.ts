@@ -2,7 +2,7 @@
 // Saves uploaded demo clips to the demos/ directory and maintains a JSON index.
 
 import { join } from 'node:path';
-import { readFile, writeFile, mkdir, unlink, readdir, rename } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, readdir, rename, stat } from 'node:fs/promises';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
@@ -73,6 +73,13 @@ export class DemoStorage {
           });
 added += 1;
         } catch (error: unknown) {
+          // 0-byte orphans are writers killed between create and first
+          // flush — no bytes, no forensic value, delete without a warn.
+          const empty = await stat(join(this.demosDir, filename)).then((s): boolean => s.size === 0).catch(() => false);
+          if (empty) {
+            await unlink(join(this.demosDir, filename)).catch((): void => { /* best effort */ });
+            continue;
+          }
           logger.warn(`Failed to parse orphaned demo ${filename} — quarantining`, { error: errMsg(error) });
           // An unparseable file never heals — rename so the next boot's
           // reconcile skips it instead of re-warning forever.

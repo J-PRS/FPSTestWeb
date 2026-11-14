@@ -99,7 +99,7 @@ function boot(): void {
       bindFails += 1;
       if (bindFails >= 2) { void portConflict(); return; } // don't respawn — wait for portConflict to resolve
     } else {bindFails = 0;}
-    say('[dev-watch] server exited — respawning');
+    say(`[dev-watch] server exited (code ${child!.exitCode}) — respawning`);
     boot();
     return undefined;
   });
