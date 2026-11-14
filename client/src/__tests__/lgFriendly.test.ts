@@ -5,7 +5,7 @@ import type { CombatDeps } from '../game/combat.js';
 
 // The Lightning Gun beam latched onto teammates: tracePlayerHit iterated
 // every remote with no team filter, while the server's beamSweep defaults
-// includeTeammates=false — the authority never pays those hits, so the
+// includeTeammates=false - the authority never pays those hits, so the
 // visual bolt attached to a friendly it could never damage. The client
 // trace must pass through teammates on BOTH legs (straight + terrain
 // bounce), the same doors the server keeps shut.
@@ -84,7 +84,7 @@ describe('LG trace teammate pass-through', (): void => {
 
   it('the terrain-bounce pick skips teammates too', (): void => {
     // Beam grounds at z≈-13 (cliff face), then must arc to the enemy
-    // 6m off the contact — not the teammate standing 1m off it.
+    // 6m off the contact - not the teammate standing 1m off it.
     const remotes = new Map([
       ['pal', remote(1.2, 10, -12, 'alpha')],
       ['foe', remote(6, 10, -12.5, 'bravo')],

@@ -37,7 +37,7 @@ export function fxJobResetMax(): void { fxJobMax.clear(); }
 
 /** Expensive rungs (shadow recompiles, cloud dome, forced LOD, post
  *  passes) restore only after this much wall-clock headroom since the
- *  last shed — industry-standard asymmetric scaling: cheap resScale/VFX
+ *  last shed - industry-standard asymmetric scaling: cheap resScale/VFX
  *  moves ride the normal ladder, the hitch-cost rungs shed instantly
  *  and come back slowly. */
 const EXPENSIVE_RESTORE_MS = 180_000;

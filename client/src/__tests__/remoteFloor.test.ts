@@ -6,7 +6,7 @@ import { classCapsule } from '../../../shared/botClasses.js';
 import type { Terrain } from '../world/terrain.js';
 
 // floorToGround's airborne-wire lift: a snapshot chord can shortcut through
-// a rise the true path went over. The render may climb to the DRAWN surface —
+// a rise the true path went over. The render may climb to the DRAWN surface -
 // but only when the wire feet clear it at that column, so the lift can never
 // hover the body above its validated capsule.
 
@@ -37,14 +37,14 @@ describe('remoteInterp floorToGround - airborne wire lift', (): void => {
   it('lifts a chord-shortcut render to the drawn surface when wire clears it', (): void => {
     const ri = mkRi(0, 10);              // drawn ridge at y=10 over a flat sim field
     const p = new THREE.Vector3(0, 5, 0); // interpolated render buried inside it
-    floor(ri, p, 14 + EYE);               // wire feet at 14 > drawn 10 — airborne above it
+    floor(ri, p, 14 + EYE);               // wire feet at 14 > drawn 10 - airborne above it
     expect(p.y).toBeCloseTo(10 + EYE, 6);
   });
 
   it('never lifts the render above the wire capsule', (): void => {
-    const ri = mkRi(0, 60);               // tall drawn column — wire feet sit BELOW its top
+    const ri = mkRi(0, 60);               // tall drawn column - wire feet sit BELOW its top
     const p = new THREE.Vector3(0, 5, 0);
-    floor(ri, p, 50 + EYE);               // wire feet 50 < drawn 60 — lift would hover over truth
+    floor(ri, p, 50 + EYE);               // wire feet 50 < drawn 60 - lift would hover over truth
     expect(p.y).toBe(5);
   });
 
@@ -63,10 +63,10 @@ describe('remoteInterp floorToGround - airborne wire lift', (): void => {
     expect(p.y).toBeCloseTo(10 + EYE, 6);
   });
 
-  it('no wire yet falls back to render feet — conservative, never lifts blind', (): void => {
+  it('no wire yet falls back to render feet - conservative, never lifts blind', (): void => {
     const ri = mkRi(0, 10);
     const p = new THREE.Vector3(0, 5, 0); // feet ~3.4: airborne-branch no-op, not a floor case
-    floor(ri, p, 0); // lengthSq 0 — the fallback path must not invent a wire
+    floor(ri, p, 0); // lengthSq 0 - the fallback path must not invent a wire
     expect(p.y).toBe(5);
   });
 
@@ -77,14 +77,14 @@ describe('remoteInterp floorToGround - airborne wire lift', (): void => {
     expect(p.y).toBe(30);
   });
 
-  it('wire feet below the drawn surface stays buried — the lift must not fire', (): void => {
+  it('wire feet below the drawn surface stays buried - the lift must not fire', (): void => {
     const ri = mkRi(0, 1);                 // field 0, drawn surface at 1.0
     const p = new THREE.Vector3(0, 0.5, 0);  // render under the drawn column
     floor(ri, p, EYE + 0.6);                  // feet 0.6: airborne vs field, BELOW drawn
     expect(p.y).toBe(0.5);
   });
 
-  it('wire feet exactly at the drawn surface is not "clear" — strict > gate', (): void => {
+  it('wire feet exactly at the drawn surface is not "clear" - strict > gate', (): void => {
     const ri = mkRi(0, 10);
     const p = new THREE.Vector3(0, 5, 0);
     floor(ri, p, 10 + EYE);                   // feet == drawn: unprovable, must not lift
@@ -92,7 +92,7 @@ describe('remoteInterp floorToGround - airborne wire lift', (): void => {
   });
 
   it('wire feet exactly at field+0.5 takes the grounded lane, not airborne', (): void => {
-    const ri = mkRi(0, 5);                   // drawn far above — only the grounded floor may act
+    const ri = mkRi(0, 5);                   // drawn far above - only the grounded floor may act
     const p = new THREE.Vector3(0, 0, 0);
     floor(ri, p, 0.5 + EYE);                  // feet = 0.5 == field+0.5 boundary → grounded floor
     expect(p.y).toBeCloseTo(EYE, 6);

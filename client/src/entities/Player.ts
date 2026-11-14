@@ -76,7 +76,7 @@ export class Player {
   /** Last local hp drop — the client-side mirror of the server's
    *  lastDamageAt, gating HELD_BUFF's grace window. */
   private _heldHurtT = 0;
-  /** Fractional belt-charge drip — ambient regen + predicted hoard buff. */
+  /** Fractional belt-charge drip - ambient regen + predicted hoard buff. */
   private _beltAcc = 0;
   /** Progress toward the next ambient belt charge, for the HUD sliver. */
   get beltProgress(): number { return this.beltCharges >= BELT_MAX ? 0 : Math.min(1, this._beltAcc); }
@@ -817,7 +817,7 @@ export class Player {
         this.armor = Math.min(POWERUP.maxArmor, this.armor + hb.armor * dt);
       }
     }
-    // Belt income is predicted for every channel — the ambient drip
+    // Belt income is predicted for every channel - the ambient drip
     // (BELT_REGEN_S/piece) plus the hoard rate, same math the server
     // runs in tickRecords. A rejected throw is the correction.
     if (!this.isDead && this.beltCharges < BELT_MAX) {
