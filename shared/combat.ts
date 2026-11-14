@@ -263,6 +263,16 @@ export function hitRadiusAt(weaponType: number | undefined, airtime: number): nu
 
 }
 
+/** The wake graze envelope is a target-side promise, not a projectile
+ *  property: a grounded player only takes true body contact (the dart
+ *  body + capsule), while an airborne one reads the full proxy. Scales
+ *  linearly with the target's feet-above-terrain so stationary peeking
+ *  can't be washed out by fat wake envelopes. */
+export const WAKE_ALT_FULL = 20;
+export function wakeScaleAt(feetAboveGround: number): number {
+  return Math.min(Math.max(feetAboveGround / WAKE_ALT_FULL, 0), 1);
+}
+
 
 
 /** Lightning beam ramp-down: consecutive ticks on the same target step

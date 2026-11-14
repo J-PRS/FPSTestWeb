@@ -1,8 +1,9 @@
 import type { Vec3 } from './types.ts';
 import type { getWeaponStats } from '../../shared/weapons.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
-import { hitRadiusAt } from '../../shared/combat.ts';
+import { hitRadiusAt, wakeScaleAt } from '../../shared/combat.ts';
 import { segFieldHit, segPointT, segCapsuleDist, bounceOffField } from '../../shared/projSim.ts';
+import { hmHeight } from '../../shared/heightfield.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
@@ -58,6 +59,14 @@ function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof 
     const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach, backMs);
     const best = bc && (!cc || bc.t <= cc.t) ? bc : cc;
     if (!best) {return false;}
+    // Pierce: pay the creature and keep flying - a paid body can't be
+    // re-paid next tick while the shell still sits inside its reach.
+    if (stats.pierce) {
+      if (proj.pierced?.has(best.id)) {return false;}
+      (proj.pierced ??= new Set()).add(best.id);
+      r.piercePay(proj, undefined, best === bc ? best.id : undefined, best === cc ? best.id : undefined);
+      return false;
+    }
     const at: Vec3 = {
       x: from.x + (p.pos.x - from.x) * best.t,
       y: from.y + (p.pos.y - from.y) * best.t,
@@ -98,7 +107,23 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       const cap = classCapsule(target.armorClass);
       const pc = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
       const pd = segCapsuleDist(from, p.pos, pc.x, pc.y - cap.half, pc.y + cap.half, pc.z);
-      if (pd <= reach + cap.radius) {
+      // Wake is a target-side promise: grounded players only take true
+      // body contact - the graze envelope (reach above bodyRadius)
+      // scales with the target's feet-above-terrain, full at
+      // WAKE_ALT_FULL; a field-less room can't measure alt so it pays
+      // the legacy full wake.
+      const scale = r.field ? wakeScaleAt(pc.y - cap.half - cap.radius - hmHeight(r.field, tp.x, tp.z)) : 1;
+      const treach = stats.bodyRadius + Math.max(0, reach - stats.bodyRadius) * scale;
+      if (pd <= treach + cap.radius) {
+        // Pierce: pay the body and keep flying - the skewer only stops
+        // for terrain, walls, and domes. The pierced set keeps the same
+        // body from re-paying every tick it sits inside the capsule.
+        if (stats.pierce) {
+          if (proj.pierced?.has(pid)) {continue;}
+          (proj.pierced ??= new Set()).add(pid);
+          r.piercePay(proj, pid);
+          continue;
+        }
         // Ghost-forensics: how far behind live truth the credited ghost
         // sat — a large delta is the "hit landed where nobody stood" feel.
         const gd = dhypot3(tp.x - target.position.x, tp.y - target.position.y, tp.z - target.position.z);
@@ -151,6 +176,7 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
           return false;
         }
         if (stats.stick) { r.attach(proj, hit); return true; }
+        if (stats.plants) { r.plant(proj, hit); return true; }
         r.detonate(proj, hit); return true;
       }
       // Still flying below the ceiling — sweep every tick from here on.
@@ -165,7 +191,7 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
       const dyn = r.room.deployables?.solidCols;
       const dh = dyn?.length ? segSolidHit(from, p.pos, dyn, undefined, proj.ownerTeam) : null;
       const hit = dh && (!sh || dh.t < sh.t) ? dh : sh;
-      if (hit) { if (stats.stick) { r.attach(proj, hit); return true; } r.detonate(proj, hit); return true; }
+      if (hit) { if (stats.stick) { r.attach(proj, hit); return true; } if (stats.plants) { r.plant(proj, hit); return true; } r.detonate(proj, hit); return true; }
     }
     // Shield sweep — an enemy dome eats the shell at the field's edge,
     // before any body inside can be reached. Walls already won if they

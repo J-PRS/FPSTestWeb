@@ -730,6 +730,8 @@ export interface ImplodeSpec {
   gravity?: number;
   spin?: number;
   stagger?: number;
+  stretched?: boolean;                  // velocity-aligned quads - streaks rushing INWARD
+  stretchLen?: number;
 }
 
 function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
@@ -747,7 +749,9 @@ function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bool
     emissionBursts: blastBursts(Math.max(1, Math.round(spec.count * vfxPressure())), w),
     shape: new ImplodeEmitter(spec.rMin, spec.rMax, spec.swirl ?? 0),
     material: additive ? impactMat() : normalMat(),
-    renderMode: RenderMode.BillBoard,
+    renderMode: spec.stretched ? RenderMode.StretchedBillBoard : RenderMode.BillBoard,
+    speedFactor: spec.stretched ? 0.12 : undefined,
+    startLength: spec.stretched ? new ConstantValue(spec.stretchLen ?? 8) : undefined,
     worldSpace: true,
     behaviors: [
       ...(spec.gravity ? [new GravityForce(_upQ, spec.gravity)] : []),
@@ -755,7 +759,7 @@ function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bool
         [[new QV3(...spec.c1), 0], [new QV3(...spec.c2), 1]],
         [[spec.opacity, 0], [0, 1]])),
       new SizeOverLife(GROW_SHRINK),
-      new RotationOverLife(new IntervalValue(-(spec.spin ?? 1), spec.spin ?? 1)),
+      ...(spec.stretched ? [] : [new RotationOverLife(new IntervalValue(-(spec.spin ?? 1), spec.spin ?? 1))]),
     ],
   }));
   activateSystem(ps, pos);

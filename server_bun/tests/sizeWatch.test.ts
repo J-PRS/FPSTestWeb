@@ -102,6 +102,10 @@ const GRANDFATHERED: Record<string, number> = {
   // Breached unpinned (pre-existing): bot decision brain aggregates
   // behaviors like its pinned siblings; pinned at current size.
   'client/src/game/bots/botBrain.ts': 903,
+  // Wire-shape declarations + the client shell sim: both aggregator
+  // files crossed by the loaded-shell variant plumbing, pinned at size.
+  'shared/worldModel.ts': 903,
+  'client/src/projectiles/Projectile.ts': 902,
 };
 
 function* walk(dir: string): Generator<string> {

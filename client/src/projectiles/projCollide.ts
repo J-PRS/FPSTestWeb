@@ -35,6 +35,9 @@ export interface CollideHost extends SweepHost {
   hitBall: Targetable | null;
   hitPlayerId: string | null;
   hitBolt: SweepObstacle | null;
+  /** Set by terrain/solid sweeps only - dome/obstacle pops must NOT
+   *  plant an embed corpse floating mid-air (the air-stuck spear bug). */
+  worldContact: boolean;
   bouncesTaken: number;
   readonly armed: boolean;
   readonly bodiesLive: boolean;
@@ -53,6 +56,11 @@ export interface CollideHost extends SweepHost {
           remotePlayers?: Map<string, THREE.Vector3>): void;
   clampFuse(sec: number): void;
   explode(): void;
+  /** Pierce (config.pierce): bodies this shell already paid, plus the
+   *  queue the impact pipeline drains through handlePlayerHit/
+   *  handleBallHit after update - the skewer keeps flying. */
+  pierced: Set<string | number>;
+  pierceQueue: { playerId?: string; ball?: Targetable }[];
   /** Demo bounce checkpoint - records the post-bounce pos/vel edge so the
    *  replayed arc matches what actually flew (see Projectile.onDemoBounce). */
   onDemoBounce?: (pos: THREE.Vector3, vel: THREE.Vector3, normal: THREE.Vector3) => void;
@@ -86,6 +94,7 @@ export class ProjCollide {
       const hit = dh && (!sh || dh.t < sh.t) ? dh : sh;
       if (hit && hit.t <= (h.tMax ?? 1)) {
         h.hitAt(hit.x, hit.y, hit.z, hit.t);
+        h.worldContact = true;
         if (h.config.sticks) {
           h.stickAt(h.hitPoint);
           return true;
@@ -107,13 +116,14 @@ export class ProjCollide {
     // off dirt.) Bolts and shield domes still intercept: shooting it
     // down is counterplay, and a dome shouldn't let a dud inside.
     if (!h.bodiesLive) {return this.checkObstacles(obstacles) || (terrHit && this.applyTerrain(terrain));}
-    if (this.checkObstacles(obstacles) || this.checkBalls(balls, ballSweepPos) || this.checkPlayers(remotePlayers, playerClasses)) {return true;}
+    if (this.checkObstacles(obstacles) || this.checkBalls(balls, ballSweepPos) || this.checkPlayers(remotePlayers, playerClasses, terrain)) {return true;}
     return terrHit && this.applyTerrain(terrain);
   }
 
   private applyTerrain(terrain: Terrain): boolean {
     const {h} = this;
     if (h.canBounce && this.bounceOffTerrain(terrain)) {return false;}
+    h.worldContact = true;
     if (h.config.sticks) {
       h.stickAt(h.hitPoint);
       return true;
@@ -227,6 +237,14 @@ export class ProjCollide {
       if (ball.dead) {continue;}
       if (sweepBall(h, ball, ballSweepPos?.get(ball))) {
         this.recordHit(h.minHitDist - ball.radius);
+        // Pierce: pay the body and fly on - a skewered ball can't
+        // re-pay next tick inside its own radius.
+        if (h.config.pierce) {
+          if (h.pierced.has(ball.id)) {continue;}
+          h.pierced.add(ball.id);
+          h.pierceQueue.push({ ball });
+          continue;
+        }
         h.hitBall = ball;
         if (h.config.sticks) {
           // Glued to a live victim - it rides the target at the contact
@@ -241,25 +259,38 @@ export class ProjCollide {
     return false;
   }
 
-  private checkPlayers(remotePlayers?: Map<string, THREE.Vector3>, playerClasses?: Map<string, string>): boolean {
+  private checkPlayers(remotePlayers?: Map<string, THREE.Vector3>, playerClasses?: Map<string, string>, terrain?: Terrain): boolean {
     const {h} = this;
     if (h.sweepLocal) {
       const lp = h.sweepLocal();
-      if (lp && sweepPlayer(h, lp, 'local', h.localClass?.())) {
+      if (lp && sweepPlayer(h, lp, 'local', h.localClass?.(), terrain)) {
         this.recordHit(h.minHitDist - classCapsule(h.localClass?.()).radius);
-        h.hitPlayerId = 'local';
-        if (h.config.sticks) {
-          h.stickAt(h.hitPoint, undefined, 'local', remotePlayers);
+        if (h.config.pierce) {
+          // Pay the local body once, keep flying.
+          if (!h.pierced.has('local')) {h.pierced.add('local'); h.pierceQueue.push({ playerId: 'local' });}
+        } else {
+          h.hitPlayerId = 'local';
+          if (h.config.sticks) {
+            h.stickAt(h.hitPoint, undefined, 'local', remotePlayers);
+            return true;
+          }
+          h.explode();
           return true;
         }
-        h.explode();
-        return true;
       }
     }
     if (!remotePlayers) {return false;}
     for (const [playerId, playerPos] of remotePlayers) {
-      if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId))) {
+      if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId), terrain)) {
         this.recordHit(h.minHitDist - classCapsule(playerClasses?.get(playerId)).radius);
+        // Pierce: queue the hit for the impact pipeline and keep flying -
+        // the skewer only stops for terrain, walls, and domes.
+        if (h.config.pierce) {
+          if (h.pierced.has(playerId)) {continue;}
+          h.pierced.add(playerId);
+          h.pierceQueue.push({ playerId });
+          continue;
+        }
         h.hitPlayerId = playerId;
         if (h.config.sticks) {
           h.stickAt(h.hitPoint, undefined, playerId, remotePlayers);

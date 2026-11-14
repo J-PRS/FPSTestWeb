@@ -476,6 +476,7 @@ target.deaths += 1;
     player.lastDamageAt = simMs(simNow()); // a fresh life is a fresh ramp
     player.charge = 0;
     player.beltCharges = BELT_MAX;
+    player.loadedShell = undefined; // a chambered shell dies with the body
     player.ammoPool.clear(); // absent cell = full pool - clear IS the refill
     player.bloom = 0;
     player.heldTokens = 0;

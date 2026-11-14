@@ -120,11 +120,22 @@ export const ARMORNADE_OVERCAP = 2;    // creature armor cap = this × maxHealth
 // Heal-kit economy — the beam's ammo is jet energy, so pocket-healing a
 // push taxes the healer's own mobility. Claims carry no amounts: the
 // server re-derives the tick and the energy cost.
-export const HEALBEAM_RANGE = 22;         // beam reach (m)
+export const HEALBEAM_RANGE = 40;         // beam reach (m)
 export const HEALBEAM_PER_TICK = 4;       // hp per fire tick → ~40 hp/s at 0.1s rate
 export const HEALBEAM_MIN_TICK_S = 0.07;  // min seconds between claims per shooter+target
-export const HEALBEAM_ENERGY = 6;         // jet energy per heal tick — a full tank is ~16s of beam
+export const HEALBEAM_ENERGY = 1;         // jet energy per heal tick — 10/s drain vs 8/s regen: a full tank is ~30s of beam
+export const HEALBEAM_SNAP = 3;         // m of extra capsule radius for heal contacts — the magnet window (~4° at max range, ~30°+ point-blank). Heal intents (includeTeammates) read it on BOTH ends so a latched beam is a paid beam; damage beams keep the honest +0.2 pad.
+export const HEALBEAM_DETACH = 4.5;       // hysteresis: a latched patient must miss at THIS pad to break - a patient hovering at the snap edge can't flip-flop the beam every tick. Read on BOTH ends like SNAP.
+// Angular window (proper lock-on language): the flat meter pad is ~4° at
+// max range but ~37°+ point-blank, which let the beam attach to patients
+// it wasn't facing. The cone caps that - acquire inside 30°, a latched
+// patient holds out to 45°. Both ends read the same cos² thresholds.
+export const HEALBEAM_ATTACH_COS2 = 0.866 * 0.866;  // cos²30°
+export const HEALBEAM_HOLD_COS2 = 0.707 * 0.707;    // cos²45°
 export const HEALNADE_HEAL = 60;          // flat heal on allies caught in the nade blast
+/** Shell variant ids on the projectileCreated edge (WireProjSpawn
+ *  variant) - a spawn-time modifier the replica must render. */
+export const PROJVAR_LOADED = 1;          // chambered shell (stats.loadable) - charged trail
 export const CONC_JET_DRAIN = 40;         // jet energy the concussion blast saps — the escape debuff, not just the fumble
 
 // Shocklance — the honest ray's reach for the pull-out zap. Shared: the

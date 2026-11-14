@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { releaseProjectileInstance, syncProjectileInstance } from '../effects/projectileVisuals.js';
+import { releaseProjectileInstance, syncProjectileInstance, syncProjectileInstanceColor } from '../effects/projectileVisuals.js';
 import type { ProjectileConfig } from './types.js';
 import type { Targetable } from '../entities/balls.js';
 
@@ -14,6 +14,12 @@ const _velDir = new THREE.Vector3();
 const _FORWARD = new THREE.Vector3(0, 0, 1);
 const EMBED_DEPTH = 0.4;
 const EMBED_SHRINK_TIME = 0.25;
+// Reclaim anim: white-hot flash on the instance (color can only burn
+// brighter), then the ghost carries the transparency fade - instanced
+// materials can't go per-instance transparent.
+const HARVEST_FLASH = 0.1;
+const HARVEST_FADE = 0.4;
+const _flashCol = new THREE.Color();
 
 export interface StuckHost {
   pos: THREE.Vector3;
@@ -24,6 +30,9 @@ export interface StuckHost {
   hitBall: Targetable | null;
   hitPlayerId: string | null;
   hitBolt: unknown;
+  /** Terrain/solid swept contact - obstacle/dome pops leave it false so
+   *  a spear never plants in mid-air. */
+  worldContact: boolean;
   readonly config: ProjectileConfig;
   age: number;
   exploded: boolean;
@@ -45,6 +54,9 @@ export class ProjStuck {
   // already resolved via explode(); this is purely the visible corpse.
   embedded = false;
   private embedAge = 0;
+  /** Flight dir at plant - the shaft runs tip→butt along -embedDir, so
+   *  the reclaim sweep can test the whole shaft, not the buried tip. */
+  readonly embedDir = new THREE.Vector3(0, 0, 1);
 
   // Stick attachment: a bomb glued to a victim rides it at a fixed
   // world-space offset (no victim-local frame — fine for spheres/capsules).
@@ -109,10 +121,11 @@ export class ProjStuck {
    *  plants the shell as a planted corpse. Returns true when handled. */
   tryEmbed(): boolean {
     const {h} = this;
-    if (h.config.embeds === undefined || !h.hitPointValid
+    if (h.config.embeds === undefined || !h.hitPointValid || !h.worldContact
         || h.hitBall || h.hitPlayerId || h.hitBolt) {return false;}
     this.embedded = true;
     this.embedAge = 0;
+    this.embedDir.copy(h.vel).normalize();
     // Tip-origin mesh: slide only a little along the flight line — the
     // head buries, ~1.6m of tail stays visibly planted in the dirt.
     // hitPoint itself stays at the swept contact — the impact decal
@@ -133,10 +146,51 @@ export class ProjStuck {
     return true;
   }
 
+  /** Retire path: the fade ghost is scene-owned - without this it
+   *  outlives the corpse and hangs in the air forever. */
+  dispose(): void {
+    if (!this.ghost) {return;}
+    this.h.scene.remove(this.ghost);
+    (this.ghost.material as THREE.Material).dispose();
+    this.ghost = null;
+  }
+
+  /** Reclaimed by its owner (server edge or the offline mirror): flash
+   *  white then fade to transparent - reads as "picked up", never to be
+   *  confused with the shrink-away expiry. */
+  harvest(): void {
+    if (!this.embedded || this.harvestAge >= 0) {return;}
+    this.harvestAge = 0;
+  }
+  private harvestAge = -1;
+  private ghost: THREE.Mesh | null = null;
+
   // Planted shell: hold full size for the embed window, then shrink away.
   tickEmbedded(dt: number): boolean { // true while the corpse is still planted
     const {h} = this;
     this.embedAge += dt;
+    if (this.harvestAge >= 0) {
+      this.harvestAge += dt;
+      if (this.harvestAge < HARVEST_FLASH) {
+        syncProjectileInstanceColor(h.mesh, _flashCol.setScalar(1 + 4 * (this.harvestAge / HARVEST_FLASH)));
+      } else if (this.ghost) {
+        const fade = 1 - (this.harvestAge - HARVEST_FLASH) / HARVEST_FADE;
+        if (fade <= 0) {
+          h.scene.remove(this.ghost); (this.ghost.material as THREE.Material).dispose(); this.ghost = null;
+          return false; // caller removes the mesh
+        }
+        (this.ghost.material as THREE.MeshBasicMaterial).opacity = fade;
+      } else {
+        // Swap the instance for a fading ghost: kill the instance (scale
+        // 0 + tint reset) and paint a real transparent material over it.
+        h.mesh.scale.setScalar(0); syncProjectileInstance(h.mesh);
+        syncProjectileInstanceColor(h.mesh, _flashCol.setScalar(1));
+        this.ghost = new THREE.Mesh(h.mesh.geometry, new THREE.MeshBasicMaterial({ color: 0xFF_F6_D8, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+        this.ghost.position.copy(h.pos); this.ghost.quaternion.copy(h.mesh.quaternion);
+        h.scene.add(this.ghost);
+      }
+      return true;
+    }
     const shrink = (this.embedAge - h.config.embeds!) / EMBED_SHRINK_TIME;
     if (shrink >= 1) {return false;} // caller removes the mesh
     if (shrink > 0) { h.mesh.scale.setScalar(1 - shrink); syncProjectileInstance(h.mesh); }

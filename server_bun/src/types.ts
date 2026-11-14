@@ -172,6 +172,11 @@ export interface PlayerState {
   // Belt/pack charges: BELT_MAX on spawn, −1 per belt toss, −2 per pack
   // deploy, +1 per nugget (gem/tag) touch — one pool, shared/weapons.ts.
   beltCharges: number;
+  /** Chambered belt shell (weaponType) waiting for the host weapon's
+   *  next shot - javelin loaded into a BoltLauncher. Set/cleared by the
+   *  loadItem toggle, consumed by the simmedShot spawn substitution;
+   *  survives weapon swaps but not death. */
+  loadedShell?: number;
   /** Per-weapon pool rounds (ammoCap rows - PlasmaGun pilot). Lazy
    *  accrual on this player's own fire clock; cleared on respawn =
    *  refilled (absent cell reads full). shared/weapons.ts AmmoPool. */

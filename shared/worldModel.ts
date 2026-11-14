@@ -351,6 +351,8 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // is exact: intent lag + echo transit both measured, nothing
       // estimated. The age>sa traj-epoch class collapses to wire truth.
       { name: 't', wire: 'num', channel: 'echo', absent: null },
+      // Spawn-time modifier the replica must render (PROJVAR_*).
+      { name: 'variant', wire: 'num', channel: 'edge', absent: null },
     ],
     // The contact point: replicas explode where the AUTHORITY detonated
     // the shell, not wherever their replay drifted to - a stamped blast
@@ -777,6 +779,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   deploy: [{ name: 'kind', wire: 'str' }, { name: 'position', wire: 'vec3' }, { name: 'vel', wire: 'vec3', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
   repair: [{ name: 'targetId', wire: 'num' }, { name: 'claimSeq', wire: 'num', absent: null }],
   skillUse: [{ name: 'claimSeq', wire: 'num', absent: null }],
+  loadItem: [{ name: 'weaponType', wire: 'num' }],
   slam: [{ name: 'position', wire: 'vec3' }, { name: 'claimSeq', wire: 'num', absent: null }],
   respawn: [{ name: 'hold', wire: 'bool', absent: null }],
   ready: [],

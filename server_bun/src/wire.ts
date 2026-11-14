@@ -432,6 +432,21 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     handle: (h, id, m): void => h.claimAck(id, 'skillUse', m.claimSeq, h.roomInfo.onSkillUse?.(id, m.skill) ?? 'gone'),
   },
 
+  // Chamber toggle (javelin → BoltLauncher): load the named belt shell
+  // into the held weapon its row declares, or unload+refund when the
+  // same type is already chambered. The authority owns the charge.
+  loadItem: {
+    limit: { maxCount: 8, windowMs: 1000 },
+    validate: (obj) => {
+      const w = obj.weaponType;
+      if (!Number.isInteger(w) || !((w as number) in WEAPONS)) {
+        return { success: false, error: 'weaponType must be a WeaponType' };
+      }
+      return { success: true, data: { type: 'loadItem', weaponType: w as number } };
+    },
+    handle: (h, id, m): void => h.combat.loadItem(id, m.weaponType),
+  },
+
   snapshotRequest: {
     // Each request reserializes + resends the whole world state — the
     // most expensive message per byte a client can send. Legit uses are

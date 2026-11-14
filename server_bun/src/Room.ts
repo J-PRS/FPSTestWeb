@@ -1185,7 +1185,7 @@ export class Room {
    *  earliest of terrain face, wall, player capsule, or creature wins
    *  (same math as botBeam.beamContact). A creature contact also picks
    *  the chain fork; payment stays in CombatHandler. */
-  private beamSweep(shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates = false): BeamContact | null {
+  private beamSweep(shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates = false, snapPad?: number, coneCos2?: number): BeamContact | null {
     // One cast for every authority shape  -  Room and P2PHost resolve the
     // same rays through shared beamSweep.ts.
     return beamSweepRay({
@@ -1195,7 +1195,7 @@ export class Room {
       ballSim: this.ballSim, creatureSim: this.creatureSim,
       transitOf: (pid): number => this.moveSim.transitOf(pid),
       transitVarOf: (pid): number => this.moveSim.transitVarOf(pid),
-    }, shooterId, muzzle, dir, range, includeTeammates);
+    }, shooterId, muzzle, dir, range, includeTeammates, snapPad, coneCos2);
   }
 
   /** Any player death drops a carried flag  -  called from the damage
@@ -1310,9 +1310,9 @@ export class Room {
       readySpawn: (pid): void => this.releaseReady(pid),
       admitQueue: (pid, ids): void => { this.admitPending.set(pid, ids); },
       floodPause: (pid, ms): void => this.connections.floodPause(pid, ms),
-      fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS),
+      fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS, dmgMult, variant): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS, dmgMult, variant),
       fizzleProjectiles: (pid): void => this.projectiles.fizzleOwner(pid),
-      beamSweep: (pid, muzzle, dir, range, includeTeammates): BeamContact | null => this.beamSweep(pid, muzzle, dir, range, includeTeammates),
+      beamSweep: (pid, muzzle, dir, range, includeTeammates, snapPad, coneCos2): BeamContact | null => this.beamSweep(pid, muzzle, dir, range, includeTeammates, snapPad, coneCos2),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
       crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),
       repairTarget: (pid, muz, dir, range): number | null => this.deployables.repairTarget(pid, muz, dir, range),

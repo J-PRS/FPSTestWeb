@@ -337,7 +337,7 @@ this.handlerThrows += 1;
     const ownerId = s ? this.wireIds.get(s.ownerWireId) : undefined;
     if (s && !ownerId) {this.pendingWidEvents.push({ at: Date.now(), proj: s }); this.drainPendingWidEvents(); return;}
     if (s && ownerId) {
-      try { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t); }
+      try { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t, s.variant); }
       catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projSpawn: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
     }
   }
@@ -452,7 +452,7 @@ this.handlerThrows += 1;
     knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull, data.yank),
     jump: (data): void | undefined => this.h.onPlayerJump?.(data.playerId, data.position),
     jetpack: (data): void | undefined => this.h.onPlayerJetpack?.(data.playerId, data.position),
-    projectileCreated: (data): void | undefined => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet, data.age, data.t),
+    projectileCreated: (data): void | undefined => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet, data.age, data.t, data.variant),
     playerShot: (data): void | undefined => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
     projectileDestroyed: (data): void | undefined => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId, data.position ?? undefined, data.age ?? undefined, data.fizzle === true),
     snapshot: (data): void | undefined => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
@@ -492,6 +492,7 @@ this.handlerThrows += 1;
     matchToken: (data): void | undefined => this.h.onMatchToken?.(data.token),
     mapUpdate: (data): void | undefined => this.h.onMapUpdate?.(data),
     projRide: (data): void | undefined => this.h.onProjRide?.(data.projectileId, data.host),
+    spearCollect: (data): void | undefined => this.h.onSpearCollect?.(data.ownerId, data.position),
     deploySpawn: (data): void | undefined => this.h.onDeploySpawn?.(data.id, data.owner, data.kind, data.pos, data.team),
     deployGone: (data): void | undefined => this.h.onDeployGone?.(data.id),
     deployDown: (data): void | undefined => this.h.onDeployDown?.(data.id, data.kind, data.team, data.respawnS),
@@ -826,7 +827,7 @@ dedupCensus.hitSeqDrops += 1;
     const s = p.proj!;
     const ownerId = this.wireIds.get(s.ownerWireId);
     if (!ownerId) {return null;}
-    return (): void => { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t); };
+    return (): void => { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t, s.variant); };
   }
 
   /** Routed through the NetworkManager seam so tests can wrap/count it. */

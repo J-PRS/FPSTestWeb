@@ -134,51 +134,47 @@ function ask(q: string): Promise<string> {
   });
 }
 
+/** Kill the squatter; on Access denied (it runs elevated) offer a RunAs
+ *  taskkill, which pops a real UAC consent prompt. */
+async function killOwner(owner: { pid: number; name: string }): Promise<boolean> {
+  try {
+    execFileSync('taskkill', ['/F', '/PID', String(owner.pid)]);
+    return true;
+  } catch (error) {
+    say(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
+    if (await ask(`[dev-watch] retry with elevation (UAC prompt)? [y/N] `) !== 'y') {return false;}
+    try {
+      execFileSync('powershell', ['-NoProfile', '-Command',
+        `Start-Process taskkill -Verb RunAs -Wait -ArgumentList '/F','/PID','${owner.pid}'`]);
+      return true;
+    } catch (error_) {
+      say(`[dev-watch] elevated kill failed: ${error_ instanceof Error ? error_.message : String(error_)}`);
+      return false;
+    }
+  }
+}
+
 async function portConflict(): Promise<void> {
   if (conflictBusy) {return;}
   conflictBusy = true;
   try {
-    const owner = portOwner();
+    let owner = portOwner();
     if (!owner) {
       say(`[dev-watch] :${PORT} busy but no LISTENING owner — waiting 2s for release...`);
       await new Promise((r) => setTimeout(r, 2000));
-      const owner2 = portOwner();
-      if (!owner2) {
+      owner = portOwner();
+      if (!owner) {
         say(`[dev-watch] :${PORT} still busy (TIME_WAIT?) — save a file or rerun to retry`);
         bindFails = 0;
         return;
       }
-      // fall through to kill logic below with owner2
-      say(`[dev-watch] :${PORT} is held by ${owner2.name} (pid ${owner2.pid}) — the server can't bind.`);
-      const a = await ask(`[dev-watch] kill ${owner2.name}? [y/N] `);
-      if (a === 'y') {
-        try {
-          execFileSync('taskkill', ['/F', '/PID', String(owner2.pid)]);
-          say(`[dev-watch] ${owner2.name} killed — waiting for port release...`);
-          await new Promise((r) => setTimeout(r, 2000));
-          bindFails = 0;
-          boot();
-        } catch (error) {
-          say(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      } else {
-        bindFails = 0;
-        say('[dev-watch] leaving it alone — save a file or rerun to retry');
-      }
-      return;
     }
     say(`[dev-watch] :${PORT} is held by ${owner.name} (pid ${owner.pid}) — the server can't bind.`);
-    const a = await ask(`[dev-watch] kill ${owner.name}? [y/N] `);
-    if (a === 'y') {
-      try {
-        execFileSync('taskkill', ['/F', '/PID', String(owner.pid)]);
-        say(`[dev-watch] ${owner.name} killed — waiting for port release...`);
-        await new Promise((r) => setTimeout(r, 2000));
-        bindFails = 0;
-        boot();
-      } catch (error) {
-        say(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
+    if (await ask(`[dev-watch] kill ${owner.name}? [y/N] `) === 'y' && await killOwner(owner)) {
+      say(`[dev-watch] ${owner.name} killed — waiting for port release...`);
+      await new Promise((r) => setTimeout(r, 2000));
+      bindFails = 0;
+      boot();
     } else {
       bindFails = 0;
       say('[dev-watch] leaving it alone — save a file or rerun to retry');

@@ -24,9 +24,10 @@ import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballSim.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { getWeaponStats, WeaponType, idSeed, jitteredTtl, roomDirectDamage, directHitAoeBonus, RIDE_CATCH_R, canHostRide, BELT_THROW_WEAPONS, isInstagibWeapon } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, idSeed, jitteredTtl, roomDirectDamage, directHitAoeBonus, RIDE_CATCH_R, canHostRide, BELT_THROW_WEAPONS, isInstagibWeapon, BELT_MAX, beltThrowCost } from '../../shared/weapons.ts';
 import { waterDomeDrag, type WaterDome } from '../../shared/deployItems.ts';
 import { GRAVITY } from '../../shared/movement.ts';
+import { dhypot3, segSegDistSq } from '../../shared/dmath.ts';
 import type { Vec3, ServerMessage } from './types.ts';
 import type { RoomMods } from '../../shared/protocol.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
@@ -79,6 +80,9 @@ export interface LiveProj {
   /** fuseOnly carriers: bodies this shell already bonked - each body
    *  reflects it once (no re-trigger next tick inside the capsule). */
   bodyBounced?: Set<string>;
+  /** pierce shells: bodies (players by pid, creatures by sim id) this
+   *  skewer already paid - same problem as bodyBounced, paid not bounced. */
+  pierced?: Set<string | number>;
 }
 
 // Player aim height - matches where the client sweeps the capsule center.
@@ -86,6 +90,13 @@ export interface LiveProj {
 const HARD_TTL_S = 8;
 // Below this altitude the shell is irrecoverably underground / off-map.
 const FLOOR_Y = -220;
+
+/** Owner-only spear reclaim: capsule-vs-shaft contact, not point-vs-tip -
+ *  the visible spear is a ~3.3m shaft, so brushing the butt counts.
+ *  Radius is arm's reach; the client mirror runs the same math. */
+const SPEAR_LEN = 3.3;
+const SPEAR_PICKUP_R2 = 1;
+const PLAYER_CAPSULE = 1.8;
 
 /** Earliest future time (from now, seconds) at which the parabola
  *  y(t) = y0 + vy·t + ½g·t² can descend to `ceiling`. Infinity when the
@@ -213,7 +224,7 @@ export class RoomProjectiles {
    *  Burst weapons (flak/shotgun) fire the whole pellet fan - a pull
    *  registers `burst` shells fanned by golden-angle cone offsets, same
    *  coverage the client spawnFan produces. */
-  spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS = 0): string | null {
+  spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS = 0, dmgMult = 1, variant = 0): string | null {
     // Modifier backstops: every spawn path (claims, bot arsenal, deploy
     // sims) funnels here - a weapon outside the room's rules has no body.
     if (this.room.mods?.instagib === true && !isInstagibWeapon(weaponType)) {return null;}
@@ -226,7 +237,7 @@ export class RoomProjectiles {
     // CombatHandler also calls fizzleOwner for beam/melee/hitscan pulls.
     if (stats && stats.speed > 0 && chamberedEligible(stats.fireInterval)
       && perkMods(this.room.players.getPlayer(ownerId)?.perk).singleChamber > 0) {this.fizzleOwner(ownerId);}
-    if (burst <= 1 || spread <= 0) {return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId, undefined, lagS);}
+    if (burst <= 1 || spread <= 0) {return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId, undefined, lagS, dmgMult, variant);}
     // One pull = one nonce for every pellet - unclaimed (bot) fans get a
     // minted pull id so the ledger can dedupe connects per trigger pull.
     const pullId = shotId ?? `pf-${(this.nextId += 1)}`;
@@ -245,13 +256,13 @@ export class RoomProjectiles {
       const ox = Math.cos(a) * r, oy = Math.sin(a) * r;
       const dx = dir.x + rx * ox + ux * oy, dy = dir.y + ry * ox + uy * oy, dz = dir.z + rz * ox + uz * oy;
       const l = Math.hypot(dx, dy, dz) || 1;
-      const id = this.spawnOne(ownerId, weaponType, origin, { x: dx / l, y: dy / l, z: dz / l }, ownerVel, pullId, i, lagS);
+      const id = this.spawnOne(ownerId, weaponType, origin, { x: dx / l, y: dy / l, z: dz / l }, ownerVel, pullId, i, lagS, dmgMult, variant);
       if (first === null) {first = id;}
     }
     return first;
   }
 
-  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, pellet?: number, lagS = 0): string | null {
+  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, pellet?: number, lagS = 0, dmgMult = 1, variant = 0): string | null {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.speed <= 0) {return null;} // hitscan-class - no body
     const owner = this.room.players.getPlayer(ownerId);
@@ -284,11 +295,11 @@ export class RoomProjectiles {
       ownerTeam: owner.team,
       // ttl scales by the same cut ratio - capped shells keep range.
       ttl: (jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S) * speedRatio,
-      directBonus: capped ? Math.min(1.5, speedRatio) : 1,
+      directBonus: (capped ? Math.min(1.5, speedRatio) : 1) * dmgMult,
     });
     // shotId/pellet are the intent's nonce - the shooter's predicted
     // shell binds its server identity off this echo (linkOwnProjectile).
-    this.edgeSpawn(id, ownerId, origin, vel, weaponType, shotId, pellet, lagS);
+    this.edgeSpawn(id, ownerId, origin, vel, weaponType, shotId, pellet, lagS, variant);
     return id;
   }
 
@@ -296,7 +307,7 @@ export class RoomProjectiles {
    *  ~44% of client egress at a full room. Owner wireId is how receivers
    *  resolve the shooter; an owner with no wireId yet (first-tick fire)
    *  or a host without the binary lane falls back to JSON. */
-  private edgeSpawn(id: string, ownerId: string, origin: Vec3, vel: Vec3, weaponType: number, shotId: string | undefined, pellet: number | undefined, lagS: number): void {
+  private edgeSpawn(id: string, ownerId: string, origin: Vec3, vel: Vec3, weaponType: number, shotId: string | undefined, pellet: number | undefined, lagS: number, variant = 0): void {
     const bin = this.room.connections;
     const ownerWireId = this.room.wireIds?.get(ownerId);
     if (bin && ownerWireId !== undefined) {
@@ -304,11 +315,12 @@ export class RoomProjectiles {
         projId: Number(id.slice(3)), ownerWireId, weaponType, pellet,
         age: lagS, t: Date.now(),
         position: Object.assign({}, origin), velocity: vel, shotId,
+        variant: variant || undefined,
       }));
       return;
     }
     this.room.broadcast(spawnPayload(WORLD_MODEL.projectile!, id, 'projectileId', {
-      ownerId, position: Object.assign({}, origin), velocity: vel, weaponType, shotId, pellet, age: lagS || undefined, t: Date.now(),
+      ownerId, position: Object.assign({}, origin), velocity: vel, weaponType, shotId, pellet, age: lagS || undefined, t: Date.now(), variant: variant || undefined,
     }) as ServerMessage);
   }
 
@@ -332,8 +344,44 @@ export class RoomProjectiles {
     this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age, fizzle: fizzle || undefined }) as ServerMessage);
   }
 
+  /** Planted spear corpses (stats.plants): the terrain/wall contact
+   *  killed the shell but left a reclaimable body — owner walks over it
+   *  to reclaim the belt charge it cost. ttl counts down in sim time. */
+  private readonly planted = new Map<string, { pos: Vec3; dir: Vec3; ownerId: string; weaponType: number; ttl: number }>();
+
+  plant(proj: LiveProj, at: Vec3): void {
+    const vl = dhypot3(proj.p.vel.x, proj.p.vel.y, proj.p.vel.z) || 1;
+    this.planted.set(proj.id, { pos: { ...at }, dir: { x: proj.p.vel.x / vl, y: proj.p.vel.y / vl, z: proj.p.vel.z / vl }, ownerId: proj.ownerId, weaponType: proj.weaponType, ttl: proj.stats.plants! });
+    this.edgeGone(proj, at, proj.p.age);
+  }
+
+  private spearSweep(dt: number): void {
+    for (const [id, s] of this.planted) {
+      s.ttl -= dt;
+      if (s.ttl <= 0) { this.planted.delete(id); continue; }
+      const owner = this.room.players.getPlayer(s.ownerId);
+      if (!owner) {continue;}
+      // Bounding-sphere early-out first - the shaft midpoint rejects
+      // everything beyond arm's reach + half-length before the seg-seg
+      // solve runs (broad phase before narrow, per Ericson).
+      const mx = s.pos.x - s.dir.x * SPEAR_LEN * 0.5, my = s.pos.y - s.dir.y * SPEAR_LEN * 0.5, mz = s.pos.z - s.dir.z * SPEAR_LEN * 0.5;
+      const bx = owner.position.x - mx, by = owner.position.y - my, bz = owner.position.z - mz;
+      if (bx * bx + by * by + bz * bz > 21) {continue;}
+      // Owner capsule (eye pos down to feet) vs the planted shaft
+      // segment (tip at pos, butt a spear-length back along flight dir).
+      if (segSegDistSq(owner.position.x, owner.position.y, owner.position.z,
+          owner.position.x, owner.position.y - PLAYER_CAPSULE, owner.position.z,
+          s.pos.x, s.pos.y, s.pos.z,
+          s.pos.x - s.dir.x * SPEAR_LEN, s.pos.y - s.dir.y * SPEAR_LEN, s.pos.z - s.dir.z * SPEAR_LEN) > SPEAR_PICKUP_R2) {continue;}
+      this.planted.delete(id);
+      owner.beltCharges = Math.min(BELT_MAX, owner.beltCharges + beltThrowCost(s.weaponType));
+      this.room.broadcast({ type: 'spearCollect', ownerId: s.ownerId, position: s.pos } as ServerMessage);
+    }
+  }
+
   tick(dt: number): void {
     this.domes = this.room.deployables?.waterDomes?.() ?? [];
+    this.spearSweep(dt);
     // Map iterators tolerate mid-loop delete (detonate) - no snapshot.
     for (const proj of this.projs.values()) {
       const {stats} = proj;
@@ -541,6 +589,24 @@ export class RoomProjectiles {
           cooked++;
         }
       }
+    }
+  }
+
+  /** Pierce contact (stats.pierce): pay the direct line to ONE body
+   *  WITHOUT the blast/death edges - the skewer keeps flying until
+   *  terrain, a wall, or a dome takes it. Same damage math detonate
+   *  uses for its direct lines, minus the blast. */
+  piercePay(proj: LiveProj, playerId?: string, ballId?: number, crawlerId?: number): void {
+    const rampAge = proj.p.age;
+    const fly = flyRampMult(perkMods(this.room.players.getPlayer(proj.ownerId)?.perk), rampAge, proj.stats.fireInterval ?? 0.5) * proj.directBonus;
+    if (playerId) {this.room.messages.botAttack(proj.ownerId, playerId, proj.weaponType, rampAge, proj.pull); return;}
+    const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * fly;
+    if (ballId !== undefined) {
+      const killed = this.room.ballSim?.handleHit(proj.ownerId, ballId, dmg).killed ?? false;
+      weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
+    } else if (crawlerId !== undefined) {
+      const killed = this.room.creatureSim?.handleHit(proj.ownerId, crawlerId, dmg).killed ?? false;
+      weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
   }
 

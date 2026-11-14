@@ -72,6 +72,7 @@ const EXEMPT: Record<string, string> = {
   padBoing: 'launch FX relay — remote frames carry the resulting velocity',
   loiterDive: 'dive FX relay — the blast arrives through the mineBoom funnel',
   projRide: 'cosmetic pairing relay — destroy events carry the contact pos',
+  spearCollect: 'collect FX relay — the charge lands through yourAmmo, the corpse fade is cosmetic',
   srvPing: 'liveness',
   aoeShot: 'cosmetic beam relay',
   sensorPing: 'intel relay — no actor state',

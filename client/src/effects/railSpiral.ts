@@ -43,7 +43,8 @@ export class RailSpiral implements DriveRibbon {
   // "thickness" is the helix radius, not the ribbon width).
   private traveled = 0;
 
-  constructor(scene: THREE.Scene, config: ProjectileConfig) {
+  constructor(scene: THREE.Scene, config: ProjectileConfig,
+              private readonly radius = RADIUS, private readonly wavelength = WAVELENGTH) {
     const base = config.ribbonColor ?? config.trailColors[0]?.getHex() ?? 0xFF_FF_FF;
     const color = new THREE.Color(base).lerp(_WHITE, 0.45).getHex();
     this.ribbon = RibbonTrail.acquire(scene, {
@@ -69,7 +70,7 @@ export class RailSpiral implements DriveRibbon {
     // legitimately travels tens of meters per frame. Clear the ring so
     // the next sample starts fresh; painting a chord across the gap just
     // trips RibbonTrail's own jumpcut warn (the console flood).
-    if (dist <= 0 || dist > 2 * WAVELENGTH) {
+    if (dist <= 0 || dist > 2 * this.wavelength) {
       if (dist > 0) { this.ribbon.clear(); }
       this.last.copy(pos);
       return;
@@ -83,18 +84,18 @@ export class RailSpiral implements DriveRibbon {
     while (remaining >= STEP) {
       remaining -= STEP;
       this.last.addScaledVector(_dir, STEP);
-      this.phase += (STEP / WAVELENGTH) * TWO_PI;
+      this.phase += (STEP / this.wavelength) * TWO_PI;
       // Radius ramp: seconds of flight = meters / mps, so the coil is a
       // tight thread leaving the muzzle and reaches full turn by 0.1s.
       const ramp = Math.min(1, this.traveled / (spd * 0.1));
-      const r = RADIUS * ramp;
+      const r = this.radius * ramp;
       const c = Math.cos(this.phase) * r, s = Math.sin(this.phase) * r;
       _pt.copy(this.last).addScaledVector(_upAxis, c).addScaledVector(_right, s);
       this.ribbon.push(_pt, vel);
     }
     // Fold the sub-step remainder into phase so the next frame's coil
     // continues the same rotation instead of restarting its angle.
-    this.phase += (this.last.distanceTo(pos) / WAVELENGTH) * TWO_PI;
+    this.phase += (this.last.distanceTo(pos) / this.wavelength) * TWO_PI;
     this.last.copy(pos);
   }
 

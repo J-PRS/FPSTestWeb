@@ -123,6 +123,24 @@ export interface WeaponStats {
    *  when a shell bounces off dirt yet pops on body contact at ANY age -
    *  the T2 grenade launcher: no arming window on players, only on dirt. */
   bodyArmTime?: number;
+  /** Body contact pays its direct damage and the shell KEEPS FLYING
+   *  (javelin skewer) - terrain, walls, and shield domes still stop it.
+   *  A pierced body can't be hit again by the same shell (per-proj set
+   *  on both ends, else it re-pays every tick inside the capsule). */
+  pierce?: boolean;
+  /** Planted-corpse seconds: a shell that dies on terrain/solids leaves
+   *  a retrievable spear the OWNER can walk over to reclaim its belt
+   *  charge. The server tracks the corpse, pays the refund, and
+   *  broadcasts the collect edge; clients mirror the corpse window. */
+  plants?: number;
+  /** Loadable shell: a belt item that can be chambered INTO a held
+   *  weapon (javelin → BoltLauncher). The belt press loads instead of
+   *  throwing when `into` is the equipped weapon; the next shot of that
+   *  weapon claims as itself but spawns THIS projectile with direct
+   *  damage x dmgMult. Toggle: pressing belt again while loaded refunds
+   *  the charge and unloads. Future load-X-into-Y combos are new rows,
+   *  not new code. */
+  loadable?: { into: number; dmgMult?: number };
   /** Mid-flight hitscan discharge (remote railgun): at `rayDelay` seconds
    *  the projectile fires a beam along its velocity and dies at the hit
    *  point (or at rayRange on a miss). The server reach check adds

@@ -1116,11 +1116,17 @@ export interface WireProjSpawn {
   position: WireVec3;
   velocity: WireVec3;
   shotId: string | undefined; // owner's bind nonce — meaningless to others
+  /** Shell variant (PROJVAR_*): a spawn-time modifier the replica must
+   *  show - e.g. a chambered spear's charged trail. Trailing byte so
+   *  old readers round-trip clean (fizzle set the precedent). */
+  variant?: number;
 }
 
 export function encodeProjSpawn(s: WireProjSpawn): Uint8Array {
   const sid = s.shotId === undefined ? null : ENC.encode(s.shotId);
-  const len = 46 + (sid ? 1 + sid.length : 0);
+  // variant without a shotId still needs the sid-length byte (0) or the
+  // trailing variant reads as a 1-char nonce - keep the layout aligned.
+  const len = 46 + (sid || s.variant !== undefined ? 1 + (sid?.length ?? 0) : 0) + (s.variant === undefined ? 0 : 1);
   const { u8, dv } = evScratch(len);
   const b = u8.byteOffset;
   let o = 0;
@@ -1133,7 +1139,9 @@ export function encodeProjSpawn(s: WireProjSpawn): Uint8Array {
   dv.setFloat64(b + o, s.t, true); o += 8;
   dv.setFloat32(b + o, s.position.x, true); dv.setFloat32(b + o + 4, s.position.y, true); dv.setFloat32(b + o + 8, s.position.z, true); o += 12;
   dv.setFloat32(b + o, s.velocity.x, true); dv.setFloat32(b + o + 4, s.velocity.y, true); dv.setFloat32(b + o + 8, s.velocity.z, true); o += 12;
-  if (sid) { u8[o++] = sid.length; u8.set(sid, o); }
+  if (sid) { u8[o++] = sid.length; u8.set(sid, o); o += sid.length; }
+  else if (s.variant !== undefined) {u8[o++] = 0;}
+  if (s.variant !== undefined) {u8[o] = s.variant & 0xFF;}
   return u8.subarray(0, len);
 }
 
@@ -1153,12 +1161,13 @@ export function decodeProjSpawn(u8: Uint8Array): WireProjSpawn | null {
   if (o < u8.length) {
     const n = d.getUint8(o++);
     if (o + n > u8.length) {return null;}
-    shotId = DEC.decode(u8.subarray(o, o + n));
+    shotId = DEC.decode(u8.subarray(o, o + n)); o += n;
   }
+  const variant = o < u8.length ? d.getUint8(o) : undefined;
   if (!Number.isFinite(age + t) ||
       !Number.isFinite(position.x + position.y + position.z) ||
       !Number.isFinite(velocity.x + velocity.y + velocity.z)) {return null;}
-  return { projId, ownerWireId, weaponType, pellet: pelletB === 0xFF ? undefined : pelletB, age, t, position, velocity, shotId };
+  return { projId, ownerWireId, weaponType, pellet: pelletB === 0xFF ? undefined : pelletB, age, t, position, velocity, shotId, variant };
 }
 
 export interface WireProjGone {

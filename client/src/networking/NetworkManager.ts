@@ -104,7 +104,7 @@ export class NetworkManager {
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
-  public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, age?: number, t?: number) => void) | null = null;
+  public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, age?: number, t?: number, variant?: number) => void) | null = null;
   /** Server refused a claim - `health` is the authoritative resync value
    *  (rejected predicted self-splash leaves client health divergent). */
   public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined, shotId?: string) => void) | null = null;
@@ -112,6 +112,7 @@ export class NetworkManager {
   public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, age?: number, fizzle?: boolean) => void) | null = null;
   /** Belt-sticky combo - rider server id glued dead-center onto host id. */
   public onProjRide: ((riderId: string, hostId: string) => void) | null = null;
+  public onSpearCollect: ((ownerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   /** Headhunt held-count edge - roster patch already landed; this is the
@@ -1296,6 +1297,13 @@ this.sendDrops += 1;
   sendHeldWeapon(wt: number | undefined): void {
     if (!this.connected || wt === undefined) {return;}
     this.send({ type: 'held', weapon: wt });
+  }
+
+  /** Chamber toggle (stats.loadable): server owns the charge both ways -
+   *  load pays it, unload refunds it. The shell type claims the intent. */
+  sendLoadItem(weaponType: number): void {
+    if (!this.connected) {return;}
+    this.send({ type: 'loadItem', weaponType });
   }
 
   /** Post-resync claim mute - see sendResync. */

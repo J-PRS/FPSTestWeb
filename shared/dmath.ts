@@ -184,3 +184,26 @@ export function hermiteBounded(
     out.x = lx; out.y = ly; out.z = lz;
   }
 }
+
+/** Squared distance between segments AB and CD (Ericson 5.1.9). The
+ *  spear-reclaim sweep needs capsule-vs-shaft contact, not point-vs-tip. */
+export function segSegDistSq(ax: number, ay: number, az: number, bx: number, by: number, bz: number,
+    cx: number, cy: number, cz: number, dx: number, dy: number, dz: number): number {
+  const d1x = bx - ax, d1y = by - ay, d1z = bz - az;
+  const d2x = dx - cx, d2y = dy - cy, d2z = dz - cz;
+  const rx = ax - cx, ry = ay - cy, rz = az - cz;
+  const a = d1x * d1x + d1y * d1y + d1z * d1z;
+  const e = d2x * d2x + d2y * d2y + d2z * d2z;
+  const f = d2x * rx + d2y * ry + d2z * rz;
+  const c = d1x * rx + d1y * ry + d1z * rz;
+  const b = d1x * d2x + d1y * d2y + d1z * d2z;
+  const den = a * e - b * b;
+  let s = den > 1e-12 ? Math.max(0, Math.min(1, (b * f - c * e) / den)) : 0;
+  let t = e > 1e-12 ? (b * s + f) / e : 0;
+  if (t < 0) { t = 0; s = a > 1e-12 ? Math.max(0, Math.min(1, -c / a)) : 0; }
+  else if (t > 1) { t = 1; s = a > 1e-12 ? Math.max(0, Math.min(1, (b - c) / a)) : 0; }
+  const px = ax + d1x * s - (cx + d2x * t);
+  const py = ay + d1y * s - (cy + d2y * t);
+  const pz = az + d1z * s - (cz + d2z * t);
+  return px * px + py * py + pz * pz;
+}

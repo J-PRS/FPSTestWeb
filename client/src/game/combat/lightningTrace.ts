@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LG_RANGE, LG_CHAIN_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
 import { classCapsule } from '../../../../shared/botClasses.js';
+import { HEALBEAM_SNAP, HEALBEAM_ATTACH_COS2 } from '../../../../shared/weapons.js';
 import { segSolidHit } from '../../../../shared/solidWorld.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import type { CombatDeps } from '../combat.js';
@@ -49,7 +50,7 @@ export function pickChain(deps: CombatDeps, from: THREE.Vector3, exclude: (typeo
   return best;
 }
 
-function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o: THREE.Vector3, d: THREE.Vector3): string | null {
+function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o: THREE.Vector3, d: THREE.Vector3, includeTeammates: boolean, snapPad = HEALBEAM_SNAP, coneCos2 = HEALBEAM_ATTACH_COS2): string | null {
   traceT.t = hitT;
   let hitId: string | null = null;
   // Teammates pass through, same as the server's beamSweep default
@@ -57,16 +58,23 @@ function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o
   // the visual bolt on a friendly was a lie - the beam detached-looking
   // attach point was a hit the server would never pay. Wire team resolves
   // the same way fillMapBlips does; teamless/FFA remotes stay hittable.
+  // HealBeam is the exception: its paid contact IS a teammate, so it
+  // passes includeTeammates - enemies still register (they body-block
+  // the patient and the server pays nothing for that contact either).
   const wirePlayers = deps.lazyNetworkManager?.().getPlayers?.();
   for (const [pid, rp] of deps.world.remotePlayers) {
     if (rp.isDead) {continue;}
     const team = (rp as { team?: string }).team ?? wirePlayers?.get(pid)?.team;
-    if (team !== undefined && team === deps.world.localTeam) {continue;}
+    if (!includeTeammates && team !== undefined && team === deps.world.localTeam) {continue;}
     // Ray vs the class capsule (shared/botClasses - the same shape the
     // server validates) at the GHOST epoch - the server judges the victim
     // ~0.7·renderDelay behind live; the rendered body is ~150ms stale
     // (pins on the stale visual read as hits the authority never saw).
-    const entry = rayCapsuleEntry(rp.ghostPosition?.(_lgGhost, _lgTransit) ?? rp.position, traceT.t, rp.armorClass, o, d);
+    // Heal intents test the RENDERED body, not the ghost: the lagged
+    // epoch trails a fast teammate by meters, so aiming at what you see
+    // missed what it tested - the beam felt less sticky than a thin ray.
+    const eye = includeTeammates ? rp.position : (rp.ghostPosition?.(_lgGhost, _lgTransit) ?? rp.position);
+    const entry = rayCapsuleEntry(eye, traceT.t, rp.armorClass, o, d, includeTeammates, snapPad, coneCos2);
     if (entry !== null) { traceT.t = entry; hitId = pid; }
   }
   return hitId;
@@ -98,7 +106,7 @@ function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o
 // sphere hit. Both the damage tick AND the per-frame visual refresh run
 // this - a stale tip between ticks is what detached the bolt on strafes.
 export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number },
-                        range = LG_RANGE, bounce = true): {
+                        range = LG_RANGE, bounce = true, includeTeammates = false, snapPad = HEALBEAM_SNAP, coneCos2 = HEALBEAM_ATTACH_COS2): {
   hitT: number;
   hitTarget: (typeof deps.targets)[number] | null;
   hitPlayerId: string | null;
@@ -150,7 +158,7 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   // point (exact aim), never magnetized to the center
   const hitTarget = traceTargetHit(deps, hitT, traceT, _lgO, _lgD);
   hitT = traceT.t;
-  const hitPlayerId = tracePlayerHit(deps, hitT, traceT, _lgO, _lgD);
+  const hitPlayerId = tracePlayerHit(deps, hitT, traceT, _lgO, _lgD, includeTeammates, snapPad, coneCos2);
   hitT = traceT.t;
 
   _lgHit.copy(_lgO).addScaledVector(_lgD, hitT);
@@ -230,9 +238,19 @@ function sphereEntry(hitT: number, r: number, proj: number): number | null {
  *  segment, then back off the surface by sqrt(r²−d²) - the standard
  *  capsule-beam solve (exact for horizontal rays, ≤cm error for steep
  *  ones vs a true cylindrical cast). */
-function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls: string | undefined, o: THREE.Vector3, d: THREE.Vector3): number | null {
+function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls: string | undefined, o: THREE.Vector3, d: THREE.Vector3, includeTeammates: boolean, snapPad = HEALBEAM_SNAP, coneCos2 = HEALBEAM_ATTACH_COS2): number | null {
   const cap = classCapsule(cls);
-  const capPad = cap.radius + 0.2; // beam is thin but not needle-thin
+  // Heal intents magnetize (snapPad, same pad the server applies);
+  // damage beams stay thin at +0.2.
+  const capPad = cap.radius + (includeTeammates ? snapPad : 0.2);
+  // Angular gate: the flat pad is ~4° at range but ~37°+ point-blank -
+  // without a cone it attached to patients you weren't facing. Server
+  // beamSweep gates identically (~30° acquire, ~45° latched hold).
+  if (includeTeammates) {
+    const cx = eyePos.x - o.x, cy = eyePos.y + cap.centerOff - o.y, cz = eyePos.z - o.z;
+    const fwd = cx * d.x + cy * d.y + cz * d.z;
+    if (fwd <= 0 || fwd * fwd < coneCos2 * (cx * cx + cy * cy + cz * cz)) {return null;}
+  }
   const yLo = eyePos.y - cap.eye + cap.radius;
   const axisH = (cap.height - 2 * cap.radius); // yLo .. yLo+axisH
   const wx = o.x - eyePos.x;

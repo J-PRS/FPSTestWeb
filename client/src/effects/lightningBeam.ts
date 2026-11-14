@@ -70,6 +70,8 @@ export class LightningBeam {
   private to = new THREE.Vector3();
   private bend = new THREE.Vector3();  // terrain-bounce corner (hasBend)
   private hasBend = false;
+  private curve = new THREE.Vector3(); // quadratic-bezier control point (hasCurve) - smooth latch arcs
+  private hasCurve = false;
   private camPos = new THREE.Vector3();
   private jagT = 0;
   private fade = 0;
@@ -94,12 +96,14 @@ export class LightningBeam {
    *  billboarding, hasContact = the tip actually landed on something —
    *  the glow sprite + spark fountain are CONTACT VFX and must not float
    *  at the end of a max-range air shot. */
-  fire(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, hasContact = true, damaging = false, bend?: THREE.Vector3 | null): void {
+  fire(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, hasContact = true, damaging = false, bend?: THREE.Vector3 | null, curve?: THREE.Vector3 | null): void {
     this.from.copy(from);
     this.to.copy(to);
     this.camPos.copy(camPos);
     this.hasBend = bend != null;
     if (bend) {this.bend.copy(bend);}
+    this.hasCurve = curve != null;
+    if (curve) {this.curve.copy(curve);}
     // Revive from hidden: update() early-returns while faded, so jagT
     // froze mid-clock and the skeleton still holds the PREVIOUS shot's
     // curve — endpoints weld to the new shot but the interior arcs
@@ -126,12 +130,14 @@ export class LightningBeam {
   /** Post-release fade weld — endpoints keep riding the gun + live trace
    *  while the bolt fades, so it shrinks in place instead of freezing
    *  mid-air for 90ms while the camera moves on. */
-  weld(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, bend?: THREE.Vector3 | null): void {
+  weld(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, bend?: THREE.Vector3 | null, curve?: THREE.Vector3 | null): void {
     this.from.copy(from);
     this.to.copy(to);
     this.camPos.copy(camPos);
     this.hasBend = bend != null;
     if (bend) {this.bend.copy(bend);}
+    this.hasCurve = curve != null;
+    if (curve) {this.curve.copy(curve);}
     _dir.copy(camPos).sub(to);
     if (_dir.lengthSq() > 0.0001) {this.hitFx.copy(to).addScaledVector(_dir.normalize(), 0.22);}
     this.hitGlow.position.copy(this.hitFx);
@@ -229,14 +235,29 @@ export class LightningBeam {
     // Leg vectors stay RAW deltas — params t·legLen fraction-of-leg.
     let bendT = 0;
     const legB = _bendDir.copy(this.to).sub(this.bend); // raw delta when bent
-    const useBend = this.hasBend && legB.lengthSq() > 0.002;
-    const len = useBend ? this.bend.distanceTo(this.from) + legB.length() : _dir.length();
+    const useBend = !this.hasCurve && this.hasBend && legB.lengthSq() > 0.002;
+    // Curved bolt: quadratic bezier through the control point - leaves
+    // the muzzle along the aim line, arcs smoothly onto the latch target.
+    // Read this.curve DIRECTLY: _segDir scratch gets clobbered by
+    // writeRibbonPts between passes, and the damage arc re-samples
+    // pointAt after them - a dead ctrl bends the arc back at the muzzle.
+    const ctrl = this.curve;
+    const useCurve = this.hasCurve && ctrl.distanceToSquared(this.from) > 0.002;
+    const len = useCurve ? this.from.distanceTo(ctrl) + ctrl.distanceTo(this.to)
+      : useBend ? this.bend.distanceTo(this.from) + legB.length() : _dir.length();
     if (useBend) {bendT = this.bend.distanceTo(this.from) / len;}
     // Degenerate (point-blank) beam: any basis works, just don't NaN
     if (len < 0.05) { _side.set(1, 0, 0); _up.set(0, 1, 0); }
     else {perpBasis(_dir, _side, _up);}
     const jagAmp = JAG * this.jagMul * Math.min(1, len / 30);
     const pointAt = (t: number, p: THREE.Vector3): THREE.Vector3 => {
+      if (useCurve) {
+        const u = 1 - t;
+        return p.set(0, 0, 0)
+          .addScaledVector(this.from, u * u)
+          .addScaledVector(ctrl, 2 * u * t)
+          .addScaledVector(this.to, t * t);
+      }
       if (useBend && t > bendT) {return p.copy(this.bend).addScaledVector(legB, (t - bendT) / (1 - bendT));}
       if (useBend) {return p.copy(this.from).addScaledVector(_segDir.copy(this.bend).sub(this.from), t / bendT);}
       return p.copy(this.from).addScaledVector(_dir, t);

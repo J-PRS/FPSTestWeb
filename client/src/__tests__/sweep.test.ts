@@ -75,6 +75,37 @@ describe('sweepPlayer', (): void => {
     expect(sweepPlayer(h, eye, 'p1')).toBe(true);
     expect(h.directHit).toBe(false);
   });
+
+  it('wake falloff: a grounded target only takes body contact, 20m+ reads the full envelope', (): void => {
+    // Same graze as the wake test above (dist 1.5, wake radius 2).
+    const from: [number, number, number] = [-5, CAPSULE_CENTER_Y, 1.5];
+    const mid: [number, number, number] = [0.5, CAPSULE_CENTER_Y, 1.5];
+    const to: [number, number, number] = [5, CAPSULE_CENTER_Y, 1.5];
+
+    // Grounded (feet on flatTerrain y=0): the graze envelope is gone.
+    const g = host({ from, to: mid, hitRadius: 2 });
+    expect(sweepPlayer(g, eye, 'p1', 'medium', flatTerrain)).toBe(false);
+    g.prevPos.copy(g.pos); g.pos.set(...to);
+    expect(sweepPlayer(g, eye, 'p1', 'medium', flatTerrain)).toBe(false);
+
+    // 20m+ above terrain: the full wake pays the graze - shell path
+    // rides at the airborne capsule's height (same 1.5m lateral miss).
+    const air = eye.clone().setY(eye.y + 20);
+    const aFrom: [number, number, number] = [from[0], from[1] + 20, from[2]];
+    const aMid: [number, number, number] = [mid[0], mid[1] + 20, mid[2]];
+    const aTo: [number, number, number] = [to[0], to[1] + 20, to[2]];
+    const a = host({ from: aFrom, to: aMid, hitRadius: 2 });
+    expect(sweepPlayer(a, air, 'p1', 'medium', flatTerrain)).toBe(false); // still approaching
+    a.prevPos.copy(a.pos); a.pos.set(...aTo);
+    expect(sweepPlayer(a, air, 'p1', 'medium', flatTerrain)).toBe(true);
+    expect(a.directHit).toBe(false);
+
+    // No terrain (legacy callers): the old full-wake rule stands.
+    const n = host({ from, to: mid, hitRadius: 2 });
+    sweepPlayer(n, eye, 'p1'); // approach frame registers the min sample
+    n.prevPos.copy(n.pos); n.pos.set(...to);
+    expect(sweepPlayer(n, eye, 'p1')).toBe(true);
+  });
 });
 
 describe('sweepBall ghost pos', (): void => {

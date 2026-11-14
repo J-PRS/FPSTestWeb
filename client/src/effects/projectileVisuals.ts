@@ -104,6 +104,13 @@ function getGlowMat(color: number, opacity: number, flash: boolean, cone = false
   }
   return m;
 }
+/** The javelin shell's merged spear geometry (cached) - shared by the
+ *  projectile pools and the BoltLauncher's loaded-spear viewmodel prop
+ *  so the bore prop is the same silhouette you throw. */
+export function javelinGeometry(): THREE.BufferGeometry {
+  return getMeshGeo('javelin', 0.15);
+}
+
 function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry {
   const key = `${meshType}:${bodyRadius}`;
   let geo = MESH_GEO_CACHE.get(key);
@@ -115,15 +122,26 @@ function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry 
       // unlike the oriented tube meant for rocket shells
       geo = new THREE.IcosahedronGeometry(bodyRadius, 1);
     } else if (meshType === 'javelin') {
-      // Thrown spear, ~2m, tip apex AT the origin (body trailing -Z) —
+      // Thrown spear, ~2.8m, tip apex AT the origin (body trailing -Z) -
       // pos is the head, so trail/ribbon emission lines up with the
       // visual point instead of the mid-shaft.
-      const shaft = new THREE.CylinderGeometry(0.035, 0.035, 1.5, 6);
-      shaft.rotateX(Math.PI / 2); shaft.translate(0, 0, -1.25);
-      const tip = new THREE.ConeGeometry(0.09, 0.5, 6);
-      tip.rotateX(Math.PI / 2); tip.translate(0, 0, -0.25);
-      geo = mergeGeometries([shaft, tip])!;
-      shaft.dispose(); tip.dispose();
+      const shaft = new THREE.CylinderGeometry(0.07, 0.07, 2.65, 6);
+      shaft.rotateX(Math.PI / 2); shaft.translate(0, 0, -2.225);
+      // Spearhead blade, 0.9m - the embed slides the apex ~0.4m under
+      // the surface, so anything shorter reads as a bare shaft: ~0.5m
+      // of blade still clears the dirt. Base meets the shaft at -0.9.
+      const tip = new THREE.ConeGeometry(0.085, 0.9, 6);
+      tip.rotateX(Math.PI / 2); tip.translate(0, 0, -0.45);
+      // Weighted-pilum ball (Trajanic reliefs show a lead/bronze sphere
+      // under the head joint) - also hides the shaft/blade transition.
+      const ball = new THREE.SphereGeometry(0.12, 8, 6);
+      ball.translate(0, 0, -0.9);
+      // Same 60° point on the butt - r=0.07 → ~0.12m, apex facing -Z,
+      // base flush on the shaft tail at -3.55.
+      const butt = new THREE.ConeGeometry(0.07, 0.121, 6);
+      butt.rotateX(-Math.PI / 2); butt.translate(0, 0, -3.61);
+      geo = mergeGeometries([shaft, tip, ball, butt])!;
+      shaft.dispose(); tip.dispose(); ball.dispose(); butt.dispose();
     } else {
       geo = new THREE.CylinderGeometry(0.08, bodyRadius, 0.7, 6);
       geo.rotateX(Math.PI / 2);
@@ -156,7 +174,7 @@ const _zeroScale = new THREE.Vector3(0, 0, 0);
 
 interface SlotTag { __inst?: { pool: InstPool; slot: number } }
 
-function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry, mat: THREE.Material, colored = false): InstPool {
+function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry, mat: THREE.Material, colored = false, shadows = false): InstPool {
   const key = `${scene.uuid  }|${  kind}`; // pools die with their scene — no cross-scene reuse
   return acquireBatch(instPools, key, (k) => {
     const mesh = new THREE.InstancedMesh(geo, mat, INST_CAP);
@@ -167,6 +185,7 @@ function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry
       mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
     }
     mesh.matrixWorldAutoUpdate = false;
+    mesh.castShadow = shadows; // body pools only - glow/additive pools never cast
     mesh.frustumCulled = false; // shells scatter; per-instance bounds don't exist
     mesh.count = 0;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -255,14 +274,14 @@ export function buildProjectileMeshes(
   scene: THREE.Scene, config: ProjectileConfig, pos: THREE.Vector3,
 ): ProjectileMeshes {
   const geo = getMeshGeo(config.meshType, config.bodyRadius);
-  const mat = getBodyMat(config.meshColor, config.litMesh === true); // shared — never mutated
+  const mat = config.bodyMaterial ?? getBodyMat(config.meshColor, config.litMesh === true); // shared - never mutated
   const mesh = new THREE.Mesh(geo, mat); // state only — rendered via the instanced pool
   mesh.position.copy(pos);
   // Spawn at the ramp-in start scale — prevents a one-frame full-size
   // flash before the first update shrinks it
   mesh.scale.setScalar(rampInStartScale(config));
   mesh.layers.enable(BLOOM_LAYER);
-  const bpool = instPoolFor(scene, `body|${config.meshType}|${config.bodyRadius}|${config.meshColor}`, geo, mat);
+  const bpool = instPoolFor(scene, `body|${config.meshType}|${config.bodyRadius}|${config.meshColor}`, geo, mat, false, true);
   (mesh as SlotTag).__inst = { pool: bpool, slot: instAlloc(bpool) };
 
   const glowMesh = config.glowShell ? buildGlowMesh(scene, config, pos) : null;

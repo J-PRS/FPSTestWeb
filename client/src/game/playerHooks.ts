@@ -59,7 +59,16 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   sfx.warpJump(to);
   };
   player.onMelee = combat.onMelee;
-  player.onWeaponSwitch = (i): void => { const wt = weaponDef(i).weaponType; viewModel?.switchWeapon(wt); sfx.equip(); c.sendHeld(wt); };
+  player.onWeaponSwitch = (i): void => {
+    const wt = weaponDef(i).weaponType;
+    viewModel?.switchWeapon(wt);
+    // Chambered-spear prop follows the chamber's truth, not the swap:
+    // respawn cleared loadedShell (dead shell dies with the body), so a
+    // stale prop can't ride the new life's launcher; swap-back re-shows.
+    viewModel?.setLoadedSpear(player.loadedShell !== undefined);
+    sfx.equip();
+    c.sendHeld(wt);
+  };
   player.onJump = (pos): void => { effects.spawnJumpDust(pos); sfx.jump(); };
   player.onLand = (impactSpeed): void => sfx.land(impactSpeed);
   player.onJetpack = (pos): void => effects.spawnJetpack(pos);

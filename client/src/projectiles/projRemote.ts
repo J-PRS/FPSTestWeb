@@ -51,7 +51,7 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
     // no aoeShot, no claims — damage stays a server edge like before.
     if (h.bodiesLive && !h.config.passThroughTargets && !h.config.sticks) {
       const lp = h.sweepLocal?.();
-      if (lp && h.shooterId !== 'local' && sweepPlayer(h, lp, 'local', h.localClass?.())) {
+      if (lp && h.shooterId !== 'local' && sweepPlayer(h, lp, 'local', h.localClass?.(), terrain)) {
         h.popClass = 'body-local';
         h.explode();
         return true;
@@ -59,7 +59,7 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
       if (remotePlayers) {
         for (const [playerId, playerPos] of remotePlayers) {
           if (playerId === h.shooterId) {continue;}
-          if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId))) {
+          if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId), terrain)) {
             h.popClass = 'body-remote';
             h.explode();
             return true;

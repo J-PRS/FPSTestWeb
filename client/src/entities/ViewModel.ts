@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { WeaponType, vmTypeOf } from '../../../shared/weapons.js';
 import { buildWeaponMeshes, buildHandAndFlash } from './viewmodel/weaponsGeo.js';
+import { darkMat } from './viewmodel/weaponKit.js';
+import { javelinGeometry } from '../effects/projectileVisuals.js';
 import { muzzleZFor } from './viewmodel/weaponVisual.js';
 import * as vm from './vmGhost.js';
 import { kickF } from './vmKick.js';
@@ -247,6 +249,25 @@ export class ViewModel {
   private strA = new THREE.Vector3();
   private strB = new THREE.Vector3();
   private strD = new THREE.Vector3();
+  /** Chambered-spear prop (stats.loadable): the rammed shell sits in
+   *  the BoltLauncher's bolt groove, blade past the prod. It parents to
+   *  the weapon group so swap envelopes hide/reveal it with the gun -
+   *  a chamber survives a holster and the spear is there on swap-back. */
+  private loadedSpearProp: THREE.Mesh | null = null;
+  setLoadedSpear(visible: boolean): void {
+    if (visible && !this.loadedSpearProp) {
+      const host = this.weapons.get(WeaponType.BoltLauncher);
+      if (!host) {return;}
+      const m = new THREE.Mesh(javelinGeometry(), darkMat);
+      m.rotation.y = Math.PI;   // geo apex rides +Z; flip so the blade pokes past the prod
+      m.scale.setScalar(0.4);   // vm props aren't to scale - this reads oversized, not clownish
+      m.position.set(0, 0.02, -0.8); // deep in the groove but the head clears the prod
+      host.add(m);
+      this.loadedSpearProp = m;
+    }
+    if (this.loadedSpearProp) {this.loadedSpearProp.visible = visible;}
+  }
+
   /** The kick+punch share of this frame's group transform - public so
    *  gunlab's inspect anchor (parked outside vm.group) can ride it. */
   readonly kickDeltaPos = new THREE.Vector3();

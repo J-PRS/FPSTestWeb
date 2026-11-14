@@ -3,14 +3,19 @@ import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
 
 import { TerrainRing } from './TerrainRing.js';
-import { implodeBurst } from './vfx.js';
+import { implodeBurst, blastBurst } from './vfx.js';
 import { markProbe } from '../core/fxDiag.js';
 
 // ---- Shared GPU resources (never disposed) ----
 const GEO_SHOCK  = new THREE.SphereGeometry(0.3, 16, 16);
 const GEO_CORE   = new THREE.SphereGeometry(1.2, 16, 16);
+const GEO_HOLE   = new THREE.SphereGeometry(1, 16, 16);
+// Accretion swirl: a tilted luminous ring spinning fast at the point -
+// the "gravity well" read from every stylized void-collapse breakdown.
+const GEO_SWIRL  = new THREE.RingGeometry(0.55, 1, 32);
 const ARC_SEGS   = 8;
 const ARC_POINTS = ARC_SEGS + 1;
+const _snapPos = new THREE.Vector3();
 
 
 
@@ -24,6 +29,8 @@ interface Arc {
 
 interface Shock { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; life: number; elapsed: number; maxRadius: number; dead: boolean }
 interface Core  { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; dead: boolean }
+interface Hole  { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; dead: boolean }
+interface Swirl { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; tilt: number; spinDir: number; dead: boolean }
 
 // ---- Module pools — shared across all Implosion instances ----
 const shockPool: Shock[] = [];
@@ -35,6 +42,10 @@ const arcPool: Arc[] = [];
 const SHOCK_POOL_KEEP = 8;
 const CORE_POOL_KEEP = 4;
 const ARC_POOL_KEEP = 16;
+const HOLE_POOL_KEEP = 4;
+// Collapse clock: everything rushes in for ~0.3s, then the snap -
+// a collapsed void has to POP, not fizzle out.
+const SNAP_T = 0.3;
 function releaseShock(sw: Shock): void {
   if (shockPool.length >= SHOCK_POOL_KEEP) {sw.mat.dispose();}
   else {shockPool.push(sw);}
@@ -47,6 +58,16 @@ function releaseArc(a: Arc): void {
   if (arcPool.length >= ARC_POOL_KEEP) { a.mat.dispose(); a.line.geometry.dispose(); }
   else {arcPool.push(a);}
 }
+const holePool: Hole[] = [];
+function releaseHole(h: Hole): void {
+  if (holePool.length >= HOLE_POOL_KEEP) {h.mat.dispose();}
+  else {holePool.push(h);}
+}
+const swirlPool: Swirl[] = [];
+function releaseSwirl(s: Swirl): void {
+  if (swirlPool.length >= HOLE_POOL_KEEP) {s.mat.dispose();}
+  else {swirlPool.push(s);}
+}
 
 export class Implosion {
   dead = false;
@@ -57,6 +78,10 @@ export class Implosion {
   private rings: TerrainRing[] = [];
   private core: Core | null = null;
   private arcs: Arc[] = [];
+  private hole: Hole | null = null;
+  private swirls: Swirl[] = [];
+  private snapped = false;
+  private timeScale = 1;
 
   constructor(scene: THREE.Scene, pos: THREE.Vector3, age = 0, terrain?: Terrain) {
     // See Explosion — hidden-tab spawns die at birth.
@@ -90,6 +115,57 @@ export class Implosion {
       lifeMin: 0.2, lifeMax: 0.35, sizeMin: 0.6, sizeMax: 1.2,
       c1: [0.3, 0.6, 0.5], c2: [0, 0.2, 0.3], opacity: 1, spin: 4, stagger: 0.08,
     }, false);
+    implodeBurst(pos, { // velocity-aligned streaks - matter torn inward
+      count: 55 * timeScale, rMin: 4, rMax: 8, spdMin: 30, spdMax: 55, swirl: 12,
+      lifeMin: 0.18, lifeMax: 0.32, sizeMin: 0.12, sizeMax: 0.28,
+      c1: [0.75, 1, 1], c2: [0.1, 0.55, 1], opacity: 0.95, stagger: 0.06,
+      stretched: true, stretchLen: 7,
+    }, true);
+
+    // Event horizon: a dark orb at the center while the inrush runs -
+    // the "nothing escapes" read every real implosion has. Snaps out at
+    // SNAP_T into the collapse flash.
+    let hole = holePool.pop();
+    if (hole) {
+      this.scene.add(hole.mesh);
+    } else {
+      const mat = new THREE.MeshBasicMaterial({ color: 0x00_00_08 });
+      const mesh = new THREE.Mesh(GEO_HOLE, mat);
+      markProbe(mesh, { kind: 'fxMesh', label: 'implosion:hole' });
+      this.scene.add(mesh);
+      hole = { mesh, mat, dead: false };
+    }
+    hole.mesh.position.copy(pos);
+    hole.mesh.scale.setScalar(0.01);
+    hole.dead = false;
+    this.hole = hole;
+    this.timeScale = timeScale;
+
+    // Accretion swirls: two counter-tilted additive rings spinning at
+    // the point - dies into the same snap as the horizon.
+    for (const tilt of [0.5, -0.35]) {
+      let sw2 = swirlPool.pop();
+      if (sw2) {
+        this.scene.add(sw2.mesh);
+      } else {
+        const mat = new THREE.MeshBasicMaterial({
+          transparent: true, side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(GEO_SWIRL, mat);
+        mesh.layers.enable(BLOOM_LAYER);
+        markProbe(mesh, { kind: 'fxMesh', label: 'implosion:swirl' });
+        this.scene.add(mesh);
+        sw2 = { mesh, mat, tilt: 0, spinDir: 1, dead: false };
+      }
+      sw2.tilt = tilt; sw2.spinDir = Math.sign(tilt) || 1;
+      sw2.mat.color.setHex(0x44_EE_FF).multiplyScalar(EMIT_GAIN);
+      sw2.mesh.position.copy(pos);
+      sw2.mesh.rotation.set(Math.PI / 2 + tilt, Math.random() * Math.PI, 0);
+      sw2.mat.opacity = 0.7;
+      sw2.dead = false;
+      this.swirls.push(sw2);
+    }
 
     // Layer 5: Shockwave - expanding cyan sphere
     let sw = shockPool.pop();
@@ -109,7 +185,7 @@ export class Implosion {
     sw.mat.color.setHex(0x00_FF_FF).multiplyScalar(EMIT_GAIN);
     sw.mat.opacity = 0.8;
     sw.mesh.position.copy(pos);
-    sw.life = 0.4; sw.elapsed = 0; sw.maxRadius = 8 * timeScale; sw.dead = false;
+    sw.life = SNAP_T; sw.elapsed = 0; sw.maxRadius = 8 * timeScale; sw.dead = false;
     this.shockwaves.push(sw);
 
     // Layer 5b: Terrain-draped expanding ground ring — see TerrainRing
@@ -179,12 +255,64 @@ export class Implosion {
 
   update(dt: number): void {
     this.elapsed += dt;
+    // Event horizon: swells while the inrush runs, snaps out at SNAP_T
+    // into the collapse flash + outward spark fan.
+    if (this.hole && !this.snapped) {
+      const g = Math.min(this.elapsed / SNAP_T, 1);
+      // g³ easing - the Graviton critique is universal: the collapse
+      // must ACCELERATE, not drift in linearly.
+      this.hole.mesh.scale.setScalar(0.3 + 1.7 * g * g * g * this.timeScale);
+      for (const sw2 of this.swirls) {
+        sw2.mesh.rotation.y += dt * 14 * sw2.spinDir * (0.5 + g * 2);
+        sw2.mesh.scale.setScalar(Math.max(0.05, (1 - g * 0.7) * this.timeScale * 2));
+        sw2.mat.opacity = 0.7 * (1 - g * 0.4);
+      }
+      if (this.elapsed >= SNAP_T) {this.snap();}
+    }
     let alive =
       this.updateCore() +
       this.updateShockwaves(dt) +
       this.updateArcs(dt);
+    if (this.snapped) {alive += 1;}
     for (const r of this.rings) {if (r.update(dt)) {alive += 1;}}
     if (alive === 0) {this.dead = true;}
+  }
+
+  /** The collapse punctuation: horizon gone, one white-hot flash and a
+   *  fan of outward sparks - the implosion's full stop. */
+  private snap(): void {
+    this.snapped = true;
+    if (this.hole) {
+      this.scene.remove(this.hole.mesh);
+      this.hole.dead = true;
+      releaseHole(this.hole);
+      this.hole = null;
+    }
+    for (const sw2 of this.swirls) {
+      this.scene.remove(sw2.mesh);
+      sw2.dead = true;
+      releaseSwirl(sw2);
+    }
+    this.swirls.length = 0;
+    const pos = _snapPos.set(this.ox, this.oy, this.oz);
+    blastBurst(pos, { // collapse flash - the void popping
+      count: 1, spdMin: 0, spdMax: 0, vy: 0,
+      lifeMin: 0.1, lifeMax: 0.1, sizeMin: 8 * this.timeScale, sizeMax: 8 * this.timeScale,
+      gravity: 0, c1: [1, 1, 1], c2: [0.55, 0.85, 1], opacity: 1,
+    }, true);
+    blastBurst(pos, { // rebound sparks - what the void spits back out
+      count: 14, spdMin: 40, spdMax: 75, vy: 4,
+      lifeMin: 0.12, lifeMax: 0.2, sizeMin: 0.15, sizeMax: 0.3,
+      gravity: -3, c1: [1, 1, 1], c2: [0.2, 0.7, 1], opacity: 0.95,
+      stretched: true, stretchLen: 9,
+    }, true);
+    blastBurst(pos, { // void shards - DARK fragments against the glow,
+      // the contrast layer stylized collapses all carry
+      count: 12, spdMin: 8, spdMax: 22, vy: 6,
+      lifeMin: 0.4, lifeMax: 0.7, sizeMin: 0.3, sizeMax: 0.7,
+      gravity: -14, c1: [0.02, 0.03, 0.08], c2: [0, 0, 0.02], opacity: 1,
+      spin: 6,
+    }, false);
   }
 
   private updateCore(): number {
@@ -217,8 +345,10 @@ export class Implosion {
       }
 alive += 1;
       const t = sw.elapsed / sw.life;
-      sw.mesh.scale.setScalar(sw.maxRadius * t / 0.3);
-      sw.mat.opacity = (1 - t) * 0.8;
+      // Converging shell: shrinks to the point while BRIGHTENING - an
+      // expanding shock reads "explosion", a collapsing one "implosion".
+      sw.mesh.scale.setScalar(Math.max(0.001, sw.maxRadius * (1 - t) / 0.3));
+      sw.mat.opacity = 0.3 + 0.55 * t;
     }
     return alive;
   }
@@ -252,6 +382,20 @@ alive += 1;
   }
 
   dispose(): void {
+    if (this.hole) {
+      this.scene.remove(this.hole.mesh);
+      this.hole.dead = true;
+      releaseHole(this.hole);
+      this.hole = null;
+    }
+    for (const sw2 of this.swirls) {
+      if (!sw2.dead) {
+        this.scene.remove(sw2.mesh);
+        sw2.dead = true;
+        releaseSwirl(sw2);
+      }
+    }
+    this.swirls.length = 0;
     for (const sw of this.shockwaves) {
       if (!sw.dead) {
         this.scene.remove(sw.mesh);

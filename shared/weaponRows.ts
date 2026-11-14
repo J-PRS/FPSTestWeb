@@ -679,6 +679,12 @@ export const WEAPONS: Record<number, WeaponStats> = {
     airtimeScale: true,
     // Thrown dart: near-flat long throw, heavy single-target pierce.
     // No splash - the skill shot IS the reward.
+    pierce: true, // bodies pay their direct hit and the spear flies on to terrain
+    plants: 10, // stuck in the dirt it's reclaimable - mirrors the client corpse window
+    // Bolt Launcher combo: belt press with the launcher out rams the
+    // spear down the bore instead of throwing - the next trigger sends
+    // it at +50% direct, still piercing, still reclaimable.
+    loadable: { into: WeaponType.BoltLauncher, dmgMult: 1.5 },
     directDamage: 60,
     aoeDamage: 0,
     aoeRadius: 0,

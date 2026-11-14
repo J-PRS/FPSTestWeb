@@ -6,6 +6,7 @@ import {
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
+import { bodyMat } from '../entities/viewmodel/weaponKit.js';
 
 // Belt throws — the C-key item slot. Each is a fuse/contact explosive or a
 // kinetic dart; stats live in shared/weapons.ts keyed by weaponType.
@@ -42,7 +43,7 @@ export const BOMBLET_CONFIG: ProjectileConfig = beltBall(22, 0x2A_2D_24, 0xCC_FF
 
 // Javelin: a fast near-flat dart — no splash, precision throw. The whole
 // sell is SPEED: a fat bright streak behind a real spear, not a dust puff.
-export const JAVELIN_CONFIG: ProjectileConfig = Object.assign({}, beltBall(20, 0x8A_8F_96, 0xCC_DD_FF, { displayName: 'Javelin' }), {meshType: 'javelin',noExplosion: true,embeds: 2,damageColor: '#ccddff',trailOpacity: 0.5,trailParticlesPerUnit: 1.6,ribbonTrail: true,ribbonLanes: 3,ribbonWidth: 0.34,ribbonLife: 0.6,ribbonColor: 0x9D_B8_FF});
+export const JAVELIN_CONFIG: ProjectileConfig = Object.assign({}, beltBall(20, 0x8A_8F_96, 0xCC_DD_FF, { displayName: 'Javelin' }), {meshType: 'javelin',bodyMaterial: bodyMat,noExplosion: true,embeds: 10,pierce: true,damageColor: '#ccddff',trailOpacity: 0.5,trailParticlesPerUnit: 1.6,ribbonTrail: true,ribbonLanes: 3,ribbonWidth: 0.34,ribbonLife: 0.6,ribbonColor: 0x9D_B8_FF});
 
 // Impact grenade: bright cyan shell, flat long arc, pops on touch,
 // outsized shove. The movement tool.
@@ -62,6 +63,7 @@ export const HOOK_CONFIG: ProjectileConfig = Object.assign({}, beltBall(37, 0x6A
   damageColor: '#ffcc88',
 }), {
   meshType: 'javelin',
+  bodyMaterial: bodyMat, // same iron as the viewmodel guns - shades + embeds consistently
   noExplosion: true,
   hook: true,
   // No trail of its own — a dart WITH a rope is the read; smoke/ribbons

@@ -82,6 +82,27 @@ describe('LG trace teammate pass-through', (): void => {
     expect(r.hitPlayerId).toBeNull();
   });
 
+  it('includeTeammates latches the friendly contact (heal beam)', (): void => {
+    const remotes = new Map([['pal', remote(0, 10, -20, 'alpha')]]);
+    const r = lgTrace(rig(remotes, { localTeam: 'alpha' }), cam(), { t: 0 }, 22, false, true);
+    expect(r.hitPlayerId).toBe('pal');
+    // HEALBEAM_SNAP fattens the capsule - the entry backs off by the pad.
+    expect(r.hitT).toBeGreaterThan(15);
+    expect(r.hitT).toBeLessThan(19);
+  });
+
+  it('includeTeammates still stops the beam on a body-block (heal beam)', (): void => {
+    // An enemy standing in front of the patient is the earliest contact
+    // - the server pays nothing for it, and the visual must stop there.
+    const remotes = new Map([
+      ['foe', remote(0, 10, -15, 'bravo')],
+      ['pal', remote(0, 10, -20, 'alpha')],
+    ]);
+    const r = lgTrace(rig(remotes, { localTeam: 'alpha' }), cam(), { t: 0 }, 22, false, true);
+    expect(r.hitPlayerId).toBe('foe');
+    expect(r.hitT).toBeLessThan(15);
+  });
+
   it('the terrain-bounce pick skips teammates too', (): void => {
     // Beam grounds at z≈-13 (cliff face), then must arc to the enemy
     // 6m off the contact - not the teammate standing 1m off it.

@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, isInstagibWeapon, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow, IGUN_DIRECT_MULT } from '../../shared/weapons.ts';
+import { serverSimmed, isInstagibWeapon, BELT_THROW_WEAPONS, beltThrowCost, BELT_MAX, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, HEALBEAM_DETACH, HEALBEAM_HOLD_COS2, PROJVAR_LOADED, payShotCost, spendAmmo, jitter01, coneDir, bloomRadius, bloomGrow, IGUN_DIRECT_MULT } from '../../shared/weapons.ts';
 import { gunGameAllows } from '../../shared/gunGame.ts';
 import type { RoomMods } from '../../shared/protocol.ts';
 import { idSeed } from '../../shared/weaponTable.ts';
@@ -124,13 +124,13 @@ export interface CombatDeps {
   rng?: () => number;
   /** Fire-intent → authoritative shell spawn (RoomProjectiles). Only
    *  SERVER_SIMMED_WEAPONS route here; returns the LiveProj id. */
-  fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number) => string | null;
+  fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number, dmgMult?: number, variant?: number) => string | null;
   /** Chambered perk: any admitted pull fades the shooter's live shells. */
   fizzleProjectiles?: (ownerId: string) => void;
   /** Beam-intent resolution - the honest ray against terrain, walls,
    *  players, and creatures; earliest contact wins. Absent = beam
    *  intents stay cosmetic relays only. */
-  beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates?: boolean) => BeamContact | null;
+  beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates?: boolean, snapPad?: number, coneCos2?: number) => BeamContact | null;
   /** Creature damage sinks for beam contacts - BallSim/CreatureSim
    *  handleHit; absent when the room runs no creature sims. */
   ballHit?: (playerId: string, id: number, damage: number) => HitVerdict | null;
@@ -202,6 +202,11 @@ export class CombatHandler {
   /** Heal-beam tick law - per `shooter|patient` pair last-tick stamp,
    *  the same rate shape the repair beam enforces. */
   healTicks = new Map<string, number>();
+  /** Heal-beam latch (hysteresis): the latched patient sweeps at the
+   *  wider HEALBEAM_DETACH pad before falling back to a fresh SNAP
+   *  trace - a patient hovering at the snap edge can't flip-flop the
+   *  beam every tick. Client mirrors in healbeam.ts. */
+  private readonly healLatch = new Map<string, string>();
   /** The LG bank/ramp economy - own file (combatCharge.ts); this handler
    *  only supplies the detonation (a real processAOE blast). */
   chargeBank: ChargeBank; // public - aoeClaims banks LG ticks through it
@@ -407,6 +412,7 @@ w.n += 1;
     for (const key of this.healTicks.keys()) {
       if (key.startsWith(`${playerId}|`) || key.endsWith(`|${playerId}`)) {this.healTicks.delete(key);}
     }
+    this.healLatch.delete(playerId);
     for (const key of this.lastDropNotify.keys()) {
       if (key.startsWith(`${playerId}:`)) {this.lastDropNotify.delete(key);}
     }
@@ -635,13 +641,46 @@ w.n += 1;
     const l = dhypot3(dir.x, dir.y, dir.z) || 1;
     // includeTeammates: the honest ray must CONTACT the patient - damage
     // beams skip friendly bodies, but the heal contact IS a teammate.
-    const c = sweep(playerId,
-      { x: mpos.x, y: mpos.y, z: mpos.z },
-      { x: dir.x / l, y: dir.y / l, z: dir.z / l }, HEALBEAM_RANGE, true);
+    const dN = { x: dir.x / l, y: dir.y / l, z: dir.z / l };
+    // Hysteresis: keep paying the latched patient while it connects at
+    // the wider DETACH pad; only a wider miss falls through to a fresh
+    // SNAP trace (which may re-acquire anyone, latch included).
+    const latchId = this.healLatch.get(playerId);
+    if (latchId) {
+      const lc = sweep(playerId, { x: mpos.x, y: mpos.y, z: mpos.z }, dN, HEALBEAM_RANGE, true, HEALBEAM_DETACH, HEALBEAM_HOLD_COS2);
+      if (lc?.playerId === latchId && this.friendly(playerId, latchId)) {
+        this.healBeamTick(playerId, latchId, now);
+        return false;
+      }
+      this.healLatch.delete(playerId);
+    }
+    const c = sweep(playerId, { x: mpos.x, y: mpos.y, z: mpos.z }, dN, HEALBEAM_RANGE, true);
     if (c?.playerId && this.friendly(playerId, c.playerId)) {
+      this.healLatch.set(playerId, c.playerId);
       this.healBeamTick(playerId, c.playerId, now);
     }
     return false;
+  }
+
+  /** Chamber toggle (stats.loadable): a belt press while the host
+   *  weapon is held loads the shell (paying its belt charge); pressing
+   *  again with the same shell chambered unloads and refunds it - the
+   *  round trip is free bookkeeping, the shell was never a physical
+   *  object. Client mirrors the gate in fire.ts's onBelt. */
+  loadItem(playerId: string, weaponType: number): void {
+    const player = this.playerManager.getPlayer(playerId);
+    const spec = getWeaponStats(weaponType)?.loadable;
+    if (!player || player.isDead || spec === undefined || player.weapon !== spec.into) { this.hb('drop.loadItem'); return; }
+    const cost = beltThrowCost(weaponType);
+    if (player.loadedShell === weaponType) {
+      player.loadedShell = undefined;
+      player.beltCharges = Math.min(BELT_MAX, player.beltCharges + cost);
+      this.hb('loadItem.unload');
+    } else if (player.loadedShell === undefined && player.beltCharges >= cost) {
+      player.beltCharges -= cost;
+      player.loadedShell = weaponType;
+      this.hb('loadItem.load');
+    } else { this.hb('drop.loadItemFull'); }
   }
 
   /** One heal tick on a resolved teammate contact: pair-paced, tank-
@@ -714,10 +753,28 @@ win.violations += 1;
     // not buy seconds of shell age). Without a measurement the honest
     // age is arrival-time - transitOf returns 0 in join grace.
     const lagS = (this.deps.transitOf?.(playerId) ?? 0) / 1000;
-    const id = fireProjectile(playerId, msg.weaponType!,
+    // Chambered shell (stats.loadable): a belt item rammed into the
+    // host weapon claims AS the host but spawns the loaded type -
+    // javelin out of a BoltLauncher at dmgMult direct. Consumed by this
+    // shot only; a weapon the row doesn't declare can't fire it, so
+    // holstering keeps the chamber until swap-back (or unload).
+    let spawnWt = msg.weaponType!;
+    let dmgMult = 1;
+    let variant = 0;
+    const ld = player.loadedShell;
+    if (ld !== undefined) {
+      const lspec = getWeaponStats(ld)?.loadable;
+      if (lspec !== undefined && lspec.into === msg.weaponType) {
+        player.loadedShell = undefined;
+        spawnWt = ld;
+        dmgMult = lspec.dmgMult ?? 1;
+        variant = PROJVAR_LOADED;
+      }
+    }
+    const id = fireProjectile(playerId, spawnWt,
       { x: aim.at.x, y: aim.at.y, z: aim.at.z },
       ndir,
-      ownerVel, msg.shotId, lagS);
+      ownerVel, msg.shotId, lagS, dmgMult, variant);
     if (id) {
       this.noteShot(playerId, msg.shotId, now);
       this.hb('shot.serverSim');

@@ -13,6 +13,7 @@ import { LG_CHAIN_RANGE, LG_BOUNCE_RANGE, lgBounceDmgScale } from '../../shared/
 import { classCapsule } from '../../shared/botClasses.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
+import { HEALBEAM_SNAP, HEALBEAM_ATTACH_COS2 } from '../../shared/weapons.ts';
 import type { Vec3 } from './types.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import type { PlayerManager } from './PlayerManager.ts';
@@ -79,7 +80,7 @@ function beamChain(world: BeamSweepWorld, contact: Vec3, dir: Vec3, excludeBall:
 
 
 
-export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates = false): BeamContact | null {
+export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates = false, snapPad = HEALBEAM_SNAP, coneCos2 = HEALBEAM_ATTACH_COS2): BeamContact | null {
   const end = { x: muzzle.x + dir.x * range, y: muzzle.y + dir.y * range, z: muzzle.z + dir.z * range };
   const at = (t: number): Vec3 => ({ x: muzzle.x + (end.x - muzzle.x) * t, y: muzzle.y + (end.y - muzzle.y) * t, z: muzzle.z + (end.z - muzzle.z) * t });
   let bestT = 1;
@@ -134,7 +135,20 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
       const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
       // Capsule test, not midpoint sphere - a beam over the helmet or
       // under the feet is a visual miss, so it must not register.
-      if (segCapsuleDist(a, b, c.x, c.y - cap.half, c.y + cap.half, c.z) > cap.radius + 0.2) {continue;}
+      // Heal intents magnetize: the snap pad widens the capsule so a
+      // near-miss on a patient still connects (client pads identically;
+      // a latched beam sweeps with the wider detach pad).
+      const capPad = cap.radius + (includeTeammates ? snapPad : 0.2);
+      if (segCapsuleDist(a, b, c.x, c.y - cap.half, c.y + cap.half, c.z) > capPad) {continue;}
+      // Angular gate: the flat pad is ~4° at range but ~37°+ point-blank,
+      // so without a cone it attaches to patients the shooter isn't even
+      // facing (closest approach = the segment start). Lock-on language:
+      // acquire inside ~30°, a latched patient holds out to ~45°.
+      if (includeTeammates) {
+        const fx = c.x - a.x, fy = c.y - a.y, fz = c.z - a.z;
+        const fwd = fx * beamDir.x + fy * beamDir.y + fz * beamDir.z;
+        if (fwd <= 0 || fwd * fwd < coneCos2 * (fx * fx + fy * fy + fz * fz)) {continue;}
+      }
       const tt = segPointT(a, b, c);
       if (tt <= tMin) { tMin = tt; playerId = pid; }
     }

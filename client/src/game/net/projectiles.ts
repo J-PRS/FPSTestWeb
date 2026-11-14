@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { BOLT_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
-import { WeaponType, getWeaponStats, LANCE_RANGE } from '../../../../shared/weapons.js';
+import { WeaponType, getWeaponStats, LANCE_RANGE, BELT_MAX } from '../../../../shared/weapons.js';
 import { GRAVITY } from '../../../../shared/movement.js';
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
@@ -209,7 +209,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
   };
 
-  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, srvAge?: number, srvT?: number): void => {
+  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, srvAge?: number, srvT?: number, variant?: number): void => {
     if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
     // Hidden tabs render nothing and the un-hide resync reaps remote
     // shells anyway — spawning them anyway just piles up a backlog the
@@ -241,6 +241,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (cosmeticShot(ownerId, weaponType, origin, dir)) {return;}
     const cfg = (weaponType === undefined ? undefined : getProjectileConfig(weaponType)) ?? BOLT_CONFIG;
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
+    if (variant !== undefined) {remoteProjectile.applyVariant(variant);}
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     // Underground spawn: a wire origin already below the heightmap can
     // never "cross" terrain in the replica sweep - it tunnels forever.
@@ -521,5 +522,20 @@ export function wireProjectiles(ctx: NetCtx): void {
     const rider = remoteProjectiles.get(riderId) ?? reg.byId.get(riderId);
     const host = remoteProjectiles.get(hostId) ?? reg.byId.get(hostId);
     if (rider && host) {rider.host = host;}
+  };
+
+  // Server-paid spear reclaim: the owner's planted corpse near the edge
+  // point shrinks away on every client; the owner also pockets the belt
+  // charge back (server already refunded its own counter).
+  networkManager.onSpearCollect = (ownerId, pos): void => {
+    for (const p of deps.world.projectiles) {
+      const dx = p.pos.x - pos.x, dy = p.pos.y - pos.y, dz = p.pos.z - pos.z;
+      if (p.glue.embedded && dx * dx + dy * dy + dz * dz < 9) {p.glue.harvest(); break;}
+    }
+    if (ownerId === deps.lazyNetworkManager()?.getLocalPlayerId?.()) {
+      const pl = deps.lazyPlayer();
+      pl.beltCharges = Math.min(BELT_MAX, pl.beltCharges + 1);
+      sfx.powerup('gem');
+    }
   };
 }

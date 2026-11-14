@@ -46,6 +46,12 @@ export interface ProjectileConfig {
   /** Lit body material (Phong + specular) instead of the flat unlit
    *  default - iron shells need shading to read as balls, not discs. */
   litMesh?: boolean; // 'rocket', 'disc' - Projectile class dispatches on this
+  /** Body contact pays its hit and the shell KEEPS FLYING (javelin
+   *  skewer) - mirrors the shared stats.pierce the server sweep reads. */
+  pierce?: boolean;
+  /** Explicit body material override (e.g. the viewmodel gun bodyMat) —
+   *  wins over meshColor/litMesh; shared, never mutated. */
+  bodyMaterial?: THREE.Material;
   glowShell: boolean;
   glowColor: number;
   glowOpacity: number;

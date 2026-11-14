@@ -18,9 +18,10 @@ import * as sfx from '../../core/sfx.js';
 import { screenShake } from '../../effects/screenShake.js';
 import { EXPLOSION_VFX_RADIUS, SCORCH_MAX } from '../../core/config.js';
 import { urlParams } from '../../core/params.js';
-import { getWeaponStats, WeaponType, AOE_VFX_SCALE, ARMORNADE_ARMOR, RIDE_CATCH_R, canHostRide } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, AOE_VFX_SCALE, ARMORNADE_ARMOR, RIDE_CATCH_R, canHostRide, BELT_MAX } from '../../../../shared/weapons.js';
 import { POWERUP } from '../../../../shared/pickups.js';
-import { handleProjectileImpact } from './impact.js';
+import { segSegDistSq } from '../../../../shared/dmath.js';
+import { handleProjectileImpact, handlePlayerHit, handleBallHit } from './impact.js';
 import type { CombatCtx, ExplosionArgs } from '../combat.js';
 
 // Turret-bolt interception: clip a lobbed shell with an explosive and it
@@ -341,6 +342,48 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
     // starvation class). The local BODY stays on the clamped dt - only
     // shells mirror a server-side clock.
     p.update(rawDt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles, remotePlayerClasses);
+
+    // Pierce queue: bodies the skewer paid mid-flight - same handlers
+    // the explode path runs, drained while the shell is still live.
+    if (p.pierceQueue.length > 0) {
+      for (const q of p.pierceQueue) {
+        if (q.ball) {handleBallHit(c, p, q.ball);}
+        else if (q.playerId) {handlePlayerHit(c, p, q.playerId);}
+      }
+      p.pierceQueue.length = 0;
+    }
+
+    // Spear reclaim (plants): walking over your own planted corpse
+    // scoops it. Offline the client is the authority - it pays the local
+    // belt and scoops bot spears too (bots track no charge; the harvest
+    // is their whole reclaim). Online the spearCollect edge pays - the
+    // local harvest is just the no-latency shrink.
+    if (p.glue.embedded) {
+      const offline = !deps.lazyNetworkManager()?.authoritySims();
+      const pl = p.shooterId == null ? deps.lazyPlayer() : null;
+      const ownerPos = pl ? pl.pos
+        : offline ? deps.world.remotePlayers.get(p.shooterId!)?.position
+        : undefined;
+      if (ownerPos) {
+        // Bounding-sphere early-out (shaft midpoint, half-len + reach +
+        // capsule ≈ 4.6m) before the seg-seg solve - same math as server.
+        const d = p.glue.embedDir;
+        const bx = ownerPos.x - (p.pos.x - d.x * 1.65), by = ownerPos.y - (p.pos.y - d.y * 1.65), bz = ownerPos.z - (p.pos.z - d.z * 1.65);
+        if (bx * bx + by * by + bz * bz < 21
+        // Capsule (eye→feet) vs the planted shaft (tip→butt): brushing
+        // the tail counts - same segSeg math as the server sweep.
+        && segSegDistSq(ownerPos.x, ownerPos.y, ownerPos.z,
+            ownerPos.x, ownerPos.y - 1.8, ownerPos.z,
+            p.pos.x, p.pos.y, p.pos.z,
+            p.pos.x - d.x * 3.3, p.pos.y - d.y * 3.3, p.pos.z - d.z * 3.3) < 1) {
+          p.glue.harvest();
+          if (pl && offline) {
+            pl.beltCharges = Math.min(BELT_MAX, pl.beltCharges + 1);
+            sfx.powerup('gem');
+          }
+        }
+      }
+    }
 
     if (p.config.hook) {tickHookRope(deps, p, remotePlayerPositions);}
 

@@ -138,6 +138,7 @@ export class Player {
     this.lastDamageSource = '';
     this.protectedUntil = performance.now() + SPAWN_PROTECT_MS;
     this.beltCharges = BELT_MAX;
+    this.loadedShell = undefined; // a chambered shell dies with the body
     this.ammoPool.clear(); // absent cell = full pool - the refill IS the clear
     this.bloom = 0;
     this._heldHurtT = 0;
@@ -434,6 +435,10 @@ export class Player {
   /** Belt/pack charge mirror — BELT_MAX on respawn, server owns the truth.
    *  Belt throw −1, pack deploy −2, nugget +1 (shared/weapons.ts). */
   beltCharges = BELT_MAX;
+  /** Belt shell chambered into the held weapon (stats.loadable → jav →
+   *  BoltLauncher). The next shot of the host weapon spawns it; a
+   *  second belt press unloads + refunds. Server mirrors on PlayerState. */
+  loadedShell?: number;
   /** Per-weapon pool rounds (ammoCap rows - PlasmaGun pilot): lazy
    *  accrual on the perf clock; the server owns the same pool through
    *  its own gate, prediction just previews/spends the same formula. */

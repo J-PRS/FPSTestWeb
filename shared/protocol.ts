@@ -150,6 +150,10 @@ export type ClientMessage =
   // spawns an authoritative shell, echoes shotId on projectileCreated,
   // and declares all outcomes - pos/shotId only help binding, never truth.
   | { type: 'shotFired'; weaponType?: number; dir?: Vec3; pos?: Vec3; vel?: Vec3; shotId?: string; fireAt?: number }
+  /** Chamber toggle: load the belt item (`weaponType` = its projectile
+   *  type) into the held weapon declared by its row's `loadable.into`,
+   *  or unload+refund when already chambered. Rare, rides JSON. */
+  | { type: 'loadItem'; weaponType: number }
   // tickNack: client lost a tick-frame burst - asks the room to run a
   // full-record window so masked-field baselines reseed in ~1s instead
   // of waiting out the staggered-full cadence. Payload-free: gap size is
@@ -320,12 +324,13 @@ export type ServerMessage =
   | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; armorClass?: string; health?: number }
   | { type: 'jump'; playerId: string; position: Vec3 }
   | { type: 'jetpack'; playerId: string; position: Vec3 }
-  | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: Vec3; velocity: Vec3; weaponType?: number; shotId?: string; pellet?: number; age?: number; t?: number }
+  | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: Vec3; velocity: Vec3; weaponType?: number; shotId?: string; pellet?: number; age?: number; t?: number; variant?: number }
   // Cosmetic relay of a hitscan trigger-pull: pos is server-stamped
   // (rewind to fire time), dir is the shooter's claimed aim - never
   // trusted for damage, only for muzzle audio/visual on observers.
   | { type: 'playerShot'; id: string; weaponType?: number; pos?: Vec3; dir?: Vec3 }
   | { type: 'projRide'; projectileId: string; host: string }
+  | { type: 'spearCollect'; ownerId: string; position: Vec3 }
   | { type: 'projectileDestroyed'; projectileId: string; shotId?: string;
       /** Server-true contact point - replicas snap here before exploding
        *  so the predicted blast center IS the authority's. */

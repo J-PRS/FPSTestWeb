@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
 import { glitch } from '../core/fxDiag.js';
 import { hitRadiusAt } from '../../../shared/combat.js';
-import { idSeed, jitteredTtl, getWeaponStats } from '../../../shared/weapons.js';
+import { idSeed, jitteredTtl, getWeaponStats, PROJVAR_LOADED } from '../../../shared/weapons.js';
 
 import type { Targetable } from '../entities/balls.js';
 
@@ -109,6 +109,10 @@ export class Projectile {
    *  contact where the server shell flew on). */
   popClass?: string;
   hitBolt: SweepObstacle | null = null; // mid-air interception - combat turns this into a cookoff blast
+  // Pierce (config.pierce): bodies already paid (pid or ball/creature id)
+  // plus the drain queue projectiles.ts pays through the impact pipeline.
+  pierced = new Set<string | number>();
+  pierceQueue: { playerId?: string; ball?: Targetable }[] = [];
   age = 0;
   spawnedThisFrame = true; // skip first update so projectile renders at spawn pos before moving
   isRemote = false; // true for server-authoritative/demo projectiles
@@ -177,6 +181,9 @@ export class Projectile {
   bouncesTaken = 0;
   readonly hitPoint = new THREE.Vector3(); // exact sweep intersection (set by sweepTerrain)
   hitPointValid = false;
+  /** Terrain/solid swept this step - obstacle/dome pops leave it false
+   *  so an embed corpse never plants in mid-air. */
+  worldContact = false;
   explosionProcessed = false;
   // Sticky: froze to a surface - physics off, fuse still burning. The
   // blast is what hurts people, not the glue point.
@@ -299,7 +306,7 @@ export class Projectile {
   // Runtime-owned emit/jump decisions for every trail layer (P1) -
   // pos discontinuities need no caller teleport(): the driver cuts all
   // layers when its own last-sample says the host jumped.
-  private readonly driver: TrailDriver;
+  private driver!: TrailDriver;
 
   constructor(scene: THREE.Scene, origin: THREE.Vector3, dir: THREE.Vector3, playerVel: THREE.Vector3, config: ProjectileConfig) {
     this.scene = scene;
@@ -331,11 +338,30 @@ export class Projectile {
     // Q2 coil rides the same ribbons list: the driver push()es it the
     // frame travel once, and it internally re-samples onto its helix.
     if (config.railSpiral) {this.ribbons.push(new RailSpiral(scene, config));}
+    this.initDriver();
+  }
+
+  /** Wire variant (PROJVAR_*): spawn-time modifier the replica must
+   *  render - a chambered spear (loadable) draws the rail corkscrew at
+   *  a minuscule radius: the tight coil reads as launcher-charged, not
+   *  thrown. Own predicted shells call this straight from spawn. */
+  variant = 0;
+  applyVariant(v: number): void {
+    this.variant = v;
+    if (v === PROJVAR_LOADED) {
+      const spiral = new RailSpiral(this.scene, this.config, 0.12, 3.5);
+      // driver.add() binds follow like a ctor ribbon; falling back to a
+      // raw push keeps a pre-driver path sane.
+      if (this.driver) {this.driver.add(spiral);} else {this.ribbons.push(spiral);}
+    }
+  }
+
+  private initDriver(): void {
     this.driver = new TrailDriver(
       { pos: this.rendered, vel: this.vel,
         // trailDelay holds ALL trail layers (ribbon + droplets) for the
         // first flight seconds - `last` still tracks pos, so resume is streak-free.
-        emitting: (): boolean => !this.exploded && this.age >= (config.trailDelay ?? 0) },
+        emitting: (): boolean => !this.exploded && this.age >= (this.config.trailDelay ?? 0) },
       [this.trail],
       this.ribbons,
     );
@@ -549,6 +575,7 @@ export class Projectile {
     // teleport the explosion back to the last terrain contact (the
     // "explosion in the wrong spot" bug on fuse/ball/player kills)
     this.hitPointValid = false;
+    this.worldContact = false;
     if (this.config.gravity) {this.vel.y += GRAVITY * dt;}
     this.pos.addScaledVector(this.vel, dt);
     // Watersphere drag - same post-integration pass the server runs in
@@ -721,6 +748,7 @@ export class Projectile {
 
   removeProjectileMesh(): void {
     if (this.projectileRemoved) {return;}
+    this.glue.dispose(); // retire the harvest ghost too - it's scene-owned
     releaseProjectileInstance(this.mesh);
     // mat/glowMat are cache-shared - never dispose
     if (this.glowMesh) {

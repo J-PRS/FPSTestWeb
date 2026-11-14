@@ -66,11 +66,13 @@ describe('scenario: class bodies', () => {
     shooter.protectedUntil = simMs(0);
     const medium = addStanding(room, 'medium', 'medium', 20);
     const heavy = addStanding(room, 'heavy', 'heavy', 40);
-    // Railgun at FLOOR+2.9: the midpoint-sphere reach (radius+wake+half)
-    // is ~1.6 vs medium center FLOOR+1.1 - a whiff - but ~1.85 vs the
-    // heavy's FLOOR+1.35 - a wake clip on the mech's taller silhouette.
+    // Railgun at FLOOR+2.75: axis tops sit FLOOR+1.55 (medium) vs
+    // FLOOR+1.9 (heavy) - the path clears the medium's reach (1.2 vs
+    // 0.83) but grazes the heavy's capsule (0.85 < 0.98). A body clip,
+    // not a wake clip: a grounded target earns no graze envelope since
+    // the altitude-scaled wake arrived.
     room.projectiles.spawn(shooter.id, WeaponType.Railgun,
-      { x: 0, y: FLOOR + 2.9, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+      { x: 0, y: FLOOR + 2.75, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 20; i++) {room.projectiles.tick(0.05);}
     expect(medium.health).toBe(medium.maxHealth); // whiffed overhead
     expect(heavy.health).toBeLessThan(heavy.maxHealth); // clipped the mech

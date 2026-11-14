@@ -22,7 +22,7 @@ import {
 import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
 import { swingArcView } from '../../effects/swingTrails.js';
-import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed, payShotCost, spendAmmo, jitter01, coneDir } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, beltThrowCost, BELT_MAX, serverSimmed, payShotCost, spendAmmo, jitter01, coneDir, PROJVAR_LOADED } from '../../../../shared/weapons.js';
 import { chamberedEligible } from '../../../../shared/perks.js';
 import { classCanFire } from '../../../../shared/botClasses.js';
 import { idSeed } from '../../../../shared/weaponTable.js';
@@ -92,7 +92,7 @@ export function fadeChambered(deps: CombatDeps, weaponType: number): void {
   for (const old of deps.world.projectiles) {if (!old.isRemote && old.shooterId == null && !old.exploded) {old.explode();}}
 }
 
-function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined {
+function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false, claimType?: number): Projectile | undefined {
   // Same law as combat.ts's onWeaponFire gate: a weapon the authority
   // calls class-locked must not spawn a predicted shell or send an
   // intent - every pull otherwise spam-rejects for the life (belt
@@ -112,7 +112,10 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   if (deps.inputTracking.isTabHidden()) {return undefined;}
   if (deps.lazyDemoManager()?.isPlaying) {return undefined;}
 
-  if (!quiet) {sfx.shoot(config.weaponType);}
+  // claimType: a chambered shell claims as its HOST weapon (the
+  // authority substitutes the spawn) - the launcher keeps its own sfx
+  // and intent id while the shell flies the loaded config's sim.
+  if (!quiet) {sfx.shoot(claimType ?? config.weaponType);}
   // Decloak-on-fire: bot senses mask this player's cloak for the reveal
   // window, same rule the server applies to its own bots.
   deps.lazyPlayer().lastFireAt = performance.now();
@@ -200,7 +203,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // jitter off shotId, so |claimVel - p.vel| measures the cone angle,
   // not a bug (chaingun spray read as a 24 m/s "drift" storm).
   if (e.bloomRadius === undefined) {spawnDrift(velocity.distanceTo(p.vel));}
-  if (serverSimmed(config.weaponType)) {
+  if (serverSimmed(claimType ?? config.weaponType)) {
     // Claimless path: the intent is all we send — the server spawns its
     // own authoritative shell and echoes shotId on projectileCreated,
     // which linkOwnProjectile binds to this predicted shell. Contact
@@ -209,7 +212,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     // the server fans the whole spread itself, echoing a pellet index.
     if (!quiet) {
       deps.lazyNetworkManager().sendShotFired({
-        weaponType: config.weaponType,
+        weaponType: claimType ?? config.weaponType,
         dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
         pos: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
         // The claim carries our live velocity so the server spawns with
@@ -268,6 +271,30 @@ function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
   // rule on the spawn claim, this gate just saves the animation/no-op.
   const config = BELT_THROWS[item] ?? BELT_DISC_CONFIG;
   const cost = beltThrowCost(config.weaponType);
+  // Chamberable shell (stats.loadable): the belt press with the host
+  // weapon out rams it down the bore instead of throwing - the next
+  // trigger sends it (fireWeapon), and a second belt press slides it
+  // back into the belt with the charge. The authority toggles the same
+  // way on the loadItem intent.
+  const spec = getWeaponStats(config.weaponType).loadable;
+  if (spec !== undefined && p.currentWeapon === spec.into) {
+    const timeScale = BELT_THROW_TIME[item] ?? 1;
+    deps.lazyViewModel()?.startThrow(timeScale);
+    setTimeout((): void => {
+      const pl = deps.lazyPlayer();
+      if (pl.isDead || pl.currentWeapon !== spec.into) {return;}
+      if (pl.loadedShell === config.weaponType) {
+        pl.loadedShell = undefined;
+        pl.beltCharges = Math.min(BELT_MAX, pl.beltCharges + cost);
+      } else if (pl.loadedShell === undefined && pl.beltCharges >= cost) {
+        pl.beltCharges -= cost;
+        pl.loadedShell = config.weaponType;
+      } else {return;}
+      deps.lazyNetworkManager()?.sendLoadItem(config.weaponType);
+      deps.lazyViewModel()?.setLoadedSpear(pl.loadedShell !== undefined);
+    }, THROW_RELEASE * timeScale * 1000);
+    return;
+  }
   if (p.beltCharges < cost) {return;}
   // Some throws are a deliberate plant, not a flick — the anim stretch and
   // the release delay must agree or the bomb leaves the hand early.
@@ -364,6 +391,27 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
     deps.lazyPlayer().movement.armFallBoost(3);
   }
   deps.lazyViewModel()?.kick(def.kick);
+  // Chambered shell (stats.loadable): the host weapon's trigger sends
+  // the loaded belt projectile instead of its own - the claim rides the
+  // HOST's weaponType so the authority's simmedShot swaps the spawn
+  // identically. A weapon the row doesn't declare never reaches this.
+  const ld = deps.lazyPlayer().loadedShell;
+  if (ld !== undefined) {
+    const lspec = getWeaponStats(ld)?.loadable;
+    if (lspec?.into === def.config.weaponType) {
+      const cfg = Object.values(BELT_THROWS).find((c): boolean => c.weaponType === ld);
+      deps.lazyPlayer().loadedShell = undefined;
+      deps.lazyViewModel()?.setLoadedSpear(false);
+      if (cfg) {
+        const shot = spawnProjectile(deps, cfg, e, false, def.config.weaponType);
+        if (shot) {
+          shot.directBonus = (shot.directBonus ?? 1) * (lspec.dmgMult ?? 1);
+          shot.applyVariant(PROJVAR_LOADED); // charged tight-coil - mirrors the edge replicas draw
+        }
+      }
+      return;
+    }
+  }
   if (def.pellets) { spawnFan(deps, def.config, e, def.pellets.count, def.pellets.spread); return; }
   if (def.bloom) {
     // Bloom: claim the RAW aim dir - the server owns the cone. The

@@ -17,7 +17,7 @@ import type { ClientMessage } from '../../shared/protocol.ts';
 const ALL_CLIENT_TYPES = [
   'aoeShot', 'chat', 'classUpdate', 'clientStats', 'crawlerHit', 'creatureHit',
   'deploy', 'environmentDamage', 'heal', 'held', 'inputMove', 'jetpack', 'join', 'jump',
-  'perkUpdate', 'ping', 'pong', 'position', 'projectileDestroy', 'ready', 'repair', 'respawn',
+  'loadItem', 'perkUpdate', 'ping', 'pong', 'position', 'projectileDestroy', 'ready', 'repair', 'respawn',
   'resync', 'shotFired', 'skillUse', 'slam', 'snapshotRequest', 'switchRoom',
   'teleport', 'throwFlag', 'tickNack',
 ] as const satisfies readonly ClientMessage['type'][];
