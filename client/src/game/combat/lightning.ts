@@ -7,7 +7,7 @@ import {
   LG_RANGE, LG_POP_DMG_CAP, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN,
   LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT, LG_CHARGE_DECAY_S, lgBounceDmgScale,
 } from '../../core/config.js';
-import { getWeaponStats, WeaponType, IGUN_DIRECT_MULT } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, IGUN_DIRECT_MULT, IGUN_AOE_MULT } from '../../../../shared/weapons.js';
 import { lgTickDamage, LG_TICK_BASE, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
 import { lgTrace, pickChain, _lgHit, _lgO, _lgD } from './lightningTrace.js';
 import type { CombatDeps, FireArgs, ExplosionArgs } from '../combat.js';
@@ -426,7 +426,9 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     // pays the victim server-side through the same ramp/bank economy.
     // Splash sweep still runs for bystander knockback; the named victim is
     // skipped so the pin + predict above isn't double-applied.
-    hooks.applyForceToRemotes({ pos: _lgHit, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: hitPlayerId, forceMultiplier: 1 });
+    // Bystander pop pays aoeDamage×10 in igun (server blast law) -
+    // same mult impact.ts gives projectile splash predictions.
+    hooks.applyForceToRemotes({ pos: _lgHit, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: deps.world.igun === true ? stats.aoeDamage * IGUN_AOE_MULT : stats.aoeDamage, directHitTargetId: hitPlayerId, forceMultiplier: 1 });
   }
 
 
