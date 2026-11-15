@@ -57,16 +57,31 @@ describe('resolveServerEndpoints', (): void => {
     expect(ep.httpUrl).toBe('https://play.jprice.app:8443');
   });
 
-  it('https page, no config at all: same-origin wss/https, never ws://host:8000', async (): Promise<void> => {
+  it('https funnel page with no game behind it: public pool, never same-origin hairpin', async (): Promise<void> => {
     setLoc({ hostname: 'jp-oooff.tailaba354.ts.net', host: 'jp-oooff.tailaba354.ts.net:10000', protocol: 'https:', pathname: '/quickplay' });
-    stubFetch({}); // everything 404s - no server.json, no dev server
+    stubFetch({ '/join': { url: 'wss://play.jprice.app:8443/ws', http: 'https://play.jprice.app:8443' } });
     const ep = await resolveServerEndpoints();
-    // Mixed-content poison: http:// API on an https page died silently.
-    expect(ep.httpUrl.startsWith('https://')).toBe(true);
-    expect(ep.wsUrl.startsWith('wss://')).toBe(true);
-    // Port survives - hostname alone lands the funnel's :443 listener.
-    expect(ep.httpUrl).toBe('https://jp-oooff.tailaba354.ts.net:10000');
+    // A static funnel returning 404/HTML for /wthash must not become the
+    // game endpoint - same-origin there hairpins every socket through
+    // the asset host. The pool is the only sane destination.
+    expect(ep.wsUrl).toBe('wss://play.jprice.app:8443/ws');
+    expect(ep.httpUrl).toBe('https://play.jprice.app:8443');
+  });
+
+  it('funnel page whose origin IS a game (funnel -> local :8000): same-origin stays', async (): Promise<void> => {
+    setLoc({ hostname: 'jp-oooff.tailaba354.ts.net', host: 'jp-oooff.tailaba354.ts.net:10000', protocol: 'https:', pathname: '/quickplay' });
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL): Promise<Response> => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/wthash')) {
+        return new Response(JSON.stringify({ enabled: false }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const ep = await resolveServerEndpoints();
+    // The intentional funnel case: a real game behind the asset host
+    // (their local :8000) - same-origin is the only route to it.
     expect(ep.wsUrl).toBe('wss://jp-oooff.tailaba354.ts.net:10000/ws');
+    expect(ep.httpUrl).toBe('https://jp-oooff.tailaba354.ts.net:10000');
   });
 
   it('http localhost dev page: same-host:8000 convention preserved', async (): Promise<void> => {

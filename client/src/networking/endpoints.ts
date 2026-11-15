@@ -97,7 +97,21 @@ async function pickHost(): Promise<{ ep: ServerEndpoints } | { host: string; fle
   // matchmaker first; resolveFleet's failure falls back to the direct
   // URL below, so non-fleet boxes are unaffected.
   if (host.length > 0) {fleet = true;}
-  if (!host) {return { ep: (fleet ? await resolveFleet(local.httpUrl) : null) ?? local };}
+  if (!host) {
+    // Same-origin only earns the endpoint when a real game answers it.
+    // A static/proxy front (tailscale funnel serves the bundle and is
+    // TCP-only) returning HTML here would silently hairpin every game
+    // socket through the asset host. /wthash is JSON on the game
+    // server, HTML-200 on an SPA catch-all, 404 through a filtered
+    // proxy - any non-JSON answer means "no game behind this origin,"
+    // and the client must dial the public pool directly instead.
+    const sameOriginGame = localPage(hn)
+      || await fetch(`${local.httpUrl}/wthash`, { signal: AbortSignal.timeout(3000) })
+        .then((r): boolean => (r.headers.get('content-type') ?? '').includes('json'))
+        .catch((): boolean => false);
+    if (!sameOriginGame) {return { host: NAMED_SERVERS.pub, fleet: true };}
+    return { ep: (fleet ? await resolveFleet(local.httpUrl) : null) ?? local };
+  }
   return { host, fleet };
 }
 /** ?server= wins (shareable link); the lobby's saved host is the
