@@ -659,14 +659,18 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     // lobbyUrl is the matchmaker a fresh joiner must enter through.
     const pinBase = (await serverEndpoints).lobbyUrl ?? serverUrl;
     const u = new URL(pinBase);
-    const local = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname);
+    // Same-origin needs no pin either: the page already derives its
+    // endpoints from window.location (localEp), so ?server= repeating
+    // it only uglifies the share link.
+    const local = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname)
+      || u.host === window.location.host;
     // A ?server= that already names the entry host is redundant - it
     // only ever needed the param to SAY it. Those get the alias path
     // too (and drop the param), which self-heals stamped worker URLs
     // from before this ran against the entry host.
     const serverParam = urlParams.get('server');
     const serverParamHost = ((): string => { try { return new URL(serverParam ?? '').host; } catch { return ''; } })();
-    const redundantParam = Boolean(serverParam) && (serverParamHost === u.host || serverParamHost === serverUrlHost());
+    const redundantParam = Boolean(serverParam) && (serverParamHost === u.host || serverParamHost === serverUrlHost() || serverParamHost === window.location.host);
     function serverUrlHost(): string { try { return new URL(serverUrl).host; } catch { return ''; } }
     if (!local && (!urlParams.has('server') || redundantParam) && !urlParams.serverPath) {
       const alias = Object.entries(NAMED_SERVERS).find(([, v]): boolean => {
@@ -899,9 +903,20 @@ async function init(): Promise<void> {
   // downgrades httpUrl to http:// and dies as mixed content on the funnel.
   // publicPoolBoot, not the current path: quickplay already rewrote it to /s/.
   if (!publicPoolBoot && !urlParams.get('server') && settings.get('fps-server').trim()) {
-    const q = new URLSearchParams(window.location.search);
-    q.set('server', settings.get('fps-server').trim());
-    history.replaceState(null, '', `${window.location.pathname}?${q}`);
+    // Same-origin saved host: pinning repeats what the page already
+    // derives - skip it so /s/ links stay clean.
+    const saved = settings.get('fps-server').trim();
+    const savedHost = ((): string => {
+      // 'host:port' parses as scheme:path with empty host - require a
+      // real host before accepting either form.
+      for (const v of [saved, `wss://${saved}`]) { try { const h = new URL(v).host; if (h) {return h;} } catch { /* next form */ } }
+      return '';
+    })();
+    if (savedHost !== window.location.host) {
+      const q = new URLSearchParams(window.location.search);
+      q.set('server', settings.get('fps-server').trim());
+      history.replaceState(null, '', `${window.location.pathname}?${q}`);
+    }
   }
   // Boot resume: a bare '/' load with a remembered room rejoins it - the
   // canonical /s/<room> path is written BEFORE anything reads urlParams,
