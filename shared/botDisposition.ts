@@ -278,7 +278,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // Pick the bearing around the target the fewest allies already
       // hold and approach down that line: deterministic flank fan.
       if (d > CLOSE_PRESS_M && ctx.allies && ctx.allies.length) {
-        const sectors = new Array<number>(8).fill(0);
+        const sectors = [0, 0, 0, 0, 0, 0, 0, 0];
         for (const a of ctx.allies) {
           const ba = Math.atan2(a.z - t.pos.z, a.x - t.pos.x);
           sectors[Math.floor(((ba + Math.PI) / (Math.PI * 2)) * 8) % 8]! += 1;
