@@ -144,7 +144,7 @@
       }
     ]
   },
-  "terrain": "t2/escalade/terrain.bin",
+  "terrain": "escalade.bin",
   "terrainPreset": 5,
   "fog": {
     "color": [
