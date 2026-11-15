@@ -87,7 +87,6 @@
 11	client/src/projectiles/stickyConfig.ts
 11	client/src/ui/hud/hudChrome.ts
 11	server_bun/src/simJournal.ts
-11	server_bun/src/UdpLane.ts
 11	shared/botLos.ts
 11	shared/dmath.ts
 11	shared/perks.ts
@@ -126,7 +125,6 @@
 13	client/src/gunlab/scans.ts
 13	client/src/ui/hud/indicators.ts
 13	server_bun/src/ballSpawn.ts
-13	server_bun/src/DemoStorage.ts
 13	server_bun/src/envClaims.ts
 13	server_bun/src/rewind.ts
 13	shared/ballCollide.ts
@@ -284,7 +282,6 @@
 21	server_bun/src/mapCatalog.ts
 21	server_bun/src/roomFlagPlacer.ts
 22	client/src/core/Logger.ts
-22	client/src/core/sfx/explosions.ts
 22	client/src/entities/player/skills.ts
 22	client/src/game/bots/botSenses.ts
 22	client/src/networking/WorkerTransport.ts
@@ -409,7 +406,6 @@
 35	server_bun/src/RoomPickups.ts
 35	shared/ballSim.ts
 36	client/src/entities/viewmodel/weaponKit.ts
-36	server_bun/src/roomFactory.ts
 36	shared/weapons.ts
 37	client/src/core/tts.ts
 37	client/src/demo/DemoManager.ts
@@ -433,7 +429,6 @@
 4	client/src/__tests__/simRand.test.ts
 4	client/src/__tests__/sweep.test.ts
 4	client/src/__tests__/transportDeath.test.ts
-4	client/src/__tests__/vmEnvelopes.test.ts
 4	client/src/core/audioRoute.ts
 4	client/src/core/deployWatch.ts
 4	client/src/core/sfx/beam.ts

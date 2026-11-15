@@ -50,7 +50,9 @@ const GRANDFATHERED: Record<string, number> = {
   'client/src/game/deployables.ts': 1142,
   'client/src/game/lobbyPanel.ts': 1227,
   'client/src/game/net/mapAssets.ts': 1763,
-  'client/src/world/terrainShaders.ts': 919,
+  // Re-pinned at the 2026-11-14 mist-endpoint fix + CDLOD pilot size —
+  // shader chunks legitimately aggregate per-preset GLSL; +15% alarms.
+  'client/src/world/terrainShaders.ts': 1062,
   // Crossed via the arsenal rework (eafd1c11) — pinned at its breached
   // size; still alarms if it grows another 15%. Re-pinned at 1124 after
   // the howitzer bot kit/plant work (deploy gates + fallback picks).

@@ -19,7 +19,7 @@ export interface DemoMeta {
 }
 
 const INDEX_FILE = 'index.json';
-// Evicted clips gzip into archive/ — write-only, nothing ever deletes
+// Evicted clips gzip into archive/ - write-only, nothing ever deletes
 // from it; the operator manages the pile manually.
 const ARCHIVE_DIR = 'archive';
 const gzipAsync = promisify(gzip);
@@ -31,7 +31,7 @@ function errMsg(e: unknown): string {
 export class DemoStorage {
   private demosDir: string;
   private index: DemoMeta[] = [];
-  /** /demos is a public route — the stale-file sweep below stats every
+  /** /demos is a public route - the stale-file sweep below stats every
    *  index entry per request. Cache the listing briefly; uploads and
    *  evictions flow through saveIndex which invalidates it. */
   private listCache: { at: number; rows: DemoMeta[] } | null = null;
@@ -41,7 +41,7 @@ export class DemoStorage {
     this.demosDir = demosDir;
     this.ensureDir().catch((): void => { /* ensureDir logs its own failure */ });
     this.loadIndex().then((): Promise<void> => this.reconcileIndex()).catch((error): void => {
-      logger.warn('DemoStorage index failed to load — starting empty', error);
+      logger.warn('DemoStorage index failed to load - starting empty', error);
     });
   }
 
@@ -53,7 +53,7 @@ export class DemoStorage {
       for (const filename of demoFiles) {
         // Live membership check, not a snapshot: the ctor doesn't await
         // this reconcile, so a saveDemo in flight writes its file before
-        // index.push — a snapshotted 'known' double-indexes it.
+        // index.push - a snapshotted 'known' double-indexes it.
         if (this.index.some((m): boolean => m.filename === filename)) {continue;}
         try {
           const data = await readFile(join(this.demosDir, filename));
@@ -61,7 +61,7 @@ export class DemoStorage {
           const header = this.parseDemoHeader(ab);
           if (header.projectileLifetime < CONFIG.minDemoLifetime) {continue;}
           // The readFile yield is a race window: a saveDemo landing inside
-          // it already pushed this filename — re-check or the index rows
+          // it already pushed this filename - re-check or the index rows
           // outnumber the files on disk.
           if (this.index.some((m): boolean => m.filename === filename)) {continue;}
           this.index.push({
@@ -74,17 +74,17 @@ export class DemoStorage {
 added += 1;
         } catch (error: unknown) {
           // 0-byte orphans are writers killed between create and first
-          // flush — no bytes, no forensic value, delete without a warn.
+          // flush - no bytes, no forensic value, delete without a warn.
           const empty = await stat(join(this.demosDir, filename)).then((s): boolean => s.size === 0).catch(() => false);
           if (empty) {
             await unlink(join(this.demosDir, filename)).catch((): void => { /* best effort */ });
             continue;
           }
-          logger.warn(`Failed to parse orphaned demo ${filename} — quarantining`, { error: errMsg(error) });
-          // An unparseable file never heals — rename so the next boot's
+          logger.warn(`Failed to parse orphaned demo ${filename} - quarantining`, { error: errMsg(error) });
+          // An unparseable file never heals - rename so the next boot's
           // reconcile skips it instead of re-warning forever.
           await rename(join(this.demosDir, filename), join(this.demosDir, `${filename}.bad`))
-            .catch((): void => { /* rename failed — it re-warns next boot, harmless */ });
+            .catch((): void => { /* rename failed - it re-warns next boot, harmless */ });
         }
       }
       if (added > 0) {
@@ -103,7 +103,7 @@ added += 1;
         await mkdir(this.demosDir, { recursive: true });
       }
     } catch (error: unknown) {
-      // Storage keeps running — every later write reports its own failure.
+      // Storage keeps running - every later write reports its own failure.
       logger.warn('Failed to create demos directory', { dir: this.demosDir, error: errMsg(error) });
     }
   }
@@ -133,7 +133,7 @@ added += 1;
   }
 
   // Parse the demo binary header to extract metadata. Every offset read
-  // is bounds-checked — uploads are attacker-controlled bytes, and a
+  // is bounds-checked - uploads are attacker-controlled bytes, and a
   // truncated body or lying length field would otherwise throw a bare
   // RangeError the route can't distinguish from a write failure.
   private parseDemoHeader(buf: ArrayBuffer): { projectileLifetime: number; description: string; duration: number } {
@@ -210,13 +210,13 @@ added += 1;
   async saveDemo(data: ArrayBuffer): Promise<{ filename: string; projectileLifetime: number; description: string }> {
     const header = this.parseDemoHeader(data);
 
-    // Reject demos below the cool-shot lifetime threshold — and above the
+    // Reject demos below the cool-shot lifetime threshold - and above the
     // absurd: a crafted Infinity/huge lifetime would sort to the top of
     // the index forever since eviction drops the lowest.
     if (!Number.isFinite(header.projectileLifetime) ||
         header.projectileLifetime < CONFIG.minDemoLifetime ||
         header.projectileLifetime > 300) {
-      logger.info('Demo rejected — lifetime out of range', {
+      logger.info('Demo rejected - lifetime out of range', {
         lifetime: header.projectileLifetime.toFixed(2),
         threshold: CONFIG.minDemoLifetime,
         duration: header.duration.toFixed(1),
@@ -229,7 +229,7 @@ added += 1;
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     // Second-precision stamp + 0.1s lifetime: two uploads in the same
     // second with equal air-time mint the same name and would silently
-    // clobber — suffix until the name is free on disk and in the index.
+    // clobber - suffix until the name is free on disk and in the index.
     const base = `clip_${ts}_${header.projectileLifetime.toFixed(1)}s`;
     const taken = new Set(this.index.map((m): string => m.filename));
     let filename = `${base}.demo`;
@@ -248,14 +248,14 @@ added += 1;
       fileSize: data.byteLength,
     };
 
-    // The async ctor reconcile may have already adopted this file —
+    // The async ctor reconcile may have already adopted this file -
     // pushing unconditionally would index it twice.
     if (!this.index.some((m): boolean => m.filename === meta.filename)) {
       this.index.push(meta);
     }
     this.index.sort((a, b): number => b.projectileLifetime - a.projectileLifetime);
 
-    // Cap the live index — the tail is lowest-lifetime, gzip it to
+    // Cap the live index - the tail is lowest-lifetime, gzip it to
     // archive rather than delete outright.
     if (this.index.length > CONFIG.demoMaxClips) {
       const removed = this.index.splice(CONFIG.demoMaxClips);
@@ -307,7 +307,7 @@ added += 1;
       return null;
     }
     const data = await readFile(filePath);
-    // Buffer.buffer may be a larger pool — slice to exact file bytes
+    // Buffer.buffer may be a larger pool - slice to exact file bytes
     return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
   }
 }

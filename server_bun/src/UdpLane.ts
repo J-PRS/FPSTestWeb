@@ -3,15 +3,15 @@ import { wireRx, wireTx, BIN_KIND } from './wireMeter.ts';
 
 /**
  * Raw-UDP volatile lane (native-shell clients). The ws session owns the
- * reliable lane — this is ONLY the volatile path: seq'd binary frames
+ * reliable lane - this is ONLY the volatile path: seq'd binary frames
  * up (position/input claims), tick frames down. Datagrams never mutate
- * session state — they carry the same wire frames the ws binary lane
+ * session state - they carry the same wire frames the ws binary lane
  * decodes, fed into the same trusted dispatch.
  *
  * Session bind: join over ws issues a 16B token (in gameState). Every
  * datagram is [token:16][frame]; the first datagram from an addr binds
  * addr→session, later ones must match. A datagram whose token doesn't
- * map to a live session is dropped — the lane can't mint sessions.
+ * map to a live session is dropped - the lane can't mint sessions.
  */
 const TOKEN_BYTES = 16;
 
@@ -24,11 +24,11 @@ export class UdpLane {
   private tokenToPid = new Map<string, string>();
   private pidToToken = new Map<string, string>();
   private addrOf = new Map<string, { port: number; host: string }>();
-  /** pid → wall ms of the last inbound datagram — staleness decides
+  /** pid → wall ms of the last inbound datagram - staleness decides
    *  whether the down-lane is still real. */
   private lastRx = new Map<string, number>();
   /** Lane silence budget: no datagram in this window = the client-side
-   *  shim is dead or the NAT blackholed the path — starving their tick
+   *  shim is dead or the NAT blackholed the path - starving their tick
    *  stream on a corpse lane is the silent-failure mode. ~2 claim beats. */
   private static readonly STALE_MS = 2500;
   /** pid -> inbound frame hook, set by GameServer once the lane exists. */
@@ -38,7 +38,7 @@ export class UdpLane {
   private portNum = 0;
 
   async listen(port: number): Promise<void> {
-    // A dev-watch respawn races its predecessor's socket release —
+    // A dev-watch respawn races its predecessor's socket release -
     // child.exited resolves before Windows frees the datagram port, so
     // an instant bind reads EADDRINUSE. Give it a few beats, then let
     // the failure stand (a real squatter deserves the crash).
@@ -61,7 +61,7 @@ export class UdpLane {
     logger.info('udp lane listening', { port });
   }
 
-  /** Mint a session token — called when gameState goes out. */
+  /** Mint a session token - called when gameState goes out. */
   issue(playerId: string): string {
     const token = crypto.getRandomValues(new Uint8Array(TOKEN_BYTES));
     const hex = [...token].map((b): string => b.toString(16).padStart(2, '0')).join('');
@@ -70,7 +70,7 @@ export class UdpLane {
     return hex;
   }
 
-  /** Session end — drop both maps so a stale token dies with it. */
+  /** Session end - drop both maps so a stale token dies with it. */
   unbind(playerId: string): void {
     const token = this.pidToToken.get(playerId);
     if (token !== undefined) { this.tokenToPid.delete(token); }
@@ -79,7 +79,7 @@ export class UdpLane {
     this.lastRx.delete(playerId);
   }
 
-  /** Bound AND alive — the send router consults this per frame: a stale
+  /** Bound AND alive - the send router consults this per frame: a stale
    *  lane falls back to ws ticks and self-heals on the next datagram. */
   live(playerId: string): boolean {
     const at = this.lastRx.get(playerId);
@@ -88,7 +88,7 @@ export class UdpLane {
 
   bound(playerId: string): boolean { return this.addrOf.has(playerId); }
 
-  /** Volatile lane send — tick frames to a bound session's addr. */
+  /** Volatile lane send - tick frames to a bound session's addr. */
   sendTo(playerId: string, bytes: Uint8Array): void {
     const a = this.addrOf.get(playerId);
     if (a && this.sock) { wireTx(playerId, bytes.byteLength, BIN_KIND[bytes[1]!]!); this.sock.send(bytes, a.port, a.host); }
@@ -112,7 +112,7 @@ export class UdpLane {
       c.n = 0; c.reset = now + 1000;
     }
     if (++c.n > UdpLane.RX_BUDGET) {return;}
-    // Token is the map key — a datagram that doesn't carry a live token
+    // Token is the map key - a datagram that doesn't carry a live token
     // can't reach a session (bind tokens are 128-bit, issued per join).
     let hex = '';
     for (let i = 0; i < TOKEN_BYTES; i += 1) { hex += buf[i]!.toString(16).padStart(2, '0'); }
@@ -123,7 +123,7 @@ export class UdpLane {
       this.addrOf.set(pid, { port, host: addr });
       logger.info('udp lane bound', { playerId: pid, addr, port });
     } else if (bound.port !== port || bound.host !== addr) {
-      // Addr migration: drop for now — a spoofed source can't rebind a
+      // Addr migration: drop for now - a spoofed source can't rebind a
       // live session without the token anyway, and real NAT rebind
       // windows are a hardening pass, not the spike.
       return;

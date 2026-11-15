@@ -3,7 +3,7 @@ import * as THREE from 'three';
 
 import { VmEnvelopes, type EnvHost } from '../entities/vmEnvelopes';
 
-// Spawn arms the default slot with switchWeapon(wt) — but when wt IS the
+// Spawn arms the default slot with switchWeapon(wt) - but when wt IS the
 // class's default activeWeapon (0 = BoltLauncher), the same-weapon guard
 // skipped the dip AND the visibility swap, leaving the gun built-hidden
 // until the first real switch.
@@ -12,7 +12,7 @@ const mkHost = (built: number[]): EnvHost => {
   const weapons = new Map<number, THREE.Group>();
   for (const wt of built) {
     const g = new THREE.Group();
-    g.visible = false; // every viewmodel ships hidden — the envelope shows one
+    g.visible = false; // every viewmodel ships hidden - the envelope shows one
     weapons.set(wt, g);
   }
   return {
@@ -34,7 +34,7 @@ describe('VmEnvelopes.switchWeapon', (): void => {
   it('arming the already-active weapon still unhides it (spawn with BoltLauncher)', (): void => {
     const h = mkHost([0, 1, 2]);
     const env = new VmEnvelopes(h);
-    env.switchWeapon(0); // wt 0 === default activeWeapon — the old early-return left it hidden
+    env.switchWeapon(0); // wt 0 === default activeWeapon - the old early-return left it hidden
     expect(h.weapons.get(0)!.visible).toBe(true);
   });
 
@@ -50,10 +50,10 @@ describe('VmEnvelopes.switchWeapon', (): void => {
   it('a mid-dip retarget to the active weapon still shows it (respawn race)', (): void => {
     const h = mkHost([0, 1]);
     const env = new VmEnvelopes(h);
-    env.switchWeapon(1);   // dip lowers toward 1 — active is still 0
+    env.switchWeapon(1);   // dip lowers toward 1 - active is still 0
     env.tick(0.05);        // mid-lower, before the swap point (LOWER_TIME=0.12)
     env.switchWeapon(0);   // igun rung re-arms the already-active weapon
-    env.tick(0.15);        // past the bottom — the old !== guard skipped the show
+    env.tick(0.15);        // past the bottom - the old !== guard skipped the show
     expect(h.activeWeapon).toBe(0);
     expect(h.weapons.get(0)!.visible).toBe(true);
     expect(h.weapons.get(1)!.visible).toBe(false);
@@ -64,7 +64,7 @@ describe('VmEnvelopes.switchWeapon', (): void => {
     h.weapons.get(0)!.visible = true;
     const env = new VmEnvelopes(h);
     env.switchWeapon(1);
-    env.tick(0.2); // past SWITCH_LOWER_TIME — the swap lands at the dip bottom
+    env.tick(0.2); // past SWITCH_LOWER_TIME - the swap lands at the dip bottom
     expect(h.weapons.get(0)!.visible).toBe(false);
     expect(h.weapons.get(1)!.visible).toBe(true);
     expect(h.activeWeapon).toBe(1);
