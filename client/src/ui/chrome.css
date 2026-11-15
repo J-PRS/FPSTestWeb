@@ -86,7 +86,9 @@ canvas { display: block; }
 .lb-btn,
 #loadout-bar .lo-chip,
 #loadout-bar .lo-tile,
-#cool-shot-toggles .cs-toggle {
+#cool-shot-toggles .cs-toggle,
+#cs-vault-zip,
+#cs-save-dir {
   background: var(--ui-tile-bg);
   border: 1px solid var(--ui-tile-line);
   border-radius: var(--ui-r);
@@ -228,7 +230,9 @@ body.menu-open #frag-msg { display: none !important; }
 }
 /* Shared tile hover — cs-toggle rides the same material. */
 #overlay .btn-row button:hover,
-#cool-shot-toggles .cs-toggle:hover { background: rgb(var(--ui-white-rgb) / 0.14); color: #fff; }
+#cool-shot-toggles .cs-toggle:hover,
+#cs-vault-zip:hover,
+#cs-save-dir:hover { background: rgb(var(--ui-white-rgb) / 0.14); color: #fff; }
 /* Two toggles per row — short labels only (ON/OFF state pairs). */
 #overlay .btn-row .btn-pair { display: flex; gap: 6px; }
 /* min-width:0 lets the flex children shrink below label width — without
@@ -541,7 +545,30 @@ body.lobby-open #overlay-center { display: none; }
 .cool-shot-item .fmt-demo { color: #9fd4ff; background: rgb(var(--ui-accent-rgb) / 0.15); }
 .cool-shot-item .fmt-mp4 { color: rgb(var(--ui-warn-rgb)); background: rgb(var(--ui-warn-rgb) / 0.15); }
 .cool-shot-item .time-ago { font-size: 0.65rem; color: rgb(var(--ui-dim-rgb) / 0.55); margin-left: auto; }
+/* Extracted-clip tiles: the description is the headline and can't
+   ellipsize (the victim id trails it), so locals go two-line. */
+.cool-shot-item.local { flex-direction: column; align-items: stretch; gap: 1px; padding-top: 6px; padding-bottom: 5px; }
+.cool-shot-item.local .shot-head { display: flex; align-items: baseline; gap: 8px; }
+.cool-shot-item.local .shot-desc { font-size: 0.72rem; color: rgb(var(--ui-white-rgb) / 0.92); white-space: normal; word-break: break-word; }
+/* who is context, not the headline — dimmed and pinned right */
+.cool-shot-item.local .shot-who { margin-left: auto; font-size: 0.68rem; color: rgb(var(--ui-dim-rgb) / 0.7); text-align: right; }
+.cool-shot-item.local .shot-head { display: flex; align-items: baseline; gap: 6px; }
+.cool-shot-item.local .rank { min-width: 2ch; }
+.cool-shot-item.local .pov { font-size: 0.56rem; font-family: inherit; letter-spacing: 0.06em; padding: 0 4px; border-radius: 3px; align-self: center; flex: none; }
+.cool-shot-item.local .pov-rec { color: #7db4ff; background: rgb(80 130 220 / 0.18); border: 1px solid rgb(80 130 220 / 0.35); }
+.cool-shot-item.local .pov-pov { color: #ffb45e; background: rgb(230 150 60 / 0.15); border: 1px solid rgb(230 150 60 / 0.35); }
+.cool-shot-item.local .shot-foot { display: flex; align-items: center; padding-left: 24px; }
+.cool-shot-item.local .shot-foot .lifetime { width: 5.5ch; }
+.cool-shot-item.local .shot-dist { width: 5.5ch; font-size: 0.72rem; color: rgb(var(--ui-dim-rgb) / 0.85); font-variant-numeric: tabular-nums; }
+.cool-shot-item.local .shot-miss { font-size: 0.62rem; color: rgb(var(--ui-dim-rgb) / 0.6); letter-spacing: 0.08em; text-transform: uppercase; }
+.cool-shot-item.local .shot-foot .time-ago { margin-left: auto; }
+.cool-shot-item.local .shot-kill { color: #ff4444; font-size: 0.8rem; margin-left: 2px; }
 .cool-shot-item.empty { color: rgb(var(--ui-dim-rgb) / 0.4); cursor: default; text-align: center; justify-content: center; }
+/* Vault footer — storage stats + export-all */
+#cs-vault-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; padding-top: 8px; border-top: 1px solid rgb(var(--ui-white-rgb) / 0.08); }
+#cs-vault-stats { font-size: 0.68rem; color: rgb(var(--ui-dim-rgb) / 0.7); }
+#cs-vault-zip { flex: none; padding: 4px 12px; font-size: 0.65rem; font-weight: 600; letter-spacing: 0.1em; }
+#cs-save-dir { flex: none; padding: 4px 12px; font-size: 0.65rem; font-weight: 600; letter-spacing: 0.1em; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cool-shot-item.empty:hover { background: rgb(var(--ui-white-rgb) / 0.04); border-left-color: rgb(var(--ui-white-rgb) / 0.1); }
 
 /* Right-click context menu on cool-shot items — same dark-glass palette

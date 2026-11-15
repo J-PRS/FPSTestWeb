@@ -4,7 +4,7 @@
 // (step-index) timestamps. Output is frame-perfect at any machine speed
 // and typically runs 2-5x faster than realtime; the wall-clock capture
 // path in VideoRecorder.ts stays for live clips / comparison.
-import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { Output, Mp4OutputFormat, BufferTarget, EncodedPacket, EncodedVideoPacketSource } from 'mediabunny';
 import type { DemoPlayer } from './DemoPlayer.js';
 
 export interface RenderClipOpts {
@@ -108,15 +108,17 @@ export async function renderClip(o: RenderClipOpts): Promise<Blob | null> {
     stageCtx.drawImage(src, 0, 0, src.width, src.height, (STAGE_W - w) / 2, (STAGE_H - h) / 2, w, h);
   };
 
-  const mux = new Muxer({
-    target: new ArrayBufferTarget(),
-    video: { codec: picked.muxCodec, width: STAGE_W, height: STAGE_H, frameRate: fps },
-    firstTimestampBehavior: 'offset',
-    fastStart: 'in-memory',
-  });
+  const target = new BufferTarget();
+  const out = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target });
+  const vs = new EncodedVideoPacketSource(picked.muxCodec);
+  out.addVideoTrack(vs);
+  await out.start();
+  const adds: Promise<void>[] = [];
   let failed = false;
   const enc = new VideoEncoder({
-    output: (c, m): void => mux.addVideoChunk(c, m),
+    // Step-index stamps already start at 0 — fromEncodedChunk carries them
+    // through µs→s untouched, no rebase needed.
+    output: (c, m): void => { adds.push(vs.add(EncodedPacket.fromEncodedChunk(c), m).catch((): void => { failed = true; })); },
     error: (): void => { failed = true; },
   });
   enc.configure(picked.config);
@@ -145,6 +147,8 @@ export async function renderClip(o: RenderClipOpts): Promise<Blob | null> {
   if (failed) {enc.close(); return null;}
   await enc.flush();
   enc.close();
-  mux.finalize();
-  return new Blob([mux.target.buffer], { type: 'video/mp4' });
+  vs.close();
+  await Promise.all(adds);
+  await out.finalize();
+  return new Blob([target.buffer!], { type: 'video/mp4' });
 }

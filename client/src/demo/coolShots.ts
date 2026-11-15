@@ -54,7 +54,7 @@ export interface CoolShotDeps {
   /** Same clip window (demo-recorder seconds) cut from the rolling video
    *  buffer — wired only while the canvas recorder is on. Returns the
    *  saved mp4's clip name so the entry can badge/menu-download it. */
-  videoClip?(clipStart: number, clipEnd: number, lifetime: number): string | null;
+  videoClip?(clipStart: number, clipEnd: number, lifetime: number): Promise<string | null>;
   /** False when the cool-shot demo toggle is off — the pending clip still
    *  extracts so the mp4 lane can cut, but no .demo entry is minted. */
   demoEnabled?(): boolean;
@@ -71,6 +71,10 @@ export class CoolShotManager {
   // out of order — last-click must win, not last-resolve.
   private playSeq = 0;
   coolShots: CoolShotEntry[] = [];
+  /** Server-hosted extracted clips (demos/shots/**) — stream recordings
+   *  cut by _tools/shots.ts. Separate list: they're the recorder's POV,
+   *  not the local player's own highlight lane. */
+  localShots: CoolShotEntry[] = [];
   serverUrl = '';
   uploadFailureCount = 0;
   /** Consecutive /demos fetch failures + backoff — a server without the
@@ -80,6 +84,7 @@ export class CoolShotManager {
   private static MAX_UPLOAD_WARNINGS = 3;
 
   onChanged?: (shots: CoolShotEntry[]) => void;
+  onLocalChanged?: (shots: CoolShotEntry[]) => void;
 
   constructor(public deps: CoolShotDeps) {}
 
@@ -177,7 +182,7 @@ export class CoolShotManager {
     }
   }
 
-  private extractPendingClip(pending: PendingClip): void {
+  private async extractPendingClip(pending: PendingClip): Promise<void> {
     if (this.deps.demoEnabled && !this.deps.demoEnabled()) {return;}
     const clipData = this.deps.recorder().extractClip(pending.clipStart, pending.clipEnd, pending.description, pending.bestLifetime);
     if (!clipData) {
@@ -186,7 +191,7 @@ export class CoolShotManager {
     }
     // Only after the demo clip exists — an orphan mp4 with no demo entry
     // is unwatchable vault litter.
-    const mp4Name = this.deps.videoClip?.(pending.clipStart, pending.clipEnd, pending.bestLifetime) ?? null;
+    const mp4Name = await this.deps.videoClip?.(pending.clipStart, pending.clipEnd, pending.bestLifetime) ?? null;
 
     const filename = `clip_${this.deps.timestampStr()}_${pending.bestLifetime.toFixed(1)}s.demo`;
 
@@ -242,6 +247,10 @@ export class CoolShotManager {
 
   // Rehydrate the list from the vault: entries restored across
   // sessions carry no clipData — play/download pulls it back lazily.
+  /** Vault footer stats + zip export (panel's VAULT row). */
+  vaultStats(): Promise<{ count: number; bytes: number }> { return this.vault.stats(); }
+  vaultDump(): Promise<{ name: string; data: Uint8Array }[]> { return this.vault.dumpAll(); }
+
   async loadVault(): Promise<void> {
     if (this.vaultLoaded) {return;}
     this.vaultLoaded = true;
@@ -350,4 +359,17 @@ export class CoolShotManager {
   private async uploadClipToServer(clipData: DemoFile): Promise<string | null> { return net.uploadClipToServer(this, clipData); }
 
   async fetchFromServer(): Promise<void> { return net.fetchFromServer(this); }
+  async fetchLocal(): Promise<void> { return net.fetchLocal(this); }
+
+  /** Local-list entries play through the same resolve path — their
+   *  filename is a shots/<group>/<file> server path, fetched on demand. */
+  async playLocalById(id: string): Promise<void> {
+    const entry = this.localShots.find((s): boolean => s.id === id);
+    if (!entry) {return;}
+    this.deps.setStatus('Loading clip...');
+    const data = await this.resolveClipData(entry);
+    if (!data) { this.deps.setStatus('Load failed'); return; }
+    this.deps.playDemoData(data);
+    this.deps.setStatus('');
+  }
 }

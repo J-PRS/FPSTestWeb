@@ -186,13 +186,14 @@ function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage:
   recordWireHitDemo(ctx, shooterId, targetId, damage);
   if (targetId === nm().getLocalPlayerId()) {wireHitSelf(ctx, shooterId, damage, health, armor); return;}
 
-  // Non-lethal hits don't trigger death animation
-  logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
   deps.lazyHealthBarSystem().spawn(targetId, damage, health, armor);
   deps.world.remotePlayers.get(targetId)?.flinch();
   // Server-confirmed hit on a remote: flash the marker even when client
   // prediction didn't (e.g. lag-comp rewound the victim into the shot).
+  // The log line lives in here too - bot-vs-bot wire hits are constant
+  // and tell us nothing, so only hits we dealt print.
   if (shooterId === nm().getLocalPlayerId()) {
+    logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
     confirmLocalHit(ctx, targetId, damage, predicted);
     // Wire-confirmed clip fallback: the wire `gone` beat this shell's
     // local sweep to the contact (live-link race), so its cool-shot
@@ -617,7 +618,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     rp.teleportTo(new THREE.Vector3(position.x, position.y, position.z));
   };
 
-  networkManager.onPlayerKill = (shooterId, targetId, weapon, air, steal): void => onPlayerKill(ctx, shooterId, targetId, weapon, air, steal);
+  networkManager.onPlayerKill = (shooterId, targetId, k): void => onPlayerKill(ctx, shooterId, targetId, k);
 
   // Server-truth IFF feed - the marker gate reads this store; nothing
   // else may un-hide an enemy indicator.

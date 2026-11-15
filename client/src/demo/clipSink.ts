@@ -6,6 +6,8 @@
  *  restart, done lazily inside a user gesture (F9 / the pick button).
  *  Non-Chromium browsers keep the universal anchor-download path. */
 
+import { ChildLogger } from '../core/Logger.js';
+
 export type DirHandle = {
   getFileHandle(name: string, opts?: { create?: boolean }): Promise<{
     createWritable(): Promise<{ write(b: Blob): Promise<void>; close(): Promise<void> }>;
@@ -14,10 +16,15 @@ export type DirHandle = {
   requestPermission?(o: { mode: string }): Promise<string>;
 };
 
+const logger = new ChildLogger('ClipSink');
+
 let dir: DirHandle | null = null;
 
 const idb = (): Promise<IDBDatabase> => new Promise((res, rej): void => {
-  const r = indexedDB.open('kribes-clips', 2);
+  // v3: an older v2 db created without the 'v' vault store (pre-vault
+  // builds) silently throws on every vault write — the bump re-runs
+  // onupgradeneeded and creates it.
+  const r = indexedDB.open('kribes-clips', 3);
   r.onupgradeneeded = (): void => {
     // 'h' = persisted dir handle, 'v' = clip vault (silent fallback sink)
     if (!r.result.objectStoreNames.contains('h')) {r.result.createObjectStore('h');}
@@ -58,8 +65,17 @@ export async function restoreClipsDir(): Promise<boolean> {
 
 export function hasClipsDir(): boolean { return dir !== null; }
 
-/** Must run inside a user gesture. Returns true when a folder is armed. */
-export async function pickClipsDir(): Promise<boolean> {
+/** Armed folder's display name for the panel footer; 'not set' when
+ *  saves are going to the IDB vault / anchor downloads instead. */
+export function clipsDirName(): string {
+  return (dir as { name?: string } | null)?.name ?? 'not set';
+}
+
+export type PickResult = 'armed' | 'cancelled' | 'unsupported';
+
+/** Must run inside a user gesture. 'armed' = folder armed; the other
+ *  two let callers say WHY nothing happened instead of dying silently. */
+export async function pickClipsDir(): Promise<PickResult> {
   // Stored handle awaiting a gesture re-grant? Chrome restores persisted
   // dirs as 'prompt', not 'granted' — without this branch every save
   // silently fell back to the anchor download = a prompt per clip.
@@ -67,19 +83,19 @@ export async function pickClipsDir(): Promise<boolean> {
     try {
       if ((await stored.requestPermission?.({ mode: 'readwrite' })) === 'granted') {
         dir = stored;
-        return true;
+        return 'armed';
       }
     } catch { /* falls through to a fresh pick */ }
     stored = null;
   }
   const picker = (window as unknown as { showDirectoryPicker?: (o?: object) => Promise<DirHandle> }).showDirectoryPicker;
-  if (!picker) {return false;}
+  if (!picker) {return 'unsupported';}
   try {
     const h = await picker({ id: 'kribes-clips', mode: 'readwrite' });
     dir = h;
     persistDir(h);
-    return true;
-  } catch { return false; } // user cancelled — keep anchor downloads
+    return 'armed';
+  } catch { return 'cancelled'; } // user cancelled — keep vault fallback
 }
 
 /** Re-grant inside a user gesture when the persisted dir lost permission. */
@@ -214,7 +230,8 @@ export async function saveClip(filename: string, blob: Blob): Promise<boolean> {
   // No folder armed → vault it silently (durable, bounded, exportable on
   // demand) instead of the prompt-per-clip anchor path.
   try { await vaultPut(filename, blob); return true; }
-  catch {
+  catch (error) {
+    logger.warn(`vault save failed (${filename}) — anchor download fallback`, { e: String(error) });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

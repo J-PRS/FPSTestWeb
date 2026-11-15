@@ -11,6 +11,7 @@ import {CoolShotManager, type CoolShotEntry} from './coolShots.js';
 import { VideoRecorder } from './VideoRecorder.js';
 import * as clipSink from './clipSink.js';
 import { ChildLogger } from '../core/Logger.js';
+import { registerDiag } from '../core/fxDiag.js';
 import { urlParams } from '../core/params.js';
 import { feedMode } from '../feed/feedMode.js';
 import * as demoIO from './demoIO.js';
@@ -117,10 +118,11 @@ export class DemoManager implements demoIO.DemoIOHost {
       playDemoData: (d): void => this.playDemoData(d),
       downloadDemoFile: (d, f): void => demoIO.downloadDemoFile(d, f),
       timestampStr: (): string => demoIO.timestampStr(),
-      videoClip: (s, e, l): string | null => this.videoAutoClip(s, e, l),
+      videoClip: (s, e, l): Promise<string | null> => this.videoAutoClip(s, e, l),
       demoEnabled: (): boolean => this.autoDemo,
     });
     this.coolShotMgr.onChanged = (shots): void | undefined => this.onCoolShotsChanged?.(shots);
+    this.coolShotMgr.onLocalChanged = (shots): void | undefined => this.onLocalShotsChanged?.(shots);
     // IDB vault rehydrate — fire-and-forget; entries land via onChanged.
     this.coolShotMgr.loadVault();
 
@@ -135,6 +137,12 @@ export class DemoManager implements demoIO.DemoIOHost {
     window.__demoManager = this;
 
     buildDemoUI(this);
+
+    // Alt+Q — F9 lane state: path/frames/ring/encFailed, plus where
+    // saves would land. No-op cost when not recording.
+    registerDiag('rec', (): { rec: Record<string, unknown> } => ({
+      rec: { ...this.video.diag, saveDir: clipSink.clipsDirName() },
+    }));
     wirePlayerCallbacks(this);
   }
 
@@ -236,12 +244,12 @@ export class DemoManager implements demoIO.DemoIOHost {
    *  to the video's wall clock through the recorder's wallMarks anchors —
    *  elapsedTime drifts from real time under throttle, so a plain
    *  `now - duration` base slides the window forward by the drift. */
-  private videoAutoClip(clipStart: number, clipEnd: number, lifetime: number): string | null {
+  private async videoAutoClip(clipStart: number, clipEnd: number, lifetime: number): Promise<string | null> {
     if (!this.video.isRecording) {return null;}
     const wallStart = this.recorder.wallForElapsed(clipStart);
     const wallEnd = this.recorder.wallForElapsed(clipEnd);
     if (wallStart === null || wallEnd === null) {return null;}
-    const blob = this.video.cutWindow(wallStart, wallEnd);
+    const blob = await this.video.cutWindow(wallStart, wallEnd);
     if (!blob) {return null;}
     const name = `kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`;
     clipSink.saveClip(name, blob).then((ok): void => {
@@ -494,8 +502,14 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   // Fetch cool shots list from server and merge with local
   async fetchCoolShotsFromServer(): Promise<void> {
-    return this.coolShotMgr.fetchFromServer();
+    return Promise.all([this.coolShotMgr.fetchFromServer(), this.coolShotMgr.fetchLocal()]).then((): void => undefined);
   }
+
+  onLocalShotsChanged?: (shots: CoolShotEntry[]) => void;
+  getLocalShots(): CoolShotEntry[] { return this.coolShotMgr.localShots; }
+  vaultStats(): Promise<{ count: number; bytes: number }> { return this.coolShotMgr.vaultStats(); }
+  vaultDump(): Promise<{ name: string; data: Uint8Array }[]> { return this.coolShotMgr.vaultDump(); }
+  playLocalShotById(id: string): void { void this.coolShotMgr.playLocalById(id); }
 
   // Load demo from file
   async loadDemo(file: File): Promise<void> { return demoIO.loadDemo(this, file); }

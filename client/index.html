@@ -23,7 +23,7 @@
 <body>
   <div id="overlay">
     <div id="cool-shots-panel">
-      <h2>BEST SHOTS</h2>
+      <h2>RECORDINGS</h2>
       <div id="cool-shot-toggles">
         <button id="cs-toggle-demo" class="cs-toggle">DEMO</button>
         <button id="cs-toggle-mp4" class="cs-toggle">MP4</button>
@@ -36,6 +36,19 @@
       <div class="section-label" style="margin-top: 20px;">RECENT 10</div>
       <div id="cool-shots-recent">
         <div class="cool-shot-item empty">No recent shots</div>
+      </div>
+      <div class="section-label" style="margin-top: 20px;">LOCAL</div>
+      <div id="cool-shots-local">
+        <div class="cool-shot-item empty">No extracted clips</div>
+      </div>
+      <div class="section-label" style="margin-top: 20px;">SAVED MP4</div>
+      <div id="cool-shots-vault">
+        <div class="cool-shot-item empty">No saved clips</div>
+      </div>
+      <div id="cs-vault-foot">
+        <span id="cs-vault-stats">vault: …</span>
+        <button id="cs-vault-zip" class="cs-toggle">ZIP</button>
+        <button id="cs-save-dir" class="cs-toggle" title="pick mp4 autosave folder">save: …</button>
       </div>
     </div>
     <div id="overlay-center">

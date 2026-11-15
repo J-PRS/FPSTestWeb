@@ -16,7 +16,7 @@ const STORE = 'clips';
 // Meta-only store — list() would otherwise structured-clone ~35MB of
 // DemoFile payloads through getAll just to render the tile shelf.
 const META_STORE = 'meta';
-const CAP = 100;
+const CAP = 300;
 
 export interface VaultEntry {
   id: string;
@@ -103,6 +103,33 @@ export class DemoVault {
       logger.warn('Vault list failed', error);
       return [];
     }
+  }
+
+  // Serialized-size stats for the vault footer — one pass through
+  // serialize per clip on panel open; the CAP bounds the cost.
+  async stats(): Promise<{ count: number; bytes: number }> {
+    try {
+      const db = await this.db();
+      const all = await db.getAll(STORE) as VaultEntry[];
+      const { serializeDemo } = await import('./demoWriter.js');
+      let bytes = 0;
+      for (const e of all) { bytes += serializeDemo(e.data).byteLength; }
+      return { count: all.length, bytes };
+    } catch { return { count: 0, bytes: 0 }; }
+  }
+
+  // Every clip as serialized bytes — the ZIP export source.
+  async dumpAll(): Promise<{ name: string; data: Uint8Array }[]> {
+    try {
+      const db = await this.db();
+      const all = await db.getAll(STORE) as VaultEntry[];
+      all.sort((a, b): number => a.timestamp - b.timestamp);
+      const { serializeDemo } = await import('./demoWriter.js');
+      return all.map((e, i): { name: string; data: Uint8Array } => ({
+        name: `${String(i + 1).padStart(3, '0')}_${e.id.replace(/[^\w.-]/g, '_').slice(0, 40)}.demo`,
+        data: new Uint8Array(serializeDemo(e.data)),
+      }));
+    } catch { return []; }
   }
 
   // Rebuild the meta store from the clip rows — only runs when the two

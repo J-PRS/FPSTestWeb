@@ -87,6 +87,26 @@ m.uploadFailureCount += 1;
     }
   }
 
+  // Extracted-shot library: GET /demos/local lists demos/shots/** on the
+  // server — clips _tools/shots.ts cut from stream recordings. Kept off
+  // the main list (they're POV-of-recorder, not your own highlight lane).
+export async function fetchLocal(m: CoolShotManager): Promise<void> {
+  if (!m.serverUrl) {return;}
+  try {
+    const resp = await fetch(`${m.serverUrl}/demos/local`);
+    if (!resp.ok) {return;}
+    const data = await resp.json();
+    m.localShots = ((data.demos || []) as ServerDemoRecord[]).map((d) => ({
+      id: `local:${d.filename}`,
+      filename: d.filename,
+      projectileLifetime: d.projectileLifetime,
+      timestamp: d.timestamp,
+      description: d.description ?? '',
+    }));
+    m.onLocalChanged?.(m.localShots);
+  } catch { /* no endpoint or offline — the list just stays empty */ }
+  }
+
   // Merge the server's demo list with local clips (by filename)
 export async function fetchFromServer(m: CoolShotManager): Promise<void> {
     if (!m.serverUrl || performance.now() < m.fetchRetryAt) {return;}

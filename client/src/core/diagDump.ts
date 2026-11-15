@@ -10,6 +10,7 @@ import { deployStamp } from './deployWatch.js';
 import { serverStamp } from '../networking/wireIn.js';
 import { diagLines as netProbeLines } from '../debug/netProbe.js';
 import { parityLines } from '../game/parity.js';
+import { intelDiag } from '../game/intel.js';
 import { longestGaps } from '../effects/RibbonTrail.js';
 import { topChains, topSpans } from '../effects/trailBatch.js';
 import { depGaps } from '../effects/vfxRuntime.js';
@@ -216,6 +217,11 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   // Prediction-parity ledger - misses where wire truth disagreed with a
   // local prediction (blast echoes, pickup rests, unprompted shoves).
   lines.push(...parityLines());
+  // Intel feed liveness - markers/healthbars die when contacts expire;
+  // age>2.5s starves them, age<1s with contacts=0 means the server
+  // stamped nothing (LOS/sweep side, not the wire).
+  const idiag = intelDiag();
+  lines.push(`intel: age=${idiag.ageMs < 0 ? 'never' : `${(idiag.ageMs / 1000).toFixed(1)}s`} contacts=${idiag.contacts}`);
   lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
   for (const [id, ps] of wire) {
     const rp = ctx.remotePlayers.get(id);
@@ -264,7 +270,28 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   // game/remotes.ts; absent until the first remote accrues a bucket.
   const ad = (window as { __aswDump?: () => string[] }).__aswDump?.();
   if (ad?.length) {lines.push('asw (HA/A/S/W/ST/I % of life):', ...ad);}
-  return lines;
+  return dedupe(lines);
+}
+
+// Identical lines bunch to `line ×N` at their first occurrence - the
+// aim probe prints one row per hit so a 5-dot trail pastes five copies;
+// parity/battle rows repeat the same way. Non-consecutive dupes bunch
+// too (ABABAB → A ×3, B ×3): interleaving is lost but ordering of
+// distinct lines and every distinct line's content survive.
+function dedupe(lines: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Map<string, { idx: number; n: number }>();
+  for (const l of lines) {
+    const s = seen.get(l);
+    if (s) {
+      s.n += 1;
+      out[s.idx] = `${l} ×${s.n}`;
+    } else {
+      seen.set(l, { idx: out.length, n: 1 });
+      out.push(l);
+    }
+  }
+  return out;
 }
 
 // Sections self-register via registerDiag() in the owning modules -
