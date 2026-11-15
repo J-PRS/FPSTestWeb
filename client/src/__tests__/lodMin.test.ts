@@ -65,3 +65,15 @@ describe('LOD min-pool channels', (): void => {
     undo();
   });
 });
+
+// Regression: THREE.Vector4() defaults w=1 - a hand-rolled one-hot must
+// zero it or every selector adds channel A (80m pool) and terrain draws
+// ~2x high (the 2026-11 "everyone under terrain" canopy).
+describe('oneHot4', () => {
+  it('sets exactly one component', async () => {
+    const { oneHot4 } = await import('../world/terrain.js');
+    expect([oneHot4(0).toArray(), oneHot4(2).toArray(), oneHot4(4).toArray()]).toEqual([
+      [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 0],
+    ]);
+  });
+});

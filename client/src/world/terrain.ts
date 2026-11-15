@@ -16,8 +16,10 @@ const HSCALE = TERRAIN_HEIGHT_SCALE;
 const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
 
 // One-hot Vector4 heightmap channel selector (k outside 0..3 = zeros).
-function oneHot4(k: number): THREE.Vector4 {
-  const v = new THREE.Vector4();
+// THREE.Vector4() defaults w=1 - must zero it or every selector adds
+// channel A (80m min-pool) on top and the drawn surface rides ~2x high.
+export function oneHot4(k: number): THREE.Vector4 {
+  const v = new THREE.Vector4(0, 0, 0, 0);
   if (k >= 0 && k < 4) {v.setComponent(k, 1);}
   return v;
 }
