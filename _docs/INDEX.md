@@ -104,6 +104,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/traps/2026-10-25_sweepStale-mass-reap-on-stall.md` | Trap: wall-clock staleness sweep mass-reaps live ribbons after a hidden-tab stall → zombie pushes + shared-slot trails |
 | `_docs/traps/2026-10-31_audio-stop-pop.md` | Trap: bare `stop()` mid-waveform clicks — global 15ms fade patch in `audio.ts` beats patching every call site |
 | `_docs/traps/2026-11-08_quat-runaway-aim-pitch.md` | Trap: non-unit bone quats run away exponentially on extreme aim pitch — procedural pose writes must normalize; repro via `_tools/_stretchprobe.ts` |
+| `_docs/traps/2026-11-14_mist-midray-camera-crawl.md` | Trap: camera-tracked mid-ray mist sample paints crawling "caustics" on terrain — sample fog modulation at the ray endpoint; bisect motion artifacts with `?x=off` gates, not screenshots |
 | `_docs/2026-11-05_BOT_WEAPON_USE_AUDIT.md` | Bot weapon-use audit — full cycle-table sweep: 16 commits (body-bounce, bodyArmTime gate, far-slot GL/bolt, situational sidearms, hose/disc orbits, flak+splash serves), pinned-bench board, remaining balance items |
 | `_docs/2026-11-09_UI_BENCHMARK_AUDIT.md` | **UI benchmark vs browser-FPS greats** (Krunker prime, Narrow One): bones vs skin verdict — we win layout contract/tokens/rebinds, lose type cohesion/icons/restraint/juice; 6-item steal list ordered by impact for the restyle pass |
 | `_docs/2026-11-09_CHEAP_GFX_TECHNIQUES.md` | **Aesthetic-per-millisecond GFX survey** — post/material/lighting tricks ranked by cost for our fused-grade WebGL2 pipeline: vignette, rim light, ramp-toon, unlit gradient albedo, analytic occluder AO, cell-noise screen fx, channel packing; plus the SSAO/full-res-bloom/nested-pass traps to avoid |
@@ -122,6 +123,8 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-09_BUZZARD.md` | Buzzard port report — ambient decor made a server-owned fly-family creature: `creatures` pops, shared `stepFlyer` both ends, 6s shooter-grudge brain, `attachField` fix that un-dead creature spawns on terrain maps, stat-fidelity audit + gaps |
 | `_docs/2026-11-11_VERIFICATION_AUDIT_TECHNIQUES.md` | SOTA verification-audit survey — mutation testing (blastForce pilot 46.3%), property-based testing (~50x mutants/test), differential replay client-vs-server, executable invariants, semantic-diff gates, protocol fuzzing; ranked adoption order for this repo |
 | `_docs/2026-11-13_BLOOM_CONVERGE.md` | Bloom "spread then converge" artifact — client/server `bloomSeq` desync from reject gates made the reanchor blend visibly drag shells onto the aim line; per-claim `bloomTick` fix + the convergent-spread weapon idea it suggests |
+| `_docs/2026-11-15_WIRE_FORMAT_REVIEW.md` | Wire-format review — ~85-95% of bytes already binary (estimate; worker socket defeated sniffing); protobuf would net ~5-15% mostly on the join burst, pro games hand-roll binary+delta on the tick lane; recommended: gzip gameState if joins hurt, MessagePack as drop-in |
+| `_docs/2026-11-14_LOG_NOISE_AUDIT.md` | Full classification of a 2-human session's WARN flood — 0-byte demo orphans quarantined/deleted, join-gates warn needs explicit request, UDP EADDRINUSE bind retry; aoe-refuse env census + movement-cheat + gun-game rejects verified as working signal |
 
 ## Agent memory (append-only, one line each)
 
