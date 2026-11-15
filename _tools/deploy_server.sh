@@ -11,7 +11,7 @@ HOST="${FPS_DEPLOY_HOST:?set FPS_DEPLOY_HOST — see DEPLOYMENT/server.md}"
 RDIR="${FPS_REMOTE_DIR:-kribes}"
 BUN="${FPS_BUN:-.bun/bin/bun}"
 
-dirty=$(git status --porcelain -- server_bun shared client/src/demo maps/rimrock.json maps/rimrock.bin maps/duel.json maps/headhunt.json maps/igunffa.json maps/igunffa_rimrock.json maps/escalade.bin)
+dirty=$(git status --porcelain -- server_bun shared client/src/demo maps/rimrock.json maps/rimrock.bin maps/duel.json maps/headhunt.json maps/igunffa.json maps/igunffa_rimrock.json maps/escalade_test.json maps/escalade.bin)
 if [ -n "$dirty" ]; then
   echo "deploy: uncommitted changes under server/shared — commit first:"
   echo "$dirty" | head -20
@@ -24,7 +24,7 @@ tar -czf /tmp/kribes_sync.tgz \
   server_bun/src server_bun/tests server_bun/package.json \
   shared client/src/demo maps/rimrock.json maps/rimrock.bin \
   maps/duel.json maps/headhunt.json maps/igunffa.json \
-  maps/igunffa_rimrock.json maps/escalade.bin
+  maps/igunffa_rimrock.json maps/escalade_test.json maps/escalade.bin
 echo "$BUILD" > /tmp/kribes_build.txt
 
 scp -i "$KEY" /tmp/kribes_sync.tgz /tmp/kribes_build.txt "$HOST:/tmp/"
