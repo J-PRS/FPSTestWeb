@@ -54,15 +54,16 @@ export const IMPACT_CONFIG: ProjectileConfig = beltBall(21, 0x2A_4A_4D, 0x44_FF_
   glowColor: 0x44_FF_EE,
 });
 
-// Hook: the rope dart — a javelin head on a continuous thrower→dart rod
+// Hook: the rope dart — a dark ball on a continuous thrower→dart rod
 // (Projectile.setRope draws it per frame). Contact is a reel, never a
 // blast: a body yanks the victim to you, dirt yanks you to it. A whiff is
-// a snapped line — no reel, no payload.
-export const HOOK_CONFIG: ProjectileConfig = Object.assign({}, beltBall(37, 0x6A_5A_3A, 0xFF_CC_66, {
+// a snapped line — no reel, no payload. Plain ball, not the javelin
+// mesh - the spear's silhouette read as a stray javelin on the igun
+// hook belt.
+export const HOOK_CONFIG: ProjectileConfig = Object.assign({}, beltBall(37, 0x16_15_13, 0xFF_CC_66, {
   displayName: 'Hook',
   damageColor: '#ffcc88',
 }), {
-  meshType: 'javelin',
   bodyMaterial: bodyMat, // same iron as the viewmodel guns - shades + embeds consistently
   noExplosion: true,
   hook: true,

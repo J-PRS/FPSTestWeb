@@ -406,14 +406,14 @@ export default defineConfig(({ mode }) => ({
     // the stale /server proxy that used to live here WS-proxied it to
     // :8080 and spammed ECONNREFUSED).
     proxy: {
-      '/ws': { target: 'ws://localhost:8000', ws: true },
-      '/demos': 'http://localhost:8000',
-      '/maps': 'http://localhost:8000',
-      '/rooms': 'http://localhost:8000',
-      '/status': 'http://localhost:8000',
-      '/metrics': 'http://localhost:8000',
-      '/client-log': 'http://localhost:8000',
-      '/weaponstats.html': 'http://localhost:8000',
+      '/ws': { target: 'ws://127.0.0.1:8000', ws: true },
+      '/demos': 'http://127.0.0.1:8000',
+      '/maps': 'http://127.0.0.1:8000',
+      '/rooms': 'http://127.0.0.1:8000',
+      '/status': 'http://127.0.0.1:8000',
+      '/metrics': 'http://127.0.0.1:8000',
+      '/client-log': 'http://127.0.0.1:8000',
+      '/weaponstats.html': 'http://127.0.0.1:8000',
     },
   },
 }));
