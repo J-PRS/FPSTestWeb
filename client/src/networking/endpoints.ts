@@ -13,6 +13,10 @@ import { settings } from '../core/settings.js';
  *  config, not source. */
 export const NAMED_SERVERS: Record<string, string> = {
   pub: 'https://play.jprice.app',
+  // The tailscale-funnel box - a /jp/<room> link pins there instead of
+  // the fleet, and the pin-rewrite stamps 'jp' when the page is served
+  // from it, so the two public fronts can't be confused at the URL.
+  jp: 'https://jp-oooff.tailaba354.ts.net:10000',
 };
 
 export interface ServerEndpoints {
