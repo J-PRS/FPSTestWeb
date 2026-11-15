@@ -43,8 +43,8 @@ export const IGUN_LADDER: readonly (readonly WeaponType[])[] = [
   [WeaponType.FastDiscLauncher, WeaponType.BoltLauncher],   // hardest: flat lead, tiny pop
   [WeaponType.Disc],                                        // arc-bounce reads
   [WeaponType.Gonne, WeaponType.Cannon, WeaponType.Basilisk], // arc family: same shell, frame is luck
-  [WeaponType.Revolver, WeaponType.Pistol, WeaponType.Blaster], // light sidearms: honest flat slugs, no pop to lean on
-  [WeaponType.Railgun],                                     // precision tax before the easy rungs
+  [WeaponType.Railgun],                                     // slow precision tax - harder than spam when every hit kills
+  [WeaponType.Revolver, WeaponType.Pistol, WeaponType.Blaster], // light sidearms: rapid flat slugs - easier than the rail at one-shot rules
   [WeaponType.PlasmaGun, WeaponType.Sprinkler, WeaponType.PlasmaCannon], // plasma family - rapid bolts humans track well
   [WeaponType.Flak, WeaponType.Shotgun],                    // very easy: coverage
   [WeaponType.Lightning],                                   // hitscan beam - almost free kills
