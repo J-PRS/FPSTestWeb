@@ -235,7 +235,7 @@ export class RoomProjectiles {
     // Chambered: the new pull fades the owner's previous shells. Lives
     // here (not spawnOne) so a pellet fan doesn't fizzle its own siblings;
     // CombatHandler also calls fizzleOwner for beam/melee/hitscan pulls.
-    if (stats && stats.speed > 0 && chamberedEligible(stats.fireInterval)
+    if (stats && stats.speed > 0 && chamberedEligible(stats.fireInterval, stats.burst)
       && perkMods(this.room.players.getPlayer(ownerId)?.perk).singleChamber > 0) {this.fizzleOwner(ownerId);}
     if (burst <= 1 || spread <= 0) {return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId, undefined, lagS, dmgMult, variant);}
     // One pull = one nonce for every pellet - unclaimed (bot) fans get a
@@ -507,7 +507,7 @@ export class RoomProjectiles {
     const rampAge = bodyDirect ? proj.p.age : undefined;
     // Chambered fly ramp on direct lines - player hits pay it inside
     // botAttack; creature hits multiply here off the owner's perk.
-    const fly = flyRampMult(perkMods(this.room.players.getPlayer(proj.ownerId)?.perk), rampAge, proj.stats.fireInterval ?? 0.5) * proj.directBonus;
+    const fly = flyRampMult(perkMods(this.room.players.getPlayer(proj.ownerId)?.perk), rampAge, proj.stats.fireInterval ?? 0.5, proj.stats.burst) * proj.directBonus;
 
     if (directHitId) {this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge, proj.pull);}
     // A shell that lands on a creature deals its direct line, then the
@@ -603,7 +603,7 @@ export class RoomProjectiles {
    *  uses for its direct lines, minus the blast. */
   piercePay(proj: LiveProj, playerId?: string, ballId?: number, crawlerId?: number): void {
     const rampAge = proj.p.age;
-    const fly = flyRampMult(perkMods(this.room.players.getPlayer(proj.ownerId)?.perk), rampAge, proj.stats.fireInterval ?? 0.5) * proj.directBonus;
+    const fly = flyRampMult(perkMods(this.room.players.getPlayer(proj.ownerId)?.perk), rampAge, proj.stats.fireInterval ?? 0.5, proj.stats.burst) * proj.directBonus;
     if (playerId) {this.room.messages.botAttack(proj.ownerId, playerId, proj.weaponType, rampAge, proj.pull); return;}
     const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * fly;
     if (ballId !== undefined) {

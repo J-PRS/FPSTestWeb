@@ -58,7 +58,7 @@ import { simRand } from '../../../../shared/simRand.js';
 /** Chambered fly-time multiplier on a direct hit - shared by player and
  *  ball payment so predicted numbers stay identical to the verdict. */
 function chamberedMult(deps: CombatDeps, p: Projectile): number {
-  return flyRampMult(deps.lazyPlayer().mods, p.directHit ? p.hitAge : undefined, getWeaponStats(p.config.weaponType).fireInterval ?? 0.5);
+  return flyRampMult(deps.lazyPlayer().mods, p.directHit ? p.hitAge : undefined, getWeaponStats(p.config.weaponType).fireInterval ?? 0.5, getWeaponStats(p.config.weaponType).burst);
 }
 
 const _splatPos = new THREE.Vector3();

@@ -22,7 +22,7 @@ import {
 import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
 import { swingArcView } from '../../effects/swingTrails.js';
-import { getWeaponStats, WeaponType, beltThrowCost, BELT_MAX, serverSimmed, payShotCost, spendAmmo, jitter01, coneDir, PROJVAR_LOADED } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, beltThrowCost, BELT_MAX, serverSimmed, payShotCost, spendAmmo, jitter01, coneDir, PROJVAR_LOADED, IGUN_AOE_MULT } from '../../../../shared/weapons.js';
 import { chamberedEligible } from '../../../../shared/perks.js';
 import { classCanFire } from '../../../../shared/botClasses.js';
 import { idSeed } from '../../../../shared/weaponTable.js';
@@ -85,7 +85,8 @@ export function fadeChambered(deps: CombatDeps, weaponType: number): void {
   if (deps.lazyPlayer().mods.singleChamber <= 0) {return;}
   // Sub-interval guns are exempt from the perk entirely - a fast pull
   // must not fade the shell it never earned a ramp on.
-  if (!chamberedEligible(getWeaponStats(weaponType)?.fireInterval)) {return;}
+  const _chamberSt = getWeaponStats(weaponType);
+  if (!chamberedEligible(_chamberSt?.fireInterval, _chamberSt?.burst)) {return;}
   // Owner-scoped, not isRemote: offline every shell is a local sim, but
   // bots' carry shooterId while the local player's predicted shells
   // leave it null - a chambered pull must not pop a bot's bolt too.
@@ -568,7 +569,10 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
       pos: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
     });
   }
-  hooks.applyForceToRemotes({ pos: _meleeHitPos, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: null, forceMultiplier: 1, weaponType: WeaponType.Melee });
+  // igun: the punch IS the blast envelope - server pays aoeDamage×10,
+  // so the predicted splash number/health dip reads the same law here
+  // (impact.ts applies the identical mult for projectile splash).
+  hooks.applyForceToRemotes({ pos: _meleeHitPos, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: deps.world.igun === true ? stats.aoeDamage * IGUN_AOE_MULT : stats.aoeDamage, directHitTargetId: null, forceMultiplier: 1, weaponType: WeaponType.Melee });
 }
 export function createFire(deps: CombatDeps, hooks: FireHooks) {
 

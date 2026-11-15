@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { PERKS, PERK_ORDER, perkMods, effectiveResist, isPerkId, type PerkId, type PerkMods } from '../../shared/perks.ts';
+import { PERKS, PERK_ORDER, perkMods, effectiveResist, isPerkId, chamberedEligible, type PerkId, type PerkMods } from '../../shared/perks.ts';
 
 // The perk table is server-enforced economy: the wire validator gates
 // join.perk through isPerkId, applyDamage reads effectiveResist, the
@@ -73,5 +73,15 @@ describe('perks', () => {
     expect(isPerkId(undefined)).toBe(false);
     expect(isPerkId(3)).toBe(false);
     expect(isPerkId('PLATED')).toBe(false); // case-sensitive ids
+  });
+});
+
+describe('chambered eligibility', () => {
+  it('burst fans are never chambered - a volley is already nine shells', () => {
+    // flak (1.2s refire, burst 9) faded its own siblings at the muzzle.
+    expect(chamberedEligible(1.2, 9)).toBe(false);
+    expect(chamberedEligible(1.2)).toBe(true);   // burst defaults single
+    expect(chamberedEligible(0.2)).toBe(false);  // sub-interval stays exempt
+    expect(chamberedEligible(undefined)).toBe(true); // unknown weapons: old behavior
   });
 });

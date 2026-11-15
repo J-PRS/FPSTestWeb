@@ -441,7 +441,7 @@ w.n += 1;
     // spawn below, which re-checks for direct-spawn callers) fades the
     // owner's in-flight shell before the new shot resolves - except
     // sub-0.35s weapons, which the perk leaves untouched entirely.
-    if (perkMods(player.perk).singleChamber > 0 && chamberedEligible(getWeaponStats(msg.weaponType)?.fireInterval)) {this.deps.fizzleProjectiles?.(playerId);}
+    if (perkMods(player.perk).singleChamber > 0 && chamberedEligible(getWeaponStats(msg.weaponType)?.fireInterval, getWeaponStats(msg.weaponType)?.burst)) {this.deps.fizzleProjectiles?.(playerId);}
     if (msg.weaponType === WeaponType.Melee && dir) {
       this.meleeIntent(playerId, player, msg, dir);
       return;

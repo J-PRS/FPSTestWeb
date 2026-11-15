@@ -112,17 +112,19 @@ export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'armored',
 export const CHAMBERED_MIN_INTERVAL = 0.35;
 
 /** Is this pull inside the perk's rules? Missing stats count as eligible
- *  (unknown weapons keep the old always-on behavior). */
-export function chamberedEligible(fireIntervalS: number | undefined): boolean {
-  return (fireIntervalS ?? CHAMBERED_MIN_INTERVAL) >= CHAMBERED_MIN_INTERVAL;
+ *  (unknown weapons keep the old always-on behavior). Burst fans are not:
+ *  a volley is already nine shells - fading eight siblings at the muzzle
+ *  was the 2026-11 flak-in-the-face bug. */
+export function chamberedEligible(fireIntervalS: number | undefined, burst = 1): boolean {
+  return burst <= 1 && (fireIntervalS ?? CHAMBERED_MIN_INTERVAL) >= CHAMBERED_MIN_INTERVAL;
 }
 
 /** Chambered fly-time ramp: 1 + flyRamp * (bandedAirtime / interval),
  *  airtime quantized down to 0.1s bands so the dealt number reads the
  *  flight time back (a 1.7x hit on a 1s gun WAS a 0.7s shot). Both ends
  *  compute it off the shell's airtime - no wire field needed. */
-export function flyRampMult(mods: PerkMods, airtimeS: number | undefined, fireIntervalS: number): number {
-  if (mods.singleChamber <= 0 || airtimeS === undefined || !chamberedEligible(fireIntervalS)) {return 1;}
+export function flyRampMult(mods: PerkMods, airtimeS: number | undefined, fireIntervalS: number, burst = 1): number {
+  if (mods.singleChamber <= 0 || airtimeS === undefined || !chamberedEligible(fireIntervalS, burst)) {return 1;}
   const banded = Math.floor(airtimeS / 0.1 + 1e-6) * 0.1; // 0.6/0.1 lands 5.9999 in fp - nudge keeps exact bands
   return 1 + Math.min(1, banded / fireIntervalS) * mods.flyRamp;
 }

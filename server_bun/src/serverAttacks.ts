@@ -81,7 +81,7 @@ export function botAttack(h: AttackHost, shooterId: string, targetId: string, we
     const slug = sm.projSpeedCap > 0 && stats.speed > sm.projSpeedCap ? Math.min(1.5, stats.speed / sm.projSpeedCap) : 1;
     // Chambered fly ramp: airtime is the shell's real age - the pull's
     // patience pays up to flyRamp on the direct line only.
-    const fly = flyRampMult(sm, airtime, stats.fireInterval ?? 0.5);
+    const fly = flyRampMult(sm, airtime, stats.fireInterval ?? 0.5, stats.burst);
     let damage = (scaledDirectDamage(weaponType, airtime) || stats.aoeDamage) * sm.directDamage * slug * fly;
     // Instagib/igun: the flat 200 slug - airtime ramp, perk multipliers
     // and the slugger speed bonus all sit out. igun pays it on EVERY
