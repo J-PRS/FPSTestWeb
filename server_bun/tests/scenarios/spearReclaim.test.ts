@@ -41,7 +41,7 @@ describe('scenario: planted javelin reclaim', () => {
     for (let i = 0; i < 20; i++) {room.projectiles.tick(0.05);}
     const belt = a.beltCharges;
     // Stand on the buried tip - capsule overlaps the planted shaft.
-    const p = [...planted(room).values()][0].pos;
+    const p = [...planted(room).values()][0]!.pos;
     a.position = { x: p.x, y: p.y + 1.8, z: p.z };
     room.projectiles.tick(0.05);
     expect(planted(room).size).toBe(0);

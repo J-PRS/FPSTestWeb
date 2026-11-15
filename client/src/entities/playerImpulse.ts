@@ -51,6 +51,15 @@ export function beltThrowReady(beltTimer: number, throwLockT: number): boolean {
     return beltTimer <= 0 && throwLockT <= 0;
   }
 
+  /** Can the belt press pay for its item? A chambered loadable shell
+   *  exempts the press - the unload refunds, never pays. Without this a
+   *  player who chambered their LAST bolt could never unload it (the
+   *  charge gate swallowed the press before onBelt's unload branch ran).
+   *  'javelin' is the only loadable row (shared/weaponRows.ts). */
+export function beltPressPaid(charges: number, cost: number, item: string, loadedShell: number | undefined): boolean {
+    return charges >= cost || (item === 'javelin' && loadedShell !== undefined);
+  }
+
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
 export function fireWeapons(p: Player): void {
     // Dead men don't fire — there was no gate here (belt releases already
@@ -77,7 +86,7 @@ export function fireWeapons(p: Player): void {
     // swing + lock. Satchel is the only multi-charge item
     // (beltThrowCost, shared/weapons).
     const beltCost = p.beltItem === 'satchel' ? 2 : 1;
-    if (p.input.beltHeld && p.beltCharges >= beltCost && beltThrowReady(p.beltTimer, p.throwLockT)) {
+    if (p.input.beltHeld && beltPressPaid(p.beltCharges, beltCost, p.beltItem, p.loadedShell) && beltThrowReady(p.beltTimer, p.throwLockT)) {
       p.beltTimer = DISC_RATE;
       // BELT_THROW_TIME lives in Player.ts (canonical, used by fire.ts too);
 // inlined here to break the Player <-> playerImpulse cycle (Player imports

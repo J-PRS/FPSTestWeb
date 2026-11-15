@@ -33,6 +33,8 @@ export interface LoadoutHost {
   loadout: number[];
   weaponIndex: number;
   beltItem: BeltItem;
+  /** Chambered loadable shell (stats.loadable) - the kit lock drops it. */
+  loadedShell?: number;
   sidearm: SidearmId;
   packItem: DeployKind;
   skill: SkillId;
@@ -127,6 +129,12 @@ export class PlayerLoadout {
     this.pendingGunRoll = null;
     this.fillGunSlots(roll?.rung ?? 0, roll?.wt);
     this.h.beltItem = 'hook';
+    // A chambered loadable dies with the room that owned it - the
+    // server's PlayerState is fresh, so a stale loadedShell would fire a
+    // phantom shell the authority never spawned. The spear prop is
+    // parented to the BoltLauncher group and re-hides on the next
+    // setLoadedSpear toggle; emitWeaponSwitch below re-arms the vm.
+    this.h.loadedShell = undefined;
     if (igun) {this.h.armorClass = igunChassis(weaponDef(this.currentWid).weaponType);}
     this.applyPendingClass();
     this.emitWeaponSwitch(this.currentWid);
