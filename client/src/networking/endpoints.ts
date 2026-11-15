@@ -48,6 +48,18 @@ export async function fleetWorkerUrl(httpUrl: string): Promise<string | null> {
   return (await resolveFleet(httpUrl))?.wsUrl ?? null;
 }
 
+/** Display name for a resolved endpoint: the NAMED_SERVERS alias when the
+ *  host matches ('PUB', 'JP', or a server.json alias), 'LOCAL' for loopback
+ *  dev, else the literal host. NAMED_SERVERS is populated from server.json
+ *  during resolution, so deploy-defined aliases label correctly too. */
+export function serverLabel(httpUrl: string): string {
+  const u = new URL(httpUrl);
+  for (const [alias, named] of Object.entries(NAMED_SERVERS)) {
+    if (new URL(named).host === u.host) {return `${alias.toUpperCase()} (${u.host})`;}
+  }
+  return u.hostname === 'localhost' || u.hostname === '127.0.0.1' ? `LOCAL (${u.host})` : u.host;
+}
+
 async function isUp(httpUrl: string): Promise<boolean> {
   return fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(800) }).then((r): boolean => r.ok, (): boolean => false);
 }

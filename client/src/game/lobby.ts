@@ -85,6 +85,10 @@ export interface LobbyDeps {
    *  the default room" and the join path dead-ends (row disabled,
    *  early return). Absent → assume online (legacy behavior). */
   isConnected?(): boolean;
+  /** Resolved backend name ('PUB (play.jprice.app)', 'LOCAL (…:8000)', …)
+   *  — stamped next to the saved-host field so "blank = local" can't
+   *  hide which box the room list and joins actually come from. */
+  serverLabel?: string;
 }
 
 const POLL_MS = 3000;
@@ -354,7 +358,7 @@ export class Lobby {
     if (!this.head) {
       this.head = document.createElement('div');
       this.head.className = 'lb-head';
-      for (const h of ['SERVER', 'MODE', 'MAP', 'PLAYERS', 'PING']) {
+      for (const h of ['ROOM', 'MODE', 'MAP', 'PLAYERS', 'PING']) {
         const c = document.createElement('span');
         c.textContent = h;
         this.head.append(c);

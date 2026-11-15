@@ -1055,6 +1055,23 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     srvRow.append(srvIn, srvBtn);
 
+    // The field above is the *saved* pick — this stamp names what the
+    // resolver actually dialed, so "blank = local" can't hide whether
+    // the list/joins below are the dev box or the public pool.
+    if (h.deps.serverLabel) {
+
+      const stamp = document.createElement('span');
+
+      stamp.textContent = `→ ${h.deps.serverLabel}`;
+
+      stamp.title = 'backend this page resolved — room list and joins come from it';
+
+      stamp.style.cssText = 'opacity:.55;font-size:10px;white-space:nowrap;';
+
+      srvRow.append(stamp);
+
+    }
+
 
 
     // Player name lives in the menu-side PROFILE row (#name-input) —

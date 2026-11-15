@@ -2,7 +2,7 @@
 // a public-host page with no explicit server must read server.json's
 // cfg.server, and must never produce ws://+http:// endpoints on https.
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { resolveServerEndpoints } from '../networking/endpoints.js';
+import { resolveServerEndpoints, serverLabel } from '../networking/endpoints.js';
 import { invalidateUrlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 
@@ -105,5 +105,14 @@ describe('resolveServerEndpoints', (): void => {
     const ep = await resolveServerEndpoints();
     expect(ep.wsUrl).toBe('wss://play.jprice.app:8443/ws');
     expect(ep.httpUrl).toBe('https://play.jprice.app:8443');
+  });
+});
+
+describe('serverLabel', (): void => {
+  it('names the resolved backend — alias, loopback, or literal host', (): void => {
+    expect(serverLabel('https://play.jprice.app')).toBe('PUB (play.jprice.app)');
+    expect(serverLabel('https://jp-oooff.tailaba354.ts.net:10000')).toBe('JP (jp-oooff.tailaba354.ts.net:10000)');
+    expect(serverLabel('http://localhost:8000')).toBe('LOCAL (localhost:8000)');
+    expect(serverLabel('http://192.168.1.50:8000')).toBe('192.168.1.50:8000');
   });
 });

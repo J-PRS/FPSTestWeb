@@ -10,7 +10,7 @@ import { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import { Lobby , type RoomRow, type MapRow } from './lobby.js';
-import { resolveServerEndpoints } from '../networking/endpoints.js';
+import { resolveServerEndpoints, serverLabel } from '../networking/endpoints.js';
 import { settings } from '../core/settings.js';
 import type { WorldState } from './worldState.js';
 import type { createEntities } from './entities.js';
@@ -138,6 +138,10 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   // Lobby browser — corner button lists the server's live rooms; joining
   // reloads onto /s/NAME (membership is fixed at connect time).
   resolveServerEndpoints().then(({ httpUrl, lobbyUrl, fleet }): Lobby => new Lobby({
+    // The listing backend (matchmaker when fleet, worker otherwise) is
+    // also where /join + quickJoin dial — name THAT so the stamp can't
+    // promise a different box than the buttons reach.
+    serverLabel: serverLabel(lobbyUrl ?? httpUrl),
     listRooms: async (): Promise<RoomRow[]> => {
       // Fleet: the matchmaker aggregates every worker's /rooms — a
       // worker-local fetch would hide the rest of the fleet.
