@@ -137,6 +137,10 @@ export const parityProbes: {
 // detonation point when the gone edge lands is the trajectory-divergence
 // census: the tail (p95) is the honest number a ghost-hit rate lives on.
 const trajDivs: number[] = [];
+// Per-weapon split of the same samples - an aggregate p50 can't tell a
+// healthy bolt (0.5m) from a drifting disc (8m); the dump names the
+// offenders instead of averaging them away.
+const trajByWt = new Map<number, number[]>();
 // Outlier context - a 100m+ replica-vs-fate gap classifies differently
 // if the replica already self-detonated (its own contact vs the wire's)
 // than one still mid-flight at fate arrival (early server kill).
@@ -150,6 +154,12 @@ export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean, age?: 
   if (boundAt === undefined || boundAt < 0) {parityProbes.trajUnbound = (parityProbes.trajUnbound ?? 0) + 1; return;}
   trajDivs.push(d);
   if (trajDivs.length > 64) {trajDivs.shift();}
+  if (wt !== undefined) {
+    const a = trajByWt.get(wt) ?? [];
+    a.push(d);
+    if (a.length > 32) {a.shift();}
+    trajByWt.set(wt, a);
+  }
   if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0, age: age === undefined ? '?' : Number(age.toFixed(2)), bind: Number(boundAt.toFixed(2)), sa: srvAge === undefined ? '?' : Number(srvAge.toFixed(2)), mir: mirrored ? 1 : 0 });}
 }
 export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
@@ -292,7 +302,15 @@ export function parityLines(): string[] {
   }).join(' ');
   lines.push(`parity: misses=${total}${byKind ? ` ${byKind}` : ''}`);
   const td = trajDivStats();
-  if (td.n > 0 || parityProbes.trajUnbound) {lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8} unbound=${parityProbes.trajUnbound ?? 0} bounced=${parityProbes.trajBounced ?? 0}`);}
+  if (td.n > 0 || parityProbes.trajUnbound) {
+    lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8} unbound=${parityProbes.trajUnbound ?? 0} bounced=${parityProbes.trajBounced ?? 0}`);
+    const perWt = [...trajByWt.entries()]
+      .map(([wt, a]): string => {
+        const s = a.toSorted((x, y): number => x - y);
+        return `wt${wt}:${(s[Math.floor(s.length * 0.5)] ?? 0).toFixed(1)}m(n${a.length})`;
+      }).join(' ');
+    if (perWt) {lines.push(`  shell-traj-bywt: ${perWt}`);}
+  }
   for (const r of rows.slice(-8).toReversed()) {
     lines.push(`  parity-${r.kind}: ${r.detail}`);
   }

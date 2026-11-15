@@ -1166,9 +1166,13 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
 
   function renderFrame(dt: number): void {
     const { camera, rendererSetup, sceneSetup } = deps;
-    // FLOYD overlay hook - idempotent; the VM draw runs inside fsRender so
-    // the gun lands in the readPixels buffer and gets dithered too.
-    rendererSetup.setOverlayPass((): void => {
+    // One vm-draw path for all three render chains. A stale lit program can
+    // survive a lights/shadow-state change (setShadows only flags materials
+    // mounted at flip time - an async bake swap or late mount lands after);
+    // the program then asks for shadowIntensity the lights state lacks and
+    // the upload throws every frame. Recompile-once heals it permanently.
+    let vmCrashed = false;
+    const drawViewmodel = (): void => {
       const vm = deps.lazyViewModel(), vmc = deps.vmCamera();
       if (!vm.group.visible) {return;}
       vmc.aspect = camera.aspect;
@@ -1177,12 +1181,23 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
       const prev = rendererSetup.renderer.autoClear;
       rendererSetup.renderer.autoClear = false;
       rendererSetup.renderer.clearDepth();
-      rendererSetup.renderer.render(deps.vmScene(), vmc);
+      try {
+        rendererSetup.renderer.render(deps.vmScene(), vmc);
+      } catch (error) {
+        if (vmCrashed) {throw error;}
+        vmCrashed = true;
+        deps.vmScene().traverse((o): void => {
+          const m = (o as THREE.Mesh).material;
+          if (m) {(Array.isArray(m) ? m : [m]).forEach((x): void => { x.needsUpdate = true; });}
+        });
+        Logger.warn('[vm] viewmodel render crashed - flagged materials for recompile', error);
+        rendererSetup.renderer.render(deps.vmScene(), vmc);
+      }
       rendererSetup.renderer.autoClear = prev;
-    });
-    const viewModel = deps.lazyViewModel();
-    const vmCamera = deps.vmCamera();
-    const vmScene = deps.vmScene();
+    };
+    // FLOYD overlay hook - idempotent; the VM draw runs inside fsRender so
+    // the gun lands in the readPixels buffer and gets dithered too.
+    rendererSetup.setOverlayPass(drawViewmodel);
     const {renderer} = rendererSetup;
 
     gateInteriorCasters(deps, st, camera);
@@ -1215,16 +1230,7 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     // now draw it inside the frame buffer via VmRenderPass - skipping
     // here keeps the gun inside the pixel/dither pipeline, not pasted
     // full-res over a chunky frame.
-    if (viewModel.group.visible && !rendererSetup.isFloyd() && !rendererSetup.needsComposer()) {
-      vmCamera.aspect = camera.aspect;
-      vmCamera.updateProjectionMatrix();
-      vmCamera.quaternion.copy(camera.quaternion);
-      const prevAutoClear = renderer.autoClear;
-      renderer.autoClear = false;
-      renderer.clearDepth();
-      renderer.render(vmScene, vmCamera);
-      renderer.autoClear = prevAutoClear;
-    }
+    if (!rendererSetup.isFloyd() && !rendererSetup.needsComposer()) {drawViewmodel();}
     gpuEnd();
 
     // Staged video export: captureStream reads a blank GL buffer unless

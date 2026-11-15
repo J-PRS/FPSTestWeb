@@ -983,7 +983,14 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // Terrain hits are provably identical both sides - predict them fully.
   const ghostBodyPop = p.hitPlayerId !== null && p.hitPlayerId !== 'local' &&
     (p.serverProjectileId !== null || (p.shotId !== null && deps.lazyNetworkManager()?.isConnected() === true));
-  if (ghostBodyPop) {p.ghostBodyPop = true;}
+  if (ghostBodyPop) {
+    p.ghostBodyPop = true;
+    // The full dome still waits for the wire's real detonation point -
+    // but a predicted body contact paints its small kinetic tell NOW or
+    // a server-whiffed hit reads as "damage number, world silent". On a
+    // confirm the dome lands ~RTT later and reads as the same blast.
+    kineticHitFx(deps, p, p.hitPointValid ? p.hitPoint : p.pos);
+  }
   else {spawnImpactEffect(c, p);} // flag it - the wire 'gone' owes us the real blast
 
   recordProjectileHit(c, p);

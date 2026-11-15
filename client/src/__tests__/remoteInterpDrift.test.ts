@@ -65,7 +65,37 @@ describe('remoteInterp simStep - dead-reckoning correction math', (): void => {
 
   it('drift under the cap leaves velocity alone', (): void => {
     const ri = mkRi();
-    (ri as any).h.position.set(10, 60, 0); // 10m < 40m cap
+    (ri as any).h.position.set(10, 60, 0); // 10m < 40m cap, drift ⊥ velocity
+    (ri as any).lastServerPosition.set(0, 60, 0);
+    vel(ri).set(0, 0, 10); // tangential - neither the ring nor the lead cap bite
+    step(ri, 0.016);
+    expect(vel(ri).z).toBeCloseTo(10, 5);
+  });
+
+  it('lead cap stalls a ghost ahead of the wire head', (): void => {
+    const ri = mkRi();
+    (ri as any).h.position.set(3, 60, 0);     // 3m ahead along +x of wire
+    (ri as any).lastServerPosition.set(0, 60, 0);
+    vel(ri).set(10, 0, 2);                     // +x forward, +z tangential
+    step(ri, 0.016);
+    // Forward component stripped (gravity's -y dt survives the math);
+    // tangential slide lives so the drift can turn off-path.
+    expect(Math.abs(vel(ri).x)).toBeLessThan(0.5);
+    expect(vel(ri).z).toBeCloseTo(2, 0.5);
+  });
+
+  it('lead cap spares behind-wire drift - that lag is rewindable', (): void => {
+    const ri = mkRi();
+    (ri as any).h.position.set(-3, 60, 0);    // 3m BEHIND wire along -x
+    (ri as any).lastServerPosition.set(0, 60, 0);
+    vel(ri).set(10, 0, 0);                     // moving toward wire head
+    step(ri, 0.016);
+    expect(vel(ri).x).toBeCloseTo(10, 5); // closing speed untouched
+  });
+
+  it('lead cap ignores sub-0.5m leads - the seed jitter zone', (): void => {
+    const ri = mkRi();
+    (ri as any).h.position.set(0.3, 60, 0);
     (ri as any).lastServerPosition.set(0, 60, 0);
     vel(ri).set(10, 0, 0);
     step(ri, 0.016);

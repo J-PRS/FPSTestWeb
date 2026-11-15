@@ -50,6 +50,7 @@ export class RemoteInterp {
   private targetPosition = new THREE.Vector3();
   private targetRotation = { yaw: 0, pitch: 0 };
   private ping = 0; // connection ping in ms - the knockback window sizes off it
+  private lastPredictAt = -Infinity; // last predict() wall time - leadCap exemption window
   private lastUpdateTime = 0;   // CLIENT wall ms of the last update - liveness/DR only
   private silencePeakMs = 0;    // duration of the gap that just ended - keeps the leash DR earned
   private silencePeakAt = 0;
@@ -364,6 +365,10 @@ export class RemoteInterp {
     this.simulatedVelocity.x += (dx / dist) * impulseMag * s;
     this.simulatedVelocity.y += (pull ? 0.3 : 0.5) * impulseMag;
     this.simulatedVelocity.z += (dz / dist) * impulseMag * s;
+    // The lead cap must not eat this launch - a predicted knockback is
+    // client-trusted physics (the blast happened here), not wire-fiction.
+    // Exempt ~1 RTT, the same window the real record lands inside.
+    this.lastPredictAt = Date.now();
     // No buffer clear, no fabricated flight: a predicted arc is client-
     // side fiction about ANOTHER player - the overshoot resample is the
     // 40-70m model pop seen on mortar-heavy maps, and the cleared
@@ -842,6 +847,7 @@ export class RemoteInterp {
       }
     }
 
+    this.leadCap();
     if (this.h.terrain) {
       // Feet clamp to the VISIBLE surface - the smooth heightfield can
       // dip below the rendered level-0 chord in gullies, sinking bodies
@@ -860,6 +866,38 @@ export class RemoteInterp {
           this.simulatedVelocity.z *= 0.9;
         }
       }
+    }
+  }
+
+  // Lead cap: a ghost AHEAD of the wire head lives in fiction no epoch
+  // can rewind to (viewLagMs reports 0 for it - lag-comp then validates
+  // a spot nobody saw, the "painted hit, unpaid" class). Strip only the
+  // velocity carrying it further ahead, same radial trick as the 40m
+  // ring: the body stalls at the lead radius, lateral slide turns the
+  // drift off-path, and off-path/behind drift IS rewindable via the
+  // drift/speed epoch report. Renders as a remote hesitating in a gap -
+  // honest, and every drawn position stays inside the rewindable set.
+  private leadCap(): void {
+    if (this.lastServerPosition.lengthSq() === 0) {return;}
+    // Predicted-knockback window: the seeded launch velocity is client-
+    // trusted (the blast happened); capping it mid-flight re-breaks the
+    // mortar-spam arc this channel exists for.
+    if (Date.now() - this.lastPredictAt < Math.max(250, this.ping * 2)) {return;}
+    const p = this.h.position;
+    const ax = p.x - this.lastServerPosition.x;
+    const ay = p.y - this.lastServerPosition.y;
+    const az = p.z - this.lastServerPosition.z;
+    const d = Math.hypot(ax, ay, az);
+    const vlen = this.simulatedVelocity.length();
+    if (d <= 0.5 || vlen <= 0.001) {return;}
+    const along = (ax * this.simulatedVelocity.x + ay * this.simulatedVelocity.y + az * this.simulatedVelocity.z) / vlen;
+    if (along <= 0.6 * d) {return;}
+    const ux = ax / d, uy = ay / d, uz = az / d;
+    const outVel = this.simulatedVelocity.x * ux + this.simulatedVelocity.y * uy + this.simulatedVelocity.z * uz;
+    if (outVel > 0) {
+      this.simulatedVelocity.x -= outVel * ux;
+      this.simulatedVelocity.y -= outVel * uy;
+      this.simulatedVelocity.z -= outVel * uz;
     }
   }
 }
