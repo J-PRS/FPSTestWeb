@@ -400,5 +400,38 @@ this.live -= 1;
     this.opacity.addUpdateRange(slot, 1);
     this.opacity.needsUpdate = true;
   }
+
+  /** Elongated blob for fast thin casters (shells): the foot is projected
+   *  along the sun vector to where the shadow actually lands instead of
+   *  pinned under the caster - a real map's ~0.13m/texel raster at half
+   *  rate sits meters behind a 60m/s dart, this is per-frame and cheap.
+   *  yaw is the ground heading of the sliver; halfLen/halfWid are its
+   *  half-extents on the shared 2m quad. */
+  setSliver(owner: SwarmSlotOwner & { shadowSlot: number }, pos: THREE.Vector3, yaw: number, halfLen: number, halfWid: number, baseOpacity: number): void {
+    const slot = owner.shadowSlot;
+    if (slot < 0 || slot >= this.live) {return;}
+    const groundY = this.terrain.getHeight(pos.x, pos.z);
+    const airHeight = pos.y - groundY;
+    const o = airHeight > 3 ? Math.max(0, baseOpacity * (1 - (airHeight - 3) / 7)) : baseOpacity;
+    // foot = pos - sunDir * (airH / sunDir.y) - clamped for a low sun so a
+    // sunset shell doesn't throw a shadow across the whole map.
+    const sd = this.terrain.sunDir;
+    const t = airHeight / Math.max(sd.y, 0.25);
+    const fx = pos.x - sd.x * t;
+    const fz = pos.z - sd.z * t;
+    const footY = this.terrain.getHeight(fx, fz);
+    this._v.set(fx, footY + 0.05, fz);
+    this._q.setFromAxisAngle(_UP, yaw);
+    this._s.set(halfLen, 1, halfWid);
+    _m.compose(this._v, this._q, this._s);
+    this.mesh.setMatrixAt(slot, _m);
+    this.opacity.setX(slot, o);
+    this.mesh.instanceMatrix.addUpdateRange(slot * 16, 16);
+    this.mesh.instanceMatrix.needsUpdate = true;
+    this.opacity.addUpdateRange(slot, 1);
+    this.opacity.needsUpdate = true;
+  }
 }
+
+const _UP = new THREE.Vector3(0, 1, 0);
 

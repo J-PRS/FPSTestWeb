@@ -24,6 +24,7 @@ import { ProjCollide } from './projCollide.js';
 import { waterDomeDrag, type WaterDome } from '../../../shared/deployItems.js';
 import { ballGhostPos } from './sweep.js';
 import { ProjStuck } from './projStuck.js';
+import { getShadows } from '../entities/swarms.js';
 const _rayDir = new THREE.Vector3();
 // Rope dart: shared geo/mat + scratch - one taut rod per live dart, so a
 // per-dart allocation would be churn for a 5-vert cylinder.
@@ -305,6 +306,10 @@ export class Projectile {
   private readonly deathScaleBase = new THREE.Vector3();
   private readonly deathGlowBase = new THREE.Vector3();
   private disposed = false;
+  // Blob-shadow owner handles (SwarmSlotOwner) — the sliver replaces the
+  // old half-rate shadow-map cast that lagged 1-1.5m behind at speed.
+  swarmSlot = -1;
+  shadowSlot = -1;
   private ribbons: (RibbonTrail | RailSpiral)[] = [];
   // Runtime-owned emit/jump decisions for every trail layer (P1) -
   // pos discontinuities need no caller teleport(): the driver cuts all
@@ -723,6 +728,19 @@ export class Projectile {
     updateProjectileMesh(this.mesh, this.glowMesh, Projectile._renderPos, this.vel,
       this.config, this.age, this.hitRadius,
       { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt, this.fuseAge());
+    const shadows = getShadows();
+    if (shadows) {
+      if (this.shadowSlot < 0) {this.shadowSlot = shadows.alloc(this);}
+      const r = Math.max(this.config.bodyRadius, 0.15);
+      // Sliver along the ground track while it's heading somewhere; a
+      // vertical hang (lob peak, straight-up shot) reads better as a blob.
+      const hs = this.vel.x * this.vel.x + this.vel.z * this.vel.z;
+      if (hs > 25) {
+        shadows.setSliver(this, Projectile._renderPos, Math.atan2(-this.vel.z, this.vel.x), r * 2.5, r * 1.3, 0.4);
+      } else {
+        shadows.set(this, Projectile._renderPos, r * 1.6, 0.4);
+      }
+    }
     // F1 is a runtime toggle - create lazily (shells predating the key
     // still show), hide when it's off, spawn nothing in normal play.
     if (urlParams.debug) {
@@ -751,6 +769,7 @@ export class Projectile {
 
   removeProjectileMesh(): void {
     if (this.projectileRemoved) {return;}
+    if (this.shadowSlot >= 0) {getShadows()?.free(this);}
     this.glue.dispose(); // retire the harvest ghost too - it's scene-owned
     releaseProjectileInstance(this.mesh);
     // mat/glowMat are cache-shared - never dispose

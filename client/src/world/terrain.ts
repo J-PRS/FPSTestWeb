@@ -191,8 +191,13 @@ export class Terrain {
   private fieldYArr = new Float32Array(32);
   private fieldTintArr = new Float32Array(32 * 3);
 
+  /** Direction toward the sun, normalized - the blob-shadow slivers
+   *  project along it, so it must track setSunDirection too. */
+  readonly sunDir = new THREE.Vector3(0, 1, 0);
+
   constructor(scene: THREE.Scene, sunDir: THREE.Vector3) {
     this.scene = scene;
+    this.sunDir.copy(sunDir).normalize();
     this.remoteDetailEnabled = urlParams.get('terrainRemoteDetail') === '1';
 
     const hm = getHeightmapData();
@@ -366,6 +371,7 @@ export class Terrain {
    *  light), so a sky that moves the sun has to reach it here. */
   setSunDirection(dir: THREE.Vector3): void {
     const d = dir.clone().normalize();
+    this.sunDir.copy(d);
     for (const l of this.levels) {l.material.uniforms.sunDir.value.copy(d);}
   }
 

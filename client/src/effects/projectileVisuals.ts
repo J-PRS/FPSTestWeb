@@ -281,7 +281,9 @@ export function buildProjectileMeshes(
   // flash before the first update shrinks it
   mesh.scale.setScalar(rampInStartScale(config));
   mesh.layers.enable(BLOOM_LAYER);
-  const bpool = instPoolFor(scene, `body|${config.meshType}|${config.bodyRadius}|${config.meshColor}`, geo, mat, false, true);
+  // castShadow stays off — shells ride the per-frame sliver blob in
+  // InstancedBlobShadows; the half-rate sun-map cast lagged ~1.5m at 60m/s.
+  const bpool = instPoolFor(scene, `body|${config.meshType}|${config.bodyRadius}|${config.meshColor}`, geo, mat, false, false);
   (mesh as SlotTag).__inst = { pool: bpool, slot: instAlloc(bpool) };
 
   const glowMesh = config.glowShell ? buildGlowMesh(scene, config, pos) : null;
