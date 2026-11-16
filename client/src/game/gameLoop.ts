@@ -43,7 +43,7 @@ import type { Terrain } from '../world/terrain.js';
 import type { createEntities } from './entities.js';
 import type { createCombat } from './combat.js';
 import type { createDemoLifecycle } from './demoLifecycle.js';
-import type { createRemotes } from './remotes.js';
+import { markerLive, type createRemotes } from './remotes.js';
 import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
 import type { MinimapPlayer } from '../ui/minimap.js';
@@ -668,7 +668,10 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   deps.lazyHealthBarSystem().update(dt,
     demoManager?.isPlaying ? deps.world.playbackPlayers : networkManager.getPlayers(),
     demoManager?.isPlaying ? deps.world.playbackRemotePlayers : deps.world.remotePlayers,
-    entities.balls, deps.world.localTeam);
+    entities.balls, deps.world.localTeam,
+    // Wounded popups only where the HUD shows a marker - demo playback
+    // has no intel feed, so it keeps the ungated bars.
+    demoManager?.isPlaying ? undefined : markerLive);
   perf.mark('healthbars');
 
   // Peripheral speed lines along the true velocity vector; demo-suppressed.

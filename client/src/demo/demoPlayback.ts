@@ -1,4 +1,4 @@
-import type { ProjectileEvent, TargetEvent } from './types.js';
+import type { ProjectileEvent, RemoteFrame, TargetEvent } from './types.js';
 import { lerpAngle } from '../../../shared/angles.ts';
 import { windowProjectileEvents, windowTargetEvents } from './demoClip.js';
 
@@ -149,15 +149,33 @@ export function reconstructToTime(p: DemoPlayer, time: number): { newProjEvents:
     };
   }
 
+const zeroState = (): PlaybackState => ({
+    posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0,
+    yaw: 0, pitch: 0, inputFlags: 0, jetpackFlags: 0, jetpackFuel: 0,
+    weaponType: 0, health: 0, armor: 0,
+  });
+
 export function getInterpolatedState(p: DemoPlayer): PlaybackState {
-    if (!p.demoData || p.demoData.frames.length === 0) {
-      return {
-        posX: 0, posY: 0, posZ: 0,
-        velX: 0, velY: 0, velZ: 0,
-        yaw: 0, pitch: 0,
-        inputFlags: 0, jetpackFlags: 0, jetpackFuel: 0, weaponType: 0,
-        health: 0, armor: 0,
-      };
+    if (!p.demoData) {
+      return zeroState();
+    }
+    if (p.demoData.frames.length === 0) {
+      // POV-less files (server captures write frames:[]): ride the most-
+      // sampled remote as an approximate their-eyes camera instead of
+      // parking at world origin. Falls back to the header's recorded
+      // start pose when there are no remotes either.
+      let best: RemoteFrame[] | null = null;
+      for (const frames of p.remotesByIdx.values()) {
+        if (best === null || frames.length > best.length) {best = frames;}
+      }
+      const anchor = best && best.length > 0
+        ? best[Math.max(0, findEventIndex(best, p.currentTime) - 1)]!
+        : null;
+      if (anchor) {
+        return Object.assign(zeroState(), { posX: anchor.posX, posY: anchor.posY, posZ: anchor.posZ, velX: anchor.velX, velY: anchor.velY, velZ: anchor.velZ, yaw: anchor.yaw, pitch: anchor.pitch });
+      }
+      const h = p.demoData.header;
+      return Object.assign(zeroState(), { posX: h.startPosX, posY: h.startPosY, posZ: h.startPosZ, yaw: h.startYaw, pitch: h.startPitch, velX: h.startVelX, velY: h.startVelY, velZ: h.startVelZ });
     }
 
     const {frames} = p.demoData;

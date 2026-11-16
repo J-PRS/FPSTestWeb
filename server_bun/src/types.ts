@@ -94,6 +94,11 @@ export interface PlayerState {
   /** Latest clientStats uplink — self-reported fps/jsMs + link quality.
    *  Stamped at receive so /metrics can drop stale reporters. */
   clientStats?: { fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number; renderLag?: Record<string, number>; gap?: number; starve?: number; starveMs?: number; drainMsMax?: number; at: WallMs };
+  /** Drawn-ghost report: the shooter's rendered position of the remote
+   *  under its crosshair, refreshed on every position frame carrying an
+   *  aim tail. Hit validation may test this spot (rewind-gated) because
+   *  lateral DR drift lives at no wire epoch. */
+  aimGhost?: { id: string; x: number; y: number; z: number; at: WallMs };
   /** Netcode-v2 tier the join negotiated — surfaced to the scoreboard. */
   transport?: TransportKind;
   /** Clock-drift probe window (ping handler): s0/a0 anchor the window in

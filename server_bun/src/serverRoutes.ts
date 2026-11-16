@@ -30,6 +30,10 @@ export interface HttpCtx {
   rtcRelay: RtcRelay;
   /** DER SHA-256 of the WebTransport cert, once the WT block has read it. */
   wtCertHash(): string | null;
+  /** Why WT came up disabled after a real attempt - undefined when it
+   *  was never configured. /wthash surfaces it so clients can tell
+   *  'off by design' from 'bind failed'. */
+  wtDisabledWhy?(): string | null;
   /** Client IP for per-caller throttle tables - Bun's server.requestIP. */
   requestIP?(req: Request): { address: string } | null;
 }
@@ -192,7 +196,7 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     },
     // WebTransport discovery: browser clients pin self-signed certs via
     // serverCertificateHashes — this is the DER SHA-256 of FPS_WT_CERT.
-    '/wthash': (): Response => json(wtInfo(ctx) ?? { enabled: false }),
+    '/wthash': (): Response => json(wtInfo(ctx) ?? { enabled: false, why: ctx.wtDisabledWhy?.() ?? undefined }),
     // WebRTC tier: STUN/TURN servers come from the deployment, not the
     // client build — parsed once at boot from FPS_ICE_SERVERS.
     '/rtcconfig': (): Response => json({ iceServers: iceServers() }),
@@ -423,6 +427,10 @@ export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<R
     const filename = url.pathname.slice('/demos/'.length);
     if (filename === 'upload' || filename === '') {
       return corsResponse('Not found', { status: 404 });
+    }
+    // Extracted-clip library (demos/shots/**) - the client LOCAL list.
+    if (filename === 'local') {
+      return json({ demos: await ctx.demoStorage.listLocal() });
     }
     const data = await ctx.demoStorage.loadDemo(filename);
     if (!data) {

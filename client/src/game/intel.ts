@@ -33,3 +33,10 @@ export function intelContact(id: string): IntelMark | undefined {
   if (at === 0 || performance.now() - at > STALE_MS) {return undefined;}
   return contacts.get(id);
 }
+
+/** Feed liveness for the diag dump: age of the last 'intel' message and
+ *  how many contacts it carried - splits "server stopped stamping" from
+ *  "messages stopped arriving" when markers drop mid-view. */
+export function intelDiag(): { ageMs: number; contacts: number } {
+  return { ageMs: at === 0 ? -1 : performance.now() - at, contacts: contacts.size };
+}

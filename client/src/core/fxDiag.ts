@@ -64,7 +64,7 @@ function compact(v: unknown): string {
 /** Returns true when the occurrence was emitted — callers whose event is
  *  rare-but-important (parity misses) can warn through their own channel
  *  when the rate limiter swallowed the console line. */
-export function glitch(kind: string, detail: Record<string, unknown> = {}): boolean {
+export function glitch(kind: string, detail: Record<string, unknown> = {}, silent = false): boolean {
   glitchCounts[kind] = (glitchCounts[kind] ?? 0) + 1;
   const n = glitchCounts[kind];
   const payload = compact(detail);
@@ -75,6 +75,9 @@ export function glitch(kind: string, detail: Record<string, unknown> = {}): bool
   }
   const suppressed = last && last.n > 1 ? ` (x${last.n})` : '';
   glitchLast[kind] = { payload, n: 1 };
+  // silent = count + dedup for the census only; the caller promises this
+  // kind is routine noise (parity-nugrest) not a live alarm.
+  if (silent) {return false;}
   if (n <= 3 || n % 100 === 0) {
     // Lazy import would devolve the module graph — Logger is core like us.
     // oxlint-disable-next-line no-console

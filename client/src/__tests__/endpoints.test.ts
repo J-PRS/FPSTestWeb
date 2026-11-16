@@ -109,7 +109,7 @@ describe('resolveServerEndpoints', (): void => {
 });
 
 describe('serverLabel', (): void => {
-  it('names the resolved backend — alias, loopback, or literal host', (): void => {
+  it('names the resolved backend - alias, loopback, or literal host', (): void => {
     expect(serverLabel('https://play.jprice.app')).toBe('PUB (play.jprice.app)');
     expect(serverLabel('https://jp-oooff.tailaba354.ts.net:10000')).toBe('JP (jp-oooff.tailaba354.ts.net:10000)');
     expect(serverLabel('http://localhost:8000')).toBe('LOCAL (localhost:8000)');

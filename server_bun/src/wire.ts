@@ -134,7 +134,18 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           input = { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0 };
         }
       }
-      return { success: true, data: Object.assign({}, body.data, {seq,inputSeq,ping}, (input ? { input } : {}), {type: 'position' as const}) };
+      // Drawn-ghost report - {wid, xyz}; malformed drops just the field.
+      let aim: { wid: number; x: number; y: number; z: number } | undefined = undefined;
+      const rawAim = obj.aim;
+      if (typeof rawAim === 'object' && rawAim !== null) {
+        const a = rawAim as Record<string, unknown>;
+        if (isFiniteNumber(a.wid) && a.wid >= 0 && a.wid <= 0xFF_FF
+            && isFiniteNumber(a.x) && isFiniteNumber(a.y) && isFiniteNumber(a.z)
+            && (a.x * a.x + a.y * a.y + a.z * a.z) <= 8192 * 8192) {
+          aim = { wid: a.wid, x: a.x, y: a.y, z: a.z };
+        }
+      }
+      return { success: true, data: Object.assign({}, body.data, {seq,inputSeq,ping}, (input ? { input } : {}), (aim ? { aim } : {}), {type: 'position' as const}) };
     },
     handle: (h, id, m): void => h.moves.handlePosition(id, m),
   },

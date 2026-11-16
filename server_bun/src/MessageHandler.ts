@@ -6,9 +6,8 @@ import { CombatHandler, type CombatDeps, type BeamContact } from './CombatHandle
 import type { KillFeed } from './killFeed.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { logger } from './logger.ts';
-import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
+import { PROTOCOL_VERSION, type RoomMods } from '../../shared/protocol.ts';
 import { SERVER_VERSION, SERVER_BUILD } from './version.ts';
-import type { RoomMods } from '../../shared/protocol.ts';
 import { CONFIG } from './config.ts';
 import { WIRE } from './wire.ts';
 import { encodeWidPos, WIRE_E_JUMP, WIRE_E_JET } from '../../shared/wire.ts';
@@ -26,6 +25,11 @@ import { wallNow, type WallMs } from './wallClock.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import { simNow } from './simClock.ts';
 import type { AtmosphereSpec, SpawnPoint, StructureSpec, WaterSpec, WeatherSpec } from '../../shared/mapSpec.ts';
+
+/** Per-process stamp - a changed bootId on reconnect tells clients the
+ *  previous disconnect was process death (dev-watch respawn, crash),
+ *  not a transport fault, so tier benches shouldn't carry over. */
+const BOOT_ID = Date.now();
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -197,6 +201,8 @@ export interface RoomInfo {
   /** Binary playerHit lane — the room owns wireIds, returns false when an
    *  id can't resolve so the caller falls back to the JSON broadcast. */
   wireHit?: CombatDeps['wireHit'];
+  /** Drawn-ghost reports carry a u16 - resolve back to a seat. */
+  idOfWid?: (wid: number) => string | undefined;
   /** Room wireId lookup for S→C binary events (u16 on the wire). */
   widOf?: (playerId: string) => number | undefined;
   /** Broadcast one pre-encoded binary frame (broadcastBinaryReliable). */
@@ -687,7 +693,7 @@ export class MessageHandler {
     playersData: GameStatePlayer[],
     extras?: Record<string, unknown>,
   ): void {
-    this.sendToPlayer(playerId, Object.assign({players: playersData,protocolVersion: PROTOCOL_VERSION,serverVersion: SERVER_VERSION,serverBuild: SERVER_BUILD}, this.roomEcho(), extras, {type: 'gameState' as const}));
+    this.sendToPlayer(playerId, Object.assign({players: playersData,protocolVersion: PROTOCOL_VERSION,serverVersion: SERVER_VERSION,serverBuild: SERVER_BUILD,bootId: BOOT_ID}, this.roomEcho(), extras, {type: 'gameState' as const}));
   }
 
   /** Broadcast the playerJoined announce once — gates on the flag so a
@@ -833,6 +839,7 @@ export class MessageHandler {
   moveResync(playerId: string, pos: Vec3, yaw: number): void { this.roomInfo.moveResync?.(playerId, pos, yaw); }
   moveMute(playerId: string): void { this.roomInfo.moveMute?.(playerId); }
   cloakHidden(playerId: string): boolean { return this.roomInfo.cloakHidden?.(playerId) ?? false; }
+  idOfWid(wid: number): string | undefined { return this.roomInfo.idOfWid?.(wid); }
 
   // jump/jetpack are pure presence relays — same shape, dead check, echo
   // to everyone but the sender for remote-side jump-dust/jet FX.

@@ -100,7 +100,7 @@ export class NetworkManager {
   /** REMOTE players only - local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number, predicted?: boolean, shotId?: string) => void) | null = null;
-  public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean) => void) | null = null;
+  public onPlayerKill: ((shooterId: string, targetId: string, k: { weapon?: number; air?: number; steal?: boolean; at?: { x: number; y: number; z: number } }) => void) | null = null;
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
@@ -1012,7 +1012,7 @@ this.sendDrops += 1;
     this.send({ type: 'teleport', position, rotation, velocity });
   }
 
-  sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }): void {
+  sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }, aim?: { wid: number; x: number; y: number; z: number }): void {
     if (!this.isConnected()) {return;}
 
     const now = Date.now();
@@ -1045,7 +1045,7 @@ this.sendDrops += 1;
     // hot path; the message still passes through the same validation.
     const held = this.inputs.held();
     this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping, this.inputs.seq,
-      held ? { forward: held.forward, right: held.right, jump: held.jump, ski: held.ski, jet: held.jet ?? 0 } : undefined));
+      held ? { forward: held.forward, right: held.right, jump: held.jump, ski: held.ski, jet: held.jet ?? 0 } : undefined, aim));
 
     this.sendSideChannels(now);
   }
@@ -1116,6 +1116,9 @@ this.sendDrops += 1;
   inputsAfter(after: number, gapMs = 0): { t: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }[] {
     return this.inputs.inputsAfter(after, gapMs);
   }
+
+  /** Drawn-ghost uplink names remotes by u16 - the roster lives in wireIn. */
+  widOf(pid: string): number | undefined { return this.wireIn.widOf(pid); }
 
   /**
    * Get all REMOTE players (local player is never included)

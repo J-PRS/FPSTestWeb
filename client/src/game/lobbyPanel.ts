@@ -10,7 +10,7 @@ import type { LobbyDeps } from './lobby.js';
 
 
 
-// Lobby panel DOM — styling lives in ui/chrome.css (.lb-*); this builds
+// Lobby panel DOM - styling lives in ui/chrome.css (.lb-*); this builds
 
 // structure and wires behavior. Host is the Lobby facade: its event
 
@@ -32,7 +32,7 @@ export interface LobbyPanelHost {
 
   join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): void;
 
-  /** SOLO page's pickers — Lobby refills them from the same map list as
+  /** SOLO page's pickers - Lobby refills them from the same map list as
 
    *  HOST's so both tabs agree on what's playable. */
 
@@ -40,7 +40,7 @@ export interface LobbyPanelHost {
 
   currentRoom(): string;
 
-  /** Favorites persist across sessions — classic browser column. */
+  /** Favorites persist across sessions - classic browser column. */
 
   isFav(name: string): boolean;
 
@@ -66,7 +66,7 @@ export interface LobbyPanelEls {
 
   botsInput: HTMLInputElement;
 
-  /** Repoll the open-lobby list — Lobby calls it on open + poll tick. */
+  /** Repoll the open-lobby list - Lobby calls it on open + poll tick. */
 
   refreshLobs(): void;
 
@@ -125,7 +125,7 @@ function label(text: string): HTMLDivElement {
  *  single source of truth (?p2p=/?lobby). */
 
 /** Persist a select pick to settings, and restore the saved pick once
- *  options actually exist — refreshMaps refills async, so restore rides
+ *  options actually exist - refreshMaps refills async, so restore rides
  *  childList. Only fills an unpicked ('') select: a fresh user pick wins
  *  over the remembered one. */
 type StrKey = 'fps-lb-tab' | 'fps-host-mode' | 'fps-host-map' | 'fps-host-name'
@@ -184,7 +184,7 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
 
   let pub = settings.get('fps-p2p-pub') === 1;
 
-  // .tog styling is scoped to #overlay .btn-row — the wrapper is required
+  // .tog styling is scoped to #overlay .btn-row - the wrapper is required
 
   // for the tile + ON/OFF state box to render at all.
 
@@ -200,13 +200,13 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
 
   // Row-height match: .btn-row's 9px padding is sized for the settings
 
-  // column, .lb-quick chips are shorter — slim it to the row's rhythm.
+  // column, .lb-quick chips are shorter - slim it to the row's rhythm.
 
   pubBtn.style.cssText = 'flex:1;padding:4px 8px;';
 
   pubBtn.textContent = 'PUBLIC';
 
-  pubBtn.title = 'listed publicly — quick-joinable';
+  pubBtn.title = 'listed publicly - quick-joinable';
 
   pubBtn.classList.toggle('on', pub);
 
@@ -252,16 +252,16 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
 
 
 
-/** Solo match setup — the offline twin of HOST's PLAY: persists the picks
+/** Solo match setup - the offline twin of HOST's PLAY: persists the picks
 
- *  to settings and reloads onto a clean '/' — no room, no p2p is what keeps
+ *  to settings and reloads onto a clean '/' - no room, no p2p is what keeps
 
  *  the boot offline (see connectPhase: no room = no socket). '' mode is
 
- *  free roam — pick a ruleset to get bots/flags/scoring. */
+ *  free roam - pick a ruleset to get bots/flags/scoring. */
 
 function playOffline(mode: string, map: string, bots: number | undefined): void {
-  // Solo picks are client state — they persist as settings and the URL
+  // Solo picks are client state - they persist as settings and the URL
   // reloads clean. ?mode/?map/?bots stay readable as harness overrides.
   settings.set('fps-last-room', '');
   settings.set('fps-solo', 1);
@@ -286,7 +286,7 @@ function playOffline(mode: string, map: string, bots: number | undefined): void 
 
 
 
-/** MAP picker + pre-rendered thumbnail preview — the image swaps on
+/** MAP picker + pre-rendered thumbnail preview - the image swaps on
 
  *  selection/refill and hides itself when a map has no rendered thumb. */
 
@@ -302,7 +302,7 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
 
   thumb.className = 'lb-mapthumb';
 
-  // Block element BELOW the field row, not a flex item inside it — a
+  // Block element BELOW the field row, not a flex item inside it - a
 
   // flex child sizes to the image's natural pixels and overflows.
 
@@ -310,11 +310,11 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
 
   thumb.alt = 'map preview';
   // Dev hosts get a live render of the spec (real terrain shader + sky)
-  // instead of the baked PNG — shader/spec edits show up immediately.
+  // instead of the baked PNG - shader/spec edits show up immediately.
   const live = isDevHost() ? liveMapThumb() : null;
   const liveEl = live ? live.el : document.createElement('div');
 
-  // Thumbs are optional — mapthumbs.ts only renders them on demand. An
+  // Thumbs are optional - mapthumbs.ts only renders them on demand. An
 
   // <img> 404 spams the console, so probe with fetch first: a missing
 
@@ -349,7 +349,7 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
 
   select.addEventListener('change', update);
 
-  // Refills change the selection without firing 'change' — watch the
+  // Refills change the selection without firing 'change' - watch the
 
   // option list so the preview tracks mode filtering too.
 
@@ -361,7 +361,7 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
 
 
 
-/** Renders a select as a row of toggle buttons — the select stays the
+/** Renders a select as a row of toggle buttons - the select stays the
 
  *  value store (hidden), the row is the UI. Rebuilds on option-list
 
@@ -421,7 +421,7 @@ function modeToggleRow(sel: HTMLSelectElement, secondRow?: ReadonlySet<string>):
 
   // Programmatic picks (map auto-adopts its default ruleset) fire
 
-  // 'change' without touching the option list — resync actives on it.
+  // 'change' without touching the option list - resync actives on it.
 
   const sync = (): void => {
 
@@ -449,7 +449,7 @@ function modeToggleRow(sel: HTMLSelectElement, secondRow?: ReadonlySet<string>):
 
 
 
-/** Map list picker — same contract as modeToggleRow: the hidden select
+/** Map list picker - same contract as modeToggleRow: the hidden select
 
  *  stays the value store (fillMapSelect/bindSoloSelects keep working),
 
@@ -462,7 +462,7 @@ function mapListBox(sel: HTMLSelectElement): HTMLDivElement {
   box.className = 'lb-maplist';
 
   // Row pitch is fixed (14 line + 14 pad + 2 border = 30px) so the cap
-  // can tile whole rows — a mid-row cut read as a clipped item, not
+  // can tile whole rows - a mid-row cut read as a clipped item, not
   // "scroll for more". 12 rows land at 382px; the .lb-more fade is the
   // overflow hint now that the scrollbar is hidden.
   box.style.cssText = 'flex:0 0 44%;min-width:0;max-height:382px;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:2px;';
@@ -523,7 +523,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    // The trigger lives in the ESC menu (#lobby-open in index.html) —
+    // The trigger lives in the ESC menu (#lobby-open in index.html) -
 
     // a floating HUD button during gameplay was HUD clutter. The panel
 
@@ -535,7 +535,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    // ESC-menu disconnect — the classic "leave server" is a one-shot
+    // ESC-menu disconnect - the classic "leave server" is a one-shot
 
     // reload to a clean URL: solo boot IS the disconnected state, so no
 
@@ -589,7 +589,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    // Tabbed hub — the classic server-browser layout: JOIN is the room
+    // Tabbed hub - the classic server-browser layout: JOIN is the room
 
     // list, HOST is match setup, SOLO/DUEL are one-purpose pages.
 
@@ -657,7 +657,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    // Match setup — mode (ruleset) and map (geometry) are separate picks:
+    // Match setup - mode (ruleset) and map (geometry) are separate picks:
 
     // MODE filters which maps are offered, MAP picks the arena. Bot count
 
@@ -694,7 +694,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     modeSelect.className = 'lb-input';
 
-    // Hidden store — the toggle row beside it is the actual UI; the
+    // Hidden store - the toggle row beside it is the actual UI; the
 
     // select keeps serving fillMapSelect/handler reads.
 
@@ -705,13 +705,13 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     modeRow.append(modeSelect);
 
-    // Toggle row is a page-level block under the MODE field — inside the
+    // Toggle row is a page-level block under the MODE field - inside the
 
     // flex field it shares the row and wraps at half width.
 
     const modeBtns = modeToggleRow(modeSelect);
 
-    // Map-family toggles — T2 ports, Quake ports, our own arenas. All on
+    // Map-family toggles - T2 ports, Quake ports, our own arenas. All on
 
     // list; each can be dropped to shrink the picker. HOST and OFFLINE
 
@@ -753,7 +753,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     const famRow = famToggles();
 
-    // PRIVATE rides the same toggle row — an unlisted room is off /rooms
+    // PRIVATE rides the same toggle row - an unlisted room is off /rooms
 
     // and quick-join; friends get in by CREATE / JOIN BY NAME only.
 
@@ -761,7 +761,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     privBtn.classList.toggle('active', settings.get('fps-unlisted') === 1);
 
-    privBtn.title = 'unlisted — not on the public room list';
+    privBtn.title = 'unlisted - not on the public room list';
 
     privBtn.addEventListener('click', (): void => {
 
@@ -775,7 +775,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     famRow.append(privBtn);
 
-    // Sim gates — the host can mint a room without creatures (melee
+    // Sim gates - the host can mint a room without creatures (melee
 
     // species) and/or the ball sim. ON is the default; OFF rides the
 
@@ -878,7 +878,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const { select: mapSelect, thumb: mapThumb, live: mapLive } = mapPicker(h);
     keepSelect(mapSelect, 'fps-host-map');
 
-    // Hidden store — the scrollable list beside the preview is the UI.
+    // Hidden store - the scrollable list beside the preview is the UI.
 
     mapSelect.style.display = 'none';
 
@@ -917,7 +917,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
         const bots = botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(botsInput.value) || 0));
 
-        // A typed name skips quickJoin — host names their own room. The
+        // A typed name skips quickJoin - host names their own room. The
 
         // MODE pick still applies or a named host silently drops it.
 
@@ -935,7 +935,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
         const ig = settings.get('fps-igun') === 1;
 
-        // A named PRIVATE room is always self-hosted — quickJoin would
+        // A named PRIVATE room is always self-hosted - quickJoin would
 
         // land in someone's public match instead of creating ours.
 
@@ -951,7 +951,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     const quickLbl = label('QUICK JOIN');
     // Hidden, not deleted: quick-join-by-mode is dead weight while we
-    // host a few always-on named rooms — resurface when rooms multiply.
+    // host a few always-on named rooms - resurface when rooms multiply.
     quickLbl.style.display = 'none';
 
     const quick = document.createElement('div');
@@ -993,7 +993,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     input.style.flex = '1';
 
-    // Named-room joins honor the HOST MATCH pickers — a fresh room spins up
+    // Named-room joins honor the HOST MATCH pickers - a fresh room spins up
 
     // from the selected spec + bot count instead of always landing bare.
 
@@ -1029,7 +1029,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    // Server + P2P — the URL params ?server=/?p2p= still work for links,
+    // Server + P2P - the URL params ?server=/?p2p= still work for links,
 
     // but these fields make them reachable without editing the URL.
 
@@ -1055,7 +1055,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     srvRow.append(srvIn, srvBtn);
 
-    // The field above is the *saved* pick — this stamp names what the
+    // The field above is the *saved* pick - this stamp names what the
     // resolver actually dialed, so "blank = local" can't hide whether
     // the list/joins below are the dev box or the public pool.
     if (h.deps.serverLabel) {
@@ -1064,7 +1064,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
       stamp.textContent = `→ ${h.deps.serverLabel}`;
 
-      stamp.title = 'backend this page resolved — room list and joins come from it';
+      stamp.title = 'backend this page resolved - room list and joins come from it';
 
       stamp.style.cssText = 'opacity:.55;font-size:10px;white-space:nowrap;';
 
@@ -1074,7 +1074,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    // Player name lives in the menu-side PROFILE row (#name-input) —
+    // Player name lives in the menu-side PROFILE row (#name-input) -
 
     // an identity field, not a connection parameter.
 
@@ -1090,7 +1090,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     // No prefill: fps-p2p survives the session reload, but a join code is
 
-    // one-shot — a dead code sitting in the box reads as a feature.
+    // one-shot - a dead code sitting in the box reads as a feature.
 
     p2pIn.className = 'lb-input';
 
@@ -1105,7 +1105,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    // Open P2P lobbies — the relay lists public hosts still waiting for
+    // Open P2P lobbies - the relay lists public hosts still waiting for
 
     // a peer; clicking one is join:code without typing it.
 
@@ -1125,7 +1125,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
         const lobs = await h.deps.listP2pLobbies();
 
-        if (lobs.length === 0) { lobRows.textContent = '— none open —'; lobRows.style.color = 'rgb(var(--ui-accent-rgb) / 0.5)'; return; }
+        if (lobs.length === 0) { lobRows.textContent = '- none open -'; lobRows.style.color = 'rgb(var(--ui-accent-rgb) / 0.5)'; return; }
 
         lobRows.style.color = '';
 
@@ -1143,7 +1143,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
         }
 
-      } catch { /* relay unreachable — same failure class as /rooms */ }
+      } catch { /* relay unreachable - same failure class as /rooms */ }
 
     };
 
@@ -1153,7 +1153,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
 
-    // Advanced paths shelved for now — JOIN is browser + quick-join only.
+    // Advanced paths shelved for now - JOIN is browser + quick-join only.
 
     // Kept mounted-but-hidden (not deleted): direct-server and
 
@@ -1187,7 +1187,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     // ---- OFFLINE page: HOST's pickers, no server ---------------------
 
-    // Same mode/map/bots row layout — a solo match IS a hosted match
+    // Same mode/map/bots row layout - a solo match IS a hosted match
 
     // minus the socket, so the page reads identically on purpose.
 
@@ -1206,7 +1206,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     keepSelect(soloModeSel, 'fps-mode');
     soloModeRow.append(soloModeSel);
 
-    // Solo modes ride a second row — bot-mode picks stay a team-mode ramp.
+    // Solo modes ride a second row - bot-mode picks stay a team-mode ramp.
     const soloModeBtns = modeToggleRow(soloModeSel, new Set(['', 'flagrun', 'classic']));
 
     const soloFamRow = famToggles();
@@ -1220,7 +1220,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const { select: soloMapSel, thumb: soloThumb, live: soloLive } = mapPicker(h);
     keepSelect(soloMapSel, 'fps-solo-map');
 
-    // Hidden store — the scrollable list beside the preview is the UI.
+    // Hidden store - the scrollable list beside the preview is the UI.
 
     soloMapSel.style.display = 'none';
 
@@ -1257,7 +1257,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     h.bindSoloSelects(soloModeSel, soloMapSel);
 
-    // Two-column pick: scrollable map list left, preview + knobs right —
+    // Two-column pick: scrollable map list left, preview + knobs right -
 
     // the old one-column layout let the 4:3 thumb push BOTS off-screen.
 
@@ -1288,7 +1288,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     (document.getElementById('overlay') ?? document.body).append(panel);
 
-    // Menu closed while the panel was open (resume / re-lock) — display:none
+    // Menu closed while the panel was open (resume / re-lock) - display:none
 
     // hides it anyway, but the poll timer would keep burning for nothing.
 
@@ -1306,7 +1306,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
       // menu open lands on the room list. Any live session (room, p2p,
 
-      // or a solo boot — ?mode/?map/?bots/?solo) counts as "in a game":
+      // or a solo boot - ?mode/?map/?bots/?solo) counts as "in a game":
 
       // a mid-match menu open wants loadout/settings, not a popup.
 

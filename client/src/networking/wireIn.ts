@@ -42,6 +42,13 @@ export class WireIn {
    *  rostered values never alias a slot (see decodeTickFrame pool docs). */
   private readonly tickPool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id): string | undefined => this.wireIds.get(id) };
 
+  /** Reverse roster lookup - the drawn-ghost uplink names a remote by
+   *  u16 (rosters are small enough that a scan beats a second map). */
+  widOf(pid: string): number | undefined {
+    for (const [wid, id] of this.wireIds) {if (id === pid) {return wid;}}
+    return undefined;
+  }
+
   private lastTickSeq = -1; // highest server tickSeq applied - stale frames drop
   /** Seqs counted as missed that a late (reordered) arrival can cancel -
    *  unordered lanes reorder constantly; without this every reorder reads
@@ -73,7 +80,7 @@ export class WireIn {
    *  ahead of the roster delta, and a hit dropped here is a MISSING
    *  DAMAGE INSTANCE. Park them until the next 'wireIds' mint resolves
    *  the ids; orphans past the staleness window drop with a warn. */
-  private readonly pendingWidEvents: { at: number; hit?: { shooterWid: number; targetWid: number; damage: number; health: number; armor?: number; seq?: number; shotId?: string; gd?: number }; kill?: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean }; proj?: ReturnType<typeof decodeProjSpawn> }[] = [];
+  private readonly pendingWidEvents: { at: number; hit?: { shooterWid: number; targetWid: number; damage: number; health: number; armor?: number; seq?: number; shotId?: string; gd?: number }; kill?: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean; at?: { x: number; y: number; z: number } }; proj?: ReturnType<typeof decodeProjSpawn> }[] = [];
 
   /** Ring of recent health-affecting events - read by the desync dump so a
    *  hash mismatch says WHICH event diverged, not just that one did. */
@@ -327,7 +334,7 @@ this.handlerThrows += 1;
     const shooterId = k ? this.resolveShooterId(k.shooterWid) : undefined;
     if (k && (!targetId || !shooterId)) {this.pendingWidEvents.push({ at: Date.now(), kill: k }); this.drainPendingWidEvents(); return;}
     if (k && targetId && shooterId) {
-      try { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal }); }
+      try { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal, at: k.at }); }
       catch (error) {this.handlerThrows += 1; logger.warn(`wire-kill failed: ${error instanceof Error ? error.message : String(error)}`);}
     }
   }
@@ -776,7 +783,7 @@ dedupCensus.hitSeqDrops += 1;
     // not mint a stub corpse.
     this.h.patchRemotePlayer(data.targetId, { isDead: true, health: 0 });
     noteVictimDeath(data.targetId);
-    this.h.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air, data.steal);
+    this.h.onPlayerKill?.(data.shooterId, data.targetId, { weapon: data.weapon, air: data.air, steal: data.steal, at: data.at });
   }
 
   /** Retry wid-unresolved binary hits/kills - resolves once the roster
@@ -822,7 +829,7 @@ dedupCensus.hitSeqDrops += 1;
       const targetId = this.wireIds.get(k.targetWid);
       const shooterId = k.shooterWid === 0 ? 'environment' : this.wireIds.get(k.shooterWid);
       if (!targetId || !shooterId) {return null;}
-      return (): void => { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal }); };
+      return (): void => { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal, at: k.at }); };
     }
     const s = p.proj!;
     const ownerId = this.wireIds.get(s.ownerWireId);

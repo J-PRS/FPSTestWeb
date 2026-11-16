@@ -85,7 +85,7 @@ describe('weapon ammo pool', () => {
     }) as typeof room.connections.sendToPlayer;
     const metrics = { recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0,
-      tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsScanned: 0, scanNs: 0, frameNs: 0 } as FanoutMetrics;
+      tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0 } as FanoutMetrics;
     new TickFanout(metrics, () => {}).buildRecords(room, room.players.getAllPlayers(), wallNow());
     const echo = sent.find((m) => m.type === 'yourAmmo') as { ammo: [number, number][] } | undefined;
     expect(echo).toBeDefined();

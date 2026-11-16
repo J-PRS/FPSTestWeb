@@ -15,6 +15,7 @@ import * as sfx from '../core/sfx.js';
 import { parityMiss, parityStamp, expectDamageEcho, kbEchoHorizon, kbStampDeadline, projWireAt } from './parity.js';
 import { ballGhostPos } from '../projectiles/sweep.js';
 import { targetDemoId } from '../demo/types.js';
+import { isBotId } from '../../../shared/botNames.js';
 
 export interface BlastForceHooks {
   onTargetDestroyed(t: Targetable, impulse?: THREE.Vector3, weaponType?: number, shooterId?: string): void;
@@ -236,7 +237,12 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // than their rendered epoch, the f:30 pop:wire refuse class.
     const shooterRp = shooterId ? deps.world.remotePlayers.get(shooterId) : undefined;
     const shooterLagMs = shooterRp?.rewindLocalMs(nmPing) ?? 0;
-    const lagSec = Math.min(0.35, Math.max(0, shooterLagMs > 0 ? shooterLagMs / 1000 : nmPing / 2000 + 0.075));
+    // Bot shooters have no render pipeline - rewindTarget short-
+    // circuits to the victim's live wire pos (the move shadow, ~uplink
+    // behind live), so rewinding by the human-shooter viewLag model
+    // mispredicts every rim blast by ~vel*80ms (the BOT-* kb-echo rows).
+    const lagSec = shooterId !== undefined && isBotId(shooterId) ? nmPing / 2000
+      : Math.min(0.35, Math.max(0, shooterLagMs > 0 ? shooterLagMs / 1000 : nmPing / 2000 + 0.075));
     const evalPos = lagSec > 0 && player.vel ? (_rewound ??= player.pos.clone()).copy(player.pos).addScaledVector(player.vel, -lagSec) : player.pos;
     const dpx = evalPos.distanceTo(pos);
     // Knockback reach = damage reach: the blast ends at aoeRadius, same

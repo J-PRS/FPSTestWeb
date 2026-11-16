@@ -65,6 +65,12 @@ export interface WirePosition {
    *  costs nothing because the next frame carries the same state.
    *  Trailing fields; absent on frames <37 bytes. */
   input?: { forward: number; right: number; jump: number; ski: number; jet: number };
+  /** Drawn-ghost report: the RENDERED position of the remote the crosshair
+   *  is on (wid + xyz). Time-rewind can't express lateral DR drift - a
+   *  ghost beside the wire path has no correct epoch - so the shooter
+   *  sends the view itself; the server plausibility-gates it against the
+   *  rewind window. Trailing 14B; absent on frames <51 bytes. */
+  aim?: { wid: number; x: number; y: number; z: number };
   ping: number;
 }
 
@@ -126,8 +132,8 @@ function unpackRot(d: DataView, o: number, out: WireRot): number {
 
 // ---- C→S position ----
 
-export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: number, ping: number, inputSeq?: number, input?: { forward: number; right: number; jump: number; ski: number; jet: number }): Uint8Array {
-  const buf = new ArrayBuffer(37);
+export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: number, ping: number, inputSeq?: number, input?: { forward: number; right: number; jump: number; ski: number; jet: number }, aim?: { wid: number; x: number; y: number; z: number }): Uint8Array {
+  const buf = new ArrayBuffer(30 + (inputSeq === undefined ? 0 : 4) + (input === undefined ? 0 : 3) + (aim === undefined ? 0 : 14));
   const d = new DataView(buf);
   let o = 0;
   d.setUint8(((o += 1) - 1), MAGIC);
@@ -147,6 +153,14 @@ export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: 
     d.setInt8(((o += 1) - 1), Math.round(input.forward));
     d.setInt8(((o += 1) - 1), Math.round(input.right));
     d.setUint8(((o += 1) - 1), (input.jump ? 1 : 0) | (input.ski ? 2 : 0) | (input.jet ? 4 : 0));
+  }
+  // Drawn-ghost tail: u16 wid + the rendered xyz the shooter sees - 14B,
+  // only while a remote sits under the crosshair cone.
+  if (aim !== undefined) {
+    d.setUint16(o, aim.wid & 0xFF_FF, true); o += 2;
+    d.setFloat32(o, aim.x, true); o += 4;
+    d.setFloat32(o, aim.y, true); o += 4;
+    d.setFloat32(o, aim.z, true); o += 4;
   }
   return new Uint8Array(buf, 0, o);
 }
@@ -173,16 +187,31 @@ export function decodePosition(u8: Uint8Array, into?: WirePosition): WirePositio
   o = unpackVel(d, o, msg.velocity);
   o = unpackRot(d, o, msg.rotation);
   const ping = d.getUint16(o, true); o += 2;
-  msg.inputSeq = u8.length >= 34 ? d.getUint32(o, true) : undefined;
-  o += u8.length >= 34 ? 4 : 0;
-  if (u8.length >= 37) {
-    // The input slot recycles too — a frame shorter than 37 must not
+  // Optional tails in order: inputSeq(4) input(3) aim(14). aim is LAST,
+  // so it anchors the parse from the frame end: the trailing 14 bytes
+  // are the drawn-ghost report whenever what remains before them is a
+  // valid inputSeq/input combo (mid sizes 0/3/4/7). Other lengths fall
+  // through to the historical parse (unknown tails read as mid).
+  const tail = u8.length - 30;
+  const mid = tail - 14 === 0 || tail - 14 === 3 || tail - 14 === 4 || tail - 14 === 7 ? tail - 14 : tail;
+  msg.inputSeq = mid >= 4 ? d.getUint32(o, true) : undefined;
+  o += mid >= 4 ? 4 : 0;
+  if (mid === 3 || mid >= 7) {
+    // The input slot recycles too — a frame without the tail must not
     // inherit a prior message's held bits.
     if (!msg.input) {msg.input = { forward: 0, right: 0, jump: 0, ski: 0, jet: 0 } as NonNullable<WirePosition['input']>;}
     msg.input.forward = d.getInt8(o); msg.input.right = d.getInt8(o + 1);
     msg.input.jump = (d.getUint8(o + 2) & 1) ? 1 : 0; msg.input.ski = (d.getUint8(o + 2) & 2) ? 1 : 0; msg.input.jet = (d.getUint8(o + 2) & 4) ? 1 : 0;
+    o += 3;
   } else {
     msg.input = undefined;
+  }
+  if (tail - mid === 14) {
+    const wid = d.getUint16(o, true);
+    const ax = d.getFloat32(o + 2, true), ay = d.getFloat32(o + 6, true), az = d.getFloat32(o + 10, true);
+    msg.aim = Number.isFinite(ax + ay + az) ? { wid, x: ax, y: ay, z: az } : undefined;
+  } else {
+    msg.aim = undefined;
   }
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz) ||
       !Number.isFinite(msg.velocity.x) || !Number.isFinite(msg.velocity.y) || !Number.isFinite(msg.velocity.z)) {return null;}
@@ -1077,32 +1106,41 @@ export function decodeKnock(u8: Uint8Array): { wid: number; pos: WireVec3; force
 
 /** playerKill — durable journal event: shooter/target wireIds + optional
  *  weapon (0xFF = none), streak u16, air f32, steal bit. */
-export function encodeKill(k: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean }): Uint8Array {
-  const len = 8 + (k.streak === undefined ? 0 : 2) + (k.air === undefined ? 0 : 4);
+export function encodeKill(k: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean; at?: { x: number; y: number; z: number } }): Uint8Array {
+  const len = 8 + (k.streak === undefined ? 0 : 2) + (k.air === undefined ? 0 : 4) + (k.at === undefined ? 0 : 12);
   const { u8, dv } = evScratch(len);
   const b = u8.byteOffset;
   u8[0] = MAGIC; u8[1] = WIRE_KILL;
   dv.setUint16(b + 2, k.shooterWid, true); dv.setUint16(b + 4, k.targetWid, true);
   u8[6] = (k.weapon ?? 0xFF) & 0xFF;
-  u8[7] = (k.streak === undefined ? 0 : 1) | (k.air === undefined ? 0 : 2) | (k.steal ? 4 : 0);
+  u8[7] = (k.streak === undefined ? 0 : 1) | (k.air === undefined ? 0 : 2) | (k.steal ? 4 : 0) | (k.at === undefined ? 0 : 8);
   let o = 8;
   if (k.streak !== undefined) {dv.setUint16(b + o, k.streak, true); o += 2;}
   if (k.air !== undefined) {dv.setFloat32(b + o, k.air, true); o += 4;}
+  if (k.at !== undefined) {
+    dv.setFloat32(b + o, k.at.x, true); dv.setFloat32(b + o + 4, k.at.y, true); dv.setFloat32(b + o + 8, k.at.z, true);
+  }
   return u8.subarray(0, len);
 }
 
-export function decodeKill(u8: Uint8Array): { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean } | null {
+export function decodeKill(u8: Uint8Array): { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean; at?: { x: number; y: number; z: number } } | null {
   if (u8.length < 8 || u8[0] !== MAGIC || u8[1] !== WIRE_KILL) {return null;}
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-  const flags = u8[7]!;
-  const r: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean } = {
+  const [, , , , , , weaponByte = 0xFF, flags = 0] = u8;
+  const r: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean; at?: { x: number; y: number; z: number } } = {
     shooterWid: d.getUint16(2, true), targetWid: d.getUint16(4, true),
   };
-  if (u8[6] !== 0xFF) {r.weapon = u8[6];}
+  if (weaponByte !== 0xFF) {r.weapon = weaponByte;}
   let o = 8;
   if (flags & 1) {if (o + 2 > u8.length) {return null;} r.streak = d.getUint16(o, true); o += 2;}
   if (flags & 2) {if (o + 4 > u8.length) {return null;} const air = d.getFloat32(o, true); if (!Number.isFinite(air)) {return null;} r.air = air; o += 4;}
   if (flags & 4) {r.steal = true;}
+  if (flags & 8) {
+    if (o + 12 > u8.length) {return null;}
+    const at = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) };
+    if (!Number.isFinite(at.x + at.y + at.z)) {return null;}
+    r.at = at;
+  }
   return r;
 }
 

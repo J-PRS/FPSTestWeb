@@ -31,15 +31,17 @@ class Logger {
     // fs, so resolve it through require at construction and stay quiet
     // if it isn't there.
     try {
-      const g = globalThis as { Bun?: unknown; require?: (m: string) => { appendFileSync(p: string, s: string): void; mkdirSync(p: string, o?: { recursive: boolean }): void } };
+      const g = globalThis as { Bun?: unknown };
       if (!g.Bun) {return;}
-      // globalThis.require (not bare `require`) keeps this file valid in
-      // the browser tsconfig that typechecks server modules for P2P embeds.
-      const fs = g.require?.('node:fs');
-      if (!fs) {return;}
-      fs.mkdirSync('logs', { recursive: true });
-      this.logFile = 'logs/server.log';
-      this.append = (line): void => fs.appendFileSync(this.logFile!, `${line  }\n`);
+      // Dynamic import (not require, which Bun ESM lacks) keeps this file
+      // valid in the browser tsconfig that typechecks server modules for
+      // P2P embeds. The sink activates async - the first few warns after
+      // boot are console-only.
+      void import('node:fs').then((fs): void => {
+        fs.mkdirSync('logs', { recursive: true });
+        this.logFile = 'logs/server.log';
+        this.append = (line): void => fs.appendFileSync(this.logFile!, `${line  }\n`);
+      }).catch((): void => { /* console-only */ });
     } catch { /* console-only */ }
   }
 

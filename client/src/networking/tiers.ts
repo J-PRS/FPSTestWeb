@@ -202,6 +202,17 @@ export function benchTier(tier: 'wt' | 'rtc', ms?: number): void {
   missUntil[tier] = Date.now() + dur;
 }
 
+/** Server restarted (new bootId on the fresh gameState): every prior
+ *  disconnect was process death, not a tier verdict - wipe the benches
+ *  or a dev-watch respawn benches WT for minutes at a time. */
+export function unbenchTiers(): void {
+  missUntil.wt = 0;
+  missUntil.rtc = 0;
+  benchStreak.wt = 0;
+  benchStreak.rtc = 0;
+  logger.info('server rebooted - tier benches cleared');
+}
+
 /**
  * WebRTC tier — client side. Opens a signaling WebSocket to the server's
  * rtc endpoint, exchanges SDP/ICE, then runs two lanes: 'game' (unordered,

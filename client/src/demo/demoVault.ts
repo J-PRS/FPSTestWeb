@@ -1,8 +1,8 @@
-// DemoVault — personal clip persistence in IndexedDB (via `idb`, the
+// DemoVault - personal clip persistence in IndexedDB (via `idb`, the
 // 1.2KB promise wrapper). Server upload is the *share* lane; the vault
-// is the *yours* lane — clips survive refresh and upload failures, and
+// is the *yours* lane - clips survive refresh and upload failures, and
 // each is downloadable to a .demo file to send to yourself.
-// FIFO-evict past CAP so clip spam can't grow storage unbounded — IDB
+// FIFO-evict past CAP so clip spam can't grow storage unbounded - IDB
 // quota is per-origin and shared with everything else the page stores.
 
 import { openDB, type IDBPDatabase, type IDBPTransaction } from 'idb';
@@ -13,7 +13,7 @@ const logger = new ChildLogger('DemoVault');
 
 const DB_NAME = 'fps-demos';
 const STORE = 'clips';
-// Meta-only store — list() would otherwise structured-clone ~35MB of
+// Meta-only store - list() would otherwise structured-clone ~35MB of
 // DemoFile payloads through getAll just to render the tile shelf.
 const META_STORE = 'meta';
 const CAP = 300;
@@ -47,7 +47,7 @@ export class DemoVault {
           const store = tx.objectStore(STORE);
           if (!store.indexNames.contains('ts')) {store.createIndex('ts', 'timestamp');}
           if (!db.objectStoreNames.contains(META_STORE)) {
-            // Upgrade stays synchronous — async backfill inside an
+            // Upgrade stays synchronous - async backfill inside an
             // upgrade transaction races its auto-commit. v2 rows get a
             // meta row lazily on the next list() (see drift check there).
             const meta = db.createObjectStore(META_STORE, { keyPath: 'id' });
@@ -71,7 +71,7 @@ export class DemoVault {
       await this.evict(tx);
       await tx.done;
     } catch (error) {
-      // Vault failing must never eat a clip — memory copy is primary.
+      // Vault failing must never eat a clip - memory copy is primary.
       logger.warn('Vault put failed', error);
     }
   }
@@ -90,7 +90,7 @@ export class DemoVault {
     try {
       const db = await this.db();
       // Meta-store drift check: v2 rows predate it (and a failed put could
-      // leave clip-without-meta) — backfill once rather than 413-ing the
+      // leave clip-without-meta) - backfill once rather than 413-ing the
       // shelf permanently.
       const [clipCount, metaCount] = await Promise.all([
         db.count(STORE), db.count(META_STORE),
@@ -105,7 +105,7 @@ export class DemoVault {
     }
   }
 
-  // Serialized-size stats for the vault footer — one pass through
+  // Serialized-size stats for the vault footer - one pass through
   // serialize per clip on panel open; the CAP bounds the cost.
   async stats(): Promise<{ count: number; bytes: number }> {
     try {
@@ -118,7 +118,7 @@ export class DemoVault {
     } catch { return { count: 0, bytes: 0 }; }
   }
 
-  // Every clip as serialized bytes — the ZIP export source.
+  // Every clip as serialized bytes - the ZIP export source.
   async dumpAll(): Promise<{ name: string; data: Uint8Array }[]> {
     try {
       const db = await this.db();
@@ -132,7 +132,7 @@ export class DemoVault {
     } catch { return []; }
   }
 
-  // Rebuild the meta store from the clip rows — only runs when the two
+  // Rebuild the meta store from the clip rows - only runs when the two
   // counts disagree, i.e. on first list() after the v2→v3 upgrade.
   private async backfillMeta(db: IDBPDatabase): Promise<void> {
     try {
@@ -149,7 +149,7 @@ export class DemoVault {
   }
 
   // FIFO: newest survive; oldest go once past CAP. The 'ts' index cursor
-  // deletes by key without deserializing clip payloads — getAll would
+  // deletes by key without deserializing clip payloads - getAll would
   // pull ~35MB of DemoFiles through structured clone on every put.
   // Both stores evict in the same tx so meta can never orphan.
   private async evict(tx: IDBPTransaction<unknown, string[], 'readwrite'>): Promise<void> {

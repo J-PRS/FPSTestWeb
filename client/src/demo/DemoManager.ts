@@ -23,7 +23,7 @@ export type { CoolShotEntry } from './coolShots.js';
 
 const logger = new ChildLogger('Demo');
 
-// Visible armed indicator — the recorder rolls silently in the background
+// Visible armed indicator - the recorder rolls silently in the background
 // (ShadowPlay-style), so without a chip there was no on-screen cue at all.
 // Lives inside #hud-tr so it flows with the HUD's layout regions instead
 // of floating over arbitrary UI.
@@ -54,7 +54,7 @@ export class DemoManager implements demoIO.DemoIOHost {
   private inputData: IInputProvider | null = null;
 
   mode: 'idle' | 'recording' | 'playing' | 'paused' = 'idle';
-  /** demoIO writes through this — the only external writer of mode. */
+  /** demoIO writes through this - the only external writer of mode. */
   setMode(m: 'idle' | 'recording' | 'playing' | 'paused'): void { this.mode = m; }
   uiVisible = false;
   video: VideoRecorder = new VideoRecorder();
@@ -74,7 +74,7 @@ export class DemoManager implements demoIO.DemoIOHost {
   set coolShotMp4(on: boolean) {
     this.autoMp4 = on;
     localStorage.setItem('kribes.autorecord.mp4', on ? '1' : '0');
-    // The mp4 lane has no buffer unless the canvas capture is rolling —
+    // The mp4 lane has no buffer unless the canvas capture is rolling -
     // arming here means the toggle alone is enough, no F9 detour.
     if (on && !this.video.isRecording && VideoRecorder.isSupported()) {this.startVideoCapture();}
   }
@@ -83,7 +83,7 @@ export class DemoManager implements demoIO.DemoIOHost {
   onCoolShotsChanged?: (shots: CoolShotEntry[]) => void;
 
   // Interpolated remote-player poses + fresh remote frames each playback
-  // frame — demoLifecycle turns them into RemotePlayer replicas.
+  // frame - demoLifecycle turns them into RemotePlayer replicas.
   onRemotePlayback?: (states: InterpolatedRemote[], dt: number) => void;
 
   // Callbacks for the game to render replay state
@@ -94,15 +94,15 @@ export class DemoManager implements demoIO.DemoIOHost {
   onPlaybackSeek?: () => void;
   onPlaybackStart?: () => void;
 
-  /** Off-rAF render hook (gameLoop.renderFrame) — the offline clip
+  /** Off-rAF render hook (gameLoop.renderFrame) - the offline clip
    *  renderer calls it once per authored output frame. */
   renderNow?: (dt: number) => void;
 
-  /** True while renderClip owns the demo clock — gates every wall-dt
+  /** True while renderClip owns the demo clock - gates every wall-dt
    *  path that would otherwise double-advance playback state (replica
    *  ticks in update(), projectile/beam integration in the game loop). */
   offlineRender = false;
-  /** Stepped playback-world tick (projectiles + beams) — demoLifecycle
+  /** Stepped playback-world tick (projectiles + beams) - demoLifecycle
    *  assigns updatePlaybackProjectiles so the render loop advances them
    *  at demo rate instead of wall rate. */
   onPlaybackTick?: (dt: number) => void;
@@ -123,22 +123,22 @@ export class DemoManager implements demoIO.DemoIOHost {
     });
     this.coolShotMgr.onChanged = (shots): void | undefined => this.onCoolShotsChanged?.(shots);
     this.coolShotMgr.onLocalChanged = (shots): void | undefined => this.onLocalShotsChanged?.(shots);
-    // IDB vault rehydrate — fire-and-forget; entries land via onChanged.
+    // IDB vault rehydrate - fire-and-forget; entries land via onChanged.
     this.coolShotMgr.loadVault();
 
-    // Stamped into every clip — wrong-map playback is the classic demo bug
+    // Stamped into every clip - wrong-map playback is the classic demo bug
     this.recorder.setContext({
       room: urlParams.room ?? 'default',
       mode: urlParams.mode ?? 'offline',
     });
 
     // Render-tool entry point (tools/demorender drives seek+capture through
-    // this handle — the DOM only exposes coarse ±2s keys otherwise).
+    // this handle - the DOM only exposes coarse ±2s keys otherwise).
     window.__demoManager = this;
 
     buildDemoUI(this);
 
-    // Alt+Q — F9 lane state: path/frames/ring/encFailed, plus where
+    // Alt+Q - F9 lane state: path/frames/ring/encFailed, plus where
     // saves would land. No-op cost when not recording.
     registerDiag('rec', (): { rec: Record<string, unknown> } => ({
       rec: { ...this.video.diag, saveDir: clipSink.clipsDirName() },
@@ -152,7 +152,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.inputData = inputData;
   }
 
-  // Who we're playing as / which room — recorded into the file header
+  // Who we're playing as / which room - recorded into the file header
   setContext(ctx: Partial<DemoContext>): void {
     this.recorder.setContext(ctx);
   }
@@ -167,7 +167,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.setTargetSnapshotSource(source);
   }
 
-  // Roster of the loaded demo — replica creation needs the names
+  // Roster of the loaded demo - replica creation needs the names
   getRoster(): string[] {
     return this.player.roster.map((r): string => r.name);
   }
@@ -192,7 +192,7 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   // One-click video export: records the render canvas live (captureStream +
   // MediaRecorder), downloads mp4/webm when stopped. The render canvas is the
-  // largest canvas in the DOM — found lazily so no main.ts wiring is needed.
+  // largest canvas in the DOM - found lazily so no main.ts wiring is needed.
   toggleVideoRecord(): void {
     if (!VideoRecorder.isSupported()) { this.ui.setStatus('no video capture'); return; }
     if (this.video.isRecording) {
@@ -204,7 +204,7 @@ export class DemoManager implements demoIO.DemoIOHost {
         const name = `kribes_${ctx}_${demoIO.timestampStr()}.${ext}`;
         const ok = blob ? await clipSink.saveClip(name, blob) : false;
         if (ok && this.pendingExportShotId) {
-          // Deliberate export — the vault row alone is invisible: link it
+          // Deliberate export - the vault row alone is invisible: link it
           // onto the shot (Download MP4 badge) and download the file too.
           const shot = this.coolShotMgr.list.find((s): boolean => s.id === this.pendingExportShotId);
           if (shot) {shot.mp4Name = name;}
@@ -239,9 +239,9 @@ export class DemoManager implements demoIO.DemoIOHost {
   }
 
   /** Cool-shot auto-mp4: the rolling video buffer already holds the clip
-   *  window, so the mp4 materializes the moment the demo clip extracts —
+   *  window, so the mp4 materializes the moment the demo clip extracts -
    *  no replay pass needed. Clip bounds are demo-recorder seconds, mapped
-   *  to the video's wall clock through the recorder's wallMarks anchors —
+   *  to the video's wall clock through the recorder's wallMarks anchors -
    *  elapsedTime drifts from real time under throttle, so a plain
    *  `now - duration` base slides the window forward by the drift. */
   private async videoAutoClip(clipStart: number, clipEnd: number, lifetime: number): Promise<string | null> {
@@ -258,12 +258,12 @@ export class DemoManager implements demoIO.DemoIOHost {
     return name;
   }
 
-  /** Armed by exportCoolShotMp4, consumed by playDemoData — the recorder
+  /** Armed by exportCoolShotMp4, consumed by playDemoData - the recorder
    *  starts only when the clip actually begins playing, so a server-
    *  fetched clip doesn't record its own loading gap. 0 = disarmed; the
    *  30s staleness window drops an arm whose fetch never resolves. */
   private videoExportArmedAt = 0;
-  /** The cool-shot id an EXPORT MP4 is recording for — consumed when the
+  /** The cool-shot id an EXPORT MP4 is recording for - consumed when the
    *  capture stops: stamps mp4Name (the shot gains a Download MP4 entry)
    *  and anchor-downloads the file so a deliberate export lands visibly. */
   private pendingExportShotId: string | null = null;
@@ -271,7 +271,7 @@ export class DemoManager implements demoIO.DemoIOHost {
   /** Cool-shot context-menu "EXPORT MP4": plays the clip with the canvas
    *  recorder armed; onPlaybackEnd stops+downloads. The recorder blits
    *  into a staged 1920×1080 canvas, so the export is fixed 16:9 at any
-   *  window size — no forced fullscreen, the replay plays windowed. */
+   *  window size - no forced fullscreen, the replay plays windowed. */
   exportCoolShotMp4(id: string): void {
     if (!VideoRecorder.isSupported()) { this.ui.setStatus('no video capture'); return; }
     if (this.video.isRecording) { this.ui.setStatus('video already rolling'); return; }
@@ -281,17 +281,17 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.coolShotMgr.playById(id);
   }
 
-  /** Clip end is the export's stop signal — the armed recorder must
+  /** Clip end is the export's stop signal - the armed recorder must
    *  stop+download here or it rolls forever and nothing lands. */
   finishExportIfArmed(): void {
     if (this.pendingExportShotId && this.video.isRecording) {this.toggleVideoRecord();}
   }
 
-  /** Cool-shot context-menu "RENDER MP4": offline stepped render — scrubs
+  /** Cool-shot context-menu "RENDER MP4": offline stepped render - scrubs
    *  the demo at fixed 1/60 steps and encodes authored-timestamp frames,
    *  so the mp4 is frame-perfect at any machine speed and usually done
    *  faster than the clip's wall duration. The realtime capture path
-   *  (EXPORT MP4) stays for comparison. shortcut: video-only — playback
+   *  (EXPORT MP4) stays for comparison. shortcut: video-only - playback
    *  SFX still fires live during the render but doesn't land in the
    *  file; upgrade path is an OfflineAudioContext pass. */
   async exportCoolShotMp4Rendered(id: string): Promise<void> {
@@ -330,7 +330,7 @@ export class DemoManager implements demoIO.DemoIOHost {
       snapRemotes: (dt): void => { this.onRemotePlayback?.(this.player.getRemoteStates(), dt); },
       tickFx: (dt): void => { this.onPlaybackTick?.(dt); },
       armSeek: (): void => { this.onPlaybackSeek?.(); },
-      // ESC/stopPlayback flips mode to 'idle' — bail rather than write
+      // ESC/stopPlayback flips mode to 'idle' - bail rather than write
       // an mp4 of an empty scene.
       abort: (): boolean => this.mode !== 'playing',
       start: 0,
@@ -338,9 +338,9 @@ export class DemoManager implements demoIO.DemoIOHost {
       fps: 60,
     }).finally((): void => { this.video.suspended = false; this.offlineRender = false; });
 
-    // Park at the end like a finished realtime playback — ESC/stop from
+    // Park at the end like a finished realtime playback - ESC/stop from
     // here walks the normal cleanup path. If the user already stopped,
-    // mode is 'idle' — leave it.
+    // mode is 'idle' - leave it.
     if (this.mode === 'playing') {this.mode = 'paused';}
     this.ui.setPlaying(false);
     if (!blob) { this.ui.setStatus('render failed'); return; }
@@ -378,7 +378,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.mode = 'recording';
     this.ui.setRecording(true);
     this.ui.setStatus('REC');
-    logger.debug('Recording started — cool shots will be auto-clipped');
+    logger.debug('Recording started - cool shots will be auto-clipped');
   }
 
   stopRecording(): void {
@@ -401,14 +401,14 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.onPlaybackStop?.();
   }
 
-  // Toggle play/pause — the UI button and the keyboard shortcut share this
+  // Toggle play/pause - the UI button and the keyboard shortcut share this
   togglePlayPause(): void {
     if (this.mode === 'playing') {
       this.player.pause();
       this.mode = 'paused';
       this.ui.setPlaying(false);
     } else if (this.mode === 'paused' || this.player.isLoaded) {
-      // A clip parked via finishLoad starts here, bypassing playDemoData —
+      // A clip parked via finishLoad starts here, bypassing playDemoData -
       // without this the world never enters playbackMode and the live wire
       // fights the replay.
       if (this.mode === 'idle') {this.onPlaybackStart?.();}
@@ -465,7 +465,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     return this.coolShotMgr.downloadById(id);
   }
 
-  // Load a demo into the player and immediately start playback — the shared
+  // Load a demo into the player and immediately start playback - the shared
   // tail of playCoolShot and playFromServer.
   private playDemoData(data: DemoFile): void {
     // Loading while recording used to orphan the recorder (mode flips to
@@ -480,7 +480,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.mode = 'playing';
     this.player.play();
     this.ui.setPlaying(true);
-    // The feed supplies its own chrome — the transport bar would double it.
+    // The feed supplies its own chrome - the transport bar would double it.
     if (!feedMode.on) {
       this.ui.show();
       this.uiVisible = true;
@@ -520,14 +520,14 @@ export class DemoManager implements demoIO.DemoIOHost {
   // Called every game frame
   update(dt: number): void {
     if (this.mode === 'recording') {
-      // v5 HMAP trailer — capture the live field lazily once it exists:
+      // v5 HMAP trailer - capture the live field lazily once it exists:
       // recording starts at boot before the room's map finishes loading.
       if (!this.recorder.heightmap) {this.recorder.setHeightmap(getHeightfield());}
       this.recorder.update(dt);
       this.coolShotMgr.tick();
     } else if (this.mode === 'playing') {
       this.player.update(dt);
-      // Offline render drives replica pose+anim from the stepper —
+      // Offline render drives replica pose+anim from the stepper -
       // a wall-dt feed here would run anims at render speed, not demo rate.
       if (!this.offlineRender) {this.onRemotePlayback?.(this.player.getRemoteStates(), dt);}
       // onTimeUpdate callback handles ui.setTime during playback
@@ -554,7 +554,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordDestroyed(projectileId, position);
   }
 
-  /** Other players' shells — recorded so MP demos aren't an empty
+  /** Other players' shells - recorded so MP demos aren't an empty
    *  firefight. serverId is the wire projectile id (string). */
   recordRemoteProjectileFired(serverId: string, position: Vec3, velocity: Vec3, weaponType: number, ownerId?: string): void {
     this.recorder.recordRemoteFired(serverId, position, velocity, weaponType, ownerId);
@@ -568,7 +568,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordRemoteDestroyed(serverId, position);
   }
 
-  /** Creature lifecycle — netId is the server creature id; the demo
+  /** Creature lifecycle - netId is the server creature id; the demo
    *  target space namespaces it so it can't alias a ball's id. */
   recordCreatureSpawned(netId: number, species: string, position: Vec3): void {
     this.recorder.recordCreatureSpawned(netId, species, position);
@@ -586,7 +586,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordCreatureDie(netId, position);
   }
 
-  /** Deployable lifecycle — turrets/mines/stations/drones/shields/beacons
+  /** Deployable lifecycle - turrets/mines/stations/drones/shields/beacons
    *  and base assets ride the deploy lane of targetEvents. */
   recordDeploySpawned(netId: number, kind: string, position: Vec3): void {
     this.recorder.recordDeploySpawned(netId, kind, position);
@@ -608,7 +608,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordDeployBoom(netId, position);
   }
 
-  /** Game-state edges — kill markers, flag state, pickup lifecycle. */
+  /** Game-state edges - kill markers, flag state, pickup lifecycle. */
   recordKill(shooterId: string | null, targetId: string, weapon: number, position: Vec3): void {
     this.recorder.recordKill(shooterId, targetId, weapon, position);
   }
@@ -621,7 +621,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordFlagUpdate(team, state, position, carrier);
   }
 
-  /** Map look spec — captured when the map applies; serialized as the
+  /** Map look spec - captured when the map applies; serialized as the
    *  SECTION_ATMO trailer so playback replays the recorded sky/haze. */
   recordAtmo(atmo: { fog?: unknown; weather?: unknown; atmosphere?: unknown; terrain?: unknown; terrainTex?: unknown; terrainPreset?: unknown; heightScale?: unknown; tileSize?: unknown; sky?: unknown }): void {
     this.recorder.atmo = atmo;

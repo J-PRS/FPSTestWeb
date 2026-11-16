@@ -477,7 +477,12 @@ export class MoveJudge {
    *  noise floor and stay INFO for later review. */
   private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number, severeM: number, credit?: Record<string, number>): void {
 sh.divergences += 1;
-    this.noteHealth(dist);
+    // Health buckets mirror the log gate: impulse-window skew is the
+    // journal-blind transient the severe counter already excuses, and
+    // sub-1.5x-tolerance clips are the crest-lip noise floor - both get
+    // their own counts so the headline diverge number reads as real
+    // gaps only. gapMax records only the real class.
+    this.noteHealth(dist, wallNow() - sh.lastImpulseAt < 2000, dist < tol * 1.5);
     // The severe counter gets the same grace the log line does: inside
     // the impulse window the journal can't reproduce the shove (see
     // anchoredCompare's own comment), so a >severeM gap is unverifiable
@@ -521,11 +526,12 @@ sh.divergences += 1;
     });
   }
 
-  private noteHealth(dist: number): void {
+  private noteHealth(dist: number, impWindow: boolean, marginal: boolean): void {
     const h = this.host.health();
     if (!h) {return;}
-    h.set('diverge', (h.get('diverge') ?? 0) + 1);
-    if (dist > (h.get('gapMax') ?? 0)) {h.set('gapMax', Math.round(dist * 10) / 10);}
+    const key = impWindow ? 'diverge.kb' : marginal ? 'diverge.marginal' : 'diverge';
+    h.set(key, (h.get(key) ?? 0) + 1);
+    if (!impWindow && !marginal && dist > (h.get('gapMax') ?? 0)) {h.set('gapMax', Math.round(dist * 10) / 10);}
   }
 
   /** Rolling severe-blow counter — N overshoots inside the window flags

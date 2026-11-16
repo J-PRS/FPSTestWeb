@@ -219,11 +219,33 @@ lastFoldCount += 1;
     return lines;
   }
 
+  /** Bunch log lines that repeat to `line ×N` at the first occurrence -
+   *  keyed on the message text (timestamp + a console-tap `(×N)` suffix
+   *  stripped), so identical warnings spammed at different times still
+   *  collapse. First-seen line text is kept verbatim, timestamp and all;
+   *  the count carries how often it actually fired. */
+  function bunchLogs(lines: string[]): string[] {
+    const out: string[] = [];
+    const seen = new Map<string, { idx: number; n: number }>();
+    for (const l of lines) {
+      const key = l.replace(/^\d{4}-\d{2}-\d{2}T\S+ +/, '').replace(/ \(×\d+\)$/, '');
+      const s = seen.get(key);
+      if (s) {
+        s.n += 1;
+        out[s.idx] = `${out[s.idx]!.replace(/ ×\d+$/, '')} ×${s.n}`;
+      } else {
+        seen.set(key, { idx: out.length, n: 1 });
+        out.push(l);
+      }
+    }
+    return out;
+  }
+
   /**
    * Export logs as a downloadable file
    */
   export function exportLogs(): void {
-    const logContent = [...buildHeader(), ...logBuffer].join('\n');
+    const logContent = [...buildHeader(), ...bunchLogs(logBuffer)].join('\n');
     const blob = new Blob([logContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -247,7 +269,7 @@ lastFoldCount += 1;
    * Keydown counts as a user gesture so navigator.clipboard is allowed.
    */
   export async function copyLogs(count = 300, verbose = false): Promise<number> {
-    const lines = [...buildHeader(verbose), ...logBuffer.slice(-count)].join('\n');
+    const lines = [...buildHeader(verbose), ...bunchLogs(logBuffer.slice(-count))].join('\n');
     try {
       await navigator.clipboard.writeText(lines);
       return logBuffer.slice(-count).length;
@@ -286,7 +308,7 @@ lastFoldCount += 1;
   // endpoint resolves (or stays in the local buffer if it never does).
   let errorHooksInstalled = false;
   export function installErrorHooks(): void {
-    if (errorHooksInstalled) {return;}
+    if (errorHooksInstalled || typeof window === 'undefined') {return;}
     errorHooksInstalled = true;
     window.addEventListener('error', (e): void => {
       error(`UNCAUGHT ${e.message}`, { file: e.filename, line: e.lineno, stack: (e.error as Error)?.stack });

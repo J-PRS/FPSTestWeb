@@ -5,7 +5,7 @@
  * Joining a room first tries an in-place hop - the server's switchRoom
  * re-seats the live session and answers with a fresh gameState the normal
  * reconnect path rebuilds from. Offline/degraded clients fall back to the
- * /s/NAME reload — the path is the shareable link either way.
+ * /s/NAME reload - the path is the shareable link either way.
  */
 
 import { buildLobbyPanel , type LobbyPanelEls } from './lobbyPanel.js';
@@ -21,37 +21,37 @@ const modesOf = (m: { modes: string[]; mode?: string }): string[] => {
 export interface RoomRow {
   name: string;
   mode?: string;
-  /** Spec map the room is playing — set server-side, follows rotation. */
+  /** Spec map the room is playing - set server-side, follows rotation. */
   map?: string;
   players: number;
   maxPlayers: number;
-  /** Seated humans (rest are bots) — the browser shows humans/max. */
+  /** Seated humans (rest are bots) - the browser shows humans/max. */
   humans?: number;
   /** Team-mode live score. */
   scores?: { alpha: number; bravo: number };
   /** FFA-mode live leader [id, pts]. */
   ffaLeader?: [string, number];
   winAt?: number;
-  /** ms until the match clock's horn — omitted while unarmed. */
+  /** ms until the match clock's horn - omitted while unarmed. */
   timeLeftMs?: number;
 }
 
 export interface MapRow {
   name: string;
-  /** The map's default ruleset — used when MODE is left on ANY. */
+  /** The map's default ruleset - used when MODE is left on ANY. */
   mode: string;
   /** Modes the map can legally host (map = geometry, mode = ruleset). */
   modes: string[];
   bots: number;
-  /** Tribes 2 port — badged in the picker so ports read as ports. */
+  /** Tribes 2 port - badged in the picker so ports read as ports. */
   t2?: boolean;
-  /** Tribes 1 port — same ported family, own badge. */
+  /** Tribes 1 port - same ported family, own badge. */
   t1?: boolean;
-  /** Quake-family port (OACMP/Xonotic .map conversions) — own badge. */
+  /** Quake-family port (OACMP/Xonotic .map conversions) - own badge. */
   q3?: boolean;
 }
 
-/** Any ported map (Tribes or Quake) — procedural modes want native specs. */
+/** Any ported map (Tribes or Quake) - procedural modes want native specs. */
 const isPort = (m: MapRow): boolean => Boolean(m.t2 || m.t1 || m.q3);
 const mapFamOf = (m: MapRow): 't2' | 'q3' | 'custom' => {
   if (m.t2 || m.t1) {return 't2';}
@@ -66,34 +66,34 @@ const mapBadge = (m: MapRow): string => {
 export interface LobbyDeps {
   /** GETs {name, mode?, players, maxPlayers}[]; throws when offline. */
   listRooms(): Promise<RoomRow[]>;
-  /** GET /maps — playable map list for the match-setup picker. */
+  /** GET /maps - playable map list for the match-setup picker. */
   listMaps(): Promise<MapRow[]>;
-  /** GET /join?mode&map&bots — server picks the emptiest live match
+  /** GET /join?mode&map&bots - server picks the emptiest live match
    *  fitting the request (or spins a fresh room from the map spec). */
   quickJoin(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): Promise<{ room: string }>;
-  /** In-place room hop over the live socket — false when there's no
+  /** In-place room hop over the live socket - false when there's no
    *  connection (caller reloads instead). map/bots/mode are creation
    *  hints for a room that doesn't exist yet. */
   switchRoom?(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): boolean;
-  /** /maps/thumbs/<name>.png — pre-rendered vantage shot for the MAP
+  /** /maps/thumbs/<name>.png - pre-rendered vantage shot for the MAP
    *  picker preview. Absent → no preview panel. */
   mapThumbUrl?(name: string): string;
-  /** GET /rtc/lobbies — public P2P hosts still waiting for a peer.
+  /** GET /rtc/lobbies - public P2P hosts still waiting for a peer.
    *  Absent → P2P tab hides the open-lobby list. */
   listP2pLobbies?(): Promise<{ room: string; since: number }[]>;
-  /** Live socket check — without it a solo-offline boot reads as "in
+  /** Live socket check - without it a solo-offline boot reads as "in
    *  the default room" and the join path dead-ends (row disabled,
    *  early return). Absent → assume online (legacy behavior). */
   isConnected?(): boolean;
   /** Resolved backend name ('PUB (play.jprice.app)', 'LOCAL (…:8000)', …)
-   *  — stamped next to the saved-host field so "blank = local" can't
+   *  - stamped next to the saved-host field so "blank = local" can't
    *  hide which box the room list and joins actually come from. */
   serverLabel?: string;
 }
 
 const POLL_MS = 3000;
 
-// Styling lives in ui/chrome.css (.lb-* classes) — this module only
+// Styling lives in ui/chrome.css (.lb-* classes) - this module only
 // builds structure and wires behavior.
 
 export class Lobby {
@@ -106,11 +106,11 @@ export class Lobby {
   private els: LobbyPanelEls;
   private maps: MapRow[] = [];
   private mapsFailed = false;
-  // MAP picker family filter — [T2]/[T1]/[Q3] badges mark ports;
+  // MAP picker family filter - [T2]/[T1]/[Q3] badges mark ports;
   // 'custom' is our own spec. All on = the full list.
   private mapFam = { t2: true, q3: true, custom: true };
   private timer: ReturnType<typeof setInterval> | null = null;
-  /** SOLO tab's pickers — same fill rules as HOST's, bound from the
+  /** SOLO tab's pickers - same fill rules as HOST's, bound from the
    *  panel builder once it exists. */
   private soloSels: { mode: HTMLSelectElement; map: HTMLSelectElement } | null = null;
 
@@ -118,7 +118,7 @@ export class Lobby {
     return urlParams.room ?? 'default';
   }
 
-  /** True membership vs the ?room fallback — a solo boot has room==null
+  /** True membership vs the ?room fallback - a solo boot has room==null
    *  and no socket, so it is in NO room, not the default one. */
   private online(): boolean {
     return this.deps.isConnected?.() ?? true;
@@ -126,7 +126,7 @@ export class Lobby {
 
   constructor(deps: LobbyDeps) {
     this.deps = deps;
-    // Panel DOM lives in lobbyPanel.ts — structure + wiring, .lb-* styling.
+    // Panel DOM lives in lobbyPanel.ts - structure + wiring, .lb-* styling.
     const els = buildLobbyPanel(this);
     this.panel = els.panel;
     this.rows = els.rows;
@@ -136,7 +136,7 @@ export class Lobby {
     this.els = els;
   }
 
-  /** Populate the mode + map pickers once per open — cheap, menu is
+  /** Populate the mode + map pickers once per open - cheap, menu is
    *  user-paced. Mode select lists the union of every map's legal modes. */
   private async refreshMaps(): Promise<void> {
     try {
@@ -144,22 +144,22 @@ export class Lobby {
       this.mapsFailed = false;
     } catch {
       this.maps = [];
-      // Rooms poll shows "server offline" on the same failure — an empty
+      // Rooms poll shows "server offline" on the same failure - an empty
       // map picker with only "server default" hid the identical problem.
       this.mapsFailed = true;
-      Logger.warn('lobby: listMaps failed — map picker degraded');
+      Logger.warn('lobby: listMaps failed - map picker degraded');
     }
     // Mode order is a curated popularity ramp (team staples first, niche
-    // FFA last), not alphabetical — a mode picker is a recommendation.
+    // FFA last), not alphabetical - a mode picker is a recommendation.
     const MODE_ORDER = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel'];
     const modes = [...new Set(this.maps.flatMap(modesOf))]
       .toSorted((a, b) => (MODE_ORDER.indexOf(a) + 1 || 99) - (MODE_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
     this.fillModeSel(this.modeSelect, modes, 'ANY');
     if (this.soloSels) {
-      // Solo modes: the same legal set plus the no-map rulesets —
+      // Solo modes: the same legal set plus the no-map rulesets -
       // '' is free roam (no TeamBots), flagrun/classic host no spec.
       // Trailing position: it's a real pick, not a "no filter" default.
-      // Extras own their values — a spec that also declares 'flagrun'
+      // Extras own their values - a spec that also declares 'flagrun'
       // would mint a duplicate option, so keep them out of the catalog
       // pass and let the labeled extra be the single entry.
       const extras = [['flagrun', 'FLAG RUN'], ['classic', 'BALLS']] as const;
@@ -167,19 +167,19 @@ export class Lobby {
       this.fillModeSel(this.soloSels.mode, modes.filter((m): boolean => !extraVals.has(m)), 'FREE ROAM', false);
       for (const [extra, label] of extras) {
         const o = document.createElement('option');
-        // 'classic' boots the original bounce-and-shoot sandbox — BALLS
+        // 'classic' boots the original bounce-and-shoot sandbox - BALLS
         // names what you actually do; "classic" is only its dev codename.
         o.value = extra; o.textContent = label;
         this.soloSels.mode.append(o);
       }
-      // FREE ROAM dead last — sandbox entries sit at the tail of the ramp.
+      // FREE ROAM dead last - sandbox entries sit at the tail of the ramp.
       const fr = this.soloSels.mode.querySelector('option[value=""]');
       if (fr) {this.soloSels.mode.append(fr);}
     }
     this.fillMapSelect();
   }
 
-  /** Mode options into one select — HOST and SOLO share the list. The
+  /** Mode options into one select - HOST and SOLO share the list. The
    *  '' option leads on HOST ("ANY" = no filter) but trails on SOLO
    *  ("FREE ROAM" is a mode among peers, not a default). */
   private fillModeSel(sel: HTMLSelectElement, modes: string[], firstLabel: string, leading = true): void {
@@ -202,7 +202,7 @@ export class Lobby {
     this.soloSels = { mode: modeSel, map: mapSel };
     modeSel.addEventListener('change', (): void => this.fillMapSel(this.soloSels!));
     mapSel.addEventListener('change', (): void => {
-      // A map pick with no mode chosen adopts the spec's own ruleset —
+      // A map pick with no mode chosen adopts the spec's own ruleset -
       // the label already advertises it ("BASTION · CTF · 8 bots").
       const m = this.maps.find((x): boolean => x.name === mapSel.value);
       if (m?.mode && modeSel.value === '') {
@@ -215,7 +215,7 @@ export class Lobby {
     if (this.maps.length > 0 || this.mapsFailed) {this.refreshMaps();}
   }
 
-  /** Refill MAP for the chosen MODE — a map only shows the modes it
+  /** Refill MAP for the chosen MODE - a map only shows the modes it
    *  declares, so the list shrinks to the legal arenas. */
   fillMapSelect(): void {
     this.fillMapSel({ mode: this.modeSelect, map: this.mapSelect });
@@ -225,7 +225,7 @@ export class Lobby {
   private fillMapSel(sels: { mode: HTMLSelectElement; map: HTMLSelectElement }): void {
     const mode = sels.mode.value;
     const mapSelect = sels.map;
-    // Remember the pick — a mode swap refills the list and the user's map
+    // Remember the pick - a mode swap refills the list and the user's map
     // survives if it's still legal under the new mode.
     const keep = mapSelect.value;
     mapSelect.textContent = '';
@@ -237,7 +237,7 @@ export class Lobby {
       return;
     }
     // Modes no spec declares (flagrun circuit, classic sandbox) aren't
-    // map rulesets at all — the mode stamps its own layout onto bare
+    // map rulesets at all - the mode stamps its own layout onto bare
     // terrain. Restrict those to our own spec maps: an 800m circuit
     // square wants a real core heightmap, not a T2 port's bounds.
     const catalogModes = new Set(this.maps.flatMap(modesOf));
@@ -258,7 +258,7 @@ export class Lobby {
       const o = document.createElement('option');
       o.value = m.name;
       o.dataset.mode = mode || m.mode;
-      // No ruleset tag on the name — maps are mode-agnostic geometry; a
+      // No ruleset tag on the name - maps are mode-agnostic geometry; a
       // bare name with ANY picked still boots the map's default mode via
       // dataset.mode, the mode row owns the override.
       o.textContent = `${mapBadge(m)}${m.name.toUpperCase()}`;
@@ -271,7 +271,7 @@ export class Lobby {
     return this.mapFam[kind];
   }
 
-  // Favorite rooms persist across sessions — a server browser without a
+  // Favorite rooms persist across sessions - a server browser without a
   // fav column is only half a browser.
   private favSet(): Set<string> {
     try { return new Set(JSON.parse(settings.get('fps-fav-rooms') || '[]') as string[]); }
@@ -287,7 +287,7 @@ export class Lobby {
     this.refresh();
   }
 
-  /** Manual repoll — the ↻ button in the JOIN tab header. */
+  /** Manual repoll - the ↻ button in the JOIN tab header. */
   refresh(): void {
     this.refreshRooms();
     this.els.refreshLobs();
@@ -314,19 +314,19 @@ export class Lobby {
     }
   }
 
-  /** Live room tiles, keyed by room name — refresh diffs in place so a
+  /** Live room tiles, keyed by room name - refresh diffs in place so a
    *  score/player-count tick updates the meta span instead of destroying
    *  and re-creating every tile (the flicker the rebuild caused). */
   private rowEls = new Map<string, { row: HTMLButtonElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement }>();
-  /** Column header — minted once per poll batch, sits above the tiles. */
+  /** Column header - minted once per poll batch, sits above the tiles. */
   private head: HTMLDivElement | null = null;
-  /** Last /rooms RTT — the single-server ping every row shares. */
+  /** Last /rooms RTT - the single-server ping every row shares. */
   private lastPing = '';
 
   private async refreshRooms(): Promise<void> {
     // oxlint-disable-next-line init-declarations -- assigned later
     let rooms!: RoomRow[];
-    // RTT of the /rooms fetch itself = the server ping — green/amber/red.
+    // RTT of the /rooms fetch itself = the server ping - green/amber/red.
     const t0 = performance.now();
     try {
       rooms = await this.deps.listRooms();
@@ -342,7 +342,7 @@ export class Lobby {
       return;
     }
     // The room you're IN tops the list (green tile replaces the old
-    // IN: banner row) — then default lobby, favorites, alphabetical.
+    // IN: banner row) - then default lobby, favorites, alphabetical.
     const favs = this.favSet();
     const curName = this.currentRoom();
     const rank = (r: RoomRow): -1 | 0 | 1 | 2 => {
@@ -378,7 +378,7 @@ export class Lobby {
     if (rooms.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = '— no matches — host one from the HOST tab';
+      empty.textContent = '- no matches - host one from the HOST tab';
       this.rows.append(empty);
     }
   }
@@ -390,7 +390,7 @@ export class Lobby {
     return s;
   }
 
-  /** Build a room tile once — static structure only: star | server | mode
+  /** Build a room tile once - static structure only: star | server | mode
    *  | map | players | ping, the servers.html column set. updateRow owns
    *  every field that churns. */
   private makeRow(r: RoomRow): { row: HTMLButtonElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement } {
@@ -412,7 +412,7 @@ export class Lobby {
     return { row, mode, map, occ, ping };
   }
 
-  /** Per-poll refresh of the churning bits — state classes, fav glyph,
+  /** Per-poll refresh of the churning bits - state classes, fav glyph,
    *  mode chip, map, occupancy (+score/target/clock), ping. */
   private updateRow(tile: { row: HTMLButtonElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement }, r: RoomRow): void {
     const full = r.players >= r.maxPlayers;
@@ -421,7 +421,7 @@ export class Lobby {
     tile.row.classList.toggle('current', current);
     tile.row.classList.toggle('full', full);
     tile.mode.textContent = r.mode ? (Lobby.MODE_SHORT[r.mode] ?? r.mode.toUpperCase()) : '';
-    tile.map.textContent = r.map ?? '—';
+    tile.map.textContent = r.map ?? '-';
     tile.occ.textContent = '';
     this.rowMeta(tile.occ, r);
     tile.ping.textContent = this.lastPing;
@@ -431,7 +431,7 @@ export class Lobby {
     headhunt: 'HH', conquest: 'CONQ', infestation: 'INF', deathball: 'DB', rabbit: 'RBT', teamrabbit: 'TRBT',
   };
 
-  /** Occupancy cell — the servers.html read: humans/max (bots). Match
+  /** Occupancy cell - the servers.html read: humans/max (bots). Match
    *  internals (score/target/clock) live in the room, not the browser. */
   private rowMeta(meta: HTMLElement, r: RoomRow): void {
     const mk = Lobby.metaSpan;
@@ -441,14 +441,14 @@ export class Lobby {
   }
 
   join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean, instagib?: boolean, gungame?: boolean, igun?: boolean): void {
-    // Already there — a reload would boot us into the same seat anyway.
+    // Already there - a reload would boot us into the same seat anyway.
     // Offline solo has no room, so 'default' is a real join target.
     if (name === this.currentRoom() && this.online()) {return;}
     // Room identity is the path: /s/<name>. Creation hints (map/bots/mode)
     // ride fps-join-spec so the reload path can mint a disposed room with
-    // its spec intact — the URL stays shareable-clean. The sim gates are
+    // its spec intact - the URL stays shareable-clean. The sim gates are
     // already persisted fps-* settings; a duel session is mutually
-    // exclusive with a server room — drop it here.
+    // exclusive with a server room - drop it here.
     settings.set('fps-p2p', '');
     settings.set('fps-lobby', 0);
     settings.set('fps-solo', 0);
@@ -463,7 +463,7 @@ export class Lobby {
     const q = new URLSearchParams(window.location.search);
     for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs', 'instagib', 'gungame', 'igun']) {q.delete(k);}
     const href = `/s/${encodeURIComponent(name)}${q.size > 0 ? `?${q}` : ''}`;
-    // Live socket: hop in place — the gameState rebuild does the rest.
+    // Live socket: hop in place - the gameState rebuild does the rest.
     if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls, instagib, gungame, igun)) {
       history.replaceState(null, '', href);
       return;

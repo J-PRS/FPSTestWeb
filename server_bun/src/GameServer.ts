@@ -324,8 +324,10 @@ export class GameServer {
         // Name the socket's age - a ~ms close means the join raced off
         // generation (client-side churn), a real 15s close means the join
         // never arrived. The tunnel session proved these are indistinguishable
-        // in the log otherwise.
-        logger.info('join timeout close', { ageMs: Date.now() - ws.data.connectedAt });
+        // in the log otherwise. warn: this recurs ~16s on live WT churn and
+        // the file sink only captures warn+, so the mystery stays invisible
+        // at info.
+        logger.warn('join timeout close', { ageMs: Date.now() - ws.data.connectedAt, remote: ws.data.clientIp ?? ws.remoteAddress });
         ws.close(1000, 'join timeout');
       }
     }, CONFIG.joinTimeoutMs).unref?.();

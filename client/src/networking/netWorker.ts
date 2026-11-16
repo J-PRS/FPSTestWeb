@@ -16,7 +16,7 @@
 
 import type { ConnectionConfig } from './WebSocketConnection.js';
 import type { GameTransport } from './transport.js';
-import { TieredTransport } from './tiers.js';
+import { TieredTransport, unbenchTiers } from './tiers.js';
 import { setNetLogSink, type NetLogLevel } from './netLog.js';
 import type { ServerMessage } from '../../../shared/protocol.js';
 
@@ -76,6 +76,7 @@ setNetLogSink((level, name, msg, ctx): void => {
 
 let inner: GameTransport | null = null;
 let opts: { net?: string } = {};
+let lastBootId: number | undefined;
 let connected = false;
 // True once main has forwarded its first send (always 'join') — the
 // worker's own ping must never race it: QUIC lanes are unordered across
@@ -150,6 +151,15 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
     onDisconnect: (code, reason): void => { connected = false; post({ kind: 'down', code, reason }); },
     onError: (e): void => post({ kind: 'err', msg: e.message }),
     onMessage: (m): void => {
+      // Server process identity: a bootId different from the last
+      // gameState's means the last disconnect was a restart - benches
+      // earned from that death are void (dev-watch respawn benched WT
+      // for minutes every file save).
+      const gs = m as { type?: string; bootId?: number };
+      if (gs.type === 'gameState' && typeof gs.bootId === 'number') {
+        if (lastBootId !== undefined && gs.bootId !== lastBootId) {unbenchTiers();}
+        lastBootId = gs.bootId;
+      }
       // Inbound 'pong' is only ever a reply to a client 'ping' — ours.
       // Consume it here: main feeds its telemetry from the rtt event
       // instead of re-measuring stamp→receipt (which would fold the

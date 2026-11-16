@@ -46,16 +46,16 @@ interface PendingClip {
 export interface CoolShotDeps {
   recorder(): DemoRecorder;
   isRecording(): boolean;
-  // Playback + UI side effects live in DemoManager — clips only request them
+  // Playback + UI side effects live in DemoManager - clips only request them
   setStatus(status: string): void;
   playDemoData(data: DemoFile): void;
   downloadDemoFile(data: DemoFile, filename: string): void;
   timestampStr(): string;
   /** Same clip window (demo-recorder seconds) cut from the rolling video
-   *  buffer — wired only while the canvas recorder is on. Returns the
+   *  buffer - wired only while the canvas recorder is on. Returns the
    *  saved mp4's clip name so the entry can badge/menu-download it. */
   videoClip?(clipStart: number, clipEnd: number, lifetime: number): Promise<string | null>;
-  /** False when the cool-shot demo toggle is off — the pending clip still
+  /** False when the cool-shot demo toggle is off - the pending clip still
    *  extracts so the mp4 lane can cut, but no .demo entry is minted. */
   demoEnabled?(): boolean;
 }
@@ -68,16 +68,16 @@ export class CoolShotManager {
   private prefetched = new Map<string, DemoFile>();
   private vaultLoaded = false;
   // Play-race guard: vault.get is async, so rapid tile clicks resolve
-  // out of order — last-click must win, not last-resolve.
+  // out of order - last-click must win, not last-resolve.
   private playSeq = 0;
   coolShots: CoolShotEntry[] = [];
-  /** Server-hosted extracted clips (demos/shots/**) — stream recordings
+  /** Server-hosted extracted clips (demos/shots/**) - stream recordings
    *  cut by _tools/shots.ts. Separate list: they're the recorder's POV,
    *  not the local player's own highlight lane. */
   localShots: CoolShotEntry[] = [];
   serverUrl = '';
   uploadFailureCount = 0;
-  /** Consecutive /demos fetch failures + backoff — a server without the
+  /** Consecutive /demos fetch failures + backoff - a server without the
    *  endpoint (dev box, CORS) must not warn-spam every poll. */
   fetchFailureCount = 0;
   fetchRetryAt = 0;
@@ -105,7 +105,7 @@ export class CoolShotManager {
     }
   }
 
-  // Recording stops mid-wait — extract now with whatever buffer exists
+  // Recording stops mid-wait - extract now with whatever buffer exists
   flushPending(): void {
     if (this.pendingClips.length === 0) {return;}
     const pending = this.pendingClips;
@@ -133,7 +133,7 @@ export class CoolShotManager {
         pending.extractAt = actualHitTime + bufferAfter;
         pending.chainCount = (pending.chainCount ?? 1) + 1;
         pending.bestLifetime = Math.max(pending.bestLifetime ?? pending.projectileLifetime, projectileLifetime);
-        // Meta follows the best hit — the tile credits the shot that earned it
+        // Meta follows the best hit - the tile credits the shot that earned it
         if (projectileLifetime >= pending.bestLifetime) {
           pending.weapon = meta?.weapon;
           pending.distance = meta?.distance;
@@ -142,7 +142,7 @@ export class CoolShotManager {
         const totalDur = pending.clipEnd - pending.clipStart;
         pending.description = `Combo x${pending.chainCount} (best ${pending.bestLifetime.toFixed(2)}s air, ${totalDur.toFixed(1)}s clip)`;
         pending.feed?.extend(bufferAfter);
-        logger.debug(`[CoolShot] Chain x${pending.chainCount}! Extending clip to ${totalDur.toFixed(1)}s — extracting in ${bufferAfter}s...`);
+        logger.debug(`[CoolShot] Chain x${pending.chainCount}! Extending clip to ${totalDur.toFixed(1)}s - extracting in ${bufferAfter}s...`);
         return;
       }
     }
@@ -167,7 +167,7 @@ export class CoolShotManager {
       distance: meta?.distance,
       score: meta?.score,
     });
-    logger.debug(`[CoolShot] Clip scheduled: ${desc} — extracting in ${bufferAfter}s...`);
+    logger.debug(`[CoolShot] Clip scheduled: ${desc} - extracting in ${bufferAfter}s...`);
   }
 
   // Called every frame while recording
@@ -189,7 +189,7 @@ export class CoolShotManager {
       logger.warn('Auto-clip: not enough buffer for this clip');
       return;
     }
-    // Only after the demo clip exists — an orphan mp4 with no demo entry
+    // Only after the demo clip exists - an orphan mp4 with no demo entry
     // is unwatchable vault litter.
     const mp4Name = await this.deps.videoClip?.(pending.clipStart, pending.clipEnd, pending.bestLifetime) ?? null;
 
@@ -215,17 +215,17 @@ export class CoolShotManager {
         // A fetchFromServer that ran before this upload resolved already
         // merged the server-side copy under the server filename (the
         // local entry still carried its minted name, so dedup missed
-        // it) — the same clip would render twice in the panel.
+        // it) - the same clip would render twice in the panel.
         this.coolShots = this.coolShots.filter((s): boolean => s === entry || s.filename !== serverFilename);
         this.onChanged?.(this.coolShots);
       }
     return; }).catch((error): void => {
-      // Upload failing must not eat the local copy — it stays downloadable.
+      // Upload failing must not eat the local copy - it stays downloadable.
       logger.warn('Clip upload failed', error);
     });
     this.coolShots.push(entry);
     this.trimList();
-    // Vault is the durable copy — memory clipData frees after upload,
+    // Vault is the durable copy - memory clipData frees after upload,
     // vault keeps the clip downloadable/playbackable across sessions.
     this.vault.put({ id: entry.id, timestamp: entry.timestamp, description: entry.description, projectileLifetime: entry.projectileLifetime, weapon: entry.weapon, distance: entry.distance, score: entry.score, mp4Name: entry.mp4Name, data: clipData });
     this.onChanged?.(this.coolShots);
@@ -238,7 +238,7 @@ export class CoolShotManager {
 
   // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
   trimList(): void {
-    // toSorted returns a copy — it used to be discarded, so "top by
+    // toSorted returns a copy - it used to be discarded, so "top by
     // lifetime" quietly kept insertion order instead.
     const topIds = new Set([...this.coolShots].toSorted((a, b): number => (b.score ?? b.projectileLifetime) - (a.score ?? a.projectileLifetime)).slice(0, 10).map(s => s.id));
     const recentIds = new Set([...this.coolShots].toSorted((a, b): number => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
@@ -246,7 +246,7 @@ export class CoolShotManager {
   }
 
   // Rehydrate the list from the vault: entries restored across
-  // sessions carry no clipData — play/download pulls it back lazily.
+  // sessions carry no clipData - play/download pulls it back lazily.
   /** Vault footer stats + zip export (panel's VAULT row). */
   vaultStats(): Promise<{ count: number; bytes: number }> { return this.vault.stats(); }
   vaultDump(): Promise<{ name: string; data: Uint8Array }[]> { return this.vault.dumpAll(); }
@@ -300,7 +300,7 @@ export class CoolShotManager {
   }
 
   /** Feed pre-buffer: warm a server clip into memory; playAt consumes it.
-   *  Skips that never play leave the entry behind, so the map is capped —
+   *  Skips that never play leave the entry behind, so the map is capped -
    *  the feed only ever needs the neighbor clips warm. */
   private static readonly PREFETCH_CAP = 4;
   async prefetchClip(filename: string): Promise<void> {
@@ -314,7 +314,7 @@ export class CoolShotManager {
     }
   }
 
-  /** Resolve an entry to its DemoFile without playing it — memory →
+  /** Resolve an entry to its DemoFile without playing it - memory →
    *  vault → prefetch cache → network. The clip feed mounts neighbors
    *  through this so a swipe's incoming frame is real, not a blank slide. */
   async resolveClipData(entry: CoolShotEntry): Promise<DemoFile | null> {
@@ -361,7 +361,7 @@ export class CoolShotManager {
   async fetchFromServer(): Promise<void> { return net.fetchFromServer(this); }
   async fetchLocal(): Promise<void> { return net.fetchLocal(this); }
 
-  /** Local-list entries play through the same resolve path — their
+  /** Local-list entries play through the same resolve path - their
    *  filename is a shots/<group>/<file> server path, fetched on demand. */
   async playLocalById(id: string): Promise<void> {
     const entry = this.localShots.find((s): boolean => s.id === id);

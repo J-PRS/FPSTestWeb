@@ -40,7 +40,9 @@ const GRANDFATHERED: Record<string, number> = {
   'client/src/game/gameLoop.ts': 1123, // ditto
   // Pinned after the alarm tripped (ROADMAP next-list: burn down the
   // ichor/corpse FX block + cluster bomblets into their own modules).
-  'client/src/game/combat/impact.ts': 1145,
+  // Re-pinned at 1319 after the predicted-contact-FX + in-flight work —
+  // the burn-down note above still stands; +15% alarms.
+  'client/src/game/combat/impact.ts': 1319,
   // Crossed via the botMpc capper-drive WIP (6fbf15b7) — pinned at its
   // breached size; still alarms if it grows another 15%.
   'server_bun/src/botRouting.ts': 1011,
@@ -108,6 +110,9 @@ const GRANDFATHERED: Record<string, number> = {
   // files crossed by the loaded-shell variant plumbing, pinned at size.
   'shared/worldModel.ts': 903,
   'client/src/projectiles/Projectile.ts': 902,
+  // Crossed via the drawn-ghost/bootId wire batch — the message
+  // dispatcher legitimately aggregates handlers like its pinned siblings.
+  'server_bun/src/MessageHandler.ts': 906,
 };
 
 function* walk(dir: string): Generator<string> {

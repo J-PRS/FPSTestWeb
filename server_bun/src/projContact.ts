@@ -7,6 +7,7 @@ import { hmHeight } from '../../shared/heightfield.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
+import { wallNow } from './wallClock.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import { renderLagOf, renderLagOfTarget, renderLagBoundOf, REWIND_MS } from './rewind.ts';
 import { logger } from './logger.ts';
@@ -85,7 +86,7 @@ function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof 
 /** Player sweep — a cheap midpoint-sphere reject (server |vel|·dt bound
  *  plus teleport slack) skips anyone who cannot displace into reach this
  *  tick before the per-candidate segment solve runs. */
-function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined): boolean {
+function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number }; aimGhost?: { id: string; x: number; y: number; z: number; at: number } } | null | undefined): boolean {
     const {p} = proj;
     const midX = (from.x + p.pos.x) / 2, midY = (from.y + p.pos.y) / 2, midZ = (from.z + p.pos.z) / 2;
     const halfLen = dhypot3(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
@@ -105,7 +106,23 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       const back = ghostBack(r, owner, proj.ownerId, pid);
       const tp = rewindPos(target, back, r.field);
       const cap = classCapsule(target.armorClass);
-      const pc = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
+      // Drawn-ghost override: the shooter reported the RENDERED spot of
+      // this remote (position.aim tail). Lateral DR drift lives at no
+      // rewind epoch - a ghost beside the wire path can't be expressed
+      // as a time - so when a fresh report names this target, test the
+      // capsule where the shooter's screen put it. Reachability gate:
+      // the drawn spot must sit within drift slack of the rewind window
+      // (or live pos - an ahead-of-wire ghost is renderable too), so a
+      // forged claim can't score bodies the wire never visited.
+      const g = owner?.aimGhost;
+      let gx = tp.x, gy = tp.y, gz = tp.z, ghostDrawn = false;
+      if (g !== undefined && g.id === pid && wallNow() - g.at < 300) {
+        const slack = 6 + speed * (back + 250) / 1000;
+        const dR = dhypot3(g.x - tp.x, g.y - tp.y, g.z - tp.z);
+        const dL = dhypot3(g.x - target.position.x, g.y - target.position.y, g.z - target.position.z);
+        if (dR <= slack || dL <= slack) { gx = g.x; gy = g.y; gz = g.z; ghostDrawn = true; }
+      }
+      const pc = { x: gx, y: gy + cap.centerOff, z: gz };
       const pd = segCapsuleDist(from, p.pos, pc.x, pc.y - cap.half, pc.y + cap.half, pc.z);
       // Wake is a target-side promise: grounded players only take true
       // body contact - the graze envelope (reach above bodyRadius)
@@ -126,8 +143,9 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
         }
         // Ghost-forensics: how far behind live truth the credited ghost
         // sat — a large delta is the "hit landed where nobody stood" feel.
-        const gd = dhypot3(tp.x - target.position.x, tp.y - target.position.y, tp.z - target.position.z);
-        if (gd > 1.5) {logger.info('ghost hit', { shooter: proj.ownerId, victim: pid, deltaM: Number(gd.toFixed(1)), backMs: back, wt: proj.weaponType });}
+        const gd = dhypot3(gx - target.position.x, gy - target.position.y, gz - target.position.z);
+        if (gd > 1.5) {logger.info('ghost hit', { shooter: proj.ownerId, victim: pid, deltaM: Number(gd.toFixed(1)), backMs: back, drawn: ghostDrawn ? 1 : 0, wt: proj.weaponType });}
+        if (ghostDrawn) {r.room.health?.set('ghostDrawn', (r.room.health?.get('ghostDrawn') ?? 0) + 1);}
         // Wake contact counts as a hit but earns no airtime ramp — the
         // skillshot bonus is body-contact only, like the claim path.
         if (stats.stick) { r.attach(proj, Object.assign({}, p.pos), pid); return true; }
@@ -285,8 +303,22 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
     const margin = reach + range / 2 + 0.6;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) {continue;}
-      const tp = rewindPos(target, ghostBack(r, owner, proj.ownerId, pid), r.field);
-      const center = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
+      const back = ghostBack(r, owner, proj.ownerId, pid);
+      const tp = rewindPos(target, back, r.field);
+      // Drawn-ghost override, same gate as bodySweep - a beam that hit
+      // the rendered body must not miss because the ghost drifted
+      // sideways off the wire path.
+      const g = owner?.aimGhost;
+      let cx = tp.x, cy = tp.y, cz = tp.z;
+      if (g !== undefined && g.id === pid && wallNow() - g.at < 300) {
+        const spd = dhypot3(target.velocity.x, target.velocity.y, target.velocity.z);
+        const slack = 6 + spd * (back + 250) / 1000;
+        if (dhypot3(g.x - tp.x, g.y - tp.y, g.z - tp.z) <= slack
+            || dhypot3(g.x - target.position.x, g.y - target.position.y, g.z - target.position.z) <= slack) {
+          cx = g.x; cy = g.y; cz = g.z;
+        }
+      }
+      const center = { x: cx, y: cy + classCapsule(target.armorClass).centerOff, z: cz };
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
       const t = segPointT(p.pos, end, center);

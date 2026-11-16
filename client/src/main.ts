@@ -861,6 +861,10 @@ async function init(): Promise<void> {
   watchDeployVersion({ whenIdle: (): boolean =>
     world.matchEndsAt !== null && world.matchEndsAt <= Date.now() });
   networkManager = new NetworkManager();
+  // Stamp the recorder's identity into every clip header — the field has
+  // existed since v3 but nothing ever wrote it, so uploaded shots were
+  // anonymous in the shared vault.
+  demoManager?.setContext({ playerName: networkManager.getLocalPlayerId() });
   // Deploy admission gate - every join/reconnect (initial dial, stall
   // retries) first checks version.txt; a new build reloads BEFORE this
   // client is admitted, so stale tabs migrate at their natural join

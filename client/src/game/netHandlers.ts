@@ -1,4 +1,4 @@
-// Server message wiring — assembles the shared NetCtx and hands it to the
+// Server message wiring - assembles the shared NetCtx and hands it to the
 // per-domain modules under ./net/. Each wire event lives in its domain file;
 // this orchestrator only owns the cross-domain pieces (chat, lobby, pickup
 // mesh factory feeding both pickups.ts and the join path in world.ts).
@@ -49,7 +49,7 @@ export interface NetDeps {
   lazyHealthBarSystem(): HealthBarSystem;
   lazyDamageNumbers(): DamageNumberManager;
   lazyCamera(): THREE.Camera;
-  /** Optional until initDemo runs — net handlers record through it when
+  /** Optional until initDemo runs - net handlers record through it when
    *  present so remote shots/creatures land in the rolling buffer. */
   lazyDemoManager?(): DemoManager | null;
   fragMessages: FragMessages;
@@ -59,10 +59,10 @@ export interface NetDeps {
   setLastSentPos(pos: { x: number; y: number; z: number }): void;
   entities: () => ReturnType<typeof createEntities>;
   /** Offline-vs-bots roster lives client-side; a real room claiming the
-   *  match (gameState with a room name) retires it — otherwise ghosts the
+   *  match (gameState with a room name) retires it - otherwise ghosts the
    *  server never heard of stand next to wire bots as unkillable decoys. */
   retireOfflineBots?(): void;
-  /** The local player's chat/VGS — offline rooms never see the wire, so
+  /** The local player's chat/VGS - offline rooms never see the wire, so
    *  the bots need this to hear "gg" or a team command at all. */
   hearLocalChat?(text: string, team: boolean, vgs?: string): void;
 }
@@ -72,18 +72,18 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   const nm = (): NetworkManager => deps.lazyNetworkManager();
   const networkManager = deps.lazyNetworkManager();
 
-  // Chat is self-contained (own DOM + key routing) — net wiring is just
+  // Chat is self-contained (own DOM + key routing) - net wiring is just
   // where network↔game glue already lives.
   const chat = new Chat({
     send: (text, team): void => { networkManager.sendChat(text, team); deps.hearLocalChat?.(text, team); },
     isConnected: (): boolean => networkManager.isConnected(),
     localName: (): string => networkManager.getLocalPlayerId(),
-    // The roster is remote-only — the local id resolves through the
+    // The roster is remote-only - the local id resolves through the
     // chosen nick from settings instead (same name we sent on join).
     nameFor: (id): string => id === networkManager.getLocalPlayerId()
       ? (settings.get('fps-name').trim() || id)
       : displayName(id, networkManager.getPlayers()),
-    // /mute typed a display name — find the id it belongs to. Names are
+    // /mute typed a display name - find the id it belongs to. Names are
     // non-unique, so an ambiguous hit just mutes the first match (the
     // id itself always works).
     idFor: (name): string | undefined => {
@@ -94,15 +94,15 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       return undefined;
     },
   });
-  // VGS lines arrive flagged with their chord — the feed prints
+  // VGS lines arrive flagged with their chord - the feed prints
   // "[VGS] SHAZBOT!" (keypaths learnable from chat) and speaks through
   // the robot. Speech/formatting live inside chat.add so wire, host
   // relay, and offline echo paths all behave identically.
   networkManager.onChat = (playerId, text, team, vgsChord, muted): void => {
     chat.add(playerId, text, team, vgsChord, muted);
   };
-  // V rides the same chat wire — tactical lines team-scoped, emotes global.
-  // Self-contained like Chat — its key routing lives on window.
+  // V rides the same chat wire - tactical lines team-scoped, emotes global.
+  // Self-contained like Chat - its key routing lives on window.
   const _vgs = new Vgs({
     send: (text, team, chord): void => { networkManager.sendChat(text, team, chord); deps.hearLocalChat?.(text, team, chord); },
     echo: (text, team, chord): void => chat.echoSelf(text, team, chord),
@@ -124,7 +124,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   };
 
   // Order matters: pickups defines ctx.addPickup which world.ts's gameState
-  // handler consumes at runtime (not at wire time — safe either way).
+  // handler consumes at runtime (not at wire time - safe either way).
   wireMatchEvents(ctx);
   wireFlags(ctx);
   wireNodes(ctx);
@@ -135,15 +135,15 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   wireWorld(ctx);
   wireResync(ctx);
 
-  // Lobby browser — corner button lists the server's live rooms; joining
+  // Lobby browser - corner button lists the server's live rooms; joining
   // reloads onto /s/NAME (membership is fixed at connect time).
   resolveServerEndpoints().then(({ httpUrl, lobbyUrl, fleet }): Lobby => new Lobby({
     // The listing backend (matchmaker when fleet, worker otherwise) is
-    // also where /join + quickJoin dial — name THAT so the stamp can't
+    // also where /join + quickJoin dial - name THAT so the stamp can't
     // promise a different box than the buttons reach.
     serverLabel: serverLabel(lobbyUrl ?? httpUrl),
     listRooms: async (): Promise<RoomRow[]> => {
-      // Fleet: the matchmaker aggregates every worker's /rooms — a
+      // Fleet: the matchmaker aggregates every worker's /rooms - a
       // worker-local fetch would hide the rest of the fleet.
       const res = await fetch(`${lobbyUrl ?? httpUrl}/rooms`);
       if (!res.ok) {throw new Error(`rooms ${res.status}`);}
@@ -158,7 +158,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       const q = new URLSearchParams({ mode });
       if (map) {q.set('map', map);}
       if (bots !== undefined) {q.set('bots', String(bots));}
-      // The join mints the room — gates must ride HERE or the room
+      // The join mints the room - gates must ride HERE or the room
       // exists before the flag can ever reach it.
       if (noCreatures) {q.set('nocreatures', '1');}
       if (noBalls) {q.set('noballs', '1');}
@@ -166,13 +166,13 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       if (gungame) {q.set('gungame', '1');}
       if (igun) {q.set('igun', '1');}
       // Fleet: the matchmaker's /join picks the emptiest room FLEET-wide
-      // and pins its placement — a worker-local quickJoin would only see
+      // and pins its placement - a worker-local quickJoin would only see
       // that worker's rooms.
       const res = await fetch(`${lobbyUrl ?? httpUrl}/join?${q}`);
       if (!res.ok) {throw new Error(`join ${res.status}`);}
       return res.json() as Promise<{ room: string }>;
     },
-    // Fleet: an in-place switchRoom hops within THIS worker only — a room
+    // Fleet: an in-place switchRoom hops within THIS worker only - a room
     // living on another process would silently mint a duplicate here.
     // Returning undefined takes the ?room= reload path, which re-resolves
     // through the matchmaker and lands on the owning worker.
@@ -186,7 +186,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       return res.json() as Promise<{ room: string; since: number }[]>;
     },
   })).catch((error): void => {
-    // Endpoint resolution failing leaves no lobby button — log it so a
+    // Endpoint resolution failing leaves no lobby button - log it so a
     // dead /rooms host doesn't read as a missing feature.
     logger.warn('Lobby browser unavailable', error);
   });

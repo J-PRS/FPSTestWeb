@@ -40,7 +40,7 @@ export class CoolShotsPanel {
     this.demoManager.onCoolShotsChanged = (shots): void => this.renderCoolShots(shots);
     this.demoManager.onLocalShotsChanged = (shots): void => this.renderLocalShots(shots);
 
-    // Autorecord toggles — state lives in DemoManager (localStorage),
+    // Autorecord toggles - state lives in DemoManager (localStorage),
     // the buttons only mirror it.
     bind('cs-toggle-demo', (): boolean => this.demoManager.coolShotDemo, (v): void => { this.demoManager.coolShotDemo = v; });
     bind('cs-toggle-mp4', (): boolean => this.demoManager.coolShotMp4, (v): void => { this.demoManager.coolShotMp4 = v; });
@@ -61,12 +61,12 @@ export class CoolShotsPanel {
     // opens - mirror the real state, don't default to REC.
     this.refreshVaultFoot();
     document.getElementById('cs-vault-zip')?.addEventListener('click', (): void => { void this.exportVault(); });
-    // MP4 autosave folder — click re-picks (inside the gesture); the
+    // MP4 autosave folder - click re-picks (inside the gesture); the
     // label shows the armed folder name or 'not set' (vault fallback).
     document.getElementById('cs-save-dir')?.addEventListener('click', (): void => {
       void pickClipsDir().then((r): void => {
         const b = document.getElementById('cs-save-dir');
-        // Flash the reason instead of a no-op — 'cancelled' usually means
+        // Flash the reason instead of a no-op - 'cancelled' usually means
         // the picker died without focus (overlay/lock), 'unsupported' is
         // a browser without showDirectoryPicker.
         if (b && r !== 'armed') {
@@ -84,7 +84,7 @@ export class CoolShotsPanel {
     syncRec();
     setInterval(syncRec, 1000);
     
-    // Refresh "time ago" labels every second — but only while the panel
+    // Refresh "time ago" labels every second - but only while the panel
     // is actually up: a closed overlay re-render is a 1Hz DOM rebuild
     // nobody sees. Same skip for a backgrounded tab.
     setInterval((): void => {
@@ -95,7 +95,7 @@ export class CoolShotsPanel {
     }, 1000);
   }
 
-  // Vault footer — count + total .demo bytes (pre-zip; zip size can't be
+  // Vault footer - count + total .demo bytes (pre-zip; zip size can't be
   // known until deflate runs, so we show the raw total honestly).
   private refreshVaultFoot(): void {
     const el = document.getElementById('cs-vault-stats');
@@ -144,7 +144,7 @@ export class CoolShotsPanel {
     const item = document.createElement('div');
     const isRecent = Date.now() - shot.timestamp < 60_000;
     item.className = isRecent ? 'cool-shot-item recent' : 'cool-shot-item';
-    // Tile: weapon + shot→hit distance + air time — the brag stats.
+    // Tile: weapon + shot→hit distance + air time - the brag stats.
     // meta is optional (server/vault-restored entries may lack it).
     const dist = shot.distance == null ? '' : `${shot.distance.toFixed(0)}m`;
     // The column ellipsizes past ~18 chars; a long weapon name would eat the
@@ -154,7 +154,7 @@ export class CoolShotsPanel {
       weapon = weapon.split(/\s+/).map((w): string => w[0]).join('');
     }
     const meta = [weapon, dist].filter(Boolean).join(' · ');
-    // Server-merged entries carry uploader-supplied strings (weapon) —
+    // Server-merged entries carry uploader-supplied strings (weapon) -
     // textContent keeps a crafted name inert.
     const span = (cls: string, text: string): void => {
       const s = document.createElement('span');
@@ -163,7 +163,7 @@ export class CoolShotsPanel {
       item.append(s);
     };
     if (onPick) {
-      // Extracted clips: two-line tile — the description IS the headline
+      // Extracted clips: two-line tile - the description IS the headline
       // (weapon + air + victim), stats demote to the foot row.
       item.classList.add('local');
       const head = document.createElement('div');
@@ -240,7 +240,7 @@ export class CoolShotsPanel {
     this.menu = null;
   }
 
-  /** Right-click menu plumbing — callers fill it via act(); appended to
+  /** Right-click menu plumbing - callers fill it via act(); appended to
    *  the overlay so it dies with the overlay's own display:none, and
    *  dismissed by any outside click, Escape, or the next list re-render
    *  (the panel repaints every second for time-ago labels). */
@@ -260,7 +260,7 @@ export class CoolShotsPanel {
     };
     fill(act);
     this.overlay.append(menu);
-    // Clamp into the viewport — anchored top-left of the cursor, flips up/
+    // Clamp into the viewport - anchored top-left of the cursor, flips up/
     // left when it would overflow an edge.
     const mw = menu.offsetWidth, mh = menu.offsetHeight;
     menu.style.left = `${Math.max(0, Math.min(x, innerWidth - mw - 4))}px`;
@@ -291,9 +291,9 @@ export class CoolShotsPanel {
     act('Download .demo', (): void => {
       this.demoManager.downloadCoolShotById(shot.id);
     });
-    // Server-hosted clips get a /clips/<file> deep link — the feed route
+    // Server-hosted clips get a /clips/<file> deep link - the feed route
     // lands on this exact clip (and unfurls via the server's OG shell).
-    // Local-only entries (no filename) can't be linked — nothing on the
+    // Local-only entries (no filename) can't be linked - nothing on the
     // server points at them.
     if (shot.filename) {
       act('Copy share link', (): void => {
@@ -340,7 +340,7 @@ export class CoolShotsPanel {
     });
   }
 
-  /** F9/manual mp4s in the IDB clip vault — the write-only bucket F9
+  /** F9/manual mp4s in the IDB clip vault - the write-only bucket F9
    *  saves fell into when no save folder was armed. Click plays in a
    *  new tab; right-click gives Download/Delete. */
   private async renderVaultClips(): Promise<void> {
@@ -385,7 +385,7 @@ export class CoolShotsPanel {
   }
 
   private renderCoolShots(shots: CoolShotEntry[]): void {
-    // The 1s time-ago repaint must NOT close the context menu — item
+    // The 1s time-ago repaint must NOT close the context menu - item
     // nodes are rebuilt but the menu's actions captured the entry.
     this.lastCoolShots = shots;
     this.refreshVaultFoot();
@@ -416,7 +416,7 @@ export class CoolShotsPanel {
     recent10.forEach((shot, i): void => this.renderShotItem(this.coolShotsRecent, shot, i + 1));
   }
 
-  /** Extracted-clip library (demos/shots/**) — stream-recording cuts, so
+  /** Extracted-clip library (demos/shots/**) - stream-recording cuts, so
    *  the tile shows the shooter's POV description, not your own stats.
    *  Sorted by airtime; rank is display-only. */
   private renderLocalShots(shots: CoolShotEntry[]): void {

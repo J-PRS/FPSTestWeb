@@ -114,7 +114,7 @@ const CODECS: Codec[] = [
   },
   {
     name: 'kill',
-    frame: encodeKill({ shooterWid: 3, targetWid: 9, weapon: 5, streak: 2, air: 1.2, steal: true }),
+    frame: encodeKill({ shooterWid: 3, targetWid: 9, weapon: 5, streak: 2, air: 1.2, steal: true, at: { x: 1.5, y: 2.5, z: -3.5 } }),
     decode: decodeKill,
   },
   {

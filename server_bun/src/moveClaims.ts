@@ -37,6 +37,8 @@ export interface MoveHost {
   /** Wire-invisible cloak: position-bearing relays must not leak to
    *  non-teammates while this holds (same predicate as tickRecords). */
   cloakHidden?(playerId: string): boolean;
+  /** Drawn-ghost reports carry a u16 wireId - resolves back to a seat. */
+  idOfWid?(wid: number): string | undefined;
 }
 
 export class MoveClaims {
@@ -87,6 +89,16 @@ export class MoveClaims {
     // inputMove events the client had consumed when it took this snapshot.
     // msg.ping is the client's own RTT measure riding this frame — the
     // judge credits it as link-transit staleness (see moveJudge).
+    // Drawn-ghost report: the shooter's rendered position of the remote
+    // under its crosshair. Unknown/self wids drop; stale reports age
+    // out at read time in projContact.
+    if (msg.aim !== undefined) {
+      const aimId = this.h.idOfWid?.(msg.aim.wid);
+      if (aimId !== undefined && aimId !== playerId) {
+        player.aimGhost = { id: aimId, x: msg.aim.x, y: msg.aim.y, z: msg.aim.z, at: now };
+      }
+    }
+
     const simTruth = this.h.moveReport(playerId, msg.position, msg.rotation.yaw, msg.velocity, msg.inputSeq, msg.ping);
 
     if (this.h.moveAuthority()) {

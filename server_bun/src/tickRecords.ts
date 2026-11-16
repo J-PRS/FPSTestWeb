@@ -51,7 +51,7 @@ interface RcpCtx {
 
 /** Derived per-candidate values emitEval consumes -- evalRecord fills
  *  the shared scratch (evg) so the hot path allocates nothing. */
-interface EvalGeom { dSq: number; dx: number; dz: number; mem: number | undefined; spd: number; }
+interface EvalGeom { dSq: number; dx: number; dz: number; mem: number | undefined; spd: number; aimed: boolean; }
 
 /** The ensured lastSent snapshot -- Room.lastSentPositions' value type. */
 type SentSnap = NonNullable<ReturnType<Room['lastSentPositions']['get']>>;
@@ -156,6 +156,9 @@ export interface FanoutMetrics {
   /** Records dropped by the K-nearest per-recipient cap -- egress bound,
    *  not loss: the culled ghosts are the farthest by definition. */
   recordsCapped: number;
+  /** Far records promoted to full-variant cadence because they sat in
+   *  the recipient's aim cone -- the WYSIWYG send-tier escape hatch. */
+  recordsAimPromoted: number;
   /** Candidate records distance-tested per tick across all recipients
    *  (near-circle + every-tick list) -- the O(N^2) term the spatial
    *  index bounds. recordsScanned / recipients ≈ candidates/seat. */
@@ -254,7 +257,7 @@ export class TickFanout {
     recCap: 0, tScan: 0n,
   };
   /** evalRecord's derived values for emitEval -- one reused object. */
-  private readonly evg: EvalGeom = { dSq: 0, dx: 0, dz: 0, mem: undefined, spd: 0 };
+  private readonly evg: EvalGeom = { dSq: 0, dx: 0, dz: 0, mem: undefined, spd: 0, aimed: false };
   /** Engagement cell size + span: recipients gather cells whose CENTER
    *  sits inside ~950m (covers the 600m outer tier x 1.15 hysteresis
    *  plus a cell's half-diagonal). A box span was too fat on a 2km
@@ -284,6 +287,13 @@ export class TickFanout {
    *  record budget so encode+egress drop on exactly the links that
    *  can't keep up. */
   private static readonly STRAIN_RECORDS = 16;
+  /** Aim-promotion: a far target inside the recipient's aim cone emits
+   *  every 2nd tick with the FULL record instead of the 8-tick sparse
+   *  speck. Distance-tiered DR is cheap by design, but the one remote a
+   *  player can actually hit must ride interp-rate wire truth or shots
+   *  land on an unrewindable ghost (srvAt:none whiffs). */
+  private static readonly AIM_PROMOTE_EVERY = 2;
+  private static readonly AIM_PROMOTE_TIER = 3;
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -407,6 +417,7 @@ this.metrics.recordsSuppressed += 1;
     if (wireId === undefined) {
       wireId = mintWireId(room);
       room.wireIds.set(playerId, wireId);
+      room.widToId.set(wireId, playerId);
       (bctx.roster ??= {})[wireId] = playerId;
       bctx.rosterDirty = true;
       freshWireId = true;
@@ -770,23 +781,50 @@ this.metrics.recordsIdleReaped += 1;
    *  wholly outside the near circle emit sparse records straight to
    *  the cap pool -- the cell boundary already proves far-ness, so
    *  no dSq, no tier math. Stopped far records emit nothing, same
-   *  rule as before. */
+   *  rule as before. Aim-promotion: a far record inside the
+   *  recipient's +-45deg aim cone emits every 2nd tick with the FULL
+   *  record (vel/rot intact -- a sparse speck's DR seed is fiction);
+   *  it's the one remote the player can actually hit. */
   private emitFarCells(c: RcpCtx): void {
-    if ((c.seq + staggerOf(c.recipientId)) % 8 !== 0) {return;}
+    const phase = (c.seq + staggerOf(c.recipientId)) % 8;
+    const sparseTick = phase === 0;
+    if (!sparseTick && phase % TickFanout.AIM_PROMOTE_EVERY !== 0) {return;}
     for (const [key, bucket] of this.cells) {
       if (this.nearCellKeys.has(key)) {continue;}
-      for (const r of bucket) {
-        if (r.playerId === c.recipientId || c.pending?.has(r.playerId)) {continue;}
-        if (this.recordHidden(c, r)) {continue;}
-        if ((r.spd ?? 0) <= 12) {
-          this.metrics.recordsTierSkipped += 1;
-          this.metrics.recordsStopped += 1;
-          continue;
-        }
-        this.candRecs.push(this.sparseVariant(r, c.seq));
-        this.candScore.push(c.engaged?.get(r.playerId!) === undefined ? TickFanout.FAR_SCORE : TickFanout.FAR_SCORE * TickFanout.ENGAGE_BOOST);
-      }
+      for (const r of bucket) {this.emitFarRecord(c, r, sparseTick);}
     }
+  }
+
+  /** One far-cell record's emit verdict: aim-promoted full copy, else
+   *  the sparse speck on its staggered tick (stopped seats emit
+   *  nothing -- see the emitEval stop tier). */
+  private emitFarRecord(c: RcpCtx, r: TickRecord, sparseTick: boolean): void {
+    if (r.playerId === c.recipientId || c.pending?.has(r.playerId)) {return;}
+    if (this.recordHidden(c, r)) {return;}
+    if (this.inAimCone(c, r.pos.x - c.rx, r.pos.z - c.rz)) {
+      this.metrics.recordsAimPromoted += 1;
+      this.candRecs.push(r.data);
+      this.candScore.push(TickFanout.FAR_SCORE * TickFanout.CONE_BOOST);
+      return;
+    }
+    if (!sparseTick) {return;}
+    if ((r.spd ?? 0) <= 12) {
+      this.metrics.recordsTierSkipped += 1;
+      this.metrics.recordsStopped += 1;
+      return;
+    }
+    this.candRecs.push(this.sparseVariant(r, c.seq));
+    this.candScore.push(c.engaged?.get(r.playerId!) === undefined ? TickFanout.FAR_SCORE : TickFanout.FAR_SCORE * TickFanout.ENGAGE_BOOST);
+  }
+
+  /** +-45deg view-sector test shared by cap scoring and aim-promotion:
+   *  the aim sector that wins the cap is the same one that earns
+   *  cadence -- two thresholds would let a target outrank the cap
+   *  while still dead-reckoning. */
+  private inAimCone(c: RcpCtx, dx: number, dz: number): boolean {
+    let d = Math.atan2(dx, dz) - c.rp.rotation.yaw;
+    if (d > Math.PI) {d -= 2 * Math.PI;} else if (d < -Math.PI) {d += 2 * Math.PI;}
+    return Math.abs(d) < TickFanout.CONE_HALF;
   }
 
   /** Cutoff-bounded eval (Halo fill-until-budget on the scan itself):
@@ -842,6 +880,7 @@ this.metrics.recordsIdleReaped += 1;
     }
     const e = this.evg;
     e.dSq = dSq; e.dx = dx; e.dz = dz; e.mem = mem; e.spd = spd;
+    e.aimed = this.inAimCone(c, dx, dz);
     this.emitEval(c, r, e);
   }
 
@@ -849,7 +888,7 @@ this.metrics.recordsIdleReaped += 1;
    *  stop-tier verdict, variant pick, then force-bypass or scored
    *  cap push. Split from the gate head so each stays readable. */
   private emitEval(c: RcpCtx, r: TickRecord, e: EvalGeom): void {
-    const tier = this.recordTier(c, r, e.dSq, e.mem, e.spd);
+    const tier = this.recordTier(c, r, e.dSq, e.mem, e.spd, e.aimed);
     if (!(c.introFull || r.force || c.seq % tier === 0)) {this.metrics.recordsTierSkipped += 1; return;}
     // Stopped (far AND under ~12m/s): zero replication -- the
     // receiver dead-reckons a ~0-vel ghost either way, so every
@@ -877,7 +916,7 @@ this.metrics.recordsIdleReaped += 1;
    *  candidate. Writes the tier memory only on change -- an
    *  unconditional set was a churn write per recipient×record×tick
    *  in the cpuprofile hot loop. */
-  private recordTier(c: RcpCtx, r: TickRecord, dSq: number, mem: number | undefined, spd: number): number {
+  private recordTier(c: RcpCtx, r: TickRecord, dSq: number, mem: number | undefined, spd: number, aimed: boolean): number {
     // Tier 4 (200ms spacing) read as mini-warps even through the
     // interpolation buffer -- a skiing bot covers ~8m between records.
     // 150ms is the worst a body ever gets; hits/kills ride reliable
@@ -896,6 +935,16 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
     if (mem !== undefined && tier > mem) {
       const bound = this.hystBound(mem);
       if (dSq < bound * 1.15) {tier = mem;}
+    }
+    // Aim-promotion persists in tierMem (unlike the speed bump below,
+    // which stays ephemeral): the lazy gate re-examines a candidate on
+    // `emitEvery = mem` ticks, so a promoted cadence must be the stored
+    // cadence or the cone's target is only re-examined every 8th tick.
+    // An aimed target also escapes the stopped-far silence -- a sniper
+    // target standing still is exactly who must stay hittable.
+    if (aimed && tier > TickFanout.AIM_PROMOTE_TIER) {
+      this.metrics.recordsAimPromoted += 1;
+      tier = TickFanout.AIM_PROMOTE_TIER;
     }
     // Map write only on change -- an unconditional set was a churn
     // write per recipient×record×tick in the cpuprofile hot loop.

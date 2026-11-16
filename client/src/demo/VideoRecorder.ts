@@ -17,10 +17,10 @@ const MIME_PREFERENCES = [
 ];
 
 // Staged export: the live canvas is whatever size the window happens to
-// be, so the recorder blits it into a fixed 1920×1080 staging canvas —
+// be, so the recorder blits it into a fixed 1920×1080 staging canvas -
 // guaranteed aspect + resolution out of every clip. Drawing from a WebGL
 // canvas reads a blank buffer unless preserveDrawingBuffer is on, unless
-// the blit happens inside the same rAF the scene just rendered — the
+// the blit happens inside the same rAF the scene just rendered - the
 // caller drives pump() from the render loop for that exact reason.
 const STAGE_W = 1920;
 const STAGE_H = 1080;
@@ -50,10 +50,10 @@ export class VideoRecorder {
   private encFailed = false;
   // ShadowPlay-style rolling buffer: the last RING_MS of encoded chunks,
   // wall-clock keyed, so a clip window can be cut without re-encoding.
-  // ~30MB at 12Mbps — stays RAM-only like Medal/ShadowPlay.
+  // ~30MB at 12Mbps - stays RAM-only like Medal/ShadowPlay.
   private ring: { ts: number; c: EncodedVideoChunk; m?: EncodedVideoChunkMetadata }[] = [];
   private encWall = 0;
-  // Last decoderConfig the encoder emitted — cutWindow remuxes from ring
+  // Last decoderConfig the encoder emitted - cutWindow remuxes from ring
   // chunks whose stored meta may not carry one, and the muxer crashes on
   // finalize without a decoderConfig.
   private decConf: EncodedVideoChunkMetadata['decoderConfig'] | null = null;
@@ -68,20 +68,20 @@ export class VideoRecorder {
   private static capSeq = 0;
   // Track-capture lane (ShadowPlay-tier): captureStream taps the canvas's
   // presented buffer at display cadence and MediaStreamTrackProcessor
-  // hands ready-made GPU VideoFrames with true presentation timestamps —
+  // hands ready-made GPU VideoFrames with true presentation timestamps -
   // the render thread is no longer in the capture path. Manual pump()
   // frames remain the fallback where TrackProcessor doesn't exist.
   private vReader: ReadableStreamDefaultReader<VideoFrame> | null = null;
   private vTrack: MediaStreamTrack | null = null;
   private trackCap = false;
   // Track timestamps are µs on the same monotonic clock as
-  // performance.now() in practice, but the epoch is opaque — measure the
+  // performance.now() in practice, but the epoch is opaque - measure the
   // shift once on the first frame and stamp pump()-path frames in the
   // same space so a mid-recording lane swap can't create DTS disorder.
   private tsShift: number | null = null;
   // Game audio lane: the AudioEngine's post-compressor mix feeds an
   // AudioWorklet that hands PCM to an AudioEncoder (AAC→muxer audio track,
-  // opus fallback, none when unsupported — clips stay video-only then).
+  // opus fallback, none when unsupported - clips stay video-only then).
   private audioSrc: (() => { ctx: AudioContext; node: AudioNode } | null) | null = null;
   private aenc: AudioEncoder | null = null;
   private aWorklet: AudioWorkletNode | null = null;
@@ -90,12 +90,12 @@ export class VideoRecorder {
   private aSamples = 0;
   private aSampleRate = 0;
   private aCodec: 'aac' | 'opus' | null = null;
-  // PCM carry: worklet blocks are 128 samples, encode frames are 2048 —
+  // PCM carry: worklet blocks are 128 samples, encode frames are 2048 -
   // a grow-once Float32Array + memmove instead of slice() churn ~375×/s.
   private aCarry = new Float32Array(0);
   private aCarryN = 0;
   private aInter = new Float32Array(0);
-  // Recorder cost instrumentation — the two numbers that say whether
+  // Recorder cost instrumentation - the two numbers that say whether
   // capture is hurting the main thread. Sampled per second, reported on
   // stop: queue growth = encoder can't keep up, pump ms = render-loop tax.
   private statQMax = 0;
@@ -124,13 +124,13 @@ export class VideoRecorder {
     this.canvas = canvas;
   }
 
-  /** Audio tap provider — evaluated at start() so recording before the
+  /** Audio tap provider - evaluated at start() so recording before the
    *  AudioContext unlock (first gesture) just records video-only. */
   setAudioSource(fn: () => { ctx: AudioContext; node: AudioNode } | null): void {
     this.audioSrc = fn;
   }
 
-  /** Alt+Q row — everything needed to answer "did F9 do anything". */
+  /** Alt+Q row - everything needed to answer "did F9 do anything". */
   get diag(): Record<string, unknown> {
     return {
       on: this.isRecording,
@@ -169,16 +169,16 @@ export class VideoRecorder {
     return this.startMediaRecorder(fps);
   }
 
-  /** WebCodecs → mp4-muxer. prefer-hardware maps to NVENC/QSV/AMF — the
+  /** WebCodecs → mp4-muxer. prefer-hardware maps to NVENC/QSV/AMF - the
    *  ShadowPlay-class path: encode cost lives on the GPU, ~0 fps impact. */
   private async tryWebCodecs(fps: number): Promise<boolean> {
     if (typeof VideoEncoder === 'undefined') {return false;}
     const src = (this.staged ? this.stage : this.canvas)!;
-    // hardwarePreference predates TS's DOM lib — it selects NVENC/QSV/AMF
+    // hardwarePreference predates TS's DOM lib - it selects NVENC/QSV/AMF
     // when the platform exposes a hardware encoder.
     // Bitrate follows encode area: fast-motion footage is the worst case
     // for block artifacts, so the multiplier is generous (~12Mbps at
-    // 1080p, capped at 25) — VBR only spends it on hard frames.
+    // 1080p, capped at 25) - VBR only spends it on hard frames.
     const bitrate = Math.round(src.width * src.height * 6);
     const base = {
       width: src.width,
@@ -187,11 +187,11 @@ export class VideoRecorder {
       framerate: fps,
       hardwarePreference: 'prefer-hardware',
       // Quality over realtime: lookahead + B-frames are the difference
-      // between visible block artifacts and clean footage — the tiny
+      // between visible block artifacts and clean footage - the tiny
       // encode latency doesn't matter for a ring buffer.
       latencyMode: 'quality',
     } as unknown as VideoEncoderConfig;
-    // Codec ladder: HEVC first (NVENC does it — ~25% better quality per
+    // Codec ladder: HEVC first (NVENC does it - ~25% better quality per
     // bit), then H.264 High. Quantizer mode (fixed QP ≈ visually
     // lossless) beats VBR where the encoder supports it.
     // AV1 first: RTX40/RDNA3/Arc do HW encode at ~30% better quality/bit
@@ -249,7 +249,7 @@ export class VideoRecorder {
         output: (c, meta): void => {
           if (meta?.decoderConfig) {this.decConf = meta.decoderConfig;}
           // stop() keeps vsrc live through enc.flush() so the drained
-          // tail lands — detach happens at finalize, not here.
+          // tail lands - detach happens at finalize, not here.
           if (this.vsrc) {
             if (this.baseTsUs < 0) {this.baseTsUs = c.timestamp;}
             this.vsrc.add(this.chunkPacket(c, c.timestamp - this.baseTsUs), meta)
@@ -272,7 +272,7 @@ export class VideoRecorder {
       this.frameDur = 1e6 / fps;
       // Track capture first: frames arrive at presentation cadence with
       // real timestamps. If the platform lacks it, pump() keeps feeding
-      // the encoder manually — the pipeline below doesn't care which.
+      // the encoder manually - the pipeline below doesn't care which.
       this.trackCap = this.startTrackCapture(src);
       if (audioCfg) {await this.startAudio(audioCfg);}
       this.frames = 0;
@@ -283,7 +283,7 @@ export class VideoRecorder {
       this.statBlitSum = 0;
       this.statBlitN = 0;
       this.statLastAt = performance.now();
-      this.keyEvery = fps * 2; // IDR every 2s — the mp4 trim granularity
+      this.keyEvery = fps * 2; // IDR every 2s - the mp4 trim granularity
       this.encFailed = false;
       this.mime = 'video/mp4';
       return true;
@@ -297,14 +297,14 @@ export class VideoRecorder {
   }
 
   /** Vsync-cadence capture: the browser emits a VideoFrame each time the
-   *  canvas's presented buffer updates — dedup'd, GPU-resident, stamped
+   *  canvas's presented buffer updates - dedup'd, GPU-resident, stamped
    *  at present time. Returns false where TrackProcessor is missing and
    *  the caller leaves pump() on the manual path. */
   private startTrackCapture(src: HTMLCanvasElement): boolean {
     if (typeof MediaStreamTrackProcessor === 'undefined') {return false;}
     try {
       // captureStream(0) = manual mode: nothing emits until pump() calls
-      // requestFrame() after a real paint — emit is exactly 1:1 with
+      // requestFrame() after a real paint - emit is exactly 1:1 with
       // rendered frames, no browser-side pacing heuristic between us and
       // the presented buffer. statBlitN vs frames proves parity.
       const [track] = src.captureStream(0).getVideoTracks();
@@ -331,7 +331,7 @@ export class VideoRecorder {
         // encoder drops the presented frame rather than queueing a
         // GPU readback apiece.
         if (enc && enc.state === 'configured' && enc.encodeQueueSize <= 30) {
-          // Feed the track frame raw — no re-wrap. First frame pins the
+          // Feed the track frame raw - no re-wrap. First frame pins the
           // opaque track epoch against performance.now() for tsShift.
           if (this.tsShift === null) {this.tsShift = f.timestamp - performance.now() * 1000;}
           const now = performance.now();
@@ -352,7 +352,7 @@ export class VideoRecorder {
   }
 
   /** Probe the audio tap + encoder support. AAC first (mp4-native), opus
-   *  fallback — mp4-muxer takes both. Null = record video-only. */
+   *  fallback - mp4-muxer takes both. Null = record video-only. */
   private async probeAudio(): Promise<{ ctx: AudioContext; node: AudioNode; codec: string; muxCodec: 'aac' | 'opus' } | null> {
     const src = this.audioSrc?.();
     if (!src || typeof AudioEncoder === 'undefined') {return null;}
@@ -389,7 +389,7 @@ export class VideoRecorder {
     this.aenc.configure({ codec: a.codec, sampleRate: a.ctx.sampleRate, numberOfChannels: 2, bitrate: 128_000 });
     this.aSampleRate = a.ctx.sampleRate;
     this.aCodec = a.muxCodec;
-    // Inline worklet — a blob URL keeps it a single-file module. The
+    // Inline worklet - a blob URL keeps it a single-file module. The
     // processor name must be unique per start: a second recording on the
     // same AudioContext re-registers and 'cap' collides, killing start().
     const capName = `cap${VideoRecorder.capSeq++}`;
@@ -422,7 +422,7 @@ export class VideoRecorder {
     this.aCarry.set(l, this.aCarryN);
     this.aCarry.set(r, half + this.aCarryN);
     this.aCarryN += n;
-    const FRAME = 2048; // ~43ms at 48k — big enough to keep encode cheap
+    const FRAME = 2048; // ~43ms at 48k - big enough to keep encode cheap
     if (this.aInter.length !== FRAME * 2) {this.aInter = new Float32Array(FRAME * 2);}
     while (this.aCarryN >= FRAME) {
       this.aInter.set(this.aCarry.subarray(0, FRAME), 0);
@@ -446,7 +446,7 @@ export class VideoRecorder {
     if (!mime) {return false;}
     try {
       const stream = (this.staged ? this.stage! : this.canvas!).captureStream(fps);
-      // Fallback path gets sound for free — MediaRecorder mixes tracks.
+      // Fallback path gets sound for free - MediaRecorder mixes tracks.
       const src = this.audioSrc?.();
       if (src) {
         const dest = src.ctx.createMediaStreamDestination();
@@ -477,7 +477,7 @@ export class VideoRecorder {
       this.vTrack = null;
       this.trackCap = false;
       // Cancel the capture tap before flush so no frames queue behind the
-      // drain — reader.cancel() makes drainTrack's read() resolve done.
+      // drain - reader.cancel() makes drainTrack's read() resolve done.
       if (reader) {reader.cancel().catch((): void => undefined);}
       track?.stop();
       logger.info(`rec done ${this.frames}f qMax=${this.statQMax} pumpMax=${this.statPumpMax.toFixed(2)}ms pumpAvg=${(this.statPumpSum / Math.max(1, this.statPumpN)).toFixed(2)}ms blitAvg=${(this.statBlitSum / Math.max(1, this.statBlitN)).toFixed(2)}ms codec=${this.vmux}${this.qpMode ? '+qp' : ''}`);
@@ -492,7 +492,7 @@ export class VideoRecorder {
           }
         }
         this.aenc = null;
-        // vsrc stays live through the flush — quality-mode encoders hold
+        // vsrc stays live through the flush - quality-mode encoders hold
         // reordered tail frames (B-frame lookahead) that used to die here.
         await enc.flush();
         enc.close();
@@ -504,7 +504,7 @@ export class VideoRecorder {
         this.out = null;
         // A mid-flight encoder error used to void the whole clip; a
         // partial file (frames up to the failure) is strictly better.
-        if (this.encFailed) {logger.warn(`encoder failed mid-recording — salvaging ${this.frames}f`);}
+        if (this.encFailed) {logger.warn(`encoder failed mid-recording - salvaging ${this.frames}f`);}
         return new Blob([out.target.buffer!], { type: 'video/mp4' });
       } catch {
         this.vsrc = null;
@@ -527,17 +527,17 @@ export class VideoRecorder {
     });
   }
 
-  /** Blit the live canvas into the staging canvas — call once per rendered
+  /** Blit the live canvas into the staging canvas - call once per rendered
    *  frame while recording staged (from the render loop, so the WebGL
    *  buffer is still live). contain-fit + black bars, same letterbox math
    *  a player expects from a 16:9 export of a non-16:9 window. */
-  // Held during offline clip render — stepped frames go to renderClip's
+  // Held during offline clip render - stepped frames go to renderClip's
   // own encoder, not the realtime ring.
   suspended = false;
 
   get canvasEl(): HTMLCanvasElement | null { return this.canvas; }
 
-  /** Fresh bytes per chunk — the muxer retains the array until
+  /** Fresh bytes per chunk - the muxer retains the array until
    *  finalize(), so a reused scratch buffer corrupts every prior chunk
    *  (the "Invalid OBU length" garbled-AV1 bug). A few KB per chunk at
    *  encode rate is nothing vs the corruption it caused. */
@@ -565,7 +565,7 @@ export class VideoRecorder {
     // Pull-mode capture: emit exactly one track frame per blit/paint.
     (this.vTrack as unknown as { requestFrame?: () => void } | null)?.requestFrame?.();
     if (this.enc && !this.trackCap) {
-      // The error callback closes the codec but keeps this.enc set —
+      // The error callback closes the codec but keeps this.enc set -
       // encode on a closed codec throws InvalidStateError.
       if (this.enc.state !== 'configured') {return;}
       // Backpressure: a stalled encoder drops frames rather than queueing
@@ -605,7 +605,7 @@ this.frames += 1;
    *  buffer into a standalone mp4. Returns null when the window isn't in the
    *  ring (video wasn't rolling then) or on the MediaRecorder fallback path
    *  (opaque muxed chunks can't be re-spliced). Start lands on the previous
-   *  keyframe — up to GOP (2s) of preroll; the end is frame-accurate. */
+   *  keyframe - up to GOP (2s) of preroll; the end is frame-accurate. */
   async cutWindow(startMs: number, endMs: number): Promise<Blob | null> {
     if (!this.enc || this.ring.length === 0) {return null;}
     let keyIdx = -1, endIdx = -1;
@@ -633,7 +633,7 @@ this.frames += 1;
     for (let i = keyIdx; i <= endIdx; i += 1) {
       const r = this.ring[i]!;
       // Retimestamp relative to the leading keyframe so the clip starts at 0.
-      // The muxer only learns decoderConfig from a meta that carries it —
+      // The muxer only learns decoderConfig from a meta that carries it -
       // the stored meta may lack one, so fall back to the last config seen.
       let meta;
       if (i === keyIdx) {

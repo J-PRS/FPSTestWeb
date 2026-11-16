@@ -14,7 +14,7 @@ interface ServerDemoRecord {
 }
 
 // Cool-shot server I/O: download/upload/list fetch + play-from-server.
-// Fetch is the only thing here — clip math stays in coolShots.ts.
+// Fetch is the only thing here - clip math stays in coolShots.ts.
 
   // GET /demos/<filename> → DemoFile, with status/logging handled
 export async function fetchDemo(m: CoolShotManager, filename: string): Promise<DemoFile | null> {
@@ -88,7 +88,7 @@ m.uploadFailureCount += 1;
   }
 
   // Extracted-shot library: GET /demos/local lists demos/shots/** on the
-  // server — clips _tools/shots.ts cut from stream recordings. Kept off
+  // server - clips _tools/shots.ts cut from stream recordings. Kept off
   // the main list (they're POV-of-recorder, not your own highlight lane).
 export async function fetchLocal(m: CoolShotManager): Promise<void> {
   if (!m.serverUrl) {return;}
@@ -104,7 +104,7 @@ export async function fetchLocal(m: CoolShotManager): Promise<void> {
       description: d.description ?? '',
     }));
     m.onLocalChanged?.(m.localShots);
-  } catch { /* no endpoint or offline — the list just stays empty */ }
+  } catch { /* no endpoint or offline - the list just stays empty */ }
   }
 
   // Merge the server's demo list with local clips (by filename)

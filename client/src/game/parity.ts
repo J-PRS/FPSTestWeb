@@ -45,6 +45,14 @@ total += 1;
   counts.set(kind, (counts.get(kind) ?? 0) + 1);
   rows.push({ kind, detail: JSON.stringify(detail), ageMs: Math.round(performance.now()) });
   if (rows.length > MAX_ROWS) {rows.splice(0, rows.length - MAX_ROWS);}
+  // High-frequency kinds that spam the console with expected misses
+  // (nugrest = pickup resting-place settles - every gem landing in a
+  // headhunt room is one). Still counted in the glitch census + dump
+  // rows; just not worth a console line per occurrence. A divergence
+  // past the designed-correction band (~7m, see Nugget.serverRest) is
+  // NOT the quiet class - it keeps the loud path so mirror-math bugs
+  // still surface.
+  if (kind === 'nugrest' && (detail.dM as number) <= 7) {glitch(`parity-${kind}`, detail, true); return;}
   // glitch() rate-limits the console line (3/kind then 1-in-100) - a parity
   // miss is rare and exactly what the complaint feed exists for, so emit a
   // WARN of our own whenever the limiter swallowed the GLITCH line.

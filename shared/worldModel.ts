@@ -432,6 +432,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         // VFX on the killer; declared so the effect never plays for a
         // melee kill that didn't heal.
         { name: 'steal', wire: 'bool', channel: 'edge', absent: null },
+        // Adjudicated death position (server truth at the kill) - lets
+        // clients pair rendered corpse ↔ wire loot exactly instead of a
+        // proximity guess, so a dogpile can't fling the wrong body's loot.
+        { name: 'at', wire: 'vec3', channel: 'edge', absent: null },
       ],
       teamUpdate: [{ name: 'team', wire: 'str', channel: 'edge' }],
       // Headhunt: carrier's new held-token total after a grab/drop.

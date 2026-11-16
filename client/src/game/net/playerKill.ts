@@ -53,7 +53,7 @@ const FULL_GIB_GAP_MS = 250;
 
 /** Victim fx: ragdoll with the blast's impulse + a shard burst - unless a
  *  power weapon connected point-blank, then the body full-gibs instead. */
-function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer): void {
+function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer, wireAt?: { x: number; y: number; z: number }): void {
   const { deps, nm } = ctx;
   const exp = findShooterExplosion(deps, shooterId);
   const explosionPos = exp?.position;
@@ -64,7 +64,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   // Loot scatters at wire truth but this corpse fell at the RENDERED
   // pos - pickups.ts flings its nuggets from here to the server rest
   // spots so the drop reads as bursting out of the body you saw die.
-  noteCorpseFling(remotePlayer.position);
+  noteCorpseFling(remotePlayer.position, wireAt);
 
   // Shatter like the creatures do: shards burst off the capsule shell,
   // carry the blast direction through the body, and inherit whatever
@@ -194,9 +194,10 @@ function noteOwnStreak(ctx: NetCtx, targetId: string, roster: Map<string, { name
   if ((air ?? 0) >= 1.5) {speakAnnounce('PRECISION KILL', 'announce_precision');}
 }
 
-export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean): void {
+export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, k: { weapon?: number; air?: number; steal?: boolean; at?: { x: number; y: number; z: number } }): void {
   const { deps, nm } = ctx;
   if (deps.world.playbackMode) {return;}
+  const { weapon, air, steal, at } = k;
   noteKillEdge(ctx, shooterId, targetId, weapon);
   const localId = nm().getLocalPlayerId();
   const roster = nm().getPlayers();
@@ -208,7 +209,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   // Streak counts run-kills since your last death (reset above) and
   // match boundaries (match.ts) - a new match never continues the count.
   if (shooterId === localId) {noteOwnStreak(ctx, targetId, roster, air);}
-  applyKillWorld(ctx, shooterId, targetId, localId, steal);
+  applyKillWorld(ctx, shooterId, targetId, localId, steal, at);
 }
 
 // Kill bookkeeping head: battle log, scoreboard counters, demo marker.
@@ -229,7 +230,7 @@ function noteKillEdge(ctx: NetCtx, shooterId: string, targetId: string, weapon?:
 
 // Kill world-state tail: mark the roster dead, gib the replica, and
 // pop the lifesteal implode on the killer when the server flagged it.
-function applyKillWorld(ctx: NetCtx, shooterId: string, targetId: string, localId: string, steal?: boolean): void {
+function applyKillWorld(ctx: NetCtx, shooterId: string, targetId: string, localId: string, steal?: boolean, at?: { x: number; y: number; z: number }): void {
   const { deps, nm } = ctx;
   const {logger} = deps;
   // Mark dead immediately so the main loop stops simulating them
@@ -241,7 +242,7 @@ function applyKillWorld(ctx: NetCtx, shooterId: string, targetId: string, localI
 
   const remotePlayer = deps.world.remotePlayers.get(targetId);
   if (remotePlayer) {
-    gibVictim(ctx, shooterId, targetId, remotePlayer);
+    gibVictim(ctx, shooterId, targetId, remotePlayer, at);
     logger.info(`Player ${targetId} killed by ${shooterId}`);
   }
 

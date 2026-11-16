@@ -23,4 +23,23 @@ describe('scenario: ffa kill scores', () => {
     expect(kill.targetId).toBe(target!.id);
     expect(w.count('ffaScore')).toBeGreaterThan(0);
   });
+
+  it('playerKill carries the adjudicated death position (`at`)', () => {
+    const room = mkRoom({ mode: 'dm', bots: 2 }, 'dm');
+    const w = watch(room);
+    const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
+    const [shooter, target] = bots;
+    target!.health = 10;
+    pin(room, shooter!.id, { x: 0, y: 32, z: 0 });
+    pin(room, target!.id, { x: 20, y: 32, z: 0 });
+    room.projectiles.spawn(shooter!.id, WeaponType.PlasmaGun,
+      { x: 0, y: 32, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 300 && w.count('playerKill') === 0; i++) {
+      pin(room, target!.id, { x: 20, y: 32, z: 0 });
+      step(room, 1);
+    }
+    const kill = w.msgs.find((m) => m.type === 'playerKill')! as { at?: { x: number; y: number; z: number } };
+    expect(kill.at).toBeDefined();
+    expect(Math.hypot(kill.at!.x - 20, kill.at!.y - 32, kill.at!.z)).toBeLessThan(2);
+  });
 });

@@ -1,4 +1,4 @@
-// Offline stepped demo→mp4 render — the TF2-path twin of VideoRecorder's
+// Offline stepped demo→mp4 render - the TF2-path twin of VideoRecorder's
 // realtime capture. Seeks to t0, scrubs the player at fixed 1/fps steps,
 // renders each frame synchronously and encodes VideoFrames with authored
 // (step-index) timestamps. Output is frame-perfect at any machine speed
@@ -10,29 +10,29 @@ import type { DemoPlayer } from './DemoPlayer.js';
 export interface RenderClipOpts {
   player: DemoPlayer;
   canvas: HTMLCanvasElement;
-  /** One full render pass (gameLoop renderFrame — composer + viewmodel). */
+  /** One full render pass (gameLoop renderFrame - composer + viewmodel). */
   renderFrame: (dt: number) => void;
-  /** Replica pose+anim per step — onRemotePlayback(getRemoteStates(), dt)
+  /** Replica pose+anim per step - onRemotePlayback(getRemoteStates(), dt)
    *  so limbs/trails animate at demo rate, not wall rate. */
   snapRemotes?: (dt: number) => void;
-  /** Playback-world tick per step (projectiles, rail beams) — without it
+  /** Playback-world tick per step (projectiles, rail beams) - without it
    *  they only get wall-dt from the live loop and fly at render speed. */
   tickFx?: (dt: number) => void;
-  /** Arms seek-baseline reconstruction — needed when start > 0 so
+  /** Arms seek-baseline reconstruction - needed when start > 0 so
    *  entities whose Spawned edges predate the window still appear. */
   armSeek?: () => void;
-  /** Abort check (ESC/stop mid-render) — returns true → early null. */
+  /** Abort check (ESC/stop mid-render) - returns true → early null. */
   abort?: () => boolean;
   start: number;
   end: number;
   fps?: number;
 }
 
-// Encoder backpressure ceiling — unbounded VideoFrame queue holds full
+// Encoder backpressure ceiling - unbounded VideoFrame queue holds full
 // GPU readbacks; park the stepper until it drains.
 const QUEUE_HI = 30;
 const QUEUE_LO = 20;
-// Same fixed output as the realtime path — the game canvas is rarely
+// Same fixed output as the realtime path - the game canvas is rarely
 // fullscreen, so renders letterbox-fit into staged 1920×1080.
 const STAGE_W = 1920;
 const STAGE_H = 1080;
@@ -40,7 +40,7 @@ const STAGE_H = 1080;
 const sleep = (ms: number): Promise<void> => new Promise<void>((r): void => { setTimeout(r, ms); });
 
 /** Same codec ladder as VideoRecorder (HEVC then H.264-High, QP then VBR)
- *  minus the realtime fallback — offline render always wants quality mode. */
+ *  minus the realtime fallback - offline render always wants quality mode. */
 async function pickEncoderConfig(fps: number):
   Promise<{ config: VideoEncoderConfig; muxCodec: 'hevc' | 'avc'; qKey: 'hevc' | 'avc' } | null> {
   const base = {
@@ -66,7 +66,7 @@ async function pickEncoderConfig(fps: number):
   return null;
 }
 
-// VideoFrame snapshots the canvas at construction — must be created in
+// VideoFrame snapshots the canvas at construction - must be created in
 // the same task as renderFrame() while the GL drawing buffer is live
 // (preserveDrawingBuffer is off).
 function submitFrame(enc: VideoEncoder, src: HTMLCanvasElement, i: number, fps: number,
@@ -116,7 +116,7 @@ export async function renderClip(o: RenderClipOpts): Promise<Blob | null> {
   const adds: Promise<void>[] = [];
   let failed = false;
   const enc = new VideoEncoder({
-    // Step-index stamps already start at 0 — fromEncodedChunk carries them
+    // Step-index stamps already start at 0 - fromEncodedChunk carries them
     // through µs→s untouched, no rebase needed.
     output: (c, m): void => { adds.push(vs.add(EncodedPacket.fromEncodedChunk(c), m).catch((): void => { failed = true; })); },
     error: (): void => { failed = true; },

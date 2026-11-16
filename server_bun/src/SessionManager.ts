@@ -130,8 +130,12 @@ export class SessionManager {
     const handshake = raw as Record<string, unknown>;
     if (handshake.type === 'ping' || handshake.type === 'pong' || handshake.type === 'clientStats' || handshake.type === 'tickNack') {return null;}
     if (handshake.type !== 'join') {
-      logger.warn('pre-join frame rejected', { got: handshake.type });
-      ws.close(1008, 'Expected join handshake');
+      // Any pre-join game frame is meaningless pre-seat — drop it, don't
+      // kill. Closing here re-armed the client's reconnect with the SAME
+      // stale frame still queued ahead of join (a 'held' weapon-switch
+      // outran join on every WT redial → ~16s connect/die cycle forever).
+      // The per-conn flood budget still bounds real abuse upstream.
+      logger.warn('pre-join frame dropped', { got: handshake.type });
       return null;
     }
     // Join-phase mark: upgrade→dispatch wait  -  the inbound-queue and

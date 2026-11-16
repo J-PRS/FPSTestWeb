@@ -64,10 +64,14 @@ if (stateUrl) {
 rotateLogs();
 
 let wtCertHash: string | null = null;
+// Why /wthash reports enabled:false after a real attempt - 'off' (never
+// tried) reads the same as 'bind failed' without it, and a degraded tier
+// shouldn't need a log dig to explain.
+let wtDisabledWhy: string | null = null;
 // requestIP binds lazily — `server` doesn't exist until Bun.serve below
 // returns, but no request can arrive before that.
 // oxlint-disable-next-line no-use-before-define -- lazily bound, see comment above
-const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: (): string | null => wtCertHash, requestIP: (req: Request): Bun.SocketAddress | null => server?.requestIP(req) ?? null };
+const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: (): string | null => wtCertHash, wtDisabledWhy: (): string | null => wtDisabledWhy, requestIP: (req: Request): Bun.SocketAddress | null => server?.requestIP(req) ?? null };
 const ROUTES = makeRoutes(httpCtx);
 
 // Let the close frames flush before exiting: an immediate process.exit
@@ -120,8 +124,8 @@ function killPortHolders(port: number): boolean {
     // reads empty — skip it, don't refuse.
     if (!img.trim()) {continue;}
     if (!/bun\.exe/i.test(img)) { logger.error(`:${port} held by non-bun pid ${pid} — refusing to kill`); return false; }
-    Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
-    logger.warn(`stale bun (pid ${pid}) killed — it held :${port}`);
+    const r = Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
+    logger.warn(`stale bun (pid ${pid}) kill ${r.exitCode === 0 ? 'sent' : `FAILED (${r.exitCode})`} - it held :${port}`);
   }
   if (pids.length > 0) {Bun.sleepSync(250);} // let the socket fully release
   return pids.length > 0;
@@ -140,8 +144,8 @@ function killUdpPortHolders(port: number): boolean {
     // nothing to kill, but it's no reason to refuse the reclaim either.
     if (!img.trim()) {continue;}
     if (!/bun\.exe/i.test(img)) { logger.error(`udp:${port} held by non-bun pid ${pid} — refusing to kill`); return false; }
-    Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
-    logger.warn(`stale bun (pid ${pid}) killed — it held udp:${port}`);
+    const r = Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
+    logger.warn(`stale bun (pid ${pid}) kill ${r.exitCode === 0 ? 'sent' : `FAILED (${r.exitCode})`} - it held udp:${port}`);
   }
   if (pids.length > 0) {Bun.sleepSync(250);}
   return pids.length > 0;
@@ -151,7 +155,11 @@ function reclaimStaleBun(port: number): Promise<boolean> {
   // A live supervised server (dev-watch respawns children instantly) is
   // not "stale" — killing it is whack-a-mole we'd lose. Stale means the
   // port is held but the game doesn't answer.
-  return fetch(`http://localhost:${port}/metrics`, { signal: AbortSignal.timeout(800) }).then(
+  // Probe with the admin token when one is set: a tokened /metrics
+  // answers 401 to a bare fetch, which read a LIVE supervised sibling
+  // as 'stale' and taskkilled it on every spawn (the respawn-loop logs).
+  const key = process.env.FPS_ADMIN_TOKEN ? `?key=${process.env.FPS_ADMIN_TOKEN}` : '';
+  return fetch(`http://localhost:${port}/metrics${key}`, { signal: AbortSignal.timeout(800) }).then(
     (r): boolean => {
       if (r.ok) { logger.error(`:${port} serves a live game server — not stale, refusing takeover`); return false; }
       return killPortHolders(port);
@@ -278,22 +286,32 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> =>
 // runs as a flat promise chain and `server` stays a late-bound handle
 // every consumer (requestIP, setBunServer) only reaches after bind.
 // Bounded retry: a supervised predecessor mid-drain still answers
-// /metrics (reclaim refuses, correctly) but its socket frees ~1s out —
-// dying on the first EADDRINUSE is what spiraled the respawn loop.
+// /metrics (reclaim refuses, correctly) but its socket frees seconds
+// out - graceful close + seat handoff routinely outlast the old 4-try
+// budget, and dying there respawn-looped a live server ~once a minute.
 let server: ReturnType<typeof serve> | null = null;
 const tryServe = (attempt: number): Promise<ReturnType<typeof serve>> =>
   Promise.resolve()
     .then((): ReturnType<typeof serve> => serve())
     .catch((error: unknown): Promise<ReturnType<typeof serve>> => {
       const busy = (error as { code?: string }).code === 'EADDRINUSE' || /in use|EADDRINUSE/i.test(String(error));
-      if (!busy || attempt >= 4) {throw error;}
+      if (!busy || attempt >= 12) {throw error;}
       return reclaimStaleBun(CONFIG.port).then((ok): Promise<ReturnType<typeof serve>> =>
         ok ? tryServe(attempt + 1)
-          : Bun.sleep(600).then((): Promise<ReturnType<typeof serve>> => tryServe(attempt + 1)));
+          : Bun.sleep(800).then((): Promise<ReturnType<typeof serve>> => tryServe(attempt + 1)));
     });
 tryServe(0)
   .then((s): null => { server = s; gameServer.setBunServer(s); return null; })
-  .catch((error): never => { throw error; }); // unhandled rejection = the module-level throw it replaces
+  .catch((error): never => {
+    // Distinct exit code: dev-watch reads 9 as "port squatted past the whole
+    // retry budget" and routes to portConflict instead of crash-respawning -
+    // without it a refused-takeover exit reads as a crash and respawn-loops.
+    if ((error as { code?: string }).code === 'EADDRINUSE' || /in use|EADDRINUSE/i.test(String(error))) {
+      logger.error('bind exhausted - a live server still owns the port', {});
+      process.exit(9);
+    }
+    throw error;
+  });
 
 // WebTransport tier — opt-in via env (FPS_WT_PORT + cert/key paths).
 // Shares GameServer through the socket adapter; failure here must never
@@ -331,15 +349,24 @@ if (CONFIG.wtPort > 0) {
     // base64 wrapper, so decode via X509Certificate to get the raw bytes.
     const wtOpts = { port: CONFIG.wtPort, certPem, keyPem: rf(keyPath, 'utf8') };
     // AddrInUse = an orphaned child squatting the QUIC port (the TCP
-    // squatter-killer can't see UDP). Reclaim from bun.exe holders, retry once.
+    // squatter-killer can't see UDP). Reclaim from bun.exe holders, then
+    // retry with backoff - a just-killed holder's socket takes ~seconds
+    // to release, so one immediate retry still fails and parks the tier
+    // WS-only for the process's whole life.
     let wtOk = await wtServer.start(wtOpts);
-    if (!wtOk && killUdpPortHolders(CONFIG.wtPort)) {wtOk = await wtServer.start(wtOpts);}
+    for (let retry = 0; !wtOk && retry < 4; retry += 1) {
+      if (retry === 0 && !killUdpPortHolders(CONFIG.wtPort)) {break;}
+      await new Promise((res): void => { setTimeout(res, 1000 * (retry + 1)); });
+      wtOk = await wtServer.start(wtOpts);
+    }
     // Advertise only a live bind — a failed start leaving the hash set
     // makes /wthash point clients at a dead UDP port (the flap-era
     // ERR_CONNECTION_RESET churn that looked like a transport bug).
     if (wtOk) {wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');}
+    else {wtDisabledWhy = 'bind failed';}
     }
   } catch (error) {
+    wtDisabledWhy = 'cert/key unreadable';
     logger.warn('WebTransport disabled — cert/key unreadable', { error: (error as Error).message });
   }
 }

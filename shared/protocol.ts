@@ -116,7 +116,12 @@ export type ClientMessage =
   // stream where loss costs nothing (the next frame carries the same
   // state). On unordered lanes the position seq gates staleness.
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; inputSeq?: number; ping?: number;
-      input?: { forward: number; right: number; jump: number; ski: number; jet?: number } }
+      input?: { forward: number; right: number; jump: number; ski: number; jet?: number };
+      // Drawn-ghost report: the rendered pos of the remote under the
+      // crosshair (wid + xyz) - the send-the-view channel the rewind
+      // can't reach (lateral DR drift lives at no epoch). Server gates
+      // it against the rewind window before testing a capsule there.
+      aim?: { wid: number; x: number; y: number; z: number } }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move - the server reseats
   // its check anchor here instead of rejecting it as a speedhack.
@@ -257,7 +262,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to - set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; instagib?: boolean; gungame?: boolean; igun?: boolean; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind; val?: number; vel?: Vec3 }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string>; udp?: { token: string; port: number }; serverVersion?: string; serverBuild?: string | null }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; instagib?: boolean; gungame?: boolean; igun?: boolean; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind; val?: number; vel?: Vec3 }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string>; udp?: { token: string; port: number }; serverVersion?: string; serverBuild?: string | null; bootId?: number }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: string; armorClass?: string;
       /** Chosen display name (cosmetic - ids are still the identity). */
       name?: string;
@@ -315,7 +320,11 @@ export type ServerMessage =
       air?: number;
       /** Lifesteal perk healed the shooter on this frag - clients render
        *  the red implode VFX on the killer. */
-      steal?: boolean }
+      steal?: boolean;
+      /** Adjudicated death position (server truth at the kill) - corpse/
+       *  loot presentation anchors to it so every client pairs the body
+       *  they saw die with the same wire rest-spot. */
+      at?: { x: number; y: number; z: number } }
   // Gun-game ladder position, pushed to the owning client only - the
   // rung changes on kill/death edges, so a dedicated edge beats riding
   // the roster row. rung indexes shared/gunGame.GUN_GAME_LADDER.

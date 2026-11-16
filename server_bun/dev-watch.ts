@@ -95,6 +95,9 @@ function boot(): void {
   // spin a respawn loop spewing the same bind error forever.
   void child.exited.then(() => {
     if (restarting || child!.exitCode === null) {return;}
+    // 9 = child burned the full bind-retry budget against a live squatter —
+    // crash-respawning it just re-runs the same 20s failure loop forever.
+    if (child!.exitCode === 9) { void portConflict(); return; }
     if (Date.now() - bootAt < 3000) {
       bindFails += 1;
       if (bindFails >= 2) { void portConflict(); return; } // don't respawn — wait for portConflict to resolve
@@ -177,7 +180,14 @@ async function portConflict(): Promise<void> {
       boot();
     } else {
       bindFails = 0;
-      say('[dev-watch] leaving it alone — save a file or rerun to retry');
+      say('[dev-watch] leaving it alone — rechecking every 30s in case it drains');
+      // Headless runs can't answer the prompt (stdin EOF = no) — poll the
+      // port so a squatter that eventually exits still hands the seat back.
+      const poll = setInterval(() => {
+        if (child?.exitCode === null) {clearInterval(poll); return;} // a child already bound — stop watching
+        if (portOwner() === null) {clearInterval(poll); say('[dev-watch] :8000 freed — booting'); boot();}
+      }, 30_000);
+      poll.unref?.();
     }
   } finally {
     conflictBusy = false;

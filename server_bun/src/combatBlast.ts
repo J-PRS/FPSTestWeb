@@ -300,6 +300,8 @@ export class BlastRunner {
     // thousands of refusals a second (seen: ~67k/50s) - keep the first
     // few per shooter+gate each window with full forensics, count the
     // rest into one suppressed line. Real parity-misses stay readable.
+    const h = this.h.deps.health;
+    if (h) {h.set(`aoeRefuse.${gate}`, (h.get(`aoeRefuse.${gate}`) ?? 0) + 1);}
     const key = `${ctx.shooterId}:${gate}`;
     const r = this.refuseRate.get(key) ?? { n: 0, at: 0 };
     const now = wallNow();
@@ -325,9 +327,25 @@ export class BlastRunner {
     // The SHOOTER is exempt: their own blast already popped under their
     // feet on their screen - rewinding their ghost ~lagMs behind a fast
     // ski drops it outside the envelope, and self-damage silently dies.
-    const tpos = targetId === ctx.shooterId
+    let tpos = targetId === ctx.shooterId
       ? { x: target.position.x, y: target.position.y, z: target.position.z }
       : this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap, ctx.lagBound);
+    // Drawn-ghost override, same contract as bodySweep: a fresh aim
+    // report naming this target puts the capsule where the shooter's
+    // screen drew it - lateral DR drift lives at no rewind epoch, so a
+    // splash that detonated on the rendered body must not refuse for
+    // being off the wire path. Same reachability gate: within slack of
+    // the rewind window or live pos.
+    if (targetId !== ctx.shooterId) {
+      const g = this.h.playerManager.getPlayer(ctx.shooterId)?.aimGhost;
+      if (g !== undefined && g.id === targetId && wallNow() - g.at < 300) {
+        const spd = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
+        const slack = 6 + spd * 0.75;
+        const dR = Math.hypot(g.x - tpos.x, g.y - tpos.y, g.z - tpos.z);
+        const dL = Math.hypot(g.x - target.position.x, g.y - target.position.y, g.z - target.position.z);
+        if (dR <= slack || dL <= slack) {tpos = { x: g.x, y: g.y, z: g.z };}
+      }
+    }
     const tdx = tpos.x - ctx.pos.x;
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;
@@ -474,7 +492,12 @@ export class BlastRunner {
     target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
     const kwid = this.h.deps.widOf?.(targetId);
     if (kwid !== undefined && this.h.deps.wireTo) {
-      this.h.deps.wireTo(targetId, encodeKnock(kwid, pos, impulseMag, pull || undefined, aim ? true : undefined), 'volatile');
+      // Reliable but not journaled: a dropped knockback echo isn't
+      // cheap, it's a stranded prediction stamp - the client reverses
+      // the shove it already applied and reports a phantom kb-echo.
+      // Journaling would be worse: a stale knock replaying on reclaim
+      // shoves a body whose velocity was just snapshot-reseeded.
+      this.h.deps.wireTo(targetId, encodeKnock(kwid, pos, impulseMag, pull || undefined, aim ? true : undefined), false);
     } else {
       this.h.sendToPlayer(targetId, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', targetId, {
         position: pos, force: impulseMag, pull: pull || undefined, yank: aim ? true : undefined,

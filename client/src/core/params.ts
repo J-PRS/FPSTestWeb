@@ -17,7 +17,7 @@ import { settings } from './settings.js';
  *  server, localhost, or a LAN build, all of which may show the tools.
  *  Gate on the protocol rather than a URL param strangers can flip. */
 export const isDevHost = (): boolean =>
-  import.meta.env.DEV || window.location.protocol !== 'https:';
+  Boolean(import.meta.env.DEV) || window.location.protocol !== 'https:';
 
 /** P2P/LAN duels embed the real authority modules (p2p/host.ts pulls
  *  server_bun adjudication into the client bundle) - serving that to
@@ -64,8 +64,8 @@ const live = (): URLSearchParams => {
     // endpoints.ts NAMED_SERVERS (/pub/rimrock-1 pins the public box).
     // Only known aliases match - other routes can't collide.
     const m = /^\/(s|pub|jp)\/([^/?#]+)/.exec(window.location.pathname);
-    liveRoom = m ? decodeURIComponent(m[2]) : '';
-    liveServerPath = m && m[1] !== 's' ? m[1] : '';
+    liveRoom = m?.[2] ? decodeURIComponent(m[2]) : '';
+    liveServerPath = m && m[1] && m[1] !== 's' ? m[1] : '';
   }
   return liveParams;
 };

@@ -1,4 +1,4 @@
-/** clipSink — where recorded mp4s go. Chrome's per-download save prompt
+/** clipSink - where recorded mp4s go. Chrome's per-download save prompt
  *  fires on every anchor click, which interrupts mid-match; picking a
  *  clips folder ONCE via the File System Access API lets every later
  *  clip land silently. The handle persists in IndexedDB (handles are
@@ -22,7 +22,7 @@ let dir: DirHandle | null = null;
 
 const idb = (): Promise<IDBDatabase> => new Promise((res, rej): void => {
   // v3: an older v2 db created without the 'v' vault store (pre-vault
-  // builds) silently throws on every vault write — the bump re-runs
+  // builds) silently throws on every vault write - the bump re-runs
   // onupgradeneeded and creates it.
   const r = indexedDB.open('kribes-clips', 3);
   r.onupgradeneeded = (): void => {
@@ -41,7 +41,7 @@ async function persistDir(h: DirHandle): Promise<void> {
   } catch { /* persistence is a nicety, not a requirement */ }
 }
 
-// A stored handle that came back 'prompt' instead of 'granted' — kept so
+// A stored handle that came back 'prompt' instead of 'granted' - kept so
 // the next user gesture can re-grant it instead of re-picking.
 let stored: DirHandle | null = null;
 
@@ -58,7 +58,7 @@ export async function restoreClipsDir(): Promise<boolean> {
       dir = h;
       return true;
     }
-    stored = h; // 'prompt' — armable again inside a gesture
+    stored = h; // 'prompt' - armable again inside a gesture
   } catch { /* falls through to anchor downloads */ }
   return false;
 }
@@ -77,7 +77,7 @@ export type PickResult = 'armed' | 'cancelled' | 'unsupported';
  *  two let callers say WHY nothing happened instead of dying silently. */
 export async function pickClipsDir(): Promise<PickResult> {
   // Stored handle awaiting a gesture re-grant? Chrome restores persisted
-  // dirs as 'prompt', not 'granted' — without this branch every save
+  // dirs as 'prompt', not 'granted' - without this branch every save
   // silently fell back to the anchor download = a prompt per clip.
   if (!dir && stored) {
     try {
@@ -95,7 +95,7 @@ export async function pickClipsDir(): Promise<PickResult> {
     dir = h;
     persistDir(h);
     return 'armed';
-  } catch { return 'cancelled'; } // user cancelled — keep vault fallback
+  } catch { return 'cancelled'; } // user cancelled - keep vault fallback
 }
 
 /** Re-grant inside a user gesture when the persisted dir lost permission. */
@@ -105,7 +105,7 @@ export async function regrantClipsDir(): Promise<boolean> {
   catch { return false; }
 }
 
-/** Clip vault — silent fallback storage when no folder is armed. Instead
+/** Clip vault - silent fallback storage when no folder is armed. Instead
  *  of a prompt-per-clip anchor download, clips land in IDB and export on
  *  demand (a deliberate click is a gesture anyway, so no prompt issue).
  *  Bounded like the ShadowPlay ring: oldest clips evict past the cap. */
@@ -118,7 +118,7 @@ async function vaultEvict(db: IDBDatabase): Promise<void> {
     q.addEventListener('error', (): void => res([]));
   });
   if (keys.length <= VAULT_MAX) {return;}
-  // Keys are filenames, not insert-ordered — evict by stored timestamp.
+  // Keys are filenames, not insert-ordered - evict by stored timestamp.
   const rows = await new Promise<{ name: string; at: number }[]>((res): void => {
     const q = db.transaction('v').objectStore('v').getAll();
     q.onsuccess = (): void => res(q.result as { name: string; at: number }[]);
@@ -185,7 +185,7 @@ export async function getClipBlob(name: string): Promise<Blob | null> {
   } catch { return null; }
 }
 
-/** Deliberate-gesture export — the one place an anchor download is fine. */
+/** Deliberate-gesture export - the one place an anchor download is fine. */
 export async function exportClip(name: string): Promise<boolean> {
   try {
     const db = await idb();
@@ -225,13 +225,13 @@ export async function saveClip(filename: string, blob: Blob): Promise<boolean> {
       await w.write(blob);
       await w.close();
       return true;
-    } catch { dir = null; } // permission revoked or folder gone — fall through
+    } catch { dir = null; } // permission revoked or folder gone - fall through
   }
   // No folder armed → vault it silently (durable, bounded, exportable on
   // demand) instead of the prompt-per-clip anchor path.
   try { await vaultPut(filename, blob); return true; }
   catch (error) {
-    logger.warn(`vault save failed (${filename}) — anchor download fallback`, { e: String(error) });
+    logger.warn(`vault save failed (${filename}) - anchor download fallback`, { e: String(error) });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

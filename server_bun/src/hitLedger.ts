@@ -174,34 +174,47 @@ export class HitLedger {
     // kills++/killTotal must agree or suicides pad the scoreboard and
     // can even fake "first blood".
     if (shooterId !== 'environment' && shooterId !== targetId) {c.playerManager.addKill(shooterId);}
-    // Lifesteal: a melee frag pays the kill back as health (lance frags
-    // pay half — the zap is easier than the punch but still a closing
-    // weapon). Every hit still deals its listed damage — the
-    // survivability only lands on the kill edge, so hits-to-kill stays
-    // countable.
-    let steal = false;
-    const stealFrac = opts.weapon === WeaponType.Melee ? 1 : opts.weapon === WeaponType.Shocklance ? 0.5 : 0;
-    if (stealFrac > 0 && shooterId !== 'environment' && shooterId !== targetId) {
-      const shooter = c.playerManager.getPlayer(shooterId);
-      const mh = shooter ? perkMods(shooter.perk).meleeHeal : 0;
-      if (shooter && mh > 0 && !shooter.isDead) {healPool(shooter, shooter.maxHealth * mh * stealFrac); steal = true;}
-    }
+    const steal = this.stealPaid(c, shooterId, targetId, opts.weapon);
     if (logger.enabled('info')) {logger.info(`${opts.label} → kill`, Object.assign({}, {shooter: shooterId,target: targetId,damage}, opts.extra));}
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
-    // Binary lane when wireIds resolve — durable journal either way
-    // (kills are the event history a reclaim replays).
-    const killWids = c.deps.widOf;
-    const tw = killWids?.(targetId);
-    const sw = shooterId === 'environment' ? 0 : killWids?.(shooterId);
-    if (tw !== undefined && sw !== undefined && c.deps.wireCast) {
-      c.deps.wireCast(encodeKill({ shooterWid: sw, targetWid: tw, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }), true);
-    } else {
-      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }) as ServerMessage);
-    }
+    this.sendKill(c, shooterId, targetId, opts, shooterStreak, steal);
     c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air, endedStreak, simNow());
     c.deps.emit?.({ type: 'kill', targetId, shooterId, weapon: opts.weapon });
     c.respawner.schedule(targetId);
+  }
+
+  /** Lifesteal: a melee frag pays the kill back as health (lance frags
+   *  pay half — the zap is easier than the punch but still a closing
+   *  weapon). Every hit still deals its listed damage — the
+   *  survivability only lands on the kill edge, so hits-to-kill stays
+   *  countable. */
+  private stealPaid(c: LedgerHost, shooterId: string, targetId: string, weapon?: number): boolean {
+    let stealFrac = 0;
+    if (weapon === WeaponType.Melee) {stealFrac = 1;} else if (weapon === WeaponType.Shocklance) {stealFrac = 0.5;}
+    if (stealFrac <= 0 || shooterId === 'environment' || shooterId === targetId) {return false;}
+    const shooter = c.playerManager.getPlayer(shooterId);
+    const mh = shooter ? perkMods(shooter.perk).meleeHeal : 0;
+    if (!shooter || mh <= 0 || shooter.isDead) {return false;}
+    healPool(shooter, shooter.maxHealth * mh * stealFrac);
+    return true;
+  }
+
+  /** Kill wire: binary lane when wireIds resolve — durable journal either
+   *  way (kills are the event history a reclaim replays). `at` snaps the
+   *  adjudicated death position BEFORE respawn/teleport bookkeeping so
+   *  every client anchors corpse↔loot presentation to the same point. */
+  private sendKill(c: LedgerHost, shooterId: string, targetId: string, opts: { weapon?: number; air?: number }, shooterStreak: number | undefined, steal: boolean): void {
+    const killWids = c.deps.widOf;
+    const tw = killWids?.(targetId);
+    const sw = shooterId === 'environment' ? 0 : killWids?.(shooterId);
+    const atPos = c.playerManager.getPlayer(targetId)?.position;
+    const at = atPos ? { x: atPos.x, y: atPos.y, z: atPos.z } : undefined;
+    if (tw !== undefined && sw !== undefined && c.deps.wireCast) {
+      c.deps.wireCast(encodeKill({ shooterWid: sw, targetWid: tw, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal, at }), true);
+    } else {
+      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal, at }) as ServerMessage);
+    }
   }
 
 }

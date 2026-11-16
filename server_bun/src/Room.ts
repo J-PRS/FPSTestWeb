@@ -117,6 +117,10 @@ export class Room {
    *  prefers recycled ids over burning toward the 65536 wrap, where
    *  setUint16 would silently alias a live teammate's binding. */
   readonly wireIds = new Map<string, number>();
+  /** Reverse of wireIds — drawn-ghost reports (position.aim) carry a
+   *  u16 that must resolve back to a seat. Kept in step at the two
+   *  write sites (tickRecords mint, depart release). */
+  readonly widToId = new Map<number, string>();
   /** Spawn pacing: joiner playerId → seat ids still un-admitted to its
    *  world. gameState ships only admitted seats; the fanout admits a few
    *  per tick via direct playerJoined and gates their records meanwhile  - 
@@ -1250,6 +1254,7 @@ export class Room {
         for (const [pid, id] of this.wireIds) {out[id] = pid;}
         return out;
       },
+      idOfWid: (wid): string | undefined => this.widToId.get(wid),
       simsWorldState: (): ServerMessage[] => this.sims.flatMap((s): ServerMessage[] => s.worldState?.() ?? []),
       bases: this.spec.bases,
       structures: this.structs.eff(),
@@ -1876,6 +1881,7 @@ excess -= 1;
     const wid = this.wireIds.get(playerId);
     if (wid !== undefined) {
       this.wireIds.delete(playerId);
+      this.widToId.delete(wid);
       this.wireIdRetired.set(wid, wallNow());
       this.v4Last.delete(wid);
       this.connections.broadcast({ type: 'wireIds', add: {}, remove: [wid] });

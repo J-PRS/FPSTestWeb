@@ -1,7 +1,7 @@
 // Server-side demo file storage.
 // Saves uploaded demo clips to the demos/ directory and maintains a JSON index.
 
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { readFile, writeFile, mkdir, unlink, readdir, rename, stat } from 'node:fs/promises';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
@@ -294,15 +294,43 @@ added += 1;
     return cool;
   }
 
+  /** Extracted-shot lane: _tools/shots.ts writes clips under
+   *  demosDir/shots/<group>/. /demos/local lists them for the client's
+   *  LOCAL panel; the files serve through the normal GET /demos/<path>
+   *  now that loadDemo resolves subdirs inside demosDir. Not indexed -
+   *  scans live so new extractions appear without a reconcile. */
+  async listLocal(): Promise<DemoMeta[]> {
+    const out: DemoMeta[] = [];
+    const walk = async (d: string, rel: string): Promise<void> => {
+      const entries = await readdir(d, { withFileTypes: true }).catch(() => [] as import('node:fs').Dirent[]);
+      for (const e of entries) {
+        if (e.isDirectory()) { await walk(join(d, e.name), `${rel}${e.name}/`); continue; }
+        if (!e.name.endsWith('.demo')) { continue; }
+        const p = join(d, e.name);
+        try {
+          const data = await readFile(p);
+          const h = this.parseDemoHeader(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer);
+          const st = await stat(p);
+          out.push({ filename: `shots/${rel}${e.name}`, projectileLifetime: h.projectileLifetime, timestamp: st.mtimeMs, description: h.description, fileSize: data.byteLength });
+        } catch { /* malformed clip - skip, don't list */ }
+      }
+    };
+    await walk(join(this.demosDir, 'shots'), '');
+    return out;
+  }
+
   async loadDemo(filename: string): Promise<ArrayBuffer | null> {
-    // Sanitize filename - no path traversal
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    // Sanitize filename - subpaths (shots/<group>/<file>) are allowed so
+    // extracted-clip folders serve through the same route; resolution must
+    // stay inside demosDir.
+    const clean = filename.replace(/\\/g, '/');
+    if (clean.includes('..') || clean.startsWith('/') || !clean.endsWith('.demo')) {
       return null;
     }
-    if (!filename.endsWith('.demo')) {
+    const filePath = resolve(this.demosDir, clean);
+    if (!filePath.startsWith(resolve(this.demosDir) + sep)) {
       return null;
     }
-    const filePath = join(this.demosDir, filename);
     if (!existsSync(filePath)) {
       return null;
     }

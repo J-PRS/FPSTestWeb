@@ -73,6 +73,23 @@ describe('position frame round-trip', (): void => {
     expect(d.seq).toBe(7);
     expect(d.inputSeq).toBeUndefined();
   });
+
+  it('round-trips the drawn-ghost aim tail and drops it when absent', (): void => {
+    const pos = { x: 1, y: 2, z: 3 };
+    const rot = { yaw: 0, pitch: 0 };
+    const vel = { x: 0, y: 0, z: 0 };
+    const aim = { wid: 42, x: 10.5, y: 60.25, z: -7.75 };
+    const framed = encodePosition(pos, rot, vel, 7, 12, undefined, undefined, aim);
+    expect(framed.length).toBe(44);
+    const d = decodePosition(framed)!;
+    expect(d.aim).toEqual(aim);
+    // No tail - aim stays absent on shorter frames.
+    expect(decodePosition(encodePosition(pos, rot, vel, 7, 12))!.aim).toBeUndefined();
+    // A scratch object can't leak a prior frame's ghost either.
+    const scratch = decodePosition(encodePosition(pos, rot, vel, 8, 12, undefined, undefined, aim))!;
+    const reused = decodePosition(encodePosition(pos, rot, vel, 9, 12), scratch)!;
+    expect(reused.aim).toBeUndefined();
+  });
 });
 
 describe('inputMove binary round-trip', (): void => {
@@ -573,7 +590,7 @@ describe('v4 delta-masked records', (): void => {
     expect(u.health).toBe(100);                  // retained, not zeroed
 
     // rot-only → bare pos too.
-    p.rotation.yaw = 2.0;
+    p.rotation.yaw = 2;
     const rotOnly = sparseV4Record(encodeTickPlayerV4(7, p, enc, last, false), sparseEnc);
     expect(rotOnly.length).toBe(15);
     u = decode(rotOnly, 3);

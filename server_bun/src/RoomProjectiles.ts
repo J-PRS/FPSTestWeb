@@ -143,6 +143,8 @@ export interface ProjHost {
    *  the flat rail number; gungame gates spawns to the owner's rung
    *  weapon and igun pays the flat ~200 on body contacts. */
   mods?: RoomMods;
+  /** Health counters exposed via /metrics - drawn-ghost credits count here. */
+  health?: Map<string, number>;
   gunGameAllowsFire?(ownerId: string, weaponType: number): boolean;
   pushNoise(pos: Vec3): void;
   ballSim?: {

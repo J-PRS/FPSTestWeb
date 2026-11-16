@@ -195,7 +195,7 @@ export class HealthBarSystem {
     this.bars.set(playerId, this.createHealthBar(damage, health, this.knownMax.get(playerId) ?? MAX_HEALTH, playerId, undefined, armor));
   }
 
-  update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[], localTeam?: string): void {
+  update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[], localTeam?: string, marked?: ReadonlySet<string>): void {
     // Sync authoritative health + armor from the server-fed player map
     for (const [playerId, state] of players) {
       if (state.health !== undefined) {
@@ -212,7 +212,7 @@ export class HealthBarSystem {
     const cameraDir = _cameraDir;
     this.camera.getWorldDirection(cameraDir);
 
-    this.updatePlayerBars(dt, players, remotePlayers, cameraPos, cameraDir, localTeam);
+    this.updatePlayerBars(dt, players, remotePlayers, cameraPos, cameraDir, localTeam, marked);
 
     // Update ball healthbars
     for (const [ball, bar] of this.ballBars) {
@@ -242,14 +242,14 @@ export class HealthBarSystem {
     }
   }
 
-  private updatePlayerBars(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3, localTeam?: string): void {
+  private updatePlayerBars(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3, localTeam?: string, marked?: ReadonlySet<string>): void {
     const view = { dt, cameraPos, cameraDir, localTeam };
     for (const [playerId, bar] of this.bars) {
-      this.syncPlayerBar(playerId, bar, players, remotePlayers, view);
+      this.syncPlayerBar(playerId, bar, players, remotePlayers, view, marked !== undefined && !marked.has(playerId));
     }
   }
 
-  private syncPlayerBar(playerId: string, bar: HealthBar, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, view: { dt: number; cameraPos: THREE.Vector3; cameraDir: THREE.Vector3; localTeam?: string }): void {
+  private syncPlayerBar(playerId: string, bar: HealthBar, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, view: { dt: number; cameraPos: THREE.Vector3; cameraDir: THREE.Vector3; localTeam?: string }, hide: boolean): void {
     const { dt, cameraPos, cameraDir, localTeam } = view;
     const playerState = players.get(playerId);
     const rp = remotePlayers?.get(playerId);
@@ -274,7 +274,10 @@ export class HealthBarSystem {
     // +0.5 collapsed onto the class silhouette at distance. Repair
     // bars use +1.6 for the same reason; +1.8 clears the marker row.
     const targetPos = _targetPos.set(pos.x, pos.y + ((rp as { renderLift?: number } | undefined)?.renderLift ?? 0) + 1.8, pos.z);
-    this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, (): void => this.removeBar(playerId));
+    // Marker gate: when the HUD gives this remote no indicator the bar
+    // stays hidden too - lifetime/flash still run, so the wounded
+    // readout reappears mid-linger if the marker comes back.
+    this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, (): void => this.removeBar(playerId), hide);
   }
 
   // Sync health + armor from authoritative state.
@@ -413,7 +416,8 @@ export class HealthBarSystem {
     targetPos: THREE.Vector3,
     cameraPos: THREE.Vector3,
     cameraDir: THREE.Vector3,
-    removeBar: () => void
+    removeBar: () => void,
+    hide = false
   ): void {
     bar.life -= dt;
     if (bar.life <= 0) {
@@ -425,6 +429,11 @@ export class HealthBarSystem {
       bar.delayTimer -= dt;
     } else if (bar.flashTimer > 0) {
       bar.flashTimer -= dt;
+    }
+
+    if (hide) {
+      bar.el.style.display = 'none';
+      return;
     }
 
     this.paintBar(bar);

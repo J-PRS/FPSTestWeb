@@ -123,10 +123,14 @@ describe('join guards', () => {
     const { mgr } = mkSessions(room);
     const bad = fakeWs();
     mgr.handle(bad as never, { type: 'notjoin' });
-    expect(bad.closed[0]?.reason).toBe('Expected join handshake');
+    // Well-formed non-join frames are DROPPED, not closed — a queued game
+    // message (e.g. 'held') can legitimately outrun join on a reconnect;
+    // closing re-arms the client's reconnect with the same stale frame
+    // queued first (the ~16s connect/die cycle). Malformed still closes.
+    expect(bad.closed[0]).toBeUndefined();
     mgr.handle(bad as never, { type: 'join', playerId: '!!bad id!!' });
     await flush();
-    expect(bad.closed[1]?.reason).toBe('Invalid playerId');
+    expect(bad.closed[0]?.reason).toBe('Invalid playerId');
     expect(room.playerCount()).toBe(0);
   });
 

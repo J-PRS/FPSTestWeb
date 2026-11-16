@@ -93,6 +93,12 @@ function makeRemoteHooks(deps: RemotesDeps) {
 
 type WirePlayerState = RemotePlayerState;
 
+/** Ids whose HUD marker was refreshed this pass - the wounded-popup
+ *  healthbar gates on it: a bar without a marker would leak an enemy
+ *  the intel feed says you can't see. Cleared at the top of networkTick,
+ *  refilled wherever updatePlayerIndicator runs (wire remotes + local bots). */
+export const markerLive = new Set<string>();
+
 function isRemoteActive(deps: RemotesDeps, playerId: string, players: Map<string, WirePlayerState>): boolean {
   return deps.world.remotePlayers.active(playerId, deps.world.remotePlayers.get(playerId), players.get(playerId));
 }
@@ -200,6 +206,7 @@ function markIndicator(deps: RemotesDeps, hud: HUD, playerId: string, remotePlay
   // Unnamed humans show their id minus the 'player_' prefix - still
   // marks them as a real person vs a bot's HP number.
   hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, mem, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held, name: playerState.name ?? playerId.replace(/^player_/, '') });
+  markerLive.add(playerId);
   // The number stays on the indicator; the crown renders the pile itself.
   remotePlayer.setHeld(playerState.held ?? 0);
 }
@@ -669,6 +676,28 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
     prevOnRemove?.(id, ent, reason);
   };
 
+  // Drawn-ghost uplink: report the RENDERED feet-spot of the remote
+  // nearest the crosshair so the server tests the capsule where the
+  // shooter's screen put it - lateral DR drift lives at no rewind epoch.
+  // ~4deg cone + skip hidden/dead; feet because the server's capsule
+  // math adds centerOff to a base pos (same as rewindPos output).
+  function aimGhostFor(nm: NetworkManager, player: Player, remotes: Iterable<[string, RemotePlayer]>): { wid: number; x: number; y: number; z: number } | undefined {
+    const cp = Math.cos(player.pitch);
+    const fx = cp * Math.sin(player.yaw), fy = Math.sin(player.pitch), fz = cp * Math.cos(player.yaw);
+    let best: RemotePlayer | undefined, bestId = '', bestDot = 0.9976;
+    for (const [id, rp] of remotes) {
+      if (rp.isDead || rp.staleHidden || rp.cloakGhost) {continue;}
+      const dx = rp.pos.x - player.pos.x, dy = rp.pos.y - player.pos.y, dz = rp.pos.z - player.pos.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d < 1 || d > 600) {continue;}
+      const dot = (dx * fx + dy * fy + dz * fz) / d;
+      if (dot > bestDot) { bestDot = dot; best = rp; bestId = id; }
+    }
+    if (best === undefined) {return undefined;}
+    const wid = nm.widOf(bestId);
+    return wid === undefined ? undefined : { wid, x: best.pos.x, y: best.feetY, z: best.pos.z };
+  }
+
   function getLastSentPos(): { x: number; y: number; z: number; } { return lastSentPos; }
   function setLastSentPos(pos: { x: number; y: number; z: number }): void {
     lastSentPos.x = pos.x; lastSentPos.y = pos.y; lastSentPos.z = pos.z;
@@ -715,7 +744,8 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
     nm.sendPosition(
       { x: player.pos.x, y: player.pos.y, z: player.pos.z },
       { yaw: player.yaw, pitch: player.pitch },
-      { x: player.vel.x, y: player.vel.y, z: player.vel.z }
+      { x: player.vel.x, y: player.vel.y, z: player.vel.z },
+      aimGhostFor(nm, player, deps.world.remotePlayers),
     );
 
     // Connected → disconnected: the wire map is already cleared, so the
@@ -751,6 +781,7 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
       }
     }
 
+    markerLive.clear();
     players.forEach((playerState, playerId): void => tickRemotePlayer(deps, lastTintOf, playerId, playerState, dt));
     // 10Hz ghost-epoch sampler - rendered/wire/ghost divergence audit.
     sampleRemoteGhosts(deps.world.remotePlayers.values());
@@ -777,6 +808,7 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
         const held = (rp as { heldTokens?: number }).heldTokens ?? 0;
         rp.setHeld(held);
         hud.updatePlayerIndicator(id, _markPos, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass, hp: (rp as { botHp?: number }).botHp, held });
+        markerLive.add(id);
       }
       aswAccrue(id, rp.isDead, aswAltFor(id, rp.position.x, rp.position.z, rp.feetY, deps.lazyTerrain(), dt), gb.wireSki ?? false, dt, rp.vel.length());
       locoNote(id, rp.isDead, rp.position.x, rp.position.z);

@@ -5,6 +5,8 @@ import type { RemoteSample } from '../demo/DemoRecorder.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import { isBotId } from '../../../shared/botNames.js';
 import { applyStatusVisuals, applyTeamTint } from './remotes.js';
+import { hideRemote, showRemote } from '../entities/remoteVis.js';
+import { getShadows } from '../entities/swarms.js';
 import { WIRE_SPECIES } from './netCrawlers.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
 import { applyMapFog, applyWeather, applyAtmosphere, applyTerrain } from './net/mapAssets.js';
@@ -374,8 +376,33 @@ function playbackStart(d: DemoLifecycleCtx, demoManager: DemoManager): void {
   // The feed plays clips without a user gesture - pointer lock would
   // throw (and is meaningless there: no aiming, no input).
   if (!feedMode.on) {d.rendererCanvas.requestPointerLock()?.catch?.((): void => { return; });}
-  // Live remote players would otherwise stand ghosted inside the replay
-  for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(true);}
+  // Live remote players would otherwise stand ghosted inside the replay —
+  // stale only shimmers (they stay valid live targets), so playback needs a
+  // REAL hide plus a blob-shadow free or ghost bodies + their shadows
+  // linger over the clip.
+  for (const rp of d.world.remotePlayers.values()) {
+    hideRemote(rp);
+    if (rp.shadowSlot >= 0) {getShadows()?.free(rp);}
+  }
+  // networkTick returns early in playbackMode, so live HUD markers
+  // (nametags, chevrons, flag/node diamonds) never get refreshed or
+  // reaped — wipe the overlay or the pre-clip match floats over the
+  // replay. Playback re-mints its pb:/flag:/node: ids each tick.
+  d.lazyHud().clearPlayerIndicators();
+  // Same story one lane down: the live wire's flag/node marker objects
+  // still get projected by tickFlagMarkers/tickNodeMarkers in playback —
+  // drop them so only clip-minted markers (playbackFlagTeams/NodeIds)
+  // draw. The live feed re-mints them on the next wire update post-stop.
+  for (const team of ['alpha', 'bravo'] as const) {
+    if (d.world.flagMarkers.delete(team)) {
+      d.lazyHud().removePlayerIndicator(`flag:${team}`);
+      d.lazyHud().removePlayerIndicator(`stand:${team}`);
+    }
+  }
+  for (const id of d.world.nodeMarkers.keys()) {
+    d.world.nodeMarkers.delete(id);
+    d.lazyHud().removePlayerIndicator(`node:${id}`);
+  }
   disposeLiveEntities(d);
   clearTransientObjects(d);
 }
@@ -385,7 +412,11 @@ function playbackStop(d: DemoLifecycleCtx, demoManager: DemoManager, onPlaybackS
   // Re-arm so the next replay re-applies its own weapon instead of
   // inheriting whatever the previous clip left selected.
   d.playbackWid = -1;
-  for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(false);}
+  for (const rp of d.world.remotePlayers.values()) {
+    // Respect the gates the live vis paths own — a corpse or a cloaked
+    // body must not be resurrected by the replay's exit.
+    if (!rp.isDead && !rp.cloakHidden && !rp.frustumHidden) {showRemote(rp);}
+  }
   // Hand the live sky/haze back - the clip's atmo was a guest.
   if (demoManager.player.demoData?.atmo) {
     applyAtmoSection(d, d.world.lastAtmo);

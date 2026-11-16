@@ -1,8 +1,11 @@
 // Demo playback engine - replays recorded frames with interpolation.
 // Supports play, pause, seek, speed control, and rewind.
 
-import type { ProjectileEvent, TargetEvent, RemoteFrame, DemoFile } from './types.js';
+import { RemoteFrameFlags, type ProjectileEvent, type TargetEvent, type RemoteFrame, type DemoFile } from './types.js';
 import * as pb from './demoPlayback.js';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('DemoPlayer');
 
 export interface InterpolatedRemote {
   rosterIdx: number;
@@ -67,12 +70,69 @@ export class DemoPlayer {
     this.lastTargetEventIndex = 0;
     this.lastRemoteFrameIndex = 0;
     this.remotesByIdx.clear();
+    this.sanitize(data);
     for (const f of data.remoteFrames) {
       let arr = this.remotesByIdx.get(f.rosterIdx);
       if (!arr) {this.remotesByIdx.set(f.rosterIdx, arr = []);}
       arr.push(f);
     }
     this.playing = false;
+  }
+
+  /** Malformed-lane hygiene - every downstream lookup is a binary search
+   *  or a roster-table read, so garbage in = silent ghosts, not errors.
+   *  Sort unsorted lanes (files are timestamp-ordered by contract), drop
+   *  non-finite rows and remoteFrames pointing outside the roster, and
+   *  disambiguate same-name roster rows (a reseat splits one human into
+   *  two idx entries with identical names). */
+  private sanitize(data: DemoFile): void {
+    const bad = { unsorted: 0, nan: 0, roster: 0 };
+    const lane = <T extends { timestamp: number }>(events: T[]): T[] => {
+      let sorted = events;
+      for (let i = 1; i < events.length; i += 1) {
+        if (events[i]!.timestamp < events[i - 1]!.timestamp) {
+          bad.unsorted += 1;
+          sorted = events.toSorted((a, b): number => a.timestamp - b.timestamp);
+          break;
+        }
+      }
+      return sorted;
+    };
+    data.frames = lane(data.frames);
+    data.projectileEvents = lane(data.projectileEvents);
+    data.targetEvents = lane(data.targetEvents);
+    data.remoteFrames = lane(data.remoteFrames);
+    const rosterN = data.roster.length;
+    data.remoteFrames = data.remoteFrames.filter((f): boolean => {
+      const ok = Number.isFinite(f.posX + f.posY + f.posZ) && f.rosterIdx >= 0 && f.rosterIdx < rosterN;
+      if (!ok) {bad[f.rosterIdx >= 0 && f.rosterIdx < rosterN ? 'nan' : 'roster'] += 1;}
+      return ok;
+    });
+    data.frames = data.frames.filter((f): boolean => {
+      const ok = Number.isFinite(f.posX + f.posY + f.posZ);
+      if (!ok) {bad.nan += 1;}
+      return ok;
+    });
+    const seen = new Map<string, number>();
+    for (const r of data.roster) {
+      const n = (seen.get(r.name) ?? 0) + 1;
+      seen.set(r.name, n);
+      if (n > 1) {r.name = `${r.name} (${n})`;}
+    }
+    // Duration guard: a header claiming 0s ends playback on the first
+    // update; fall back to the last timestamp any lane recorded.
+    if (!(data.header.duration > 0)) {
+      const last = Math.max(
+        data.frames.at(-1)?.timestamp ?? 0,
+        data.remoteFrames.at(-1)?.timestamp ?? 0,
+        data.targetEvents.at(-1)?.timestamp ?? 0,
+        data.projectileEvents.at(-1)?.timestamp ?? 0,
+      );
+      if (last > 0) {data.header.duration = last;}
+    }
+    if (bad.unsorted + bad.nan + bad.roster > 0) {
+      logger.warn('sanitized malformed file', bad);
+    }
   }
 
   unload(): void {
@@ -241,6 +301,16 @@ export class DemoPlayer {
       let t = 0;
       const range = f1.timestamp - f0.timestamp;
       if (range > 0) {t = Math.max(0, Math.min(1, (this.currentTime - f0.timestamp) / range));}
+      // Teleport marks a reseat jump the recorded vel can't bridge -
+      // blending it sweeps the body across the map; snap to the edge.
+      // Pre-flag files (v7 streams) carry no marker: fall back to a
+      // distance tripwire - a body can't cover 40m inside one 20Hz gap.
+      const teleport = (f1.flags & RemoteFrameFlags.Teleport) !== 0
+        || Math.hypot(f1.posX - f0.posX, f1.posY - f0.posY, f1.posZ - f0.posZ) > 40;
+      if (f1 !== f0 && teleport) {t = 1;}
+      // Dead bodies don't lerp - hold the last live pose until the flag
+      // clears (respawn edge carries Teleport anyway).
+      if (f0.flags & RemoteFrameFlags.Dead) {t = 0;}
       out.push({
         rosterIdx,
         posX: f0.posX + (f1.posX - f0.posX) * t,
