@@ -59,7 +59,7 @@ total += 1;
   const payload = JSON.stringify(detail);
   if (glitch(`parity-${kind}`, detail)) {
     // Also log full JSON for the bot pilot soak capture
-    console.error(`[GLITCH:parity-${kind}] ${payload}`);
+    logger.error(`[GLITCH:parity-${kind}] ${payload}`);
   } else {
     logger.warn(`[GLITCH:parity-${kind}] ${payload}`);
   }

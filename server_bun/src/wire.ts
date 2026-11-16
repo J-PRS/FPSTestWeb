@@ -679,7 +679,8 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       // before a verdict; per-ping jitter averages out. Strikes count
       // on the heartbeat only — flag-for-review, never auto-kick.
       const cp = p.clockProbe ??= { s0: m.timestamp, a0: now, s: m.timestamp, a: now, strikes: 0 };
-      cp.s = m.timestamp; cp.a = now;
+      cp.s = m.timestamp;
+      cp.a = now;
       const span = cp.a - cp.a0;
       if (span >= 20_000) {
         const rate = (cp.s - cp.s0) / span;

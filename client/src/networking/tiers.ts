@@ -365,7 +365,7 @@ export class TieredTransport implements GameTransport {
 
   constructor(private readonly config: ConnectionConfig, private readonly opts?: TierOpts) {}
 
-  get tier() { return this.inner?.tier; }
+  get tier(): GameTransport['tier'] | undefined { return this.inner?.tier; }
 
   connect(url?: string): void {
     this.url = url;

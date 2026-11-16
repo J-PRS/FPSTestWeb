@@ -72,7 +72,7 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // stepping BallSim fills the field near every player, and lunging
   // balls pop on pinned bots — leaking damage into unrelated scenarios.
   const room = new Room('t', field, mode,
-    resolveMapSpec({ balls: { base: 0, perPlayer: 0, max: 0 }, ...spec }), moveAuthority);
+    resolveMapSpec(Object.assign({ balls: { base: 0, perPlayer: 0, max: 0 } }, spec)), moveAuthority);
   // Taunt draws ride a parallel stream — flavor must never consume the
   // behavior sequence (a shared cooldown ring would otherwise let one
   // room's chatter re-order another room's decision rolls).
@@ -97,7 +97,7 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
 /** Roster accessors that assert instead of returning `| undefined` —
  *  index access under noUncheckedIndexedAccess would force `!` noise. */
 export function firstPlayer(room: Room): PlayerState {
-  const p = [...room.players.getAllPlayers().values()][0];
+  const [p] = [...room.players.getAllPlayers().values()];
   if (!p) {throw new Error('firstPlayer: empty roster');}
   return p;
 }
@@ -127,7 +127,7 @@ export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string,
   const tstream = tauntStreams.get(room);
   if (tstream) {tauntRng(tstream);}
   try {
-  for (let i = 0; i < ticks; i++) {
+  for (let i = 0; i < ticks; i += 1) {
     for (const s of room.sims) {
       if (profile) {
         const t0 = performance.now();
@@ -170,7 +170,7 @@ export function pin(room: Room, playerId: string, pos: Vec3): void {
   const p = room.players.getPlayer(playerId);
   if (!p) {throw new Error(`pin: no player ${playerId}`);}
   room.moveSim.resync(playerId, pos, 0);
-  p.position = { ...pos };
+  p.position = Object.assign({}, pos);
   p.protectedUntil = simMs(0);
 }
 
@@ -188,7 +188,7 @@ export function freeze(room: Room, playerId: string, pos: Vec3): void {
 export function watch(room: Room, now?: () => number): { count: (type: string, kind?: string) => number; msgs: ServerMessage[] } {
   const msgs: ServerMessage[] = [];
   room.connections.broadcast = now
-    ? (m: ServerMessage) => { msgs.push({ ...m, _s: now() } as unknown as ServerMessage); }
+    ? (m: ServerMessage) => { msgs.push(Object.assign({}, m, { _s: now() }) as unknown as ServerMessage); }
     : (m: ServerMessage) => { msgs.push(m); };
   // Projectile edges ride the binary lane — surface them as the same
   // message shape tests assert on.
@@ -255,7 +255,7 @@ export function replica(room: Room): Replica {
     recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0,
   };
   const fanout = new TickFanout(fanoutMetrics,
-    (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
+    (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined));
   const fanoutSim = { name: 'fanout', tick: () => {
     room.tickSeq++;
     const players = room.players.getAllPlayers();
@@ -276,17 +276,16 @@ export function replica(room: Room): Replica {
     if (playerId !== REPLICA_ID) {return prevSendBin.call(room.connections, playerId, data);}
     const f = decodeTickFrame(data, pool);
     if (!f) {return 'gone';}
-    for (let i = 0; i < f.count; i++) {
+    for (let i = 0; i < f.count; i += 1) {
       const u = f.updates[i]!;
       if (!u.playerId) {continue;} // unresolved wireId — roster arrives on its own event
       held.set(u.playerId, { x: u.position.x, y: u.position.y, z: u.position.z, health: u.health, isDead: u.isDead });
     }
     return 'sent';
   };
-  const flat = (map: Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>) => map;
   return {
     players: held,
-    hash: () => computeStateHash(flat(new Map(held))),
+    hash: () => computeStateHash(new Map(held)),
     roomHash: () => {
       const truth = new Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>();
       for (const [id, p] of room.players.getAllPlayers()) {

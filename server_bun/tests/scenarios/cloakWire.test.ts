@@ -9,14 +9,16 @@ import type { ServerMessage } from '../../../shared/protocol.ts';
 
 // Wire-invisible cloak: the record itself must not reach non-teammates
 // — a visual-only hide still ships the position on the wire.
-describe('scenario: cloak wire secrecy', () => {
   const mkFanout = () => {
     const metrics: FanoutMetrics = {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0,
     };
-    return new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
+    return new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined));
   };
+
+describe('scenario: cloak wire secrecy', () => {
+
 
   it('a cloaked enemy emits no record; a teammate still sees the ghost', () => {
     const room = mkRoom({ bots: 3 });
@@ -50,7 +52,7 @@ describe('scenario: cloak wire secrecy', () => {
     const players = room.players.getAllPlayers();
     const tick = () => {
       b.position.z = (room.tickSeq % 2) * 2; // keep B out of suppression
-      room.tickSeq++;
+      room.tickSeq += 1;
       seen.clear();
       fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
     };

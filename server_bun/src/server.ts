@@ -105,7 +105,7 @@ async function shutdown(): Promise<void> {
 setInterval((): void => {
   gameServer.afkSweep();
   if (gameServer.draining && gameServer.totalHumans() === 0) {
-    void shutdown();
+    shutdown().catch((error: unknown): void => { logger.error(`shutdown failed: ${String(error)}`); });
   }
 }, 30_000).unref();
 

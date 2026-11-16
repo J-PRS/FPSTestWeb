@@ -269,7 +269,7 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Pro
     // flushed mid-match without teardown. Needs FPS_DEMO at boot.
     '/admin/demodump': (): Response => {
       const r = ctx.gameServer.dumpDemo(url.searchParams.get('room') ?? '');
-      return json(typeof r === 'string' ? { ok: false, result: r } : { ok: true, ...r },
+      return json(typeof r === 'string' ? { ok: false, result: r } : Object.assign({ ok: true }, r),
         { status: r === 'ok' || typeof r === 'object' ? 200 : 404 });
     },
     // Leak forensics — JSC-format heapsnapshot, opens in Safari Web

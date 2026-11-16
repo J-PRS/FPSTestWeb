@@ -1,6 +1,6 @@
 /**
  * Native-shell volatile lane (client side). A running Electrobun/Tauri
- * shell exposes ws://127.0.0.1:8787 — a loopback ws→UDP relay in its main
+ * shell exposes ws://127.0.0.1:8787 - a loopback ws→UDP relay in its main
  * process. The game session (join, match, edges) stays on the normal
  * ws/wt transport; ONLY volatile binary frames (position/input/shot
  * claims up, tick frames down) route through the shim.
@@ -10,7 +10,9 @@
  * send flips to it once it reports open. The shim's first datagram
  * (token-prefixed) binds the session on the server.
  */
-// The shell probes this same range for a free port — another loopback
+import { urlParams } from '../core/params.js';
+
+// The shell probes this same range for a free port - another loopback
 // app once squatted the default.
 const SHIM_PORTS = [8787, 8788, 8789, 8790, 8791];
 const TOKEN_BYTES = 16;
@@ -24,18 +26,24 @@ export class UdpLane {
    *  re-dial all 5 ports on every reconnect/session. */
   private shimMissed = false;
 
-  /** gameState carried a bind — open the shim. Idempotent per session. */
+  /** gameState carried a bind - open the shim. Idempotent per session. */
   adopt(bind: { token: string; port: number }, onBinary: (b: Uint8Array) => void): void {
     if (this.ws !== null || this.shimMissed || !bind || typeof bind.token !== 'string') {return;}
+    // A loopback dial in a plain browser pops Chrome's local-network
+    // permission for every joiner - only the native shell's stamped
+    // ?shim=<port> (or bare ?shim to scan the range) earns the probe.
+    if (!urlParams.has('shim')) {return;}
+    const portParam = Number(urlParams.get('shim'));
+    const ports = portParam > 0 ? [portParam] : SHIM_PORTS;
     const token = new Uint8Array(TOKEN_BYTES);
     for (let i = 0; i < TOKEN_BYTES; i += 1) {token[i] = Number.parseInt(bind.token.slice(i * 2, i * 2 + 2), 16);}
     this.token = token;
     const tryPort = (i: number): void => {
-      if (i >= SHIM_PORTS.length) {this.shimMissed = true; log('shim probe exhausted — staying on ws'); return;}
+      if (i >= ports.length) {this.shimMissed = true; log('shim probe exhausted - staying on ws'); return;}
       let ws: WebSocket;
-      try { ws = new WebSocket(`ws://127.0.0.1:${SHIM_PORTS[i]}/udp`); } catch { tryPort(i + 1); return; }
+      try { ws = new WebSocket(`ws://127.0.0.1:${ports[i]}/udp`); } catch { tryPort(i + 1); return; }
       ws.binaryType = 'arraybuffer';
-      ws.addEventListener('open', (): void => { this.open = true; log(`udp lane open — ws://127.0.0.1:${SHIM_PORTS[i]}`); });
+      ws.addEventListener('open', (): void => { this.open = true; log(`udp lane open - ws://127.0.0.1:${ports[i]}`); });
       ws.addEventListener('close', (): void => { this.open = false; if (this.ws === ws) {this.ws = null;} });
       ws.addEventListener('error', (): void => { if (!this.open) {tryPort(i + 1);} });
       ws.addEventListener('message', (ev): void => {
@@ -46,7 +54,7 @@ export class UdpLane {
     tryPort(0);
   }
 
-  /** Volatile send — [token][frame] through the shim. false = stay on ws. */
+  /** Volatile send - [token][frame] through the shim. false = stay on ws. */
   send(frame: Uint8Array): boolean {
     if (!this.open || this.ws === null || this.token === null) {return false;}
     const dg = new Uint8Array(TOKEN_BYTES + frame.length);

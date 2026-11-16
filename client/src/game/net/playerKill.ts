@@ -162,9 +162,9 @@ function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<
   deps.lazyHud().hide();
   deps.lazyHud().setDeathOverlay(true);
   deps.world.killStreak = 0;
-  const deathMsg = shooterId === 'environment' ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
-    : shooterId === targetId ? 'YOU DIED\nfragged yourself'
-      : `YOU DIED\nfragged by ${displayName(shooterId, roster)}`;
+  let deathMsg = `YOU DIED\nfragged by ${displayName(shooterId, roster)}`;
+  if (shooterId === 'environment') {deathMsg = `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`;}
+  else if (shooterId === targetId) {deathMsg = 'YOU DIED\nfragged yourself';}
   deps.fragMessages.show(deathMsg);
   // Kill-cam: follow the killer's replica for ~4s - informational
   // closure, not intel (you're dead; they know you're dead). A spectate

@@ -25,7 +25,7 @@ describe('scenario: interest tier hysteresis', () => {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0,
     };
-    const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
+    const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined));
     const prevBroadcast = room.connections.broadcast;
     room.connections.broadcast = (m: ServerMessage, exclude?: string) => {
       if (m.type === 'wireIds') {
@@ -47,7 +47,7 @@ describe('scenario: interest tier hysteresis', () => {
       // still target emits nothing and reads as "skipped" for the wrong reason.
       b.position.x = bx;
       b.position.z = (room.tickSeq % 2) * 2;
-      room.tickSeq++;
+      room.tickSeq += 1;
       aSeesB = false;
       fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
     };
@@ -95,7 +95,7 @@ describe('scenario: interest tier hysteresis', () => {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0,
     };
-    const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
+    const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined));
     const prevBroadcast = room.connections.broadcast;
     room.connections.broadcast = (m: ServerMessage, exclude?: string) => {
       if (m.type === 'wireIds') {
@@ -119,7 +119,7 @@ describe('scenario: interest tier hysteresis', () => {
     // baseline must punch through loss fast.
     for (let i = 0; i < 5; i += 1) {
       b.position.z = (i % 2) * 2; // keep B out of the suppression window
-      room.tickSeq++;
+      room.tickSeq += 1;
       fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
     }
     expect(cSaw).toBe(5);
@@ -129,7 +129,7 @@ describe('scenario: interest tier hysteresis', () => {
     const cTail0 = cSaw;
     for (let i = 0; i < 11; i += 1) {
       b.position.z = (i % 2) * 2;
-      room.tickSeq++;
+      room.tickSeq += 1;
       fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
     }
     const cTail = cSaw - cTail0;

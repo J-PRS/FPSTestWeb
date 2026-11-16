@@ -21,7 +21,7 @@ describe('scenario: tick egress counts live recipients only', () => {
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0,
     };
     const fanout = new TickFanout(metrics,
-      (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
+      (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined));
     const sent: Array<{ id: string; bytes: number }> = [];
     room.connections.sendBinaryToPlayer = (id: string, data: Uint8Array) => {
       sent.push({ id, bytes: data.byteLength });
@@ -30,7 +30,7 @@ describe('scenario: tick egress counts live recipients only', () => {
 
     const players = room.players.getAllPlayers();
     expect(players.size).toBe(4); // 3 bots + 1 live human
-    room.tickSeq++;
+    room.tickSeq += 1;
     fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
 
     // Exactly one wire frame: the human's. The bots are records in that

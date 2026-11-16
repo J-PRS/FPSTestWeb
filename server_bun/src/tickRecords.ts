@@ -112,7 +112,7 @@ function mintWireId(room: Room): number {
  *  doing N^2 every 400ms. */
 function staggerOf(pid: string): number {
   let h = 0;
-  for (let i = 0; i < pid.length; i += 1) {h = (h + pid.charCodeAt(i)) | 0;}
+  for (let i = 0; i < pid.length; i += 1) {h = Math.trunc(h + pid.charCodeAt(i));}
   return h & 7;
 }
 
@@ -127,9 +127,9 @@ function kthSmallest(a: number[], k: number): number {
     const pivot = b[(lo + hi) >> 1]!;
     let i = lo, j = hi;
     while (i <= j) {
-      while (b[i]! < pivot) {i++;}
-      while (b[j]! > pivot) {j--;}
-      if (i <= j) {const t = b[i]!; b[i] = b[j]!; b[j] = t; i++; j--;}
+      while (b[i]! < pivot) {i += 1;}
+      while (b[j]! > pivot) {j -= 1;}
+      if (i <= j) {const t = b[i]!; b[i] = b[j]!; b[j] = t; i += 1; j -= 1;}
     }
     if (ki <= j) {hi = j;} else if (ki >= i) {lo = i;} else {return b[ki]!;}
   }

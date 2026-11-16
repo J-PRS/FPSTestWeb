@@ -604,7 +604,10 @@ function updateScoreboard(deps: RemotesDeps): void {
   hud.setScoreboardPingVisible?.(nm.isConnected()); // offline bots-only boards drop the latency column
   hud.setScoreboardNetVisible?.(nm.isConnected()); // and the transport column - every row would read 'bot'/'-'
   hud.setScoreboardTeamScores?.(deps.world.teamScores);
-  const modTag = deps.world.instagib ? 'INSTAGIB' : deps.world.igun ? 'IGUNGAME' : deps.world.gungame ? 'GUNGAME' : undefined;
+  let modTag: string | undefined;
+  if (deps.world.instagib) {modTag = 'INSTAGIB';}
+  else if (deps.world.igun) {modTag = 'IGUNGAME';}
+  else if (deps.world.gungame) {modTag = 'GUNGAME';}
   hud.setScoreboardTitle(scoreboardTitle(deps.world.mode, deps.world.mapName, modTag));
 }
 
@@ -660,6 +663,29 @@ export interface RemotesApi {
   setLastSentPos: (pos: { x: number; y: number; z: number }) => void;
 }
 
+// Drawn-ghost uplink: report the RENDERED feet-spot of the remote
+// nearest the crosshair so the server tests the capsule where the
+// shooter's screen put it - lateral DR drift lives at no rewind epoch.
+// ~4deg cone + skip hidden/dead; feet because the server's capsule
+// math adds centerOff to a base pos (same as rewindPos output).
+function aimGhostFor(nm: NetworkManager, player: Player, remotes: Iterable<[string, RemotePlayer]>): { wid: number; x: number; y: number; z: number } | undefined {
+  const cp = Math.cos(player.pitch);
+  const fx = cp * Math.sin(player.yaw), fy = Math.sin(player.pitch), fz = cp * Math.cos(player.yaw);
+  let best: RemotePlayer | undefined, bestId = '', bestDot = 0.9976;
+  for (const [id, rp] of remotes) {
+    if (rp.isDead || rp.staleHidden || rp.cloakGhost) {continue;}
+    const dx = rp.pos.x - player.pos.x, dy = rp.pos.y - player.pos.y, dz = rp.pos.z - player.pos.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 1 || d > 600) {continue;}
+    const dot = (dx * fx + dy * fy + dz * fz) / d;
+    if (dot > bestDot) { bestDot = dot; best = rp; bestId = id; }
+  }
+  if (best === undefined) {return undefined;}
+  const wid = nm.widOf(bestId);
+  return wid === undefined ? undefined : { wid, x: best.pos.x, y: best.feetY, z: best.pos.z };
+}
+
+
 export function createRemotes(deps: RemotesDeps): RemotesApi {
   noteDeps(deps); // the game-dump hook needs deps even offline
   const lastSentPos = { x: 0, y: 0, z: 0 };
@@ -676,27 +702,6 @@ export function createRemotes(deps: RemotesDeps): RemotesApi {
     prevOnRemove?.(id, ent, reason);
   };
 
-  // Drawn-ghost uplink: report the RENDERED feet-spot of the remote
-  // nearest the crosshair so the server tests the capsule where the
-  // shooter's screen put it - lateral DR drift lives at no rewind epoch.
-  // ~4deg cone + skip hidden/dead; feet because the server's capsule
-  // math adds centerOff to a base pos (same as rewindPos output).
-  function aimGhostFor(nm: NetworkManager, player: Player, remotes: Iterable<[string, RemotePlayer]>): { wid: number; x: number; y: number; z: number } | undefined {
-    const cp = Math.cos(player.pitch);
-    const fx = cp * Math.sin(player.yaw), fy = Math.sin(player.pitch), fz = cp * Math.cos(player.yaw);
-    let best: RemotePlayer | undefined, bestId = '', bestDot = 0.9976;
-    for (const [id, rp] of remotes) {
-      if (rp.isDead || rp.staleHidden || rp.cloakGhost) {continue;}
-      const dx = rp.pos.x - player.pos.x, dy = rp.pos.y - player.pos.y, dz = rp.pos.z - player.pos.z;
-      const d = Math.hypot(dx, dy, dz);
-      if (d < 1 || d > 600) {continue;}
-      const dot = (dx * fx + dy * fy + dz * fz) / d;
-      if (dot > bestDot) { bestDot = dot; best = rp; bestId = id; }
-    }
-    if (best === undefined) {return undefined;}
-    const wid = nm.widOf(bestId);
-    return wid === undefined ? undefined : { wid, x: best.pos.x, y: best.feetY, z: best.pos.z };
-  }
 
   function getLastSentPos(): { x: number; y: number; z: number; } { return lastSentPos; }
   function setLastSentPos(pos: { x: number; y: number; z: number }): void {

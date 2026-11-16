@@ -38,7 +38,7 @@ describe('scenario: K-nearest record cap', () => {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0,
     };
-    const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
+    const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined));
     const prevBroadcast = room.connections.broadcast;
     room.connections.broadcast = (m: ServerMessage, exclude?: string) => {
       if (m.type === 'wireIds') {
@@ -69,7 +69,7 @@ describe('scenario: K-nearest record cap', () => {
     let cappedCount = -1;
     for (let i = 0; i < 30; i += 1) {
       for (const p of players.values()) {p.position.z += (i % 2) * 2 - 1;}
-      room.tickSeq++;
+      room.tickSeq += 1;
       const before = metrics.recordsCapped;
       r0Seen.clear();
       fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));

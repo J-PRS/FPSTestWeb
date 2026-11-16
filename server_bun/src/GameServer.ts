@@ -18,14 +18,13 @@ import { RoomFactory } from './roomFactory.ts';
 import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
 import { SessionRegistry } from './sessionRegistry.ts';
+import type { TeamScores,TeamId } from '../../shared/teams.ts';
 import { wallNow } from './wallClock.ts';
 import { wireRx, BIN_KIND, rxCost } from './wireMeter.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import { MessageHandler } from './MessageHandler.ts';
 import type { UdpLane } from './UdpLane.ts';
-import type { TeamId } from '../../shared/teams.ts';
-import type { ClientMessage, RoomMods } from '../../shared/protocol.ts';
-import { roomModsOf } from '../../shared/protocol.ts';
+import { roomModsOf, type ClientMessage, type RoomMods } from '../../shared/protocol.ts';
 
 interface RestoreSeat {
   id: string; name?: string; team?: TeamId; perk?: string; armorClass?: string;
@@ -346,11 +345,12 @@ export class GameServer {
     try {
     // Wrap first: the binary metering tag needs byte 1 - a DataView +
     // string per frame was ~50K throwaway allocs/s at load.
-    const u8 = typeof message === 'string'
-      ? undefined
-      : message instanceof ArrayBuffer
+    let u8: Uint8Array | undefined;
+    if (typeof message !== 'string') {
+      u8 = message instanceof ArrayBuffer
         ? new Uint8Array(message)
         : new Uint8Array(message.buffer, message.byteOffset, message.byteLength);
+    }
     wireRx(ws.data.playerId, typeof message === 'string' ? Buffer.byteLength(message) : message.byteLength,
       u8 === undefined ? `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(message as string)?.[1] ?? '?'}` : BIN_KIND[u8[1]!]!);
     // Binary hot path: [0x54] magic frames skip JSON entirely.
@@ -593,7 +593,12 @@ export class GameServer {
 
   /** Lobby listing - live matches a client can join by name. `withNames`
    *  (ops callers only) adds the per-player id→name roster. */
-  listRooms(withNames = false) {
+  listRooms(withNames = false): {
+    name: string; mode?: string; map?: string; players: number; humans: number;
+    active: number; names?: { id: string; name: string | undefined }[]; maxPlayers: number;
+    spectators?: number; scores?: TeamScores;
+    ffaLeader?: [string, number]; winAt?: number; timeLeftMs?: number;
+  }[] {
     return [...this.rooms.values()].filter((r): boolean => r.mods.unlisted !== true).map(r => ({
       name: r.name,
       mode: r.mode || undefined,
@@ -704,12 +709,12 @@ export class GameServer {
 
   /** Server-browser card: what a master list / LAN browser displays per
    *  host. Cheap to poll - one row per room, no per-player data. */
-  getServerInfo() { return opsGetServerInfo(this); }
+  getServerInfo(): ReturnType<typeof opsGetServerInfo> { return opsGetServerInfo(this); }
 
-  getHealthStatus() { return opsGetHealthStatus(this); }
+  getHealthStatus(): ReturnType<typeof opsGetHealthStatus> { return opsGetHealthStatus(this); }
 
   /** Ops snapshot for /metrics. */
-  getMetrics() { return opsGetMetrics(this); }
+  getMetrics(): ReturnType<typeof opsGetMetrics> { return opsGetMetrics(this); }
 
   setBunServer(server: Server<WebSocketData>): void {
     this.bunServer = server;
@@ -769,7 +774,10 @@ export class GameServer {
         if (ps.vel && !(Number.isFinite(ps.vel.x) && Number.isFinite(ps.vel.y) && Number.isFinite(ps.vel.z))) {continue;}
         if (ps.health !== undefined && !Number.isFinite(ps.health)) {continue;}
         if (room.players.getPlayer(ps.id)) {continue;}
-        const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', room.mods.instagib === true ? 'light' : (room.mods.igun === true ? 'medium' : (ps.armorClass ?? 'medium')));
+        let armor = ps.armorClass ?? 'medium';
+        if (room.mods.instagib === true) {armor = 'light';}
+        else if (room.mods.igun === true) {armor = 'medium';}
+        const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', armor);
         p.position = Object.assign({}, ps.pos);
         p.velocity = Object.assign({}, ps.vel);
         p.rotation.yaw = ps.yaw ?? 0;
@@ -836,7 +844,8 @@ seated += 1;
    *  not a player: close it or the parse loop is free DoS. */
   private static readonly GARBAGE_FRAME_CAP = 64;
   private garbageStrike(ws: ServerWebSocket<WebSocketData>): void {
-    const n = (ws.data.badFrames = (ws.data.badFrames ?? 0) + 1);
+    ws.data.badFrames = (ws.data.badFrames ?? 0) + 1;
+    const n = ws.data.badFrames;
     if (n >= GameServer.GARBAGE_FRAME_CAP) {
       logger.warn('Closing garbage-flood socket', { playerId: ws.data.playerId, badFrames: n });
       try { ws.close(1008, 'garbage flood'); } catch { /* already dying */ }

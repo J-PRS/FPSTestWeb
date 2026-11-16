@@ -5,7 +5,7 @@ import { join, resolve, sep } from 'node:path';
 import { readFile, writeFile, mkdir, unlink, readdir, rename, stat } from 'node:fs/promises';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { existsSync, type Dirent } from 'node:fs';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { wallNow } from './wallClock.ts';
@@ -302,7 +302,7 @@ added += 1;
   async listLocal(): Promise<DemoMeta[]> {
     const out: DemoMeta[] = [];
     const walk = async (d: string, rel: string): Promise<void> => {
-      const entries = await readdir(d, { withFileTypes: true }).catch(() => [] as import('node:fs').Dirent[]);
+      const entries = await readdir(d, { withFileTypes: true }).catch(() => [] as Dirent[]);
       for (const e of entries) {
         if (e.isDirectory()) { await walk(join(d, e.name), `${rel}${e.name}/`); continue; }
         if (!e.name.endsWith('.demo')) { continue; }

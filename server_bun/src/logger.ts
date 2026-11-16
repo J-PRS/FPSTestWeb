@@ -37,10 +37,11 @@ class Logger {
       // valid in the browser tsconfig that typechecks server modules for
       // P2P embeds. The sink activates async - the first few warns after
       // boot are console-only.
-      void import('node:fs').then((fs): void => {
+      import('node:fs').then((fs): undefined => {
         fs.mkdirSync('logs', { recursive: true });
         this.logFile = 'logs/server.log';
         this.append = (line): void => fs.appendFileSync(this.logFile!, `${line  }\n`);
+        return undefined;
       }).catch((): void => { /* console-only */ });
     } catch { /* console-only */ }
   }

@@ -16,7 +16,7 @@ describe('weapon ammo pool', () => {
     let fired = 0;
     // Full-cadence pulls every 0.1s: regen is paused one interval past
     // each shot, so exactly the 20-round clip fires - no accrual mid-burst.
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 20; i += 1) {
       if (spendAmmo(pool, WeaponType.PlasmaGun, t)) {fired += 1;}
       t += 0.1;
     }
@@ -25,7 +25,7 @@ describe('weapon ammo pool', () => {
     // Next 1s of trigger-holding at a dry pool: regen ignores the pause
     // and funds ~5 rounds (one per 0.2s) - the half-cadence trickle.
     let trickle = 0;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 10; i += 1) {
       if (spendAmmo(pool, WeaponType.PlasmaGun, t)) {trickle += 1;}
       t += 0.1;
     }
@@ -48,7 +48,7 @@ describe('weapon ammo pool', () => {
     const pool: AmmoPool = new Map();
     expect(ammoOf(pool, WeaponType.Disc, 0)).toBeUndefined();
     expect(spendAmmo(pool, WeaponType.Disc, 0)).toBe(true);
-    for (let i = 0; i < 25; i++) {spendAmmo(pool, WeaponType.PlasmaGun, i * 0.05);}
+    for (let i = 0; i < 25; i += 1) {spendAmmo(pool, WeaponType.PlasmaGun, i * 0.05);}
     expect(ammoOf(pool, WeaponType.PlasmaGun, 25 * 0.05)!).toBeLessThan(20);
     pool.clear(); // respawn path - absent cell = full pool
     expect(ammoOf(pool, WeaponType.PlasmaGun, 0)!).toBe(20);
@@ -61,7 +61,7 @@ describe('weapon ammo pool', () => {
     a.hasReceivedPosition = true; // skipRecord skips humans with no inputMove yet
     a.lastSeen = wallNow();
     seat(room, a.id); // sendToPlayer needs a live socket
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i += 1) {
       room.messages.handleMessage(a.id, {
         type: 'shotFired', seq: i + 1,
         dir: { x: 1, y: 0, z: 0 },
@@ -86,7 +86,7 @@ describe('weapon ammo pool', () => {
     const metrics = { recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0,
       tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0 } as FanoutMetrics;
-    new TickFanout(metrics, () => {}).buildRecords(room, room.players.getAllPlayers(), wallNow());
+    new TickFanout(metrics, () => undefined).buildRecords(room, room.players.getAllPlayers(), wallNow());
     const echo = sent.find((m) => m.type === 'yourAmmo') as { ammo: [number, number][] } | undefined;
     expect(echo).toBeDefined();
     const [wt, n] = echo!.ammo.find(([w]) => w === WeaponType.PlasmaGun)!;

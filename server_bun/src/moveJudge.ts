@@ -529,7 +529,9 @@ sh.divergences += 1;
   private noteHealth(dist: number, impWindow: boolean, marginal: boolean): void {
     const h = this.host.health();
     if (!h) {return;}
-    const key = impWindow ? 'diverge.kb' : marginal ? 'diverge.marginal' : 'diverge';
+    let key = 'diverge';
+    if (impWindow) {key = 'diverge.kb';}
+    else if (marginal) {key = 'diverge.marginal';}
     h.set(key, (h.get(key) ?? 0) + 1);
     if (!impWindow && !marginal && dist > (h.get('gapMax') ?? 0)) {h.set('gapMax', Math.round(dist * 10) / 10);}
   }

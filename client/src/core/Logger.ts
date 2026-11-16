@@ -212,8 +212,8 @@ lastFoldCount += 1;
     const lines = [`=== DIAGNOSTICS @ ${tsLocal()} ===`];
     try {
       if (diagnosticsProvider) {lines.push(...diagnosticsProvider(verbose));}
-    } catch (error) {
-      lines.push(`diagnostics threw: ${error}`);
+    } catch (error_) {
+      lines.push(`diagnostics threw: ${String(error_)}`);
     }
     lines.push('=== LOGS ===');
     return lines;

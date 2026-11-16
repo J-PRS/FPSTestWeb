@@ -11,8 +11,7 @@
 // invariant.
 import type { Room } from '../../src/Room.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
-import type { TickDecodePool } from '../../../shared/wire.ts';
-import { decodeTickFrame } from '../../../shared/wire.ts';
+import { decodeTickFrame, type TickDecodePool } from '../../../shared/wire.ts';
 import { TickFanout, type FanoutMetrics } from '../../src/tickRecords.ts';
 import { wallNow } from '../../src/wallClock.ts';
 
@@ -73,7 +72,7 @@ export function fuzzDeliverFrame(rep: FuzzReplica, frame: Uint8Array): void {
     }
     rep.held.set(u.playerId, {
       x: u.position.x, y: u.position.y, z: u.position.z,
-      health: u.health, isDead: u.isDead, vel: u.velocity ? { ...u.velocity } : undefined,
+      health: u.health, isDead: u.isDead, vel: u.velocity ? { x: u.velocity.x, y: u.velocity.y, z: u.velocity.z } : undefined,
     });
   }
 }

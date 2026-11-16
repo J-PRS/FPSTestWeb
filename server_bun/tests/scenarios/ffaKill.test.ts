@@ -13,7 +13,7 @@ describe('scenario: ffa kill scores', () => {
     pin(room, target!.id, { x: 20, y: 32, z: 0 });
     room.projectiles.spawn(shooter!.id, WeaponType.PlasmaGun,
       { x: 0, y: 32, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 300 && w.count('playerKill') === 0; i++) {
+    for (let i = 0; i < 300 && w.count('playerKill') === 0; i += 1) {
       pin(room, target!.id, { x: 20, y: 32, z: 0 });
       step(room, 1);
     }
@@ -34,7 +34,7 @@ describe('scenario: ffa kill scores', () => {
     pin(room, target!.id, { x: 20, y: 32, z: 0 });
     room.projectiles.spawn(shooter!.id, WeaponType.PlasmaGun,
       { x: 0, y: 32, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 300 && w.count('playerKill') === 0; i++) {
+    for (let i = 0; i < 300 && w.count('playerKill') === 0; i += 1) {
       pin(room, target!.id, { x: 20, y: 32, z: 0 });
       step(room, 1);
     }

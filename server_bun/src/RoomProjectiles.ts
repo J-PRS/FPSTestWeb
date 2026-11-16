@@ -353,7 +353,7 @@ export class RoomProjectiles {
 
   plant(proj: LiveProj, at: Vec3): void {
     const vl = dhypot3(proj.p.vel.x, proj.p.vel.y, proj.p.vel.z) || 1;
-    this.planted.set(proj.id, { pos: { ...at }, dir: { x: proj.p.vel.x / vl, y: proj.p.vel.y / vl, z: proj.p.vel.z / vl }, ownerId: proj.ownerId, weaponType: proj.weaponType, ttl: proj.stats.plants! });
+    this.planted.set(proj.id, { pos: { x: at.x, y: at.y, z: at.z }, dir: { x: proj.p.vel.x / vl, y: proj.p.vel.y / vl, z: proj.p.vel.z / vl }, ownerId: proj.ownerId, weaponType: proj.weaponType, ttl: proj.stats.plants! });
     // The shell is dead - the planted record IS its corpse. Leaving it
     // live let it keep sweeping: every tick re-planted a deeper contact
     // until ttl, so the reclaimable body ended up under the map where
@@ -593,7 +593,7 @@ export class RoomProjectiles {
         if (dx * dx + dy * dy + dz * dz <= r2) {
           sib.p.age = Math.max(sib.p.age, sib.ttl);
           sib.cooked = true;
-          cooked++;
+          cooked += 1;
         }
       }
     }

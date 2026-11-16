@@ -689,7 +689,14 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
 
 // Demo playback lifecycle: owns the playback projectile/ball registries and
 // wires all onPlayback* handlers (events, state, start/stop/seek/end).
-export function createDemoLifecycle(deps: DemoLifecycleDeps) {
+export function createDemoLifecycle(deps: DemoLifecycleDeps): {
+  playbackWorld: PlaybackWorld;
+  playbackBallById: Map<number, Ball>;
+  updatePlaybackProjectiles: (dt: number) => void;
+  updateBallsPlayback: (dt: number) => void;
+  snapshotExistingBallsForRecording: (cb?: (ball: Ball) => void) => void;
+  wireDemoHandlers: (dm: DemoManager, onStop: () => void) => void;
+} {
   const playbackProjectiles: Projectile[] = [];
   const playbackProjectileById = new Map<number, Projectile>();
   const playbackBallById = new Map<number, Ball>();

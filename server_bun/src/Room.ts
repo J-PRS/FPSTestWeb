@@ -1362,7 +1362,7 @@ export class Room {
         const shooterWid = e.shooterId === 'environment' ? 0 : this.wireIds.get(e.shooterId);
         if (shooterWid === undefined) {return false;}
         if (e.shooterId !== 'environment') {this.noteEngagement(e.shooterId, e.targetId);}
-        this.connections.broadcastBinaryReliable(encodeHit({ ...e, targetWid, shooterWid }), 'volatile'); // combat events journal  -  same 3s staleness window the JSON lane carried
+        this.connections.broadcastBinaryReliable(encodeHit(Object.assign({}, e, { targetWid, shooterWid })), 'volatile'); // combat events journal  -  same 3s staleness window the JSON lane carried
         return true;
       },
       // Generic S→C binary relay plumbing  -  the wireId+pos event family

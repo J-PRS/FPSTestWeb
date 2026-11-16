@@ -66,14 +66,15 @@ import { BootWarmup, pendingHeavy } from './bootWarmup.js';
 import { warmRig } from '../entities/rigPool.js';
 import { PlayerModel } from '../entities/PlayerModel.js';
 
+import { isPosPrimed, setPosPrimed } from './posPrimed.js';
+import { hudRegion } from '../ui/hud/regions.js';
+
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 // Frame-jump forensic: compare pos at the same point each frame so any
 // discontinuity - respawn, correction, teleport - lands in the log with
 // its from→to pair. Honest skiing is ~2-4m/frame even at 30fps; 8m only
 // fires on a real snap.
 const _posPrev = new THREE.Vector3();
-import { isPosPrimed, setPosPrimed, noteLocalSnap } from './posPrimed.js';
-import { hudRegion } from '../ui/hud/regions.js';
 
 /** Authoritative reseats (respawn, correction, gameState restore, journal
  *  rewind) teleport the body by design - the frame-jump watch must not

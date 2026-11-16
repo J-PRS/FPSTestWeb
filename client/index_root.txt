@@ -1,3 +1,4 @@
+.gitignore
 .madgerc
 AGENTS.md
 VERSION

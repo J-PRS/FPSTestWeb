@@ -65,7 +65,12 @@ export interface BlastArgs {
   shotId?: string | null;
 }
 
-export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
+export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
+  applyExplosionForce: (a: BlastArgs) => void;
+  applyForceToRemotes: (a: BlastArgs) => void;
+  predictLocalShove: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string }) => boolean;
+  applyForceToPrey: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull') => void;
+} {
 
   // Nuggets are light pickups - blast throws them at a boosted force so
   // explosions visibly scatter loot instead of it hovering through the blast
@@ -142,7 +147,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   // runs it as dead reckoning and clears stale pre-hit snapshots so there's
   // no snap-back when interpolation resumes.
   function applyForceToRemotes(a: BlastArgs): void {
-    const { pos, radius, force, forceMode, aoeDamage, directHitTargetId, shooterId, weaponType } = a;
+    const { pos, radius, force, aoeDamage, directHitTargetId, shooterId, weaponType } = a;
     const scales = weaponType === undefined ? undefined : getWeaponStats(weaponType).aoeScales;
     for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) {continue;}

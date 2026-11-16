@@ -87,7 +87,7 @@ export class TickLoop {
    *  a 200ms 'fan' span is ours. Per-tick stamps are ~6 wallNow calls --
    *  cheap vs the mark() EMA's measured cost. */
   private worstTicks: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] = [];
-  bandwidthWindow() { return this.lastBw; }
+  bandwidthWindow(): typeof this.lastBw { return this.lastBw; }
   /** Rooms stopped for repeated tick failures -- /metrics surfaces this
    *  so a dead room is visible on the status page, not just in logs. */
   quarantinedRooms(): string[] { return [...this.faultedRooms]; }

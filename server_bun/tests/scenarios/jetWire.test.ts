@@ -24,9 +24,9 @@ describe('scenario: held jet rides the tick frame', () => {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0,
     };
-    const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
+    const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined));
     room.sims.push({ name: 'fanout', tick: () => {
-      room.tickSeq++;
+      room.tickSeq += 1;
       const players = room.players.getAllPlayers();
       fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
     } });
@@ -56,14 +56,14 @@ describe('scenario: held jet rides the tick frame', () => {
     room.connections.sendBinaryToPlayer = (_pid: string, data: Uint8Array) => {
       const f = decodeTickFrame(data, pool);
       if (f) {
-        for (let i = 0; i < f.count; i++) {
+        for (let i = 0; i < f.count; i += 1) {
           if (f.updates[i]!.playerId === p.id) {lastJet = f.updates[i]!.jet;}
         }
       }
       return 'sent';
     };
     room.spectators.add('__probe__');
-    room.tickSeq++;
+    room.tickSeq += 1;
     const players = room.players.getAllPlayers();
     fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
     expect(lastJet).toBe(1);
@@ -71,7 +71,7 @@ describe('scenario: held jet rides the tick frame', () => {
     jetInput(2, 0);
     expect(p.jetting).toBe(0);
     lastJet = undefined;
-    room.tickSeq++;
+    room.tickSeq += 1;
     fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
     expect<number | undefined>(lastJet).toBe(0);
 

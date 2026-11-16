@@ -31,7 +31,7 @@ it('melee probe: who punches from far?', () => {
     pin(room, bots[i]!.id, { x: Math.cos(a) * 60, y: 32, z: Math.sin(a) * 60 });
   }
   const deadSince = new Map<string, number>();
-  for (let i = 0; i < 12000; i++) {
+  for (let i = 0; i < 12_000; i++) {
     step(room, 1);
     for (const p of bots) {
       if (p.isDead) {
@@ -43,4 +43,4 @@ it('melee probe: who punches from far?', () => {
   }
   console.log(`melee calls=${calls} applied=${applied} far-applied=${[...far.values()].reduce((a, b) => a + b, 0)}`);
   expect([...far.values()].reduce((a, b) => a + b, 0)).toBe(0);
-});
+}, 20_000); // 12k ticks solo ~5s - parallel bun test needs headroom

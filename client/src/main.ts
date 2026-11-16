@@ -1352,7 +1352,7 @@ const paintStaleBadge = (): void => {
 // (files newer than the dist build stamp) - localhost-only so the same
 // bundle on a tunneled https URL stays clean. Count is absolute vs
 // build, not cumulative - feed the delta into the accumulator.
-if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]')) {
+if (import.meta.env.PROD && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '[::1]')) {
   // Alt+R = rebuild + reload - the loop the preview badge makes visible.
   let rebuildDiv: HTMLDivElement | null = null;
   const rebuild = (): void => {
@@ -1365,7 +1365,11 @@ if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostn
       document.body.append(rebuildDiv);
     }
     fetch('/dev/rebuild', { method: 'POST' })
-      .then((r) => { if (r.ok) {location.reload();} else {rebuildDiv!.textContent = `rebuild failed (${r.status})`;} })
+      .then((r): undefined => {
+        if (r.ok) {window.location.reload();}
+        else {rebuildDiv!.textContent = `rebuild failed (${r.status})`;}
+        return undefined;
+      })
       .catch((): void => { rebuildDiv!.textContent = 'rebuild endpoint missing'; });
   };
   addEventListener('keydown', (e: KeyboardEvent): void => {

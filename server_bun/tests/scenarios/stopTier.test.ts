@@ -2,8 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkRoom, seat, freeze } from './harness.ts';
 import { TickFanout, type FanoutMetrics } from '../../src/tickRecords.ts';
 import { wallNow } from '../../src/wallClock.ts';
-import { decodeTickFrame } from '../../../shared/wire.ts';
-import type { WireTickPlayer } from '../../../shared/wire.ts';
+import { decodeTickFrame, type WireTickPlayer } from '../../../shared/wire.ts';
 import type { Room } from '../../src/Room.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
 
@@ -13,14 +12,13 @@ import type { ServerMessage } from '../../../shared/protocol.ts';
  *  (r.force bypass), so the conn's decode basis stays fresh and an
  *  un-stop needs no re-entry handshake: the next masked delta decodes
  *  right. Nothing on the wire says a record stopped. */
-describe('stop tier', () => {
   const mkFanout = (): [TickFanout, FanoutMetrics] => {
     const metrics: FanoutMetrics = { recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
       recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, recordsCapped: 0, recordsAimPromoted: 0, recordsScanned: 0, scanNs: 0, frameNs: 0 };
-    return [new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {})), metrics];
+    return [new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined)), metrics];
   };
 
-  /** Decode the observer's tick frames into playerId→tickSeq presence. */
+/** Decode the observer's tick frames into playerId→tickSeq presence. */
   const watchConn = (room: Room, observer: string): { presentAt: Map<string, Set<number>>; decode: () => void } => {
     const roster = new Map<number, string>();
     const pool = { slots: [] as WireTickPlayer[], byId: new Map<number, WireTickPlayer>(), resolveId: (wid: number) => roster.get(wid) };
@@ -39,8 +37,9 @@ describe('stop tier', () => {
       if (pid !== observer) {return prevBin.call(room.connections, pid, data);}
       const f = decodeTickFrame(data, pool);
       const seen = new Set<string>();
-      for (let i = 0; f && i < f.count; i += 1) {
-        const u = f.updates[i]!;
+      const n = f ? f.count : 0;
+      for (let i = 0; i < n; i += 1) {
+        const u = f!.updates[i]!;
         if (u.playerId) {seen.add(u.playerId);}
       }
       const tick = room.tickSeq;
@@ -53,6 +52,11 @@ describe('stop tier', () => {
     };
     return { presentAt, decode: (): void => { room.connections.broadcast = prevB; room.connections.sendBinaryToPlayer = prevBin; } };
   };
+
+describe('stop tier', () => {
+
+
+  
 
   /** One sim-tick: 50ms of fake wall time (suppression needs >250ms to
    *  re-arm heartbeats — 40 real-ms drains would eat every record). */

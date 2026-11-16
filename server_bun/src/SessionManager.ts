@@ -551,9 +551,13 @@ this.d.ops.joins += 1;
     // an undeclared skill falls back to blink - picks still flow through
     // perkUpdate/skill claims like any other room.
     const insta = room.mods.instagib === true;
-    const joinedPlayer = room.players.addPlayer(playerId, room.nextHumanTeam(),
-      isPerkId(handshake.perk) && (!insta || handshake.perk !== 'none') ? handshake.perk : (insta ? 'jumpstart' : 'none'),
-      insta ? 'light' : (room.mods.igun === true ? 'medium' : (typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium')));
+    const { perk: joinPerk } = handshake;
+    let perk = insta ? 'jumpstart' : 'none';
+    if (isPerkId(joinPerk) && (!insta || joinPerk !== 'none')) {perk = joinPerk;}
+    let armor = 'medium';
+    if (insta) {armor = 'light';}
+    else if (room.mods.igun !== true && typeof handshake.armorClass === 'string') {armor = handshake.armorClass;}
+    const joinedPlayer = room.players.addPlayer(playerId, room.nextHumanTeam(), perk, armor);
     // The seat replaces a bot's ONLY when the join grew the big side  - 
     // a human landing on the short side already balanced the room, and
     // retiring there too would just un-swap it (the bug where every join

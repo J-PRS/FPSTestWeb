@@ -47,12 +47,30 @@ const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string)
 // asserting closed[] must wait out that deferral.
 const flush = () => new Promise((r) => setTimeout(r, 40));
 
+    const mkMintSessions = (room: ReturnType<typeof mkRoom>) => {
+      const calls = { roomFor: [] as string[], quickMint: [] as boolean[] };
+      const playerRoom = new Map<string, typeof room>();
+      const reg = new SessionRegistry();
+      const mgr = new SessionManager({
+        rooms: new Map([[room.name, room]]), playerRoom, specRooms: new Map(),
+        roomFor: (n) => { calls.roomFor.push(n); return room; },
+        quickRoom: (_m, _mp, _b, _mods, _ph, mm) => { calls.quickMint.push(mm ?? true); return room; },
+        roomOfPlayer: (id) => room.players.getPlayer(id) ? room : undefined,
+        totalPlayers: () => playerRoom.size,
+        ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0, joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0 },
+        registry: reg,
+        departSpectator: () => false,
+        removePlayerCompletely: () => undefined,
+      });
+      return { mgr, calls };
+    };
+
 describe('join guards', () => {
   it('throttles a join flood from one IP after the burst budget', () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     // 20/min — a NAT'd household of players is legit; a script isn't.
-    for (let i = 0; i < 20; i++) {join(mgr, fakeWs(), `flood${i}`);}
+    for (let i = 0; i < 20; i += 1) {join(mgr, fakeWs(), `flood${i}`);}
     const over = fakeWs();
     join(mgr, over, 'floodOver');
     expect(over.closed[0]?.reason).toBe('Join rate limited');
@@ -64,7 +82,7 @@ describe('join guards', () => {
     try {
       const room = mkRoom({}, 'tdm');
       const { mgr } = mkSessions(room);
-      for (let i = 0; i < 20; i++) {join(mgr, fakeWs(), `flood${i}`);} // burn the window
+      for (let i = 0; i < 20; i += 1) {join(mgr, fakeWs(), `flood${i}`);} // burn the window
       // Wrong/absent key still throttles; the real one walks through.
       mgr.handle(fakeWs() as never, { type: 'join', playerId: 'bad', room: 't', adminKey: 'nope' });
       const ok = fakeWs();
@@ -79,7 +97,7 @@ describe('join guards', () => {
   it('exempts loopback from the throttle (dev fleets)', () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
-    for (let i = 0; i < 8; i++) {join(mgr, fakeWs('127.0.0.1'), `local${i}`);}
+    for (let i = 0; i < 8; i += 1) {join(mgr, fakeWs('127.0.0.1'), `local${i}`);}
     expect(room.playerCount()).toBe(8);
   });
 
@@ -103,7 +121,7 @@ describe('join guards', () => {
     // without a seat leaks a gen entry that never gets reaped.
     join(mgr, fakeWs(), 'victim'); // claim an id for the thief probe
     const throttled = fakeWs();
-    for (let i = 0; i < 20; i++) {join(mgr, fakeWs(), `f${i}`);}
+    for (let i = 0; i < 20; i += 1) {join(mgr, fakeWs(), `f${i}`);}
     join(mgr, throttled, 'fOver');
     room.players.removePlayer('victim');
     const thief = fakeWs('10.2.2.2');
@@ -147,23 +165,7 @@ describe('join guards', () => {
     });
     beforeEach(() => { process.env.FPS_CLIENT_ROOMS = '0'; });
 
-    const mkMintSessions = (room: ReturnType<typeof mkRoom>) => {
-      const calls = { roomFor: [] as string[], quickMint: [] as boolean[] };
-      const playerRoom = new Map<string, typeof room>();
-      const reg = new SessionRegistry();
-      const mgr = new SessionManager({
-        rooms: new Map([[room.name, room]]), playerRoom, specRooms: new Map(),
-        roomFor: (n) => { calls.roomFor.push(n); return room; },
-        quickRoom: (_m, _mp, _b, _mods, _ph, mm) => { calls.quickMint.push(mm ?? true); return room; },
-        roomOfPlayer: (id) => room.players.getPlayer(id) ? room : undefined,
-        totalPlayers: () => playerRoom.size,
-        ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0, joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0 },
-        registry: reg,
-        departSpectator: () => false,
-        removePlayerCompletely: () => undefined,
-      });
-      return { mgr, calls };
-    };
+
 
     it('an untrusted join naming a missing room lands elsewhere — no mint', () => {
       const room = mkRoom({}, 'tdm');
