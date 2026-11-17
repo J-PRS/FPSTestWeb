@@ -10,6 +10,7 @@ import type { Nugget } from '../entities/Nugget.js';
 import { Scoreboard, type SbRow } from './hud/scoreboard.js';
 import { HudStats } from './hud/hudStats.js';
 import * as ch from './hud/hudChrome.js';
+import { isDevHost } from '../core/params.js';
 
 import type { Player } from '../entities/Player.js';
 import type { TeamId } from '../../../shared/teams.js';
@@ -405,7 +406,8 @@ export class HUD {
       // A reasoned close ('server restarting') names itself and reads
       // amber — expected, transient. A silent 1006 keeps the generic red
       // CONNECTION LOST — that's the one that means something broke.
-      const label = reason ? reason.toUpperCase() : 'CONNECTION LOST';
+      // The reason text is wire jargon on prod - dev hosts keep it.
+      const label = reason && isDevHost() ? reason.toUpperCase() : 'CONNECTION LOST';
       this.paintConn(`${label} — reconnecting ${s.toFixed(1)}s`, reason ? 'warn' : 'down');
       return;
     }
