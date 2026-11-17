@@ -64,7 +64,7 @@ type Schema = {
   'fps-onboarded': number;    // 1 = first-run controls card already shown
   'fps-last-room': string;    // server room the client last joined - boot resume target
   'fps-solo': number;         // 1 = player chose a solo session (lobby stays shut on boot)
-  'fps-solo-map': string;     // SOLO tab's map pick ('' = default field)
+  'fps-solo-map': string;     // SOLO tab's map pick ('' = default field, default 'rimrock')
   'fps-solo-bots': number;    // SOLO tab's bot count (-1 = map default)
   'fps-lb-tab': string;       // lobby's last-open tab (JOIN|HOST|OFFLINE|P2P)
   'fps-host-mode': string;    // HOST tab's ruleset pick ('' = ANY)
@@ -102,7 +102,7 @@ const DEFAULTS: Schema = {
   'fps-skill': 'dash',
   'fps-perk': 'jumpstart',
   'fps-class': 'medium',
-  'fps-mode': '',
+  'fps-mode': 'headhunt', // newcomer default: offline headhunt on rimrock
   'fps-spawns': 0,
   'fps-debug': 0,
   'fps-volume': 0.7,
@@ -137,8 +137,8 @@ const DEFAULTS: Schema = {
   'fps-onboarded': 0,
   'fps-last-room': '',
   'fps-solo': 0,
-  'fps-solo-map': '',
-  'fps-solo-bots': -1,
+  'fps-solo-map': 'rimrock',
+  'fps-solo-bots': 11, // 11 bots + the player = the 6v6 newcomer match
   'fps-lb-tab': '',
   'fps-host-mode': '',
   'fps-host-map': '',

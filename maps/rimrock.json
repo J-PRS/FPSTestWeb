@@ -1,6 +1,7 @@
 {
   "name": "Rimrock",
   "mode": "dm",
+  "modes": ["dm", "headhunt"],
   "bots": 10,
   "botFill": 12,
   "spawns": [

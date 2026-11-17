@@ -28,3 +28,4 @@ tsconfig.json
 vite.config.js
 vitest.config.ts
 vmdump.html
+wrangler.jsonc
