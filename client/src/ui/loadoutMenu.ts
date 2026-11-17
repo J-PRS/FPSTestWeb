@@ -143,7 +143,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // edits that tier's kit, so its legal picks must show). lazyPlayer can
   // be unborn at wire-up - default the flag pass to medium.
   const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
-  const allWeaponOpts = weaponOpts; // label source for filtered-out picks
+  const allWeaponOpts = ALL_WEAPON_OPTS;
   for (let i = 0; i < Player.LOADOUT_SLOTS; i += 1) {
     const { cell, cap } = mkCellDom(weaponCells);
     cap.textContent = `SLOT ${i + 1}`;
@@ -244,8 +244,6 @@ function weaponOptsFor(cls: ArmorClass): DropOpt[] {
     .toSorted((a, b): number => a.tier - b.tier || a.name.localeCompare(b.name));
 }
 
-
-
 /** Faint-mark weapons already sitting in a sibling slot - one open
  *  list then shows the whole kit at a glance. */
 function markSlotUse(player: Player, slotDrops: Drop[]): void {
@@ -282,7 +280,10 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     let options = initialOptions;
     let currentV = '';
     const rebuild = (): void => {
-      const w = dropWidth(options);
+      // Measure the widest list this drop can EVER show (faceOpts = the
+      // union) not the currently filtered one - class swaps re-call
+      // setOptions, and a per-class measurement resized the whole bar.
+      const w = dropWidth(faceOpts ?? options);
       // Width lives on the LIST (it's absolutely positioned, can overflow
       // the face) - under a kit lock the face shrinks to its label.
       el.dataset.loW = String(w);
@@ -432,3 +433,12 @@ const TIER_TAG = new Map<string, string>([
   ...Player.MEDIUM_ONLY.map((w): readonly [string, "[M]"] => [String(w), '[M]'] as const),
   ...Player.LIGHT_ONLY.map((w): readonly [string, "[L]"] => [String(w), '[L]'] as const),
 ]);
+
+// Label source for filtered-out picks AND the chip-width floor: union of
+// every class's list, so a [H]-tagged name can't widen the slot on heavy
+// then shrink it on light - the bar stops resizing per class. Lives past
+// TIER_TAG: weaponOptsFor reads it and module consts init top-down.
+const ALL_WEAPON_OPTS: DropOpt[] = [...new Map(
+  (['light', 'medium', 'heavy'] as const).flatMap((c): DropOpt[] => weaponOptsFor(c))
+    .map((o): [string, DropOpt] => [o.v, o]),
+).values()].toSorted((a, b): number => a.label.localeCompare(b.label));

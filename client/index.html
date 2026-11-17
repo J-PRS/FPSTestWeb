@@ -6,7 +6,7 @@
        (the overscan canvas is, briefly, before html overflow clips it) would
        otherwise trigger Chrome's auto zoom-out → runaway oversize loop. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Three.js FPS — Tribes/Quake Style</title>
+  <title>Anabatic</title>
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/assets/icons/icon_star.png" sizes="512x512" />
   <!-- Linked, not JS-imported: stylesheet-in-JS waits on module eval →
@@ -121,8 +121,7 @@
             <span>MOUSE SENS</span>
             <span class="sens-pair">
               <input id="sens-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
-              <input id="sens-cm" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" title="cm per 360° @800 DPI" />
-              <span class="sens-unit">cm/360<br>@800dpi</span>
+              <span id="sens-cm" title="cm per 360° @800 DPI"><span id="sens-cm-v"></span> cm/360<br><span class="sens-dpi">@800dpi</span></span>
             </span>
           </div>
           <button id="invert-y-toggle" class="tog"><span>INVERT Y</span></button>

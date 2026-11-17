@@ -219,8 +219,10 @@ body.menu-open #frag-msg { display: none !important; }
 #overlay .btn-row { display: flex; flex-direction: column; gap: 6px; }
 /* Collapsible sections: expandable labels get a caret hint + cursor;
    the collapsed state shows just the label row. */
-#overlay .section-label.expandable { cursor: pointer; user-select: none; }
+#overlay .section-label.expandable { cursor: pointer; user-select: none; transition: color 0.12s; }
+#overlay .section-label.expandable:hover { color: rgb(var(--ui-dim-rgb) / 1); }
 #overlay .section-label.expandable::after { content: ' ▾'; opacity: 0.5; }
+#overlay .section-label.expandable:hover::after { opacity: 1; }
 #overlay .section-label.expandable.collapsed::after { content: ' ▸'; }
 #overlay .btn-row button {
   padding: 9px 14px; text-align: left;
@@ -286,7 +288,8 @@ body.menu-open #frag-msg { display: none !important; }
 }
 #overlay .field-row .sens-pair { display: flex; gap: 6px; align-items: center; }
 #overlay .field-row .sens-pair input { width: 52px; }
-#overlay .field-row .sens-pair #sens-cm { width: 64px; flex: 1; }
+#overlay .field-row .sens-pair #sens-cm { flex: 1; text-align: right; line-height: 1.15; font-variant-numeric: tabular-nums; color: rgb(var(--ui-ink-dim-rgb) / 0.7); }
+#overlay .field-row .sens-pair #sens-cm .sens-dpi { font-size: 0.58rem; color: rgb(var(--ui-ink-dim-rgb) / 0.6); letter-spacing: 0.05em; }
 #overlay .field-row .sens-unit { font-size: 0.58rem; color: rgb(var(--ui-ink-dim-rgb) / 0.6); letter-spacing: 0.05em; white-space: nowrap; line-height: 1.25; display: inline-block; text-align: left; }
 /* INVERT Y sits in the same btn-pair as the sens field-row — sens takes
    two thirds of the row, the toggle the remaining third. */
@@ -457,6 +460,13 @@ body.lobby-open #overlay-center { display: none; }
   width: 100%;
   display: flex; justify-content: space-between; align-items: center;
   gap: 8px;
+}
+/* Face may ellipsize: a tag-prefixed pick ([H] Plasma Cannon) can be
+   wider than the option-list floor; without min-width:0 the face's
+   intrinsic width propagates up and the whole bar breathes per class.
+   The open list always shows the full name, so clipping loses nothing. */
+#loadout-bar .lo-drop > span:first-child {
+  min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 #loadout-bar .lo-drop .lo-caret { opacity: 0.5; font-size: 0.7rem; }
 #loadout-bar .lo-list {

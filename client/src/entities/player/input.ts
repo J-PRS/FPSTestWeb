@@ -556,22 +556,19 @@ export class PlayerInput {
 
       sensInput.value = (this.sensitivity * 10).toString();
 
-      // Two synced fields: the raw sens number AND cm/360 - the universal
-      // FPS unit (players know "13cm", not "0.8"). Edit either; they stay
-      // locked. cm/360 @800DPI: 360 / (sens*0.002rad*deg*314.96c/cm).
-      const sensCm = document.querySelector('#sens-cm') as HTMLInputElement | null;
+      // cm/360 readout - the universal FPS unit (players know "13cm",
+      // not "0.8"). Derived-only label now; edit the raw sens field.
+      // cm/360 @800DPI: 360 / (sens*0.002rad*deg*314.96c/cm).
+      const sensCm = document.querySelector('#sens-cm-v') as HTMLElement | null;
       const DEG_PER_CM = 0.002 * (180 / Math.PI) * (800 / 2.54); // ~36.1°/cm per sens unit
       const paintCm = (): void => {
-        if (sensCm && document.activeElement !== sensCm) {
-          sensCm.value = (360 / (this.sensitivity * DEG_PER_CM)).toFixed(1);
-        }
+        if (sensCm) {sensCm.textContent = (360 / (this.sensitivity * DEG_PER_CM)).toFixed(1);}
       };
       paintCm();
 
       // Click/focus selects the whole value so typing replaces it outright
 
       digitsOnly(sensInput);
-      if (sensCm) {digitsOnly(sensCm);}
 
       sensInput.addEventListener('focus', (): void => sensInput.select());
 
@@ -588,18 +585,6 @@ export class PlayerInput {
         paintCm();
 
       });
-
-      if (sensCm) {
-        sensCm.addEventListener('focus', (): void => sensCm.select());
-        sensCm.addEventListener('input', (): void => {
-          const cm = Number.parseFloat(sensCm.value);
-          if (!Number.isFinite(cm) || cm <= 0) {return;}
-          this.sensitivity = Math.max(0.05, Math.min(10, 360 / (cm * DEG_PER_CM)));
-          settings.set('fps-sens', this.sensitivity);
-          if (document.activeElement !== sensInput) {sensInput.value = (this.sensitivity * 10).toString();}
-        });
-        sensCm.addEventListener('keydown', (e): void => e.stopPropagation());
-      }
 
       // Don't let WASD-type keys inside the field reach game input
 

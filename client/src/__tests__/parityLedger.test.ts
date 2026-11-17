@@ -141,6 +141,27 @@ describe('damage echo ledger', (): void => {
     expect(dump).toContain('"fates":2');
   });
 
+  it('a wire confirm landing BEFORE the stamp satisfies it (ordering inversion)', (): void => {
+    const v = VID();
+    const confirmedBefore = parityProbes.echoesConfirmed;
+    // Server shell outran the replica: the playerHit arrives while no
+    // echo is pending, then the painted contact stamps a beat later.
+    confirmDamageEcho(v, 'pre1');
+    expectDamageEcho(v, 13, 46, 'pre1');
+    expect(parityProbes.echoesConfirmed - confirmedBefore).toBe(1);
+    expect(hasPendingEcho(v)).toBe(false);
+    sweepDamageEchoes(performance.now() + 15_000, 0); // nothing left to expire
+  });
+
+  it('a stale pre-confirm cannot satisfy a fresh-session stamp', (): void => {
+    const v = VID();
+    confirmDamageEcho(v, 'stale1');
+    voidPendingEchoes(); // reclaim - the pre-confirm died with the old socket
+    expectDamageEcho(v, 13, 46, 'stale1');
+    expect(hasPendingEcho(v)).toBe(true); // stamp stands, expiry decides
+    sweepDamageEchoes(performance.now() + 15_000, 0); // leave nothing pending
+  });
+
   it('a session reset voids pending echoes instead of reporting dead-wire misses', (): void => {
     const v = VID();
     const voidsBefore = parityProbes.echoesVoided ?? 0;

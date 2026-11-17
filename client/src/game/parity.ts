@@ -73,6 +73,14 @@ total += 1;
 // counts it as a ghost hit.
 type DmgEcho = { victim: string; dmg: number; wt?: number; shotId?: string | null; at?: { x: number; y: number; z: number }; vWire?: { x: number; y: number; z: number }; t: number };
 const dmgEchoes: DmgEcho[] = [];
+// Wire hit/kill that landed BEFORE its prediction stamp - the server
+// shell outran the local replica, so handlePlayerHit found no pending
+// echo and the contact the replica paints a beat later would stamp an
+// entry that can never confirm. A short satisfy-ahead window keeps the
+// ordering inversion from counting as a ghost miss. Keyed victim|shotId
+// plus a victim-only slot mirroring confirmDamageEcho's fallback.
+const preConfirmed = new Map<string, number>();
+const PRECONFIRM_MS = 3000;
 // Where each of MY shells actually detonated server-side (projectileDestroyed
 // wire point), keyed by shotId - the fate half of the ghost-hit question.
 // An unconfirmed echo + a fate far from the painted contact = trajectory
@@ -86,6 +94,17 @@ const shellFates = new Map<string, { ats: { x: number; y: number; z: number }[];
 
 export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotId?: string | null, at?: { x: number; y: number; z: number }, vWire?: { x: number; y: number; z: number }): void {
   parityProbes.echoesStamped += 1;
+  // Its wire confirm already landed (ordering inversion) - satisfied
+  // before the stamp exists.
+  const now0 = performance.now();
+  const pk = `${victim}|${shotId ?? ''}`;
+  if ((preConfirmed.get(pk) ?? -Infinity) > now0 - PRECONFIRM_MS || (preConfirmed.get(`${victim}|`) ?? -Infinity) > now0 - PRECONFIRM_MS) {
+    // One confirm satisfies one stamp - drop both keys either way.
+    preConfirmed.delete(pk);
+    preConfirmed.delete(`${victim}|`);
+    parityProbes.echoesConfirmed += 1;
+    return;
+  }
   // A multi-part blast stamps once per sub-shell on the same victim - a
   // ClusterBomb fans into ~5 bomblets (wt:22, no shotId) that each splash
   // the same player. That's ONE predicted outcome: if the queue held five
@@ -109,7 +128,11 @@ export function confirmDamageEcho(victim: string, shotId?: string | null): void 
   // stamp - prefer the shotId match, fall back to victim-only.
   let i = shotId ? dmgEchoes.findIndex((e): boolean => e.victim === victim && (e.shotId ?? null) === shotId) : -1;
   if (i === -1) {i = dmgEchoes.findIndex((e): boolean => e.victim === victim);}
-  if (i !== -1) {parityProbes.echoesConfirmed += 1; dmgEchoes.splice(i, 1);}
+  if (i !== -1) {parityProbes.echoesConfirmed += 1; dmgEchoes.splice(i, 1); return;}
+  const now = performance.now();
+  preConfirmed.set(`${victim}|${shotId ?? ''}`, now);
+  preConfirmed.set(`${victim}|`, now);
+  for (const [k, t] of preConfirmed) {if (now - t > PRECONFIRM_MS) {preConfirmed.delete(k);}}
 }
 
 /** Telemetry audit: did a prediction stamp precede this wire hit? */
@@ -226,6 +249,7 @@ export function voidPendingEchoes(): void {
   dmgEchoes.length = 0;
   expiredShots.clear();
   shellFates.clear();
+  preConfirmed.clear();
 }
 
 export function sweepDamageEchoes(now: number, stallMs = 0): void {
