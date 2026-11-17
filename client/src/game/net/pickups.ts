@@ -24,9 +24,31 @@ const _zeroVel = new THREE.Vector3();
 // rendered-distance guess could steal another corpse's fling in pileups.
 const recentCorpses: { x: number; y: number; z: number; wire?: { x: number; y: number; z: number }; t: number; claimed?: number }[] = [];
 export function noteCorpseFling(pos: { x: number; y: number; z: number }, wire?: { x: number; y: number; z: number }): void {
-  recentCorpses.push({ x: pos.x, y: pos.y, z: pos.z, wire, t: performance.now() });
+  const corpse = { x: pos.x, y: pos.y, z: pos.z, wire, t: performance.now() };
+  recentCorpses.push(corpse);
   if (recentCorpses.length > 12) {recentCorpses.shift();}
+  // Late-corpse rescue: the kill frame rides the binary lane while
+  // pickupSpawn batches ride JSON - on WT those streams order
+  // independently, so drops can land BEFORE their corpse exists
+  // client-side. A drop parked in pendingDrops gets its fling now.
+  const now = performance.now();
+  const anchor = corpse.wire ?? corpse;
+  for (let i = pendingDrops.length - 1; i >= 0; i -= 1) {
+    const d = pendingDrops[i]!;
+    if (now - d.t > 800) {pendingDrops.splice(i, 1); continue;}
+    const gate = corpse.wire ? 12 : 15;
+    if (Math.hypot(d.pos.x - anchor.x, d.pos.y - anchor.y, d.pos.z - anchor.z) >= gate) {continue;}
+    const dx = d.pos.x - corpse.x, dy = d.pos.y - corpse.y, dz = d.pos.z - corpse.z;
+    pendingDrops.splice(i, 1);
+    if (Math.hypot(dx, dy, dz) <= 0.5) {continue;}
+    const flingT = 0.45;
+    d.nugget.relaunch(corpse, { x: dx / flingT, y: dy / flingT + 4, z: dz / flingT });
+  }
 }
+
+/** Scatter drops that spawned before their corpse landed client-side -
+ *  parked here until noteCorpseFling (or the 800ms prune) resolves them. */
+const pendingDrops: { nugget: Nugget; pos: { x: number; y: number; z: number }; t: number }[] = [];
 
 /** Claim a fresh corpse for this drop: returns the fling spawn (corpse
  *  pos) + launch vel toward the wire rest-spot, or null. Wire-anchored
@@ -114,6 +136,14 @@ export function wirePickups(ctx: NetCtx): void {
     if (spawnVel) {nugget.vel.set(spawnVel.x, spawnVel.y, spawnVel.z);}
     deps.entities().nuggets.push(nugget);
     pickupMeshes.set(id, { nugget, kind, val });
+    // No fling yet - maybe the corpse's kill frame is still in flight on
+    // the other lane. Park it; noteCorpseFling resolves or 800ms prunes.
+    // Scatter kinds only (gem/tag/token die out of corpses) - a powerup
+    // spawn 10m off a fresh corpse must not get yanked into the body.
+    if (!fling && (kind === 'gem' || kind === 'tag' || kind === 'token')) {
+      pendingDrops.push({ nugget, pos, t: performance.now() });
+      if (pendingDrops.length > 32) {pendingDrops.shift();}
+    }
   };
   // Re-export on ctx — gameState needs it for pickups lying down on join.
   ctx.addPickup = addPickup;
