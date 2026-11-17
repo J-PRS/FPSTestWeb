@@ -22,7 +22,7 @@ const _zeroVel = new THREE.Vector3();
 // `wire` is the server's adjudicated death pos (playerKill.at): loot
 // scatter originates there, so it pairs corpse↔drop exactly - the old
 // rendered-distance guess could steal another corpse's fling in pileups.
-const recentCorpses: { x: number; y: number; z: number; wire?: { x: number; y: number; z: number }; t: number }[] = [];
+const recentCorpses: { x: number; y: number; z: number; wire?: { x: number; y: number; z: number }; t: number; claimed?: number }[] = [];
 export function noteCorpseFling(pos: { x: number; y: number; z: number }, wire?: { x: number; y: number; z: number }): void {
   recentCorpses.push({ x: pos.x, y: pos.y, z: pos.z, wire, t: performance.now() });
   if (recentCorpses.length > 12) {recentCorpses.shift();}
@@ -40,7 +40,12 @@ function corpseFling(pos: { x: number; y: number; z: number }): { spawnPos: { x:
     const anchor = c.wire ?? c;
     const gate = c.wire ? 12 : 15;
     if (Math.hypot(pos.x - anchor.x, pos.y - anchor.y, pos.z - anchor.z) >= gate) {continue;}
-    recentCorpses.splice(i, 1); // consumed - one corpse, one fling
+    // Claimed, not consumed: a kill scatters a GROUP (headhunt hoards,
+    // the 3-gem drop) and every sibling should burst from the same
+    // corpse - the 400ms window covers one pickupSpawn batch without
+    // leaking the claim into the next nearby death.
+    if (c.claimed !== undefined && now - c.claimed > 400) {continue;}
+    c.claimed = now;
     const dx = pos.x - c.x, dy = pos.y - c.y, dz = pos.z - c.z;
     if (Math.hypot(dx, dy, dz) <= 0.5) {return null;} // corpse already at rest-spot
     const flingT = 0.45;
@@ -87,13 +92,14 @@ export function wirePickups(ctx: NetCtx): void {
     const tier = kind === 'token' ? tokenTier(val) : null;
     // Corpse-fling: a scatter pickup near a fresh rendered death spawns
     // AT the corpse the player saw and launches toward the wire pos —
-    // serverRest converges it to truth when the tumble settles.
+    // serverRest converges it to truth when the tumble settles. Runs even
+    // when the wire carries vel: kill scatters inherit the corpse's own
+    // momentum (server vel is tumble truth, not scatter truth), so the
+    // corpse→rest fling reads better than a pop-in at wire pos.
     let spawnPos = pos;
     let spawnVel = vel;
-    if (!vel) {
-      const fling = corpseFling(pos);
-      if (fling) {({ spawnPos, spawnVel } = fling);}
-    }
+    const fling = corpseFling(pos);
+    if (fling) {({ spawnPos, spawnVel } = fling);}
     const nugget = new Nugget(
       deps.lazyScene(),
       new THREE.Vector3(spawnPos.x, spawnPos.y, spawnPos.z),
