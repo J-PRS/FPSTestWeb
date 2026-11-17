@@ -11,6 +11,7 @@
 
 
 import { MODES, type ModeId, type TeamId } from '../../../../shared/teams.js';
+import { isDevHost } from '../../core/params.js';
 
 const MAP_ACRONYMS = new Set(['ctf', 'dm', 'tdm', 't2']);
 
@@ -302,6 +303,10 @@ export class Scoreboard {
     this.tsA = root.querySelector('#sb-ts-a');
 
     this.tsB = root.querySelector('#sb-ts-b');
+
+    // ASW/LOCO columns are movement-tuning readouts - prod boards hide
+    // them whole (same class-hide pattern as PING/NET), dev hosts keep.
+    this.root.classList.toggle('sb-noloco', !isDevHost());
 
     this.countdownEl = root.querySelector('#sb-countdown');
 
