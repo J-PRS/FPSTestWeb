@@ -152,10 +152,13 @@ function findShooterExplosion(deps: NetCtx['deps'], shooterId: string): { positi
 const _stealPos = new THREE.Vector3();
 
 /** Victim is us: flag dead, HUD down, overlay up, pick the epitaph. */
-function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<string, { name?: string }>): void {
+function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<string, { name?: string }>, at?: { x: number; y: number; z: number }): void {
   const { deps } = ctx;
   deps.logger.info(`Local player killed by ${shooterId}`);
   const player = deps.lazyPlayer();
+  // Your own corpse is a fling anchor too - the killcam/spectate view
+  // should see your loot burst out of your body, not pop in at wire pos.
+  noteCorpseFling(player.pos, at);
   player.isDead = true;
   player.deadConfirmedByWire = true;
   player.health = 0;
@@ -204,7 +207,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, k
   deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId,
     { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team, weapon, air,
       sName: displayName(shooterId, roster), tName: displayName(targetId, roster) });
-  if (targetId === localId) {ownDeath(ctx, shooterId, targetId, roster); return;}
+  if (targetId === localId) {ownDeath(ctx, shooterId, targetId, roster, at); return;}
 
   // Streak counts run-kills since your last death (reset above) and
   // match boundaries (match.ts) - a new match never continues the count.
