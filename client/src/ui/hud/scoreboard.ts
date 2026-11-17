@@ -193,6 +193,7 @@ function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   // in front would be a second legend saying the same thing.
 
   nameTd.append(document.createTextNode(` ${r.name}`));
+  nameTd.title = r.name; // the ellipsis clipped a long tag - hover restores it
 
   tr.append(nameTd);
 
