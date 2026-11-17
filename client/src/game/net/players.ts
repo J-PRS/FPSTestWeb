@@ -431,7 +431,7 @@ function killPredictedShell(deps: NetCtx['deps'], shotId: string | undefined): v
 function makeShotRejectedHandler(ctx: NetCtx, networkManager: NetCtx['networkManager']): NonNullable<NetCtx['networkManager']['onShotRejected']> {
   const { deps } = ctx;
   let lastClassResync = 0;
-  return (reason, _targetId, weaponType, health, shotId): void => {
+  return (reason, _targetId, weaponType, health, shotId, armorClass): void => {
     if (deps.world.playbackMode) {return;}
     const player = deps.lazyPlayer();
     killPredictedShell(deps, shotId);
@@ -440,20 +440,31 @@ function makeShotRejectedHandler(ctx: NetCtx, networkManager: NetCtx['networkMan
     // to the class fallback once and the next pull fires something legal.
     // unshoulderLiveSlot, not setLoadoutSlot: a banked class swap would
     // redirect the write into pendingLoadout and the live gun never heals.
-    if (reason === 'class-locked weapon' && weaponType !== undefined) {
+    // Wire reasons are `${kind}: ${reason}` ("Shot: class-locked weapon") —
+    // endsWith so a future kind prefix can't silently dead-code this scrub.
+    if (reason.endsWith('class-locked weapon') && weaponType !== undefined) {
       for (let i = 0; i < player.loadout.length; i += 1) {
         if (weaponDef(player.loadout[i]).weaponType === weaponType) {
           player.armory.unshoulderLiveSlot(i);
           break;
         }
       }
-      // The authority's enforced tier disagrees with the one we're
-      // playing - re-bank appliedClass so pendingClass stops lying at
-      // the next respawn. Throttled: a locked spray rejects per pull.
+      // A weapon the live tier CAN shoulder still rejected = the seat's
+      // enforced tier isn't the one we're wearing (a dropped classUpdate
+      // left the ends disagreeing). The reject carries the seat's class -
+      // adopt it mid-life so body/speed/kit match the authority, or a
+      // light-only pick rejects every pull for the rest of the life.
+      // armorClass keeps the pick: it's the respawn intent, not the seat.
+      if ((armorClass === 'light' || armorClass === 'medium' || armorClass === 'heavy') && armorClass !== player.appliedClass) {
+        player.armory.applyPendingClass(armorClass);
+      }
+      // The authority's bank may have missed the pick - re-claim it so
+      // the next respawn tries the same tier again. Throttled: a locked
+      // spray rejects per pull.
       const now = performance.now();
       if (now - lastClassResync > 2000) {
         lastClassResync = now;
-        networkManager.sendClassUpdate(player.appliedClass);
+        networkManager.sendClassUpdate(player.armorClass);
       }
     }
     if (health !== undefined && Number.isFinite(health) && !player.isDead) {player.health = health;}

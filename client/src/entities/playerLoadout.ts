@@ -1,6 +1,6 @@
 import { settings } from '../core/settings.js';
 import { SLOT_COUNT, weaponDef, widOf, LANCE_WID } from '../weapons.js';
-import { WeaponType, getWeaponStats } from '../../../shared/weapons.js';
+import { WeaponType } from '../../../shared/weapons.js';
 import { gunGameWeapon, igunChassis } from '../../../shared/gunGame.js';
 import { SIDEARM_DRAW_TIME } from './ViewModel.js';
 import type { MovementController } from './movement.js';
@@ -350,8 +350,7 @@ export class PlayerLoadout {
   /** Respawn-time tier application: speed scale, HP pool (via the
    *  maxHealth getter), ordnance unshoulder, and the body model swap
    *  when the silhouette tier flips. */
-  applyPendingClass(): void {
-    const c = this.h.armorClass;
+  applyPendingClass(c: ArmorClass = this.h.armorClass): void {
     // Install the banked kit FIRST — even when the tier didn't change,
     // a pending loadout is a respawn pick waiting to land.
     if (this.pendingLoadout) {

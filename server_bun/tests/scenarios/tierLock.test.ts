@@ -11,7 +11,7 @@ describe('scenario: class-locked ordnance', () => {
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
     const toA: ServerMessage[] = [];
     const origSend = room.connections.sendToPlayer.bind(room.connections);
-    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) toA.push(m); else origSend(pid, m); };
+    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) {toA.push(m);} else {origSend(pid, m);} };
 
     const p = room.players.getPlayer(a.id)!;
     p.armorClass = 'medium';
@@ -21,7 +21,11 @@ describe('scenario: class-locked ordnance', () => {
       pos: { x: 1, y: 32, z: 0 },
       weaponType: WeaponType.Mortar,
     } as never);
-    expect(toA.filter((m) => m.type === 'shotRejected').length).toBe(1);
+    const rej = toA.filter((m) => m.type === 'shotRejected');
+    expect(rej.length).toBe(1);
+    // The seat's enforced tier rides the reject - the client adopts it
+    // mid-life instead of rejecting every pull for the rest of the life.
+    expect(rej[0]!.armorClass).toBe('medium');
     expect(w.count('projectileCreated')).toBe(0);
 
     p.armorClass = 'heavy';
@@ -41,7 +45,7 @@ describe('scenario: class-locked ordnance', () => {
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
     const toA: ServerMessage[] = [];
     const origSend = room.connections.sendToPlayer.bind(room.connections);
-    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) toA.push(m); else origSend(pid, m); };
+    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) {toA.push(m);} else {origSend(pid, m);} };
 
     const p = room.players.getPlayer(a.id)!;
     p.armorClass = 'light';
@@ -83,7 +87,7 @@ describe('scenario: class-locked ordnance', () => {
     freeze(room, a.id, { x: 0, y: 31, z: 0 });
     const toA: ServerMessage[] = [];
     const origSend = room.connections.sendToPlayer.bind(room.connections);
-    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) toA.push(m); else origSend(pid, m); };
+    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) {toA.push(m);} else {origSend(pid, m);} };
     const rejects = () => toA.filter((m) => m.type === 'shotRejected').length;
 
     const p = room.players.getPlayer(a.id)!;

@@ -107,7 +107,7 @@ export class NetworkManager {
   public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, age?: number, t?: number, variant?: number) => void) | null = null;
   /** Server refused a claim - `health` is the authoritative resync value
    *  (rejected predicted self-splash leaves client health divergent). */
-  public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined, shotId?: string) => void) | null = null;
+  public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined, shotId?: string, armorClass?: string) => void) | null = null;
   public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
   public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, age?: number, fizzle?: boolean, planted?: boolean) => void) | null = null;
   /** Belt-sticky combo - rider server id glued dead-center onto host id. */
@@ -1353,7 +1353,9 @@ this.sendDrops += 1;
   /** Client-claimed heal (nugget pickup) - keeps server health the truth. */
   sendHeal(amount: number): void {
     if (!this.connected) { this.localAuthority?.heal(amount); return; }
-    if (!this.isConnected()) {return;}
+    // Dedicated sims every pickup server-side - the legit heal arrives via
+    // onCollect/tickUpdate, and the claim only earns a refused ack.
+    if (this.authoritySims() || !this.isConnected()) {return;}
     const msg = { type: 'heal' as const, amount, claimSeq: undefined as number | undefined };
     msg.claimSeq = this.ledger.stamp('heal', false, msg);
     this.send(msg);

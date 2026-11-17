@@ -314,8 +314,10 @@ export class CombatHandler {
     }
     // Rejected claims can leave predicted self-damage stuck client-side -
     // ship our health value so the shooter resyncs instead of drifting.
-    const health = this.playerManager.getPlayer(playerId)?.health;
-    this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType, health, shotId });
+    // armorClass rides too: on a class-locked verdict the shooter's seat
+    // tier is the truth their client has to adopt mid-life.
+    const shooter = this.playerManager.getPlayer(playerId);
+    this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType, health: shooter?.health, shotId, armorClass: shooter?.armorClass });
   }
 
   /** Honest-lag drop, not a reject - but the shooter's client already

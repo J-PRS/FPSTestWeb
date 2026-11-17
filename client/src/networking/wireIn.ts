@@ -527,9 +527,10 @@ rejectCensus.total += 1;
         reason: data.reason,
         targetId: data.targetId,
         weapon: wName,
+        seatCls: data.armorClass,
         pingMs: this.h.getPing(),
       });
-      this.h.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health, data.shotId);
+      this.h.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health, data.shotId, data.armorClass);
     },
     // Honest-lag discard (dead shooter/target) - not a reject, but the
     // predicted hit still needs clearing or the ledger warns phantom.

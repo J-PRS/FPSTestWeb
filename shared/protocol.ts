@@ -479,7 +479,11 @@ export type ServerMessage =
       /** The claim's own nonce - a client that retransmits un-acked spawns
        *  must stop on a reject (it's a verdict, not transport loss), and
        *  without the id it can't tell the two apart. */
-      shotId?: string }
+      shotId?: string;
+      /** The shooter's seat tier - a class-locked reject means the two
+       *  ends disagree on the enforced class, so the client adopts this
+       *  instead of rejecting for the rest of the life. */
+      armorClass?: string }
   // Claim dropped without judgement - dead shooter/target mid-flight, an
   // honest-lag discard that must still clear the shooter's predicted-hit
   // ledger. Kept distinct from shotRejected so reject tallies stay pure.

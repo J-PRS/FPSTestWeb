@@ -70,4 +70,19 @@ describe('unshoulderLiveSlot', () => {
     expect(PlayerLoadout.lockedForClass('light', host.loadout[3]!)).toBe(false);
     expect(armory.pendingLoadout).toEqual([0, 2, 6, 9]); // banked kit untouched
   });
+
+  it('adopts the seat tier mid-life without losing the pick', () => {
+    // The shotRejected armorClass is the seat's enforced tier - when it
+    // disagrees with appliedClass the slot scrub alone can't converge
+    // (a light-only pick keeps rejecting all life). applyPendingClass
+    // with the wire tier resyncs the body; armorClass keeps the pick so
+    // the re-claim asks for the same tier next respawn.
+    const lightningWid = widOf(WeaponType.Lightning);
+    const host = mkHost({ armorClass: 'light', appliedClass: 'light', loadout: [0, 2, 6, lightningWid] });
+    const armory = new PlayerLoadout(host);
+    armory.applyPendingClass('medium');
+    expect(host.appliedClass).toBe('medium');
+    expect(host.armorClass).toBe('light');
+    expect(host.loadout).not.toContain(lightningWid);
+  });
 });
