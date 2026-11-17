@@ -17,7 +17,7 @@ function readVersion(): string {
 // what the box runs (the box has no .git). Absent locally = dev build.
 function readBuild(): string | null {
   try {
-    const s = readFileSync(new URL('../build.txt', import.meta.url), 'utf8').trim();
+    const s = readFileSync(new URL(/* @vite-ignore */ '../build.txt', import.meta.url), 'utf8').trim();
     return s || null;
   } catch {
     return null;
