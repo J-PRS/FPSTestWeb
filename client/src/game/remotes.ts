@@ -25,7 +25,7 @@ import { gibRemoteBody } from './net/playerKill.js';
 import { sampleRemoteGhosts } from './ghostTrace.js';
 import { intelContact } from './intel.js';
 import { debugOverlaysOn } from '../ui/hud/indicators.js';
-import { urlParams } from '../core/params.js';
+import { urlParams, isDevHost } from '../core/params.js';
 
 // Hostiles always read red - team colors are for your own side only.
 const ENEMY_RED = 0xFF_33_33;
@@ -602,7 +602,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   pruneAsw(queriedIds);
   hud.setScoreboardRows(ranked);
   hud.setScoreboardPingVisible?.(nm.isConnected()); // offline bots-only boards drop the latency column
-  hud.setScoreboardNetVisible?.(nm.isConnected()); // and the transport column - every row would read 'bot'/'-'
+  hud.setScoreboardNetVisible?.(nm.isConnected() && isDevHost()); // transport names are tuning info - dev-only on prod, and moot offline ('bot'/'-')
   hud.setScoreboardTeamScores?.(deps.world.teamScores);
   let modTag: string | undefined;
   if (deps.world.instagib) {modTag = 'INSTAGIB';}
