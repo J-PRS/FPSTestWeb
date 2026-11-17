@@ -40,9 +40,6 @@ export interface WeaponDef {
   readonly auto: boolean;
   /** Fan weapons only: pellet count + cone spread. */
   readonly pellets?: { readonly count: number; readonly spread: number };
-  /** Projectile kind only: per-shot cone jitter (sprinkler - a stream that
-   *  drifts, vs a fan that bursts). */
-  readonly spread?: number;
   /** Growing cone (chaingun): numbers live on the shared row - the
    *  server seeds the cone off shotId, the client predicts the same
    *  jittered dir and grows player.bloom in lockstep for the HUD arms. */
@@ -55,7 +52,7 @@ export interface WeaponDef {
 const CONFIG_BY_TYPE = new Map<number, ProjectileConfig>(WEAPON_CONFIGS.map((c): [number, ProjectileConfig] => [c.weaponType, c]));
 
 function def(weaponType: WeaponType, rate: number | undefined,
-             kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; spread?: number; bloom?: { base: number; rate: number; exp: number; decay: number; max: number }; sidearm?: boolean } = {}): WeaponDef {
+             kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; bloom?: { base: number; rate: number; exp: number; decay: number; max: number }; sidearm?: boolean } = {}): WeaponDef {
   // Registry miss falls back to the bolt config rather than taking down
   //  firing - same rule weaponDef() applies to a corrupt wid.
   const config = CONFIG_BY_TYPE.get(weaponType) ?? CONFIG_BY_TYPE.get(WeaponType.BoltLauncher)!;
@@ -73,7 +70,6 @@ function def(weaponType: WeaponType, rate: number | undefined,
     kind,
     auto: opts.auto ?? false,
     pellets: opts.pellets,
-    spread: opts.spread,
     bloom: (stats.bloomMax ?? stats.spreadBase) === undefined ? opts.bloom
       : { base: stats.spreadBase ?? 0, rate: stats.bloomRate ?? 0, exp: stats.bloomExp ?? 1,
           decay: stats.bloomDecay ?? 0, max: stats.bloomMax ?? stats.spreadBase ?? 0 },

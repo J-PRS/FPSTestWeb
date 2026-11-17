@@ -10,7 +10,6 @@ import {
   ARMORNADE_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG,
   CONC_CONFIG, HOOK_CONFIG, EMP_CONFIG,
 } from '../../projectiles/index.js';
-import { simRand } from '../../../../shared/simRand.js';
 import type { WeaponDef } from '../../weapons.js';
 import { BELT_THROW_TIME, type BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
@@ -32,10 +31,7 @@ import type { BlastArgs } from '../blastForce.js';
 import type { Targetable } from '../../entities/balls.js';
 import { nextShotId } from '../projectileRegistry.js';
 
-// Flak/shotgun spread basis — rebuilt per shot, never retained
-const _flakRight = new THREE.Vector3();
-const _flakUp = new THREE.Vector3();
-const _flakUp0 = new THREE.Vector3(0, 1, 0);
+// Shot dir scratch — rebuilt per shot, never retained
 const _flakDir = new THREE.Vector3();
 const _meleeHitPos = new THREE.Vector3();
 const _meleeToT = new THREE.Vector3();
@@ -199,8 +195,8 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   const velocity = e.dir.clone().normalize().multiplyScalar(cfg2.speed).addScaledVector(e.playerVel, 0.5);
   // NetProbe: claimed-vs-flown drift - must stay ~0 or the server's
   // arc replay diverges (the 'flight blocked' phantom-reject class).
-  // Jittered shells (bloom/spread cones) SKIP this: their claim is the
-  // RAW aim dir by design - the server re-derives the identical seeded
+  // Jittered shells (bloom cones) SKIP this: their claim is the RAW
+  // aim dir by design - the server re-derives the identical seeded
   // jitter off shotId, so |claimVel - p.vel| measures the cone angle,
   // not a bug (chaingun spray read as a 24 m/s "drift" storm).
   if (e.bloomRadius === undefined) {spawnDrift(velocity.distanceTo(p.vel));}
@@ -424,20 +420,6 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
       bloomRadius: def.bloom.base + pl.bloom, bloomSeq: pl.bloomSeq++ });
     pl.bloom = Math.min(def.bloom.max, (pl.bloom + def.bloom.rate) * def.bloom.exp);
     pl.bloomDecay = def.bloom.decay; // residue drains at the growing weapon's rate (swap-safe)
-    return;
-  }
-  if (def.spread) {
-    // Stream jitter: a random cone offset per bolt — same basis math as
-    // the fan but a single drifting shot, so the volley reads as a hose.
-    _flakRight.crossVectors(e.dir, _flakUp0);
-    if (_flakRight.lengthSq() < 1e-8) {_flakRight.set(1, 0, 0);} else {_flakRight.normalize();}
-    _flakUp.crossVectors(_flakRight, e.dir);
-    const a = simRand() * Math.PI * 2, r = Math.sqrt(simRand()) * def.spread;
-    _flakDir.copy(e.dir)
-      .addScaledVector(_flakRight, Math.cos(a) * r)
-      .addScaledVector(_flakUp, Math.sin(a) * r)
-      .normalize();
-    spawnProjectile(deps, def.config, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel });
     return;
   }
   spawnProjectile(deps, def.config, e);
