@@ -870,7 +870,18 @@ export class Projectile {
       this.ropeReelT += dt;
       const k = Math.min(1, this.ropeReelT / ROPE_REEL_S);
       this.ropeFree.lerpVectors(this.ropeReelFrom, this.ropeFromPos, k);
-      if (k >= 1) {this.ropeRecall = false; this.ropeTo = null; this.hideRope();}
+      // The dart head IS the rope's free end - it rides home too. Pos and
+      // rendered follow so trails/mesh/sync agree; a whiffed dart that
+      // stays frozen mid-air reads as "disappeared", not "reeled in".
+      this.pos.copy(this.ropeFree);
+      this.rendered.copy(this.ropeFree);
+      this.cellAcc = 0; // rendered = pos + vel*rem - a stale cell remainder would leave the dart head meters off the rope end
+      if (!this.projectileRemoved) {
+        this.mesh.position.copy(this.ropeFree);
+        syncProjectileInstance(this.mesh);
+        if (this.glowMesh) {this.glowMesh.position.copy(this.ropeFree); syncProjectileInstance(this.glowMesh);}
+      }
+      if (k >= 1) {this.ropeRecall = false; this.ropeTo = null; this.hideRope(); this.removeProjectileMesh();}
     }
   }
 
@@ -890,7 +901,9 @@ export class Projectile {
     // hook finishes the same way: the free end reels back to the thrower.
     if (this.config.hook) {
       const hit = this.hitPlayerId || this.hitPointValid;
-      this.ropeTo = (this.hitPlayerId ? this.pos : this.hitPoint).clone();
+      // Whiff leaves hitPoint unwritten - anchoring there anyway reeled the
+      // line back from the world origin instead of where the dart died.
+      this.ropeTo = hit ? (this.hitPlayerId ? this.pos : this.hitPoint).clone() : null;
       this.ropeLen = -1; this.ropeMax = 0;
       if (hit) {this.ropeHold = true; this.ropeT = 0.55;}
       else {this.startRecall();}
@@ -904,9 +917,13 @@ export class Projectile {
     if (this.glue.tryEmbed()) {return;}
     // Shrink-out, not an instant despawn: update() collapses the captured
     // scale to zero over DEATH_FADE_S, then releases the instance slots.
-    this.deadAge = 0;
-    this.deathScaleBase.copy(this.mesh.scale);
-    if (this.glowMesh) {this.deathGlowBase.copy(this.glowMesh.scale);}
+    // A whiffed hook skips it - the dart head rides the recall home at full
+    // size and the reel's end releases the mesh there instead.
+    if (!this.ropeRecall) {
+      this.deadAge = 0;
+      this.deathScaleBase.copy(this.mesh.scale);
+      if (this.glowMesh) {this.deathGlowBase.copy(this.glowMesh.scale);}
+    }
   }
 
   dispose(): void {
