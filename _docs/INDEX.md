@@ -127,6 +127,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-13_BLOOM_CONVERGE.md` | Bloom "spread then converge" artifact — client/server `bloomSeq` desync from reject gates made the reanchor blend visibly drag shells onto the aim line; per-claim `bloomTick` fix + the convergent-spread weapon idea it suggests |
 | `_docs/2026-11-15_WIRE_FORMAT_REVIEW.md` | Wire-format review — ~85-95% of bytes already binary (estimate; worker socket defeated sniffing); protobuf would net ~5-15% mostly on the join burst, pro games hand-roll binary+delta on the tick lane; recommended: gzip gameState if joins hurt, MessagePack as drop-in |
 | `_docs/2026-11-14_LOG_NOISE_AUDIT.md` | Full classification of a 2-human session's WARN flood — 0-byte demo orphans quarantined/deleted, join-gates warn needs explicit request, UDP EADDRINUSE bind retry; aoe-refuse env census + movement-cheat + gun-game rejects verified as working signal |
+| `_docs/2026-11-16_HSTS_PRELOAD.md` | HSTS preload eval for anabatic.gg — benefit = one first-visit HTTP hop; cost = permanent all-subdomain HTTPS mandate (removal 6-12wks); regret corpus is always includeSubDomains hitting forgotten HTTP hosts; verdict: keep 1y header, skip preload |
 
 ## Agent memory (append-only, one line each)
 

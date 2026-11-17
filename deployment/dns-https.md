@@ -50,6 +50,23 @@ Auth: JSON body `{"apikey": "...", "secretapikey": "..."}`, or the `X-API-Key` /
 - If the MCP is wanted later: install 0.51.1 with `--save-exact` in an isolated folder and
   read the audit before using it. Delete `~/.porkbun-mcp` if it stays unused.
 
+## anabatic.gg (client CDN)
+
+- Registered at Porkbun 2026-11-16; authoritative DNS delegated to Cloudflare
+  (`harleigh`/`piers.ns.cloudflare.com`) — set via `/domain/updateNs` API.
+- Cloudflare zone on the game account; `anabatic.gg` + `www` are attached as
+  custom domains on the `anabatic` Worker (static assets) — Workers custom
+  domains manage their own DNS records on the zone, no manual CNAME needed.
+  Cert issuance follows zone activation (pending the .gg TLD publishing the
+  new NS — recheck with `nslookup -type=NS anabatic.gg 8.8.8.8`).
+- Canonical host is the apex: a Single Redirect Rule
+  (`http_request_dynamic_redirect`, `www.anabatic.gg → 301 https://anabatic.gg`,
+  path+query preserved) folds www into it. `anabatic.jprice-a.workers.dev`
+  stays reachable — workers.dev hostnames can't be disabled or redirected
+  from our zone (same story for the stale `anabatic.pages.dev` Pages deploy).
+- Porkbun-side records for anabatic.gg (ALIAS/wildcard to pixie) are inert once
+  delegated; leave them. `jprice.app` DNS stays at Porkbun — unchanged.
+
 ## Caddy (HTTPS front)
 
 - Binary: `/usr/local/bin/caddy`, Caddy 2.11.7, static build for linux arm64.

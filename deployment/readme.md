@@ -28,7 +28,7 @@ Last updated: 2026-10-24.
 | WebTransport | `play.jprice.app:443/udp` (forwarded to 9443). Browser handshake verified with 9443 closed |
 | Headhunt token changes | deployed, not verified in a live round |
 | Friend URL | `https://play.jprice.app/quickjoin` (verified). `/quickplay` is NOT a route |
-| Static client | served by Caddy from `~/anabatic-client` on the box (see `dns-https.md`) |
+| Static client | Cloudflare Worker `anabatic` (static assets, unmetered) → `https://anabatic.gg` (deploy via `_deploy_cf.bat`); `~/anabatic-client` on the box is legacy |
 | Porkbun secret | pasted into chat. **Rotate it.** |
 | Micro `92.5.63.91` | running, spare. WebTransport cannot load there |
 | Terminated A1 | still listed in OCI. Delete when convenient |

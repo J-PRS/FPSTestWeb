@@ -55,28 +55,42 @@ makes that reachable. See `webtransport.md`.
 - Shared links: send `/pub/<room>` or `/?server=https://play.jprice.app`. Do not send
   `localhost` links, because they point at the recipient's own machine.
 
-## Static hosting (Cloudflare Pages)
+## Static hosting (Cloudflare Workers Static Assets — live)
 
-`dist/` can be served from Cloudflare Pages (`wrangler pages deploy` below) — the
-OCI box stays API/game traffic only and a CDN is the unmetered path for the
-bundle. **No public deploy is currently live** — the `jetpack-fps` Pages project
-was created and then deleted at the owner's request (2026-10-29); recreate it
-with an approved name before deploying.
+`dist/` is served from the `anabatic` Worker's static assets — the OCI box
+stays API/game traffic only and the CDN is the unmetered path for the bundle.
+Asset-only Worker (no `main`, `run_worker_first=false` default): requests that
+match an asset are served by the platform and **never invoke Worker code**, so
+they are free and unlimited and don't touch the 100k/day invocation quota.
+Canonical host: **`https://anabatic.gg`** (apex + `www` attached as custom
+domains; `anabatic.jprice-a.workers.dev` is the workers.dev fallback URL).
 
-```bash
-cd client && npm run build
-npx wrangler pages deploy dist --project-name jetpack-fps --branch main --commit-dirty=true
+Deploy:
+```bat
+_deploy_cf.bat
+rem = cd client && npm run build
+rem && npx wrangler deploy        (reads client/wrangler.jsonc)
 ```
 
-- `--branch main` is required — the project's production branch is `main`; an
-  unbranched upload lands as a `*.pages.dev` preview alias only.
-- `public/_redirects` (`/* /index.html 200`) keeps client routes working:
-  `/quickjoin`, `/pub/<room>`, `/s/<room>` all serve the app.
+- `client/wrangler.jsonc` holds the config: `assets.directory = ./dist`,
+  `not_found_handling = "single-page-application"` (native SPA fallback —
+  `/quickjoin`, `/pub/<room>`, `/s/<room>` all serve the app; replaced the old
+  `_redirects` file, which Workers rejects as a redirect loop),
+  `routes` with `custom_domain` for apex + www.
+- `public/_headers` carries the security headers (`_headers` files are honored
+  by Workers assets): nosniff, no-referrer, XFO DENY, Permissions-Policy,
+  HSTS 1y (no includeSubDomains), immutable cache for hashed `/assets/*`. No
+  Cross-Origin-* or CSP — the client calls `play.jprice.app` cross-origin
+  and uses Workers/blob URLs/ws+wt, both break under stock hardening templates.
 - `server.json` in `public/` points the deploy at `https://play.jprice.app`; any
   remote host (any source) resolves through `/join` first since `eefbb9a4` + the
   server.json/named-path follow-up.
+- Migrated off Cloudflare Pages 2026-11-16 (Pages is maintenance-mode; Workers
+  static assets is the successor). The `anabatic` Pages project is kept only to
+  reserve the `anabatic.pages.dev` name — its deploy was replaced with a
+  one-file redirect to `anabatic.gg` so no stale client is served.
 
-Verified 2026-10-29 while the deploy was up: headless Chrome loaded the Pages
+Verified 2026-10-29 while the Pages deploy was up: headless Chrome loaded the
 URL and seated into w1's headhunt-1 as `player_bzy1hov3q` in under 5s.
 
 ## History

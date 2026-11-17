@@ -68,9 +68,15 @@ for (let p = RELAY_BASE; p <= RELAY_BASE + 4; p += 1) {
 }
 console.log(`udp relay: ws://127.0.0.1:${relayPort} -> ${TARGET_HOST}:${TARGET_PORT}${listening ? '' : ' (all ports busy — UDP lane off)'}`);
 
+// ?shim=<port> tells the client its UDP relay exists and where — without
+// the stamp the client never probes loopback (browsers prompt for it).
+const pageUrl = listening
+  ? `${CLIENT_URL + (CLIENT_URL.includes("?") ? "&" : "?")  }shim=${relayPort}`
+  : CLIENT_URL;
+
 const mainWindow = new BrowserWindow({
-  title: "Kribes",
-  url: CLIENT_URL,
+  title: "Anabatic",
+  url: pageUrl,
   titleBarStyle: "hidden", // no chrome — the game IS the window
   frame: {
     width: 1600,
@@ -82,4 +88,4 @@ const mainWindow = new BrowserWindow({
 if (FULLSCREEN) { mainWindow.setFullScreen(true); }
 void mainWindow;
 
-console.log(`window -> ${CLIENT_URL}`);
+console.log(`window -> ${pageUrl}`);
