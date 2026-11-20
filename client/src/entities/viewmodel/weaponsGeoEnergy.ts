@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../../core/config.js';
-import { bodyMat, darkMat, boreMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, scaleRing, rotRing, resampleRing, notchRing } from './weaponKit.js';
+import { bodyMat, darkMat, boreMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, mkRevolve, profCircle, profOct, scaleRing, rotRing, resampleRing, notchRing } from './weaponKit.js';
 
 // Energy-weapon builders - plasma, railgun, lightning. Split from
 // weaponsGeo.ts; every builder returns an invisible group keyed into
@@ -396,6 +396,85 @@ lg.add(corona);
 // Side glow slits removed — read as floating shards flanking the body.
 lg.visible = false;
 return lg;
+}
+
+// Heal beam — an open skeletal rail, not a body: two rails cage a beam
+// path where the EMITTER NODE sits at the rear, in plain view — you
+// watch the beam spring out of it and run down the guide ring at the
+// nose. The node's glow IS the weapon's signature (LG's emitter recipe,
+// recolored to the beam's cyan). Reservoir slung under the frame feeds
+// the node socket — jet energy IS the ammo, so the tank is the
+// magazine you can see.
+export function mkHealBeam(): THREE.Group {
+const hb = new THREE.Group();
+// The heal bolt renders medic GOLD (healbeam.ts palette) — every glow
+// element here matches the bolt, not the flash table's cyan.
+const healMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xFF_D0_70).multiplyScalar(EMIT_GAIN) });
+const NODE_Z = 0;   // emitter node — the beam's visible origin
+const RAIL_Z0 = -0.16, RAIL_Z1 = -0.48; // rail run back→front
+
+// Four rails forming the open cage — diagonal spread so the node reads
+// between them from any angle. bodyMat steel, not darkMat: structural
+// members in near-black read as untextured grey flats at glancing
+// angles.
+const rail = profOct(0.056, 0.056, 0.014);
+for (let i = 0; i < 4; i += 1) {
+  const a = (i / 4) * Math.PI * 2; // axis-aligned — prongs read as +, not ×
+  const dx = Math.cos(a) * 0.1, dy = Math.sin(a) * 0.1;
+  hb.add(mkLoft([
+    { z: NODE_Z + 0.1, ring: rail, dx, dy },
+    { z: RAIL_Z0, ring: rail, dx, dy },
+    { z: RAIL_Z1, ring: scaleRing(rail, 0.75), dx: dx * 0.55, dy: dy * 0.55 },
+  ], bodyMat));
+}
+// No cross struts — the prongs float clean; braces read as clutter.
+// No nose hardware — the rail tips ARE the mouth; the beam just leaves
+// the open cage end.
+
+// Node socket — steel insulator bell, CLOSED at the back (r=0 row
+// makes a point cap) and mouth shrunk tight to the node — no open rim
+// showing a hole around the glow. Back flares to the housing radius so
+// socket→breech reads as one body.
+const socket = mkRevolve([
+  [0.032, NODE_Z - 0.015], [0.068, NODE_Z + 0.02], [0.13, NODE_Z + 0.1], [0, NODE_Z + 0.11],
+], bodyMat, 10, true);
+hb.add(socket);
+// Emitter node — hot core + corona, poking PROUD of the socket mouth
+// so the mouth reads as a seat ring, not a hole. THE signature element.
+const node = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), healMat);
+node.position.z = NODE_Z;
+node.layers.enable(BLOOM_LAYER);
+hb.add(node);
+const corona = new THREE.Mesh(
+  new THREE.SphereGeometry(0.05, 12, 10),
+  new THREE.MeshBasicMaterial({ color: new THREE.Color(0xE8_A0_20).multiplyScalar(EMIT_GAIN), transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
+);
+corona.position.z = NODE_Z;
+corona.layers.enable(BLOOM_LAYER);
+hb.add(corona);
+// Breech housing behind the node — the frame's rear terminus, faceted
+// octagon like every gun housing (a box reads as an untextured block).
+// r=0.14 > the rails' outer edge (~0.128) so the prong roots bury INTO
+// the body instead of floating beside it.
+hb.add(mkTube(0.135, 0.14, 0.14, NODE_Z + 0.15, bodyMat));
+// Collar rings seating the housing into the socket.
+for (const z of [NODE_Z + 0.1, NODE_Z + 0.2]) {hb.add(mkTube(0.145, 0.145, 0.012, z, darkMat));}
+
+// Grip under the breech — drill-style rake, fat.
+const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 0.15, 6), darkMat);
+grip.position.set(0, -0.14, NODE_Z + 0.18);
+grip.rotation.x = 0.3;
+hb.add(grip);
+const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 6), darkMat);
+pommel.scale.y = 0.55;
+pommel.position.y = -0.078;
+grip.add(pommel);
+// Frame is delicate at true size — bulk + push forward like the other
+// hold-out props so the cage owns the viewmodel frame.
+hb.scale.setScalar(1.3);
+hb.position.z = -0.08;
+hb.visible = false;
+return hb;
 }
 
 // Shocklance — the power spear. A hafted emitter-lance: wrapped charge

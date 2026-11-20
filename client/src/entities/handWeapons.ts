@@ -20,8 +20,6 @@ import { mkChaingun } from './viewmodel/weaponsGeoBallistic.js';
 const ALIASES = new Map<number, number>([
   [WeaponType.Implodisc, WeaponType.Disc],
   [WeaponType.BeltDisc, WeaponType.Disc],
-  // HealBeam borrows the repair gun — same hand-held beam tool.
-  [WeaponType.HealBeam, WeaponType.Repair],
 ]);
 
 const builders = new Map<number, () => THREE.Group>(MODEL_BUILDERS);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { getMuzzleFlashTexture } from '../../effects/glowTexture.js';
-import { mkPlasmaCannon, mkPlasmaGun, mkSprinkler, mkRailgun, mkLightningGun, mkShocklance } from './weaponsGeoEnergy.js';
+import { mkPlasmaCannon, mkPlasmaGun, mkSprinkler, mkRailgun, mkLightningGun, mkShocklance, mkHealBeam } from './weaponsGeoEnergy.js';
 import { mkPistol, mkRevolver, mkRepair, mkBlaster } from './weaponsGeoSidearm.js';
 import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv, mkBombard, mkGonne, mkBasilisk, mkRocketLauncher, mkHowitzer, mkFastDisc } from './weaponsGeoBallistic.js';
 import { darkMat } from './weaponKit.js';
@@ -44,9 +44,7 @@ export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.FastDiscLauncher, mkFastDisc],
   [WeaponType.Shocklance, mkShocklance],
   [WeaponType.Blaster, mkBlaster],
-  // Heal beam wears the repair tool's chassis — same hand-held welder
-  // frame, the cyan bolt IS the distinction.
-  [WeaponType.HealBeam, mkRepair],
+  [WeaponType.HealBeam, mkHealBeam],
 ];
 
 export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: (wt: number) => number): WeaponMeshes {

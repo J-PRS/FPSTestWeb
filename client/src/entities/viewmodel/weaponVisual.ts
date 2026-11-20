@@ -39,7 +39,9 @@ export const WEAPON_VISUAL: Record<number, WeaponVisual> = {
   [WeaponType.Sticky]:          { muzzleZ: -0.4,  recoil: { recover: 0.25, jitter: 0.02,  amp: 0.9,  back: 1 },  flash: { color: 0xFF_66_DD, scale: 0.8, life: 0.7, light: 1 } },
   [WeaponType.Blaster]:         { muzzleZ: -0.2,  recoil: { recover: 0.28, jitter: 0.025, amp: 0.9,  back: 1 },  flash: { color: 0x7D_FF_9E, scale: 0.5, life: 0.5, light: 1 } },
   [WeaponType.Repair]:          { muzzleZ: -0.2,  recoil: { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 },  flash: { color: 0x7D_FF_B8, scale: 0.4, life: 0.4, light: 1 } },
-  [WeaponType.HealBeam]:        { recoil: { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 }, flash: { color: 0x8F_D8_FF, scale: 0.4, life: 0.4, light: 1 } },
+  // HealBeam fires from the emitter NODE at the rear of the rail cage
+  // (z=0) — the beam visibly springs out of the node, not the nose ring.
+  [WeaponType.HealBeam]:        { muzzleZ: -0.02, recoil: { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 }, flash: { color: 0x8F_D8_FF, scale: 0.4, life: 0.4, light: 1 } },
   [WeaponType.MRVLauncher]:     { muzzleZ: -0.56, recoil: { recover: 1.5,  jitter: 0.03,  amp: 0.8,  back: 1.35 }, flash: { color: 0xFF_77_44, scale: 1.4, life: 1.4, light: 1 } },
   // Howitzer - the recoil IS the identity: big shove, slow recover,
   // a blast big enough to read as a cannon report not a pop.
