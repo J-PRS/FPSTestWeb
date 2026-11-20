@@ -682,6 +682,8 @@ body:has(#hud.cm-open) #healthbar-container {
    # / PLAYER / CLASS / FRAGS / DEATHS / PTS / NET / PING / ... */
 .sb-noping th:nth-child(8), .sb-noping td:nth-child(8) { display: none; }
 .sb-nonet th:nth-child(7), .sb-nonet td:nth-child(7) { display: none; }
+.sb-noloco th:nth-child(9), .sb-noloco td:nth-child(9),
+.sb-noloco th:nth-child(10), .sb-noloco td:nth-child(10),
 .sb-noloco th:nth-child(11), .sb-noloco td:nth-child(11),
 .sb-noloco th:nth-child(12), .sb-noloco td:nth-child(12) { display: none; }
 #scoreboard tr.self td { color: #8fd8ff; font-weight: 600; }

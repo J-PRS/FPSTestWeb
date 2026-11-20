@@ -305,8 +305,9 @@ export class Scoreboard {
 
     this.tsB = root.querySelector('#sb-ts-b');
 
-    // ASW/LOCO columns are movement-tuning readouts - prod boards hide
-    // them whole (same class-hide pattern as PING/NET), dev hosts keep.
+    // SHEEP/ALIVE/ASW/LOCO columns are movement/debug-tuning readouts -
+    // prod boards hide them whole (same class-hide pattern as PING/NET),
+    // dev hosts keep.
     this.root.classList.toggle('sb-noloco', !isDevHost());
 
     this.countdownEl = root.querySelector('#sb-countdown');
