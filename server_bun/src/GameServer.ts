@@ -492,6 +492,11 @@ export class GameServer {
       // (a gapped spec otherwise desyncs permanently), tickNack (scoped
       // to their own intro window by nackFor, not room-wide).
       room = this.specRooms.get(existingPlayerId);
+      // A spectator's join is a real join intent - the AFK-demoted tab's
+      // reseat() lands here, and seatJoiner evicts the spec seat for the
+      // same id. Swallowing it ghosts the client forever (everyone-red,
+      // teamless UI - the seat never comes back).
+      if (room && (raw as { type?: string }).type === 'join') {this.handleHandshake(ws, raw); return;}
       // A still-connecting seat (join deferred on terrainReady) has no
       // room yet - join/switchRoom from it are re-intents, not noise.
       // Swallowing them here locks the client to whatever room the stale
@@ -922,10 +927,13 @@ this.ops.msgsRejected += 1;
    *  both route here so the room roster, connection, specRooms index and
    *  session record always die together. closeCode closes the spectator's
    *  socket first when its departure is server-initiated (id claim). */
-  departSpectator(playerId: string, reason: string, closeCode?: number): boolean {
+  departSpectator(playerId: string, reason: string, closeCode?: number, spare?: ServerWebSocket<WebSocketData>): boolean {
     const specRoom = this.specRooms.get(playerId);
     if (!specRoom) {return false;}
-    if (closeCode !== undefined) {specRoom.connections.getConnection(playerId)?.close(closeCode, reason);}
+    // `spare` is a spectator re-joining on their own socket - closing it
+    // would kill the fresh seat's lane (and fire onClose over it).
+    const conn = specRoom.connections.getConnection(playerId);
+    if (closeCode !== undefined && conn && conn !== spare) {conn.close(closeCode, reason);}
     specRoom.spectators.delete(playerId);
     specRoom.connections.unregister(playerId);
     this.specRooms.delete(playerId);

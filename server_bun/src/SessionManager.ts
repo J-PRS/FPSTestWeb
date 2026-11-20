@@ -34,8 +34,10 @@ export interface SessionDeps {
    *  carry the seat generation it stamps so stale callbacks die by gen. */
   registry: SessionRegistry;
   /** Single spectator exit path (GameServer.departSpectator)  -  roster,
-   *  connection, specRooms index and session record die together. */
-  departSpectator(playerId: string, reason: string, closeCode?: number): boolean;
+   *  connection, specRooms index and session record die together.
+   *  `spare` keeps one socket alive: a spectator re-joining on their OWN
+   *  socket must not close the lane the join rode in on. */
+  departSpectator(playerId: string, reason: string, closeCode?: number, spare?: ServerWebSocket<WebSocketData>): boolean;
   /** Full teardown of a player seat (roster + grace + indexes)  -  used by
    *  a different-room join to retire the stale seat before re-seating. */
   removePlayerCompletely(room: Room, playerId: string, reason: string): void;
@@ -310,7 +312,7 @@ export class SessionManager {
     // kick the innocent spectator.
     // The spectator session ends here  -  the player session that follows
     // is a fresh generation, not a state transition.
-    this.d.departSpectator(playerId, 'id claimed by player', 1008);
+    this.d.departSpectator(playerId, 'id claimed by player', 1008, ws);
 
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);
