@@ -18,11 +18,12 @@ function spyRejects(room: ReturnType<typeof mkRoom>, pid: string): ServerMessage
   return out;
 }
 
-function fire(room: ReturnType<typeof mkRoom>, pid: string): void {
+function fire(room: ReturnType<typeof mkRoom>, pid: string, fireAt?: number): void {
   room.messages.handleMessage(pid, {
     type: 'shotFired', weaponType: GUN,
     dir: { x: 1, y: 0, z: 0 },
     pos: { x: 1, y: 32, z: 0 },
+    fireAt,
   } as never);
 }
 
@@ -51,5 +52,22 @@ describe('scenario: intent flood gate', () => {
     for (let i = 0; i < 25; i++) {fire(room, a.id);}
     expect(w.count('projectileCreated')).toBe(expected);
     expect(rejects.filter((m) => m.type === 'shotRejected')).toHaveLength(25 - expected);
+  });
+
+  it('stall-and-drain: legit-paced fireAt claims arriving in a burst admit', () => {
+    const room = mkRoom({ bots: 2 }, 'tdm');
+    const w = watch(room);
+    const [a] = twoPlayers(room);
+    const rejects = spyRejects(room, a.id);
+    // A frozen link drains its queue: N shots land in one frame, but each
+    // was honestly fired at weapon cadence seconds apart (fireAt rides the
+    // client's server-clock estimate). Arrival-time judging rejected every
+    // one of these; the cadence law must judge the declared instant.
+    const interval = WEAPON_FIRE_INTERVAL_S[WeaponType.Chaingun]!;
+    const now = Date.now();
+    const n = 8;
+    for (let i = 0; i < n; i++) {fire(room, a.id, now - (n - 1 - i) * interval * 1000);}
+    expect(w.count('projectileCreated')).toBe(n);
+    expect(rejects.filter((m) => m.type === 'shotRejected')).toHaveLength(0);
   });
 });

@@ -711,16 +711,26 @@ w.n += 1;
     this.simmedFireTimes.set(playerId, recent);
     // Per-weapon cadence law - revived from the retired shotClaims: the
     // flat 20/s flood gate alone lets a mortar (2.0s interval) claim
-    // ~13 simmed shells/sec. Rolling-second arrival bound per
+    // ~13 simmed shells/sec. Rolling-second bound per
     // `${playerId}:${weaponType}`; 0.85× interval slack absorbs input
     // bunching under loss, so legit burst catch-up passes.
+    // The window judges the DECLARED fire instant (fireAt, client
+    // server-clock estimate), never arrival time: a stall-and-drain
+    // link delivers seconds of legit-paced shots in one burst, and
+    // arrival judging rejected every one of them (2026-11-20 report,
+    // ping>1200ms jitter spikes). fireAt clamps into [now-3s, now] - a
+    // constant or deep-past stamp still crowds the same window and
+    // rejects, and the 20/s flood gate above stays the spam bound.
     const interval = msg.weaponType === undefined ? undefined : WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType];
     if (interval !== undefined) {
       const key = `${playerId}:${msg.weaponType}`;
       const win = this.fireWindows.get(key) ?? { start: now, count: 0, lastTs: undefined, arr: [] as number[], violations: 0 };
       this.fireWindows.set(key, win);
-      win.arr = win.arr.filter((t): boolean => now - t < 1000);
-      win.arr.push(now);
+      const t = typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)
+        ? Math.min(Math.max(msg.fireAt, now - 3000), now)
+        : now;
+      win.arr = win.arr.filter((v): boolean => t - v < 1000 && v <= t);
+      win.arr.push(t);
       if (win.arr.length >= Math.ceil(1000 / (interval * 850)) + 2) {
 win.violations += 1;
         this.reject(playerId, 'Shot', `fire rate (cadence: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
