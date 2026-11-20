@@ -25,6 +25,7 @@ __RUN.bat
 _clean_deploy.bat
 _deploy_cf.bat
 _docs
+_live_versions.bat
 _netbots.bat
 _oci_deploy.bat
 _oxlint.bat
