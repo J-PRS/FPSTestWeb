@@ -823,6 +823,19 @@ export class RemoteInterp {
       }
     }
 
+    // Uncertainty brake: past ~0.6s of wire silence a cruising ghost is
+    // fiction, not a guess - the victim likely turned or stopped and the
+    // sim has no way to know (ghost ledgers showed ~19m runouts at ~1s,
+    // the "aim where the ghost led" dmg-echo miss class). Bleed cruise
+    // speed toward standstill (~0.45s tau) so the body visibly hesitates
+    // instead of sailing the whole gap; vertical gravity/jet still run so
+    // ballistic arcs stay readable. The next wire push reseats it.
+    if (Date.now() - this.lastUpdateTime > 600) {
+      const bleed = Math.exp(-dt / 0.45);
+      this.simulatedVelocity.x *= bleed;
+      this.simulatedVelocity.z *= bleed;
+    }
+
     p.x += this.simulatedVelocity.x * dt;
     p.y += this.simulatedVelocity.y * dt;
     p.z += this.simulatedVelocity.z * dt;

@@ -18,7 +18,13 @@ const mkHost = (): InterpHost => ({
   terrain: null, playerId: 'dbg', armorClass: 'medium',
 });
 
-const mkRi = (): RemoteInterp => new RemoteInterp(mkHost());
+const mkRi = (): RemoteInterp => {
+  const ri = new RemoteInterp(mkHost());
+  // Fresh wire stamp - the uncertainty brake only engages past ~600ms of
+  // silence; these tests pin the correction math, not the brake.
+  (ri as any).lastUpdateTime = Date.now();
+  return ri;
+};
 
 const step = (ri: RemoteInterp, dt: number): void => { (ri as any).simStep(dt); };
 const vel = (ri: RemoteInterp): THREE.Vector3 => (ri as any).simulatedVelocity;
@@ -100,5 +106,26 @@ describe('remoteInterp simStep - dead-reckoning correction math', (): void => {
     vel(ri).set(10, 0, 0);
     step(ri, 0.016);
     expect(vel(ri).x).toBeCloseTo(10, 5);
+  });
+});
+
+describe('remoteInterp simStep - uncertainty brake', (): void => {
+  it('bleeds XZ cruise past ~600ms silence, leaves Y alone', (): void => {
+    const ri = mkRi();
+    (ri as any).lastUpdateTime = Date.now() - 1000;
+    vel(ri).set(10, 0, 8);
+    step(ri, 0.016);
+    const b = Math.exp(-0.016 / 0.45);
+    expect(vel(ri).x).toBeCloseTo(10 * b, 5);
+    expect(vel(ri).z).toBeCloseTo(8 * b, 5);
+    expect(vel(ri).y).toBeCloseTo(GRAVITY * 0.016, 6);
+  });
+
+  it('fresh wire stamp leaves cruise untouched', (): void => {
+    const ri = mkRi(); // mkRi stamps lastUpdateTime = now
+    vel(ri).set(10, 0, 8);
+    step(ri, 0.016);
+    expect(vel(ri).x).toBeCloseTo(10, 5);
+    expect(vel(ri).z).toBeCloseTo(8, 5);
   });
 });
