@@ -666,19 +666,27 @@ export interface RemotesApi {
 // Drawn-ghost uplink: report the RENDERED feet-spot of the remote
 // nearest the crosshair so the server tests the capsule where the
 // shooter's screen put it - lateral DR drift lives at no rewind epoch.
-// ~4deg cone + skip hidden/dead; feet because the server's capsule
+// Ray-distance pick + skip hidden/dead; feet because the server's capsule
 // math adds centerOff to a base pos (same as rewindPos output).
 function aimGhostFor(nm: NetworkManager, player: Player, remotes: Iterable<[string, RemotePlayer]>): { wid: number; x: number; y: number; z: number } | undefined {
   const cp = Math.cos(player.pitch);
   const fx = cp * Math.sin(player.yaw), fy = Math.sin(player.pitch), fz = cp * Math.cos(player.yaw);
-  let best: RemotePlayer | undefined, bestId = '', bestDot = 0.9976;
+  // Nearest to the aim RAY, not the tightest cone: a led projectile puts
+  // the crosshair meters off the victim (8m lead on a 30m/s strafe at
+  // 30m bolt range is ~14deg — a ~5deg cone never reports that ghost and
+  // the server env-refuses a visually direct hit). 4 + 0.15d covers real
+  // leads; the server's rewind/live slack gate still bounds what a
+  // report can credit, so width buys a forger nothing.
+  let best: RemotePlayer | undefined, bestId = '', bestPerp = Infinity;
   for (const [id, rp] of remotes) {
     if (rp.isDead || rp.staleHidden || rp.cloakGhost) {continue;}
     const dx = rp.pos.x - player.pos.x, dy = rp.pos.y - player.pos.y, dz = rp.pos.z - player.pos.z;
     const d = Math.hypot(dx, dy, dz);
     if (d < 1 || d > 600) {continue;}
     const dot = (dx * fx + dy * fy + dz * fz) / d;
-    if (dot > bestDot) { bestDot = dot; best = rp; bestId = id; }
+    if (dot <= 0) {continue;}
+    const perp = d * Math.sqrt(1 - dot * dot);
+    if (perp < 4 + 0.15 * d && perp < bestPerp) { bestPerp = perp; best = rp; bestId = id; }
   }
   if (best === undefined) {return undefined;}
   const wid = nm.widOf(bestId);
