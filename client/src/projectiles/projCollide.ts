@@ -9,6 +9,7 @@ import { sweepTerrain, sweepBall, sweepPlayer, sweepObstacle, type SweepHost } f
 import { segSolidHit, type ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
 import type { SweepObstacle } from './Projectile.js';
+import { noteGhostClaim } from '../game/ghostClaim.js';
 
 // Collision policy - the swept-contact rules (terrain bounce/fuse, wall
 // hits, bolt interception, target hits + hit-record accounting). The
@@ -289,9 +290,16 @@ export class ProjCollide {
           if (h.pierced.has(playerId)) {continue;}
           h.pierced.add(playerId);
           h.pierceQueue.push({ playerId });
+          // Same contract as the terminal hit below - a pierced victim
+          // was still predicted; last stamper wins the single slot.
+          noteGhostClaim(playerId, playerPos.x, playerPos.y - classCapsule(playerClasses?.get(playerId)).eye, playerPos.z);
           continue;
         }
         h.hitPlayerId = playerId;
+        // Stamp the swept ghost spot - the uplink re-reports it for the
+        // shell's adjudication window (see ghostClaim.ts contract).
+        // playerPos.y is eye height; the report contract wants feet.
+        noteGhostClaim(playerId, playerPos.x, playerPos.y - classCapsule(playerClasses?.get(playerId)).eye, playerPos.z);
         if (h.config.sticks) {
           h.stickAt(h.hitPoint, undefined, playerId, remotePlayers);
           return true;

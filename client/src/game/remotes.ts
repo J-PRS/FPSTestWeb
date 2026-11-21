@@ -19,6 +19,7 @@ import { FLAG_STAND_TOP } from '../structures/structures.js';
 import { settings } from '../core/settings.js';
 import { MAX_HEALTH } from '../core/config.js';
 import { isBotId, botRosterName } from '../../../shared/botNames.js';
+import { ghostClaim } from './ghostClaim.js';
 import * as sfxWorld from '../core/sfx/world.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
 import { gibRemoteBody } from './net/playerKill.js';
@@ -669,6 +670,14 @@ export interface RemotesApi {
 // Ray-distance pick + skip hidden/dead; feet because the server's capsule
 // math adds centerOff to a base pos (same as rewindPos output).
 function aimGhostFor(nm: NetworkManager, player: Player, remotes: Iterable<[string, RemotePlayer]>): { wid: number; x: number; y: number; z: number } | undefined {
+  // A fresh predicted-hit claim wins: it's the swept ghost at the
+  // adjudication epoch, inside rewind slack by construction. 350ms of
+  // re-report covers the shell's transit to the server verdict.
+  if (ghostClaim.id && performance.now() - ghostClaim.at < 350) {
+    const wid = nm.widOf(ghostClaim.id);
+    if (wid !== undefined) {return { wid, x: ghostClaim.x, y: ghostClaim.y, z: ghostClaim.z };}
+    ghostClaim.id = '';
+  }
   const cp = Math.cos(player.pitch);
   const fx = cp * Math.sin(player.yaw), fy = Math.sin(player.pitch), fz = cp * Math.cos(player.yaw);
   // Nearest to the aim RAY, not the tightest cone: a led projectile puts
