@@ -7,8 +7,15 @@
        otherwise trigger Chrome's auto zoom-out → runaway oversize loop. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Anabatic</title>
+  <link rel="canonical" href="https://anabatic.gg/" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="color-scheme" content="dark" />
+  <!-- First joins race a TLS handshake to the fleet host — start it early. -->
+  <link rel="preconnect" href="https://play.jprice.app" />
+  <link rel="dns-prefetch" href="https://play.jprice.app" />
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/assets/icons/icon_star.png" sizes="512x512" />
+  <link rel="apple-touch-icon" href="/assets/icons/icon_star.png" />
   <!-- Linked, not JS-imported: stylesheet-in-JS waits on module eval →
        unstyled HTML flashes on refresh (FOUC). -->
   <!-- The boot heightmap fetch otherwise starts after the module parses —

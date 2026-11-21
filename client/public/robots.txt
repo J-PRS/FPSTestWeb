@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /wtmin.html
+
+Sitemap: https://anabatic.gg/sitemap.xml

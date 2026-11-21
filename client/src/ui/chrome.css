@@ -750,6 +750,15 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .feed-empty { position: absolute; inset: 0; display: none; align-items: center;
   justify-content: center; font-size: 0.85rem; color: rgb(var(--ui-dim-rgb) / 0.7);
   letter-spacing: 0.1em; background: var(--ui-bg-feed-empty); }
+/* Mid-width dead zone: two 400px drawers + the up-to-900px loadout sheet
+   can't coexist below ~1400px. The recordings feed is the expendable
+   panel — it hides first; the settings drawer shrinks at ~1100px. */
+@media (min-width: 821px) and (max-width: 1400px) {
+  #cool-shots-panel { display: none; }
+}
+@media (min-width: 821px) and (max-width: 1100px) {
+  #menu-side { width: 300px; padding: 18px 12px; }
+}
 @media (max-width: 820px) {
   .feed-rail { right: 8px; gap: 8px; }
   .feed-btn { width: 40px; height: 40px; font-size: 0.9rem; }

@@ -128,6 +128,8 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-15_WIRE_FORMAT_REVIEW.md` | Wire-format review — ~85-95% of bytes already binary (estimate; worker socket defeated sniffing); protobuf would net ~5-15% mostly on the join burst, pro games hand-roll binary+delta on the tick lane; recommended: gzip gameState if joins hurt, MessagePack as drop-in |
 | `_docs/2026-11-14_LOG_NOISE_AUDIT.md` | Full classification of a 2-human session's WARN flood — 0-byte demo orphans quarantined/deleted, join-gates warn needs explicit request, UDP EADDRINUSE bind retry; aoe-refuse env census + movement-cheat + gun-game rejects verified as working signal |
 | `_docs/2026-11-16_HSTS_PRELOAD.md` | HSTS preload eval for anabatic.gg — benefit = one first-visit HTTP hop; cost = permanent all-subdomain HTTPS mandate (removal 6-12wks); regret corpus is always includeSubDomains hitting forgotten HTTP hosts; verdict: keep 1y header, skip preload |
+| `_docs/2026-11-20_SEO_AUDIT.md` | SEO audit + plan for anabatic.gg — crawler sees only `<title>Anabatic</title>` + menu skeleton (no meta/OG/robots/sitemap/schema); plan: P0 static files (meta/OG/robots/sitemap/manifest/og.png), P1 crawl-visible copy block in index.html, P2 per-clip OG on /s/ links, P3 portal listings |
+| `_docs/2026-11-20_SEO_COPY_DRAFT.md` | SEO copy deck awaiting JP approval — title options, meta description, OG/Twitter tags, VideoGame JSON-LD, webmanifest, crawl-visible body block, portal blurb+tags; zero-copy items (robots/sitemap/canonical/theme-color/preconnect/noindex) already staged in working tree |
 
 ## Agent memory (append-only, one line each)
 
