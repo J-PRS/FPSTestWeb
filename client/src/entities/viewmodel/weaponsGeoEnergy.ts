@@ -8,13 +8,13 @@ import { bodyMat, darkMat, boreMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus,
 
 // Weapon 6 - plasma cannon: a fat energy projector, not a tube - heavy
 // finned emitter head up front, glowing core slats behind it, capacitor
-// bottle under the receiver. T2's plasma gun reads BULKY — the emitter
+// bottle under the receiver. T2's plasma gun reads BULKY - the emitter
 // dish is the widest thing on the model.
 export function mkPlasmaCannon(): THREE.Group {
 const plasma = new THREE.Group();
-// Main body — shorter and much fatter than the old slim tube
+// Main body - shorter and much fatter than the old slim tube
 plasma.add(mkTube(0.115, 0.13, 0.3, 0, bodyMat));
-// Flared emitter head — a wide shallow dish the bolt charges inside.
+// Flared emitter head - a wide shallow dish the bolt charges inside.
 // Two nested cones: outer bell + inner throat.
 const plasmaBell = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.115, 0.1, 10), darkMat);
 plasmaBell.rotation.x = Math.PI / 2;
@@ -25,7 +25,7 @@ plasmaThroat.rotation.x = Math.PI / 2;
 plasmaThroat.position.z = -0.29;
 plasma.add(plasmaThroat);
 plasma.add(mkBore(0.085, -0.331));
-// Emitter core — big green iris recessed in the throat, wider than the
+// Emitter core - big green iris recessed in the throat, wider than the
 // old ring so the muzzle reads HOT at viewmodel distance
 const plasmaGlow = new THREE.Mesh(
   new THREE.CylinderGeometry(0.078, 0.078, 0.02, 14),
@@ -34,7 +34,7 @@ const plasmaGlow = new THREE.Mesh(
 plasmaGlow.rotation.x = Math.PI / 2;
 plasmaGlow.position.z = -0.332;
 plasma.add(plasmaGlow);
-// Cooling fins — four flat blades radiating off the emitter head, the
+// Cooling fins - four flat blades radiating off the emitter head, the
 // silhouette detail that separates "energy projector" from "tube"
 for (let i = 0; i < 4; i += 1) {
   const a = (i / 4) * Math.PI * 2;
@@ -43,7 +43,7 @@ for (let i = 0; i < 4; i += 1) {
   fin.rotation.z = a;
   plasma.add(fin);
 }
-// Core slats — green glow strips along the body so the energy read
+// Core slats - green glow strips along the body so the energy read
 // isn't only at the muzzle
 for (let i = 0; i < 4; i += 1) {
   const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
@@ -54,7 +54,7 @@ for (let i = 0; i < 4; i += 1) {
   slat.position.set(Math.cos(a) * 0.125, Math.sin(a) * 0.125, 0);
   plasma.add(slat);
 }
-// Capacitor bottle under the receiver — a fat cell slung low, same
+// Capacitor bottle under the receiver - a fat cell slung low, same
 // trick as the GL drum / sticky magazine: ammo you can see
 const plasmaCell = mkTube(0.07, 0.07, 0.22, 0.05, darkMat);
 plasmaCell.position.y = -0.13;
@@ -81,18 +81,18 @@ plasma.visible = false;
 return plasma;
 }
 
-// Weapon — plasma gun v2 (Quake-style rapid bolts): a machined repeater.
-// Chamfered lofted receiver feeding an open emitter cage — the blue core
+// Weapon - plasma gun v2 (Quake-style rapid bolts): a machined repeater.
+// Chamfered lofted receiver feeding an open emitter cage - the blue core
 // glows *inside* a dark cage, so the glow reads as depth, not a sticker.
 export function mkPlasmaGun(): THREE.Group {
 const pg = new THREE.Group();
 const glowMat = new THREE.MeshBasicMaterial({ color: 0x44_BB_FF });
-// Receiver — chamfered-rectangle loft, slight rear taper. The chamfers
+// Receiver - chamfered-rectangle loft, slight rear taper. The chamfers
 // catch the rim light where the old tube read flat.
-// Grooves are NOTCHED INTO the receiver profile — real machined channels
+// Grooves are NOTCHED INTO the receiver profile - real machined channels
 // that follow the taper, not strips laid on top.
 let recv = profOct(0.2, 0.2, 0.04);
-// Descending edge order — each notch grows the ring, so high edges first.
+// Descending edge order - each notch grows the ring, so high edges first.
 recv = notchRing(recv, 5, [[0.3, 0.4], [0.6, 0.7]], 0.008, 0.35); // left flank ×2
 recv = notchRing(recv, 3, [[0.15, 0.25], [0.45, 0.55], [0.75, 0.85]], 0.008, 0.35); // top face ×3
 recv = notchRing(recv, 1, [[0.3, 0.4], [0.6, 0.7]], 0.008, 0.35); // right flank ×2
@@ -101,9 +101,9 @@ pg.add(mkLoft([
   { z: -0.02, ring: recv },
   { z: -0.14, ring: scaleRing(recv, 0.85) },
 ], bodyMat));
-// Emitter cage — three chamfered rails reach forward from the receiver
+// Emitter cage - three chamfered rails reach forward from the receiver
 // face, carrying the collar. The hot core sits INSIDE the cage.
-// Six prongs — one per hex-collar vertex. They start well inside the
+// Six prongs - one per hex-collar vertex. They start well inside the
 // receiver (z=-0.06 < front cap -0.14) so every one seats into the body.
 for (let i = 0; i < 6; i += 1) {
   const a = (i / 6) * Math.PI * 2;

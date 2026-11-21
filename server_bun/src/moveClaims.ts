@@ -262,11 +262,10 @@ export class MoveClaims {
     // toward the same kick wiring the diverge counter feeds.
     if ((this.lastTeleport.get(playerId) ?? 0) > now) {
       this.h.hb('teleportSpam');
+      // Counted, not surfaced: legit flows (resync reseat + respawn,
+      // beacon + death) land inside the window honestly, so serverWarn
+      // stays for connection-class notices the player can act on.
       logger.warn('teleport spam: inside cadence window — honored, counted', { playerId });
-      if ((this.lastTeleportWarn.get(playerId) ?? 0) <= now) {
-        this.lastTeleportWarn.set(playerId, now + 5000);
-        this.h.sendToPlayer(playerId, { type: 'serverWarn', text: 'teleport spam detected' });
-      }
     }
     this.lastTeleport.set(playerId, now + 3000);
     // Authority mode: the shadow owns position, so a declared warp only
@@ -279,21 +278,7 @@ export class MoveClaims {
     // Judge mode keeps the honor-everything contract: position is
     // already client-truth there, and the force-accept resync would
     // land it anyway.
-    if (this.h.moveAuthority()) {
-      const drift = Math.hypot(
-        msg.position.x - player.position.x,
-        msg.position.y - player.position.y,
-        msg.position.z - player.position.z);
-      const skilled = player.lastSkillUse !== undefined && now - player.lastSkillUse < 4000;
-      if (drift > 25 && !skilled) {
-        this.h.hb('teleportForged');
-        if ((this.lastTeleportWarn.get(playerId) ?? 0) <= now) {
-          this.lastTeleportWarn.set(playerId, now + 5000);
-          this.h.sendToPlayer(playerId, { type: 'serverWarn', text: 'teleport refused' });
-        }
-        return;
-      }
-    }
+    if (this.h.moveAuthority() && this.refuseForgedReseat(playerId, player, msg, now)) {return;}
     // A declared warp landing under the floor is the same buried-body
     // seed a bad spawn is — counted, never refused (the client already
     // moved; refusing recreates the warp as impossibly-fast reports).
@@ -326,6 +311,25 @@ export class MoveClaims {
     if (!this.h.cloakHidden?.(playerId)) {
       this.h.broadcast(eventPayload(WORLD_MODEL.player!, 'teleport', 'playerId', playerId, { position: msg.position, velocity: msg.velocity }) as ServerMessage, playerId);
     }
+  }
+
+  /** Authority-mode forged-reseat gate: honor warps the server can
+   *  explain (near the recorded position = resync/respawn snap, or an
+   *  accepted skillUse inside the window = beacon landing); anything
+   *  else is counted, warned once per 5s, and refused. */
+  private refuseForgedReseat(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'teleport' }>, now: number): boolean {
+    const drift = Math.hypot(
+      msg.position.x - player.position.x,
+      msg.position.y - player.position.y,
+      msg.position.z - player.position.z);
+    const skilled = player.lastSkillUse !== undefined && now - player.lastSkillUse < 4000;
+    if (drift <= 25 || skilled) {return false;}
+    this.h.hb('teleportForged');
+    if ((this.lastTeleportWarn.get(playerId) ?? 0) <= now) {
+      this.lastTeleportWarn.set(playerId, now + 5000);
+      this.h.sendToPlayer(playerId, { type: 'serverWarn', text: 'teleport refused' });
+    }
+    return true;
   }
 
   /** Resync claim (alt-tab catch-up): the client is about to snap onto

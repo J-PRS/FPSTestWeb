@@ -1184,7 +1184,7 @@ this.sendDrops += 1;
     msg.claimSeq = this.ledger.stamp('slam', false, msg);
     this.send(msg);
     this.claimIntents.push({ msg, t: performance.now(), room: this.netRoom });
-    if (this.claimIntents.length > 16) {this.claimIntents.shift();}
+    if (this.claimIntents.length > NetworkManager.FIRE_JOURNAL_CAP) {this.claimIntents.shift();}
   }
 
   sendJump(position: { x: number; y: number; z: number }): void {
@@ -1209,7 +1209,7 @@ this.sendDrops += 1;
     // server dedupes by shotId, room-scoped so a hop can't replay a
     // stale shell into the wrong room.
     this.claimIntents.push({ msg, t: performance.now(), room: this.netRoom });
-    if (this.claimIntents.length > 16) {this.claimIntents.shift();}
+    if (this.claimIntents.length > NetworkManager.FIRE_JOURNAL_CAP) {this.claimIntents.shift();}
   }
 
   /** Recent predicted intents eligible for post-reclaim replay
@@ -1224,6 +1224,11 @@ this.sendDrops += 1;
    *  detection + grace + rejoin roundtrip routinely runs past 3s -
    *  a window shorter than the reclaim never actually replays. */
   private static readonly FIRE_REPLAY_MS = 10_000;
+  /** Journal depth must cover a full window of spray: chaingun fires
+   *  ~11 intents/s, so 16 slots dropped every pull past ~1.5s of dead
+   *  lane. A lost claim never earns a server bloomSeq tick, which
+   *  skewed the seeded cone draws for the rest of the gap. */
+  private static readonly FIRE_JOURNAL_CAP = 160;
 
   /** Called by wireIn's gameState handler - the seat is (re)established.
    *  Resends fire intents the dead lane may have lost; entries from a
@@ -1263,7 +1268,7 @@ this.sendDrops += 1;
     msg.claimSeq = this.ledger.stamp('deploy', false, msg);
     this.send(msg);
     this.claimIntents.push({ msg, t: performance.now(), room: this.netRoom });
-    if (this.claimIntents.length > 16) {this.claimIntents.shift();}
+    if (this.claimIntents.length > NetworkManager.FIRE_JOURNAL_CAP) {this.claimIntents.shift();}
   }
 
   /** Repair claim - only the target id crosses the wire; the server

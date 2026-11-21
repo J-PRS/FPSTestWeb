@@ -133,10 +133,14 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
 
   const v = localPlayerState.velocity;
   const anchorVel = v && Math.hypot(v.x, v.y, v.z) < 10 ? v : { x: 0, y: 0, z: 0 };
+  // Declare the reseat only when it actually moved us: a drift-scale
+  // restore needs no teleport claim, and an undeclared one keeps the
+  // server's 3s cadence window free for real warps (respawn/beacon).
+  const jumped = player.pos.distanceTo(new THREE.Vector3(p.x, p.y, p.z)) > 3;
   restoreBodyPosition(ctx, player, localPlayerState, p, anchorVel);
   noteLocalSnap();
   deps.setLastSentPos({ x: p.x, y: p.y, z: p.z });
-  applyRestoredVitals(ctx, player, localPlayerState);
+  applyRestoredVitals(ctx, player, localPlayerState, jumped);
 
   deps.logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
 }
@@ -190,7 +194,7 @@ function restoreBodyPosition(ctx: NetCtx, player: LocalPlayer, localPlayerState:
 // Vitals + seat bookkeeping after the body lands: tokens/health/armor/
 // dead flag, controller reseat, declared-discontinuity teleport mark,
 // death overlay, seated mark, and the veil-less spawn-hold release.
-function applyRestoredVitals(ctx: NetCtx, player: LocalPlayer, localPlayerState: LocalPlayerState): void {
+function applyRestoredVitals(ctx: NetCtx, player: LocalPlayer, localPlayerState: LocalPlayerState, jumped: boolean): void {
   const { deps, nm } = ctx;
   player.heldTokens = localPlayerState.held ?? 0;
   // Bloom draw counter is server-truth: a reclaim carries it forward, a
@@ -203,8 +207,9 @@ function applyRestoredVitals(ctx: NetCtx, player: LocalPlayer, localPlayerState:
   player.syncMovement(); // reseat controller — restored pos/vel otherwise revert
   // A join reseat is a declared discontinuity like any respawn — without
   // it the first pos report can be judged a 50m+ jump, and the camera
-  // spinout watchdog flags the spawn snap as a 100°+/frame flick.
-  player.markTeleport();
+  // spinout watchdog flags the spawn snap as a 100°+/frame flick. Skipped
+  // for sub-3m restores, which report inside plausibility undeclared.
+  if (jumped) {player.markTeleport();}
 
   deps.lazyHud().setDeathOverlay(player.isDead);
   if (player.isDead) {
@@ -223,7 +228,7 @@ function applyRestoredVitals(ctx: NetCtx, player: LocalPlayer, localPlayerState:
 
 /** Room snapshot half of gameState — mode, team, scores, clock, map
  *  geometry, mid-flight pickups/flags. Pure world setup, no local player. */
-function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<NonNullable<NetworkManager['onGameState']>>[2]): void {
+function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<NonNullable<NetworkManager['onGameState']>>[2], seated = true): void {
   const { deps, networkManager } = ctx;
   if (!roomInfo) {return;}
   deps.world.mode = roomInfo.mode;
@@ -237,14 +242,10 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   if (deps.world.gungame) {armory.applyGunGame(deps.world.igun === true);} else {armory.releaseGunGame();}
   if (roomInfo.mapName) {deps.world.mapName = roomInfo.mapName;}
   if (roomInfo.room !== undefined) {deps.retireOfflineBots?.();}
-  applyMatchMeta(ctx, roomInfo);
+  applyMatchMeta(ctx, roomInfo, seated);
   if (Number.isFinite(roomInfo.respawnMs) && roomInfo.respawnMs! > 0) {deps.world.respawnMs = roomInfo.respawnMs!;}
   announceRoom(ctx, playerCount, roomInfo);
-  // Pickups still lying on the field when we (re)joined — the roster is
-  // authoritative both ways: spawn what's there, drop ghosts whose
-  // pickupGone we missed while disconnected.
-  ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map((p): number => p.id)));
-  for (const p of roomInfo.pickups ?? []) {ctx.addPickup(p.id, p.pos, p.kind ?? 'gem', p.val ?? 1);}
+  applyPickupRoster(ctx, roomInfo);
   reconcileDeployables(ctx, roomInfo.deployables);
   applyMapSnapshot(ctx, roomInfo.map);
   // Remember this room's map — F5 boots straight into it while the
@@ -255,6 +256,14 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   // An empty/absent list on a room hop must also clear the old room's
   // banners and HUD chips, so fire it either way.
   networkManager.onFlagUpdate?.(roomInfo.flags ?? []);
+}
+
+/** Pickups still lying on the field when we (re)joined: the roster is
+ *  authoritative both ways; spawn what's there, drop ghosts whose
+ *  pickupGone we missed while disconnected. */
+function applyPickupRoster(ctx: NetCtx, roomInfo: NonNullable<RoomInfo>): void {
+  ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map((p): number => p.id)));
+  for (const p of roomInfo.pickups ?? []) {ctx.addPickup(p.id, p.pos, p.kind ?? 'gem', p.val ?? 1);}
 }
 
 
@@ -357,7 +366,7 @@ export function wireWorld(ctx: NetCtx): void {
     // either way the buffer clears and the next push re-anchors.
     const wire = new Map(players.map(p => [p.id, p.position]));
     purgeStaleRemotes(deps.world, wire);
-    applyRoomInfo(ctx, players.length, roomInfo);
+    applyRoomInfo(ctx, players.length, roomInfo, localPlayerState !== undefined);
     if (localPlayerState) {restoreLocalPlayer(ctx, localPlayerState);}
     // Warm every class-body rig parse — remote ctors fire on paced spawn
     // admits, so the last variant's ~460ms worker parse otherwise starts
@@ -504,14 +513,14 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
  *  authoritative, so a hop that drops them clears rather than leaves the
  *  old match's residue. The `room` gate keeps offline modes (TeamBots
  *  localTeam) untouched: only the server sends a room name. */
-function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
+function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo, seated: boolean): void {
   const scores = roomInfo?.scores && Number.isFinite(roomInfo.scores.alpha + roomInfo.scores.bravo)
     ? roomInfo.scores : undefined;
   const ffaScores = roomInfo?.ffaScores && !Object.values(roomInfo.ffaScores).some((v): boolean => !Number.isFinite(v))
     ? roomInfo.ffaScores : undefined;
   const matchEndsAt = Number.isFinite(roomInfo?.matchEndsAt) ? roomInfo!.matchEndsAt : undefined;
   if (roomInfo?.room !== undefined) {
-    applyRoomMeta(ctx.deps, roomInfo, scores, ffaScores, matchEndsAt);
+    applyRoomMeta(ctx.deps, roomInfo, scores, ffaScores, matchEndsAt, seated);
     return;
   }
   applyPartialMeta(ctx, roomInfo, scores, ffaScores, matchEndsAt);
@@ -519,8 +528,12 @@ function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
 
 // Room-scoped gameState is authoritative - a hop that drops team/scores/
 // clock/board clears them rather than leaving the old match's residue.
-function applyRoomMeta(deps: NetCtx['deps'], roomInfo: RoomInfo, scores: { alpha: number; bravo: number } | undefined, ffaScores: Record<string, number> | undefined, matchEndsAt: number | undefined): void {
-  deps.world.localTeam = roomInfo?.team;
+function applyRoomMeta(deps: NetCtx['deps'], roomInfo: RoomInfo, scores: { alpha: number; bravo: number } | undefined, ffaScores: Record<string, number> | undefined, matchEndsAt: number | undefined, seated: boolean): void {
+  // A seat-less envelope (AFK-demoted spectator replay) describes the
+  // room, not our seat; clearing localTeam here turned the whole lobby
+  // hostile-red until the re-join landed. Seat carriers still clear on
+  // hop; a bare envelope just leaves the color alone.
+  if (seated || roomInfo?.team !== undefined) {deps.world.localTeam = roomInfo?.team;}
   deps.world.teamScores = scores ?? null;
   deps.world.ffaScores = new Map(Object.entries(ffaScores ?? {}));
   deps.world.matchEndsAt = matchEndsAt ?? null;

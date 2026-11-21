@@ -1,6 +1,6 @@
 import { WeaponType, vmTypeOf } from '../../../../shared/weapons.js';
 
-// Per-weapon PRESENTATION table — one entry per weapon replaces the three
+// Per-weapon PRESENTATION table - one entry per weapon replaces the three
 // parallel tables that used to live in ViewModel (MUZZLE_Z), vmKick
 // (RECOIL + FLASH). New weapons get ONE row here; missing fields fall
 // back to the bolt launcher defaults exactly like the old tables did.

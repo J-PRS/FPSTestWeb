@@ -23,7 +23,7 @@ export const getChallenge = (): Challenge | null => challenge;
 export function fetchChallenge(httpUrl: string): Promise<void> {
   return fetch(`${httpUrl}/challenge`)
     .then(r => (r.ok ? r.json() : null))
-    // Keyless servers answer {disabled:true} — only a real mint counts.
+    // Keyless servers answer {disabled:true}; only a real mint counts.
     .then((c: Challenge | null) => { challenge = c && typeof c.seed === 'number' ? c : null; })
     .then(() => undefined)
     .catch(() => { challenge = null; });

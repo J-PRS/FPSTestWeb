@@ -45,7 +45,7 @@ const CORS_HEADERS: Record<string, string> = {
 };
 
 // Ops surfaces (tick-lag meters, client tails, weapon telemetry) give a
-// stranger a live "when is the server weakest" readout — when the admin
+// stranger a live "when is the server weakest" readout - when the admin
 // token exists they require it; dev (token unset) stays open.
 // ?key= rides URLs — access logs, caches, Referer all see it. Remote
 // callers must send Authorization: Bearer; the query fallback stays for
