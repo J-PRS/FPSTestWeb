@@ -19,9 +19,10 @@
   <!-- Linked, not JS-imported: stylesheet-in-JS waits on module eval →
        unstyled HTML flashes on refresh (FOUC). -->
   <!-- The boot heightmap fetch otherwise starts after the module parses —
-       overlap it with game.js download+eval. as=fetch + crossorigin
-       (anonymous) matches the loadHeightfieldBin() request. -->
-  <link rel="preload" as="fetch" crossorigin href="/assets/heightmaps/heightmap.bin">
+       overlap it with game.js download+eval. NO crossorigin: the plain
+       same-origin fetch() runs same-origin credentials, which an
+       anonymous-cors preload never matches. -->
+  <link rel="preload" as="fetch" href="/assets/heightmaps/heightmap.bin">
   <link rel="stylesheet" href="/src/ui/chrome.css" />
   <link rel="stylesheet" href="/src/ui/hud/hud.css" />
   <link rel="stylesheet" href="/src/lab/lab.css" />

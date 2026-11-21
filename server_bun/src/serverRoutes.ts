@@ -362,7 +362,9 @@ export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Pr
   }
   if (url.pathname === '/challenge' && req.method === 'GET') {
     const c = await lb.mintChallenge();
-    return c ? json(c) : json({ error: 'signing disabled (KRIBES_SIGN_KEY unset)' }, { status: 503 });
+    // 200 either way — a 503 paints a red console line on every visitor's
+    // boot even though keyless signing is a valid prod state.
+    return json(c ?? { disabled: true, reason: 'KRIBES_SIGN_KEY unset' });
   }
   if (url.pathname === '/leaderboard' && req.method === 'GET') {
     return json({ board: lb.board(url.searchParams.get('mode') ?? undefined) });
