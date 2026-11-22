@@ -79,6 +79,7 @@ const EXEMPT: Record<string, string> = {
   intel: 'per-player IFF feed — marker visibility is UI state, not an actor',
   correction: 'self-sync control traffic',
   inputSync: 'control traffic',
+  uplinkStall: 'control traffic',
   claimAck: 'control traffic',
   claimDropped: 'control traffic',
   shotRejected: 'control traffic',

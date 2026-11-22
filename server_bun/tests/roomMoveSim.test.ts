@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { RoomMoveSim } from '../src/RoomMoveSim.ts';
 import { MOVEMENT_CONFIG } from '../../shared/movement.ts';
 import { STATUS } from '../../shared/status.ts';
+import { setWallNow } from '../src/wallClock.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 
 const flat: Heightfield = { size: 2, data: new Uint8Array(4), stride: 1 };
@@ -15,6 +16,39 @@ describe('RoomMoveSim', () => {
     for (let i = 0; i < 20; i++) {m.tick(0.05);}
     const pos = m.simPos('p1')!;
     expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
+  });
+
+  test('dead uplink trips onUplinkStall once per window, never for never-reported seats', () => {
+    let now = 100_000;
+    setWallNow(() => now);
+    try {
+      const m = new RoomMoveSim(flat);
+      let nudged = 0;
+      m.onUplinkStall = () => { nudged += 1; };
+      m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+      m.track('b1', { x: 0, y: 0, z: 0 }, 0, { bot: true });
+      // Seats that never reported (bots, pre-first-report joins) can't be
+      // told apart from quiet-by-design - the clock isn't armed.
+      now += 10_000;
+      m.tick(0.05);
+      expect(nudged).toBe(0);
+      m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // first report arms it
+      const sh = (m as unknown as { shadows: Map<string, { lastReportAt: number }> }).shadows.get('b1')!;
+      sh.lastReportAt = now; // bot shadows must still be skipped
+      now += 5000; // uplink goes dark past the 4s horizon
+      m.tick(0.05);
+      expect(nudged).toBe(1);
+      m.tick(0.05); // inside the 6s nudge cooldown - no re-fire
+      expect(nudged).toBe(1);
+      m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // lane recovers - clock clears
+      m.tick(0.05);
+      expect(nudged).toBe(1);
+      now += 7000; // dies again past both horizons - nudge refires
+      m.tick(0.05);
+      expect(nudged).toBe(2);
+    } finally {
+      setWallNow();
+    }
   });
 
   test('honest report reconciles quietly; divergence returns sim truth', () => {

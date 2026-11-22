@@ -373,6 +373,13 @@ export type ServerMessage =
    *  consumed inputMove seq (the same value the tick frame's inputAck
    *  field confirms every tick). */
   | { type: 'inputSync'; lastSeq: number }
+  /** Server saw no position/input frames for ~4s while our seat is
+   *  live - the lane carrying binary frames black-holed under an open
+   *  session (a stalled stream write never errors client-side). Sent on
+   *  the reliable lane so it survives the dead one; the client rebuilds
+   *  the transport if it has been sending, ignores it if it went quiet
+   *  on purpose (hidden tab). */
+  | { type: 'uplinkStall' }
   /** Uniform claim verdict - one ack per claim that carried claimSeq.
    *  `reason` is the server's drop cause when ok=false. The client's
    *  pending-claim ledger classifies the rest (transport-lost,

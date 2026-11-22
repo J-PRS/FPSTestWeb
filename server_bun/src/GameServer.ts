@@ -407,7 +407,11 @@ export class GameServer {
   ): void {
     {
         const room = existingId ? this.roomOfPlayer(existingId) : undefined;
-        if (!existingId || !room) {return;} // binary before join - ignore
+        // Binary with no live room seat: pre-join is normal, but a held
+        // session whose seat vanished silently eats every pos/shot frame
+        // while the client plays blind - the stall nudge upstream needs
+        // this visible, so count it through the same invalidWarn lane.
+        if (!existingId || !room) {this.invalidWarn(existingId, 'Binary frame for a seat with no room'); return;}
         // JSON-over-binary: combat claims ride the position lane for
         // transit, then decode back into the ordinary text path - same
         // parse, same validation, same dispatch.

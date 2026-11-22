@@ -736,6 +736,7 @@ this.sendDrops += 1;
    *  A rare real loss just widens the judge's time-gap tolerance; stale
    *  frames self-reject by seq, so disorder is free. WS/WT unchanged. */
   private sendBinary(data: Uint8Array): void {
+    this.lastBinaryTxAt = Date.now(); // uplink liveness - the uplinkStall verdict reads this
     // Native-shell UDP lane: volatile frames ride the loopback shim →
     // raw datagrams. WIRE_JSON is reliable traffic in binary clothing -
     // the server drops it on the datagram lane, so it must stay on ws.
@@ -887,6 +888,25 @@ this.sendDrops += 1;
 
   resendInputs(lastSeq: number): void {
     this.inputs.resend(lastSeq, (m): void => this.sendInputMsg(m), this.isConnected());
+  }
+
+  /** Server saw no position/input frames for ~4s while our seat is
+   *  live - the binary lane black-holed under an open session (a
+   *  stalled stream write never errors client-side, so we can't see it
+   *  ourselves). If we were still sending, the lane is dead: rebuild.
+   *  If we were legitimately quiet (hidden tab / paused), the next real
+   *  frame clears the server's clock - ignore the nudge. */
+  private lastBinaryTxAt = 0;
+  onUplinkStall(): void {
+    const silent = Date.now() - this.lastBinaryTxAt;
+    if (!this.isConnected() || this.lastBinaryTxAt === 0 || silent > 2500) {return;}
+    logger.warn(`uplink stall: server blind >4s while we sent ${Math.round(silent)}ms ago - rebuilding lane`, { tier: this.ws?.tier });
+    if (this.ws?.tier === 'wt' || this.ws?.tier === 'rtc') {benchTier(this.ws.tier);}
+    const url = this.lastUrl!;
+    this.ws?.disconnect();
+    this.ws = null;
+    this.connected = false;
+    this.connect(url, this.lastFactory, this.lastResolveUrl).catch((): void => { /* probe errors already logged */ });
   }
 
   ackInputs(inputAck: number): void {

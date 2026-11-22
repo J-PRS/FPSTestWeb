@@ -704,6 +704,16 @@ export class Room {
       this.health?.set('inputgap', (this.health?.get('inputgap') ?? 0) + 1);
       this.connections.sendToPlayer(pid, { type: 'inputSync', lastSeq });
     };
+    // Dead-uplink trip: a live seat's position/input frames stopped
+    // arriving entirely (stalled stream write - the client can't detect
+    // it). Poke down the reliable lane so the client re-dials; dead or
+    // demoted seats legitimately go quiet, so they don't get nudged.
+    this.moveSim.onUplinkStall = (pid): void => {
+      const p = this.players.getPlayer(pid);
+      if (!p || p.isDead) {return;}
+      this.health?.set('uplink.stall', (this.health?.get('uplink.stall') ?? 0) + 1);
+      this.connections.sendToPlayer(pid, { type: 'uplinkStall' });
+    };
     // T1 collision damage: the shadow measured a hard contact  -  turn it
     // into hp through the same funnel a bite or blast uses so 'fell to
     // death' reads in the kill feed and respawns on schedule.

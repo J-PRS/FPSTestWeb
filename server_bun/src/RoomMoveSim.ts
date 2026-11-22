@@ -260,7 +260,7 @@ this.structEpoch += 1;
       // persistent Partial replaces the Object.assign churn per edge.
       mergeIn: {}, jetIn: {},
       lastRepPos: null,
-      gapStreak: 0, gapAt: 0, gapClosedAt: 0, gapRunMs: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
+      gapStreak: 0, gapAt: 0, gapClosedAt: 0, gapRunMs: 0, deferStreak: 0, lastHintAt: 0, stallNudgedAt: 0, lastReportAt: 0, reportEma: 0,
       transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, pongTransitEma: 0, uplinkBias: 0, uplinkBiasN: 0, transitVar: 0, reportVar: 0,
     });
     {const sh = this.shadows.get(playerId); if (sh) {sh.sim.waterLevel = this.waterLevel; sh.sim.jumpstart = mods.jumpstart;}}
@@ -650,6 +650,19 @@ this.structEpoch += 1;
    *  the client re-emits its current input. */
   onInputGap?: (playerId: string, lastSeq: number) => void;
 
+  /** A live human seat with a report history that has gone silent -
+   *  the lane carrying its position/input frames died under a still-open
+   *  session (a stalled stream write never errors, so the client can't
+   *  see it). The room pokes the client down the reliable lane so it can
+   *  re-dial instead of playing blind. Wall-clock notification, not a
+   *  sim decision - joins/resyncs re-arm via lastReportAt. */
+  onUplinkStall?: (playerId: string) => void;
+  /** Silence before the first nudge - long enough that a hidden-tab
+   *  client still trickling at 1Hz never trips it. */
+  private static readonly UPLINK_STALL_MS = 4000;
+  /** Per-seat nudge cooldown while the silence persists. */
+  private static readonly UPLINK_NUDGE_MS = 6000;
+
   /** Compare a client position report against the shadow sim. Returns the
    *  sim's own state when the report is past the divergence tolerance —
    *  the caller turns it into a client correction (witness → judge). */
@@ -775,13 +788,27 @@ sh.gapStreak += 1;
         return scratch;
       };
     }
+    const now = wallNow();
     for (const [pid, sh] of this.shadows) {
       this.tickShadow(pid, sh, dt, bodies, bodiesNear);
+      this.noteUplinkSilence(pid, sh, now);
     }
     this.journalT += 1;
     if (this.journal && this.journalT % JOURNAL_HASH_EVERY === 0) {
       this.journal.push({ t: this.journalT, kind: 'hash', h: this.journalHash() });
     }
+  }
+
+  /** Uplink silence: a human seat that reported before but went dark -
+   *  the binary lane black-holed while the session stayed open (stalled
+   *  stream writes never error client-side, so the client can't see
+   *  it). lastReportAt > 0 keeps never-reported seats (bots, pre-first-
+   *  report joins) out; a resuming report clears the clock naturally. */
+  private noteUplinkSilence(pid: string, sh: Shadow, now: number): void {
+    if (sh.bot || sh.lastReportAt === 0) {return;}
+    if (now - sh.lastReportAt <= RoomMoveSim.UPLINK_STALL_MS || now - sh.stallNudgedAt <= RoomMoveSim.UPLINK_NUDGE_MS) {return;}
+    sh.stallNudgedAt = now;
+    this.onUplinkStall?.(pid);
   }
 
   /** One shadow's tick: edge drain → jet economy → integrator (or the

@@ -152,6 +152,10 @@ export interface Shadow {
   deferStreak: number;
   /** Cooldown on the inputSync hint so one dead lane can't spam it. */
   lastHintAt: number;
+  /** Cooldown on the uplinkStall nudge - same one-warn-per-window rule
+   *  as lastHintAt, separate clock so the two hints can't mask each
+   *  other. */
+  stallNudgedAt: number;
   /** Wall time of the last position report — a throttled client reports
    *  (and sims) slower than the server tick. */
   lastReportAt: number;

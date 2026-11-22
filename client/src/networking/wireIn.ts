@@ -466,6 +466,7 @@ this.handlerThrows += 1;
     stateHash: (data): void | undefined => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.replica),
     correction: (data): void => this.h.handleCorrection(data),
     inputSync: (data): void => this.h.resendInputs(data.lastSeq),
+    uplinkStall: (): void => this.h.onUplinkStall(),
     claimAck: (data): void => this.h.ackClaim(data),
     teleport: (data): void | undefined => this.h.onRemoteTeleport?.(data.playerId, data.position, data.velocity),
     ballSpawn: (data): void | undefined => this.h.onBallSpawn?.(data),
