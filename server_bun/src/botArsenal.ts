@@ -4,7 +4,7 @@
  * fires goes through the same projectiles/botFire paths a client's
  * claims do - this file decides WHEN and AT WHAT, never adjudicates.
  */
-import type { Vec3 } from './types.ts';
+import type { Vec3, PlayerState } from './types.ts';
 import type { Room } from './Room.ts';
 import { classCapsule, classCanFire } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
@@ -25,6 +25,8 @@ import { fireAtBall as beamAtBall, fireSpeedless, type BeamHost } from './botBea
 import { isSuper } from './superBot.ts';
 import { simNow } from './simClock.ts';
 import { weaponStats } from './weaponStats.ts';
+import { BotSelfBlast } from './botSelfBlast.ts';
+import { trackAim, deltaRide } from './botTrackAim.ts';
 
 // Ordnance aim: expected-damage argmax (true) vs the grounded/airborne
 // heuristic (false). The heuristic stays as the cheap fallback - the EV
@@ -64,12 +66,17 @@ const BOLT_SPEED = 60; // m/s - the melee swing's visual bolt
 // FPS_SUPERBOT knob lives in superBot.ts - leaf import so beam/drive/
 // roster don't reach back through this file.
 
-type BotBody = { id: string; position: Vec3; velocity: Vec3; armorClass: string; rotation: { yaw: number; pitch?: number } };
+export type BotBody = { id: string; position: Vec3; velocity: Vec3; armorClass: string; rotation: { yaw: number; pitch?: number } };
 
 /** The body's look dir from its wire rotation — same convention the
  *  drive writes (yaw=atan2(x,z), pitch positive looks DOWN). A bot's
  *  shots launch along this: the model always faces where it shoots
  *  (Quake's rule — the crosshair IS the view, not a hidden aim var). */
+function normalize3(x: number, y: number, z: number): Vec3 {
+  const l = Math.hypot(x, y, z) || 1;
+  return { x: x / l, y: y / l, z: z / l };
+}
+
 function faceDir(p: BotBody): Vec3 {
   const cp = Math.cos(p.rotation.pitch ?? 0);
   return { x: Math.sin(p.rotation.yaw) * cp, y: -Math.sin(p.rotation.pitch ?? 0), z: Math.cos(p.rotation.yaw) * cp };
@@ -92,6 +99,30 @@ function faceLaunch(p: BotBody, dir: Vec3): void {
 
 const j = (): number => (botRand() - 0.5) * 0.07;
 
+/** One held trigger. `aim` rides the target's movement so the brain's
+ *  lead/error offset is preserved while it drags; `lag`/`err`/`tv`/`diff`
+ *  only do work in tracking mode (speed-0 weapons: smooth pursuit, not
+ *  frozen offset - humans hover near target, not on it). */
+export interface TriggerRec {
+  targetId: string; aim: Vec3; lastPos: Vec3 | null; until: number;
+  lag: Vec3 | null; err: Vec3; track: boolean | undefined; sig: number;
+  tv: Vec3 | null; diff: number; wt: number | undefined;
+}
+
+/** The pull geometry every serve reads/mutates - aim is rewritten in
+ *  place to where the shell should actually land. */
+interface ServeCtx { p: BotBody; target: PlayerState; aim: Vec3; muzzle: Vec3; dist: number; dx0: number; dz0: number }
+
+/** tryPropel's shared geometry/state - one bag so the launch helpers
+ *  don't each re-derive the goal vector and gate values. */
+interface PropelCtx {
+  id: string; p: BotBody; out: BrainOut;
+  goal: { pos: BotVec; runner?: boolean; wave?: boolean };
+  sh: MoveState; now: number; surge: boolean; carrying: boolean;
+  hp: number; maxHp: number; dist: number; dx: number; dz: number;
+  lo: BotLoadout;
+}
+
 export class BotArsenal implements BeamHost {
   /** Propel cooldown + the post-shove jet pin - owned here because only
    *  firing decisions set them; the driver just reads the pin so the
@@ -103,9 +134,12 @@ export class BotArsenal implements BeamHost {
    *  brain cadence from out-shooting the drawn weapon's legal rate. */
   private lastShot = new Map<string, number>();
   /** Cumulative self-damage budget per bot - decrements on splash fire,
-   *  regenerates over time. Prevents gradual self-destruction from
-   *  repeated self-splash hits that individually pass the per-shot gate. */
-  private selfDamageBudget = new Map<string, number>();
+   *  regenerates over time (+10 HP/sim-second, capped at 100). Prevents
+   *  gradual self-destruction from repeated self-splash hits that
+   *  individually pass the per-shot gate. botSelfBlast reads/writes it. */
+  selfDamageBudget = new Map<string, number>();
+  /** The self-preservation gates - extracted cluster, same semantics. */
+  private readonly selfBlast = new BotSelfBlast(this);
   /** groundedOnly picks that lost to the ground rule - true = wants
    *  artillery but is still moving, so the drive should plant it. */
   private deployPick = new Map<string, boolean>();
@@ -113,15 +147,7 @@ export class BotArsenal implements BeamHost {
    *  direction - a human holds M1 and tracks, the gun streams at its own
    *  legal rate between thinks. `aim` rides the target's movement so the
    *  brain's lead/error offset is preserved while it drags. */
-  private trigger = new Map<string, {
-    targetId: string; aim: Vec3; lastPos: Vec3 | null; until: number;
-    /** Tracking mode (speed-0 weapons): smooth pursuit, not frozen
-     *  offset - `lag` is the pursuit-smoothed target point, `err` an
-     *  Ornstein-Uhlenbeck wander whose magnitude scales with how far
-     *  off the pull's aim was. Humans hover near target, not on it. */
-    lag: Vec3 | null; err: Vec3; track: boolean | undefined; sig: number;
-    tv: Vec3 | null; diff: number; wt: number | undefined;
-  }>();
+  private trigger = new Map<string, TriggerRec>();
   /** Sim clock - the rate gate compares in sim-ms, not wall time, so
    *  scenario tests and slow-tick servers measure the same cadence. */
   private clock = 0;
@@ -147,7 +173,7 @@ s[kind] += 1; this.propels.set(id, s);
     /** The shooter brain's skill matrix - biases the draw toward the
      *  gun the bot is actually good with (same bias the senses use,
      *  so advertised weaponSpeed and fired weapon agree). */
-    private skillOfCb: (botId: string) => BotSkill | undefined = (): undefined => undefined,
+    readonly skillOfCb: (botId: string) => BotSkill | undefined = (): undefined => undefined,
   ) {}
 
   /** BeamHost surface - botBeam resolves super-bot contact through it. */
@@ -207,96 +233,8 @@ s[kind] += 1; this.propels.set(id, s);
       const live = this.targetPos(tr.targetId);
       // undefined until the first discharge stamps it - delta-ride
       // for that one tick, pursuit the moment the weapon is known.
-      if (tr.track) {
-        // Smooth pursuit: the aim point chases the live target with a
-        // ~100ms lag (a jink pulls ahead honestly). The error is an
-        // OU wander weighted along the target's motion axis - real
-        // tracking overshoots ahead then lags behind - and its size
-        // scales with target unpredictability: a straight-line runner
-        // gets tracked clean even by modest aim, a jinking one doesn't.
-        if (live) {
-          if (!tr.lag) {tr.lag = Object.assign({}, live);}
-          // Beams pursue tighter: 0.85/tick is ~230ms of lag = ~2.3m of
-          // permanent miss on a strafing target - fair for a lobbed bolt,
-          // but a hitscan shaft owes no flight time. 0.96 lands ~45%
-          // shaft-uptime on impossible skill (the T:Tribes LG bar) while
-          // still leaving jink reaction room.
-          const chase = (tr.wt !== undefined && (getWeaponStats(tr.wt)?.speed ?? 1) === 0) ? 0.96 : 0.85;
-          tr.lag.x += (live.x - tr.lag.x) * chase;
-          tr.lag.y += (live.y - tr.lag.y) * chase;
-          tr.lag.z += (live.z - tr.lag.z) * chase;
-          // Instantaneous velocity + its turn rate - the difficulty
-          // signal humans price in when they decide a shot is easy.
-          if (tr.lastPos && dt > 0) {
-            const vx = (live.x - tr.lastPos.x) / dt;
-            const vy = (live.y - tr.lastPos.y) / dt;
-            const vz = (live.z - tr.lastPos.z) / dt;
-            const turn = tr.tv ? Math.hypot(vx - tr.tv.x, vy - tr.tv.y, vz - tr.tv.z) : 0;
-            tr.tv = { x: vx, y: vy, z: vz };
-            const speed = Math.hypot(vx, vy, vz);
-            const goal = Math.min(1, speed * 0.02 + turn * 0.04);
-            tr.diff += (goal - tr.diff) * 0.3; // ease so one jink tick doesn't flip the grade
-          }
-        }
-        const e = tr.err, s = (dt) ** 0.5;
-        // Beams (speed-0) wander far less than projectile aim - a shaft
-        // misses through tracking lag, not ballistic uncertainty; full-
-        // strength scatter just sweeps the ray across the target instead
-        // of dwelling (~22% uptime measured vs the ~85% a human holds).
-        const beam = tr.wt !== undefined && (getWeaponStats(tr.wt)?.speed ?? 1) === 0;
-        const sig = tr.sig * (0.35 + 1.3 * tr.diff) * (beam ? 0.35 : 1);
-        // Unit motion axis for ahead/behind weighting (zero speed → isotropic).
-        const v = tr.tv, vl = v ? Math.hypot(v.x, v.y, v.z) : 0;
-        const ax = vl > 1 ? v!.x / vl : 1, ay = vl > 1 ? v!.y / vl : 0, az = vl > 1 ? v!.z / vl : 0;
-        // Noise: strong along the motion axis (lead/lag oscillation),
-        // light perpendicular (settled wobble).
-        const n1 = (botRand() - 0.5) * 2, n2 = (botRand() - 0.5) * 2, n3 = (botRand() - 0.5) * 2;
-        const dot = n1 * ax + n2 * ay + n3 * az;
-        const amp = 1.6 * sig * s;
-        e.x += -2.5 * e.x * dt + amp * (n1 * 0.7 + ax * dot * 0.8);
-        e.y += -2.5 * e.y * dt + amp * (n2 * 0.7 + ay * dot * 0.8);
-        e.z += -2.5 * e.z * dt + amp * (n3 * 0.7 + az * dot * 0.8);
-        const tp = tr.lag ?? tr.aim;
-        // Stream projectiles (sprinkler hose, chaingun) track like beams
-        // but the aim point still owes flight-time lead + gravity drop -
-        // the pursuit lag alone lands every bolt behind the runner.
-        let leadX = 0, leadY = 0, leadZ = 0;
-        if (tr.wt !== undefined) {
-          const st = getWeaponStats(tr.wt);
-          const p0 = this.room.players.getPlayer(id);
-          if (st && st.speed > 0 && p0) {
-            const dx = tp.x - p0.position.x, dy = tp.y - p0.position.y, dz = tp.z - p0.position.z;
-            const dist = Math.hypot(dx, dy, dz);
-            const inh = st.inherit ?? 0;
-            // Effective muzzle speed: the shell carries `inherit` of the
-            // shooter's velocity, so a bot charging the shot throws a
-            // faster projectile (shorter flightT) and one backpedaling
-            // throws slower. flightT off by that term misleads magnitude.
-            const pv = p0.velocity;
-            const effSpeed = st.speed + inh * (pv.x * dx + pv.y * dy + pv.z * dz) / (dist || 1);
-            const flightT = dist / Math.max(1, effSpeed);
-            const {tv} = tr;
-            // Relative lead on all three axes: target-motion minus the
-            // momentum already lent to the shell - including vy, which
-            // the old code dropped entirely (an airborne bot's downward
-            // dive handed every shell a free downward kick it never
-            // aimed out). Without it a 30m/s cruiser aims as if static.
-            leadX = ((tv?.x ?? 0) - pv.x * inh) * flightT;
-            leadY = ((tv?.y ?? 0) - pv.y * inh) * flightT
-              + (st.gravity ? 0.5 * GRAVITY * flightT * flightT : 0);
-            leadZ = ((tv?.z ?? 0) - pv.z * inh) * flightT;
-          }
-        }
-        tr.aim.x = tp.x + e.x + leadX;
-        tr.aim.y = tp.y + 1.2 + e.y + leadY; // capsule midpoint off the feet pos
-        tr.aim.z = tp.z + e.z + leadZ;
-      } else {
-        if (live && tr.lastPos) {
-          tr.aim.x += live.x - tr.lastPos.x;
-          tr.aim.y += live.y - tr.lastPos.y;
-          tr.aim.z += live.z - tr.lastPos.z;
-        }
-      }
+      if (tr.track) {trackAim(this.room, tr, live, dt, id);}
+      else {deltaRide(tr, live);}
       if (live) {tr.lastPos = live;}
       this.discharge(p, tr);
     }
@@ -350,9 +288,7 @@ s[kind] += 1; this.propels.set(id, s);
   private discharge(p: BotBody, tr: { targetId: string; aim: Vec3; track: boolean | undefined; sig: number; err: Vec3; wt: number | undefined }): void {
     const { targetId, aim } = tr;
     const muzzleB = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
-    const bdx = aim.x - muzzleB.x, bdy = aim.y - muzzleB.y, bdz = aim.z - muzzleB.z;
-    const bl = Math.hypot(bdx, bdy, bdz) || 1;
-    const wantB = { x: bdx / bl, y: bdy / bl, z: bdz / bl };
+    const wantB = normalize3(aim.x - muzzleB.x, aim.y - muzzleB.y, aim.z - muzzleB.z);
     // Still turning? The pull waits — a shot that leaves before the body
     // has swung on target is a silent aimbot (the model never looked).
     if (!settled(p, wantB)) {return;}
@@ -362,52 +298,17 @@ s[kind] += 1; this.propels.set(id, s);
       return;
     }
     if (targetId.startsWith('c:')) {
-      // Species pops contest the same projectile sweep as balls - fire
-      // real shells so a shot can still whiff or body-block, identical
-      // to a human's travel time. The projectile detonate pays damage
-      // through crawlerHit and scores :prey telemetry.
-      const muzzle0 = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
-      const cdx = aim.x - muzzle0.x, cdy = aim.y - muzzle0.y, cdz = aim.z - muzzle0.z;
-      const cdist = Math.hypot(cdx, cdy, cdz) || 1;
-      const lo0 = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-      const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cdist, p.id);
-      if (!payShotCost(wt0, p.id,
-        (id): number | null => this.room.moveSim.energyOf(id),
-        (id, n): void => { this.room.moveSim.drainEnergy?.(id, n); })) {return;}
-      if (tr.track === undefined) {this.markTrack(tr, wt0, aim);}
-      if (!this.rateOk(p.id, wt0)) {return;}
-      // Pool ammo - same dry rule humans get on the intent path; bot
-      // pools live on their player record and accrue on the sim clock.
-      // Deploy weapons obey the same grounded rule humans do - feet on
-      // dirt AND not skiing, or the draw itself is refused.
-      if (getWeaponStats(wt0).groundedOnly) {
-        const sim = this.room.moveSim.simOf(p.id);
-        if (!sim?.state.onGround || sim.input.skiHeld) {return;}
-      }
-      if (!spendAmmo(this.room.players.getPlayer(p.id)?.ammoPool ?? new Map(), wt0, this.clock / 1000)) {return;}
-      // Launcher recoil: the kick is real movement, bots feel it too.
-      const recoil0 = getWeaponStats(wt0).recoilImpulse ?? 0;
-      if (recoil0 > 0) {this.room.moveSim.applyImpulse(p.id, { x: -cdx / cdist * recoil0, y: -cdy / cdist * recoil0, z: -cdz / cdist * recoil0 }, 3);}
-      weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
-      this.room.events.emit({ type: 'botShot', id: p.id, weapon: wt0 });
-      if (wt0 === WeaponType.Melee) {
-        const stats = getWeaponStats(WeaponType.Melee);
-        const bug = this.room.creatureSim.crawlerAt(Number(targetId.slice(2)));
-        if (bug && stats && Math.hypot(bug.x - muzzle0.x, bug.y - muzzle0.y, bug.z - muzzle0.z) <= stats.aoeRadius + 1.4) {
-          const {killed} = this.room.creatureSim.handleHit(p.id, bug.id, isSuper(p.id) ? 300 : stats.aoeDamage);
-          weaponStats.record(this.room.mode, `w${wt0}:prey`, stats.aoeDamage, killed, true);
-        }
-        this.room.messages.botAttack(p.id, targetId, WeaponType.Melee);
-        this.room.messages.botFire(p.id, null, muzzle0,
-          { x: (cdx / cdist) * BOLT_SPEED, y: (cdy / cdist) * BOLT_SPEED, z: (cdz / cdist) * BOLT_SPEED },
-          wt0, false);
-        return;
-      }
-      if (!this.room.projectiles.spawn(p.id, wt0, muzzle0, fdir, p.velocity)) {
-        fireSpeedless(this, p.id, muzzle0, fdir, wt0);
-      }
+      this.dischargeCrawler(p, tr, aim, fdir);
       return;
     }
+    this.dischargePlayer(p, tr, fdir);
+  }
+
+  /** The player-target pull: range-band select, serve, gates, then the
+   *  launch along the body's FACING - where the model looks IS where it
+   *  shoots (the settle gate up top held the pull until it was true). */
+  private dischargePlayer(p: BotBody, tr: { targetId: string; aim: Vec3; track: boolean | undefined; sig: number; err: Vec3; wt: number | undefined }, fdir: Vec3): void {
+    const { targetId, aim } = tr;
     const target = this.room.players.getPlayer(targetId);
     if (!target || target.isDead) {return;}
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
@@ -420,121 +321,20 @@ s[kind] += 1; this.propels.set(id, s);
     // distance: muzzle sits +1.4y over feet, so a flat 3m gap already reads
     // 3.3m+ in 3D and the band could never open.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-    const airborne = Math.abs(target.velocity?.y ?? 0) > 4;
-    let wt = this.pickWeapon(lo, distXZ, dist, p.id, airborne);
-    // Finisher pull: a wounded target (<25% hp) tempts the easy hold-out
-    // instead of another heroic lob - the sidearm is a chip on a thin
-    // target. ~40% of discharges take it; the rest stay on the primary,
-    // because going all easy-hit is the dishonorable version.
-    if (target.maxHealth > 0 && target.health / target.maxHealth < 0.25 && botRand() < 0.4) {wt = lo.side;}
-    // Armor grenade coats everyone in the blast - firing it at an enemy
-    // is arming him. Team plating goes through the belt path; a duel
-    // never wants this shot.
-    if (wt === WeaponType.ArmorGrenade) {return;}
+    const wt = this.pullWeapon(lo, target, distXZ, dist, p.id);
+    if (wt < 0) {return;} // ArmorGrenade - firing it at an enemy is arming him
     // Fuse-only carriers (MRV) detonate wherever the shell is at fuse -
-    // aim the POP point, not the target. Solve the launch dir that puts
-    // the fuse-end position on the target's led position; the ±5% band
-    // that used to gate this starved every reach-capped aoe slug (rail,
-    // plasma: contact pops, not airbursts - they were refused forever).
-    // Bomblets release FORWARD of the pop, so the burst only pays when
-    // it lands at-or-just-past the target - a close target gets overflown
-    // (MRV's ~82m carry is a >60m weapon; inside the 45m acquire cap it
-    // honestly has no shot), and confetti past ~1.4x is waste.
-    let fuseSolved = false;
-    const stF = getWeaponStats(wt);
-    // Arm-gated ordnance under the arm window plays the BOUNCE-SERVE:
-    // lob the dirt ~10m AHEAD of the runner's path - the shell thuds,
-    // skids forward still cooking, and pops where they're headed.
-    // Gate on the BODY arm time: GL's armTime is only its dirt-skip
-    // window (bodyArmTime 0 pops bodies at any age), so lobbing the
-    // dirt ahead at knife range throws away a hit it already has.
-    const bodyArmF = stF?.bodyArmTime ?? stF?.armTime;
-    if ((bodyArmF ?? 0) > 0 && stF.speed > 0 && dist < stF.speed * (bodyArmF ?? 0) * 0.35 && dist > 8) {
-      const tv = target.velocity, ts = Math.hypot(tv.x, tv.z);
-      const lx = ts > 2 ? (tv.x / ts) * 10 : 0, lz = ts > 2 ? (tv.z / ts) * 10 : 0;
-      const gx = aim.x + lx, gz = aim.z + lz;
-      aim.x = gx; aim.z = gz;
-      aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : aim.y - 1.5;
-    }
-    // Flak feet-serve, conditionally: a ground-skip beats the LEAD, not
-    // the lob - it pays vs fast lateral movers whose jink inside the
-    // ~0.3s flight undoes velocity lead, and only on ground they can
-    // land/cross. Direct lob wins vs straight runners and standoffs
-    // (bench: unconditional serve cost 11% kills).
-    else if (wt === WeaponType.Flak && dist > 8 && dist < 30) {
-      const tv = target.velocity;
-      const ux = dx0 / dist, uz = dz0 / dist; // unit shooter->target
-      const lat = Math.abs(tv.x * -uz + tv.z * ux); // lateral speed across the aim axis
-      const grounded = (this.room.field ? target.position.y - hmHeight(this.room.field, target.position.x, target.position.z) : 0) < 4;
-      if (lat > 8 && grounded) {
-        const ts = Math.hypot(tv.x, tv.z) || 1;
-        const gx = aim.x + (tv.x / ts) * 4, gz = aim.z + (tv.z / ts) * 4;
-        aim.x = gx; aim.z = gz;
-        aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : aim.y - 1.4;
-      }
-    }
-    // Splash-serve for direct-fire aoe guns (PlasmaCannon & friends):
-    // vs fast lateral movers at range, aim the dirt under the led point -
-    // a whiff becomes a guaranteed splash tag instead of a bolt landing
-    // 40m behind them. Straight runners still eat the direct hit.
-    else if (stF && stF.aoeRadius > 0 && !stF.fuseOnly && !stF.terrainBounce && (stF.bodyArmTime ?? stF.armTime ?? 0) === 0 && stF.speed > 0 && dist > 20 && dist < 80) {
-      const tv = target.velocity;
-      const ux = dx0 / dist, uz = dz0 / dist;
-      const lat = Math.abs(tv.x * -uz + tv.z * ux);
-      if (lat > 8) {
-        const gx = aim.x, gz = aim.z;
-        aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : aim.y - 1.4;
-      }
-    }
-    if (stF?.fuseOnly && stF.maxLifetime != null && stF.speed > 0) {
-      const f = stF.maxLifetime, inh = stF.inherit ?? 0.5;
-      const tv = target.velocity;
-      const qx = target.position.x + tv.x * f - muzzle.x - p.velocity.x * inh * f;
-      const qy = target.position.y + 1.2 + tv.y * f - muzzle.y - p.velocity.y * inh * f + 0.5 * GRAVITY * f * f;
-      const qz = target.position.z + tv.z * f - muzzle.z - p.velocity.z * inh * f;
-      const sf = stF.speed * f;
-      const ul = Math.hypot(qx, qy, qz) / sf;
-      if (ul < 0.85) {
-        // Too close for the fuse solve? Pop the carrier on the GROUND
-        // ~10m short of the led point - terrain contact detonates it
-        // point-blank and the rain falls on their path (the human
-        // 3-kills/min lane the carry band refused to model at all).
-        const bx = aim.x - (dx0 / dist) * 10, bz = aim.z - (dz0 / dist) * 10;
-        aim.x = bx; aim.z = bz;
-        aim.y = this.room.field ? hmHeight(this.room.field, bx, bz) : target.position.y - 1.4;
-      } else if (ul > 1.15) {return;} // past ~1.15x carry the burst always overshoots (soak: 282 volleys at 120+m, 0 hits)
-      else {aim.x = muzzle.x + qx / sf; aim.y = muzzle.y + qy / sf; aim.z = muzzle.z + qz / sf;}
-      fuseSolved = true;
-    }
-    // Energy-paid weapons (Blaster): bots drain their own moveSim tank
-    // through the shared payShotCost gate - same magazine, same bill.
-    if (!payShotCost(wt, p.id,
-      (id): number | null => this.room.moveSim.energyOf(id),
-      (id, n): void => { this.room.moveSim.drainEnergy?.(id, n); })) {return;}
-    if (tr.track === undefined) {this.markTrack(tr, wt, aim);}
-    if (!this.rateOk(p.id, wt)) {return;}
-    // Pool ammo - the cadence gate stamps first so a rate-blocked pull
-    // doesn't eat a round; a dry pool then refuses like a dry tank.
-    if (getWeaponStats(wt).groundedOnly) {
-      const sim = this.room.moveSim.simOf(p.id);
-      if (!sim?.state.onGround || sim.input.skiHeld) {return;}
-    }
-    if (!spendAmmo(this.room.players.getPlayer(p.id)?.ammoPool ?? new Map(), wt, this.clock / 1000)) {return;}
-    const recoil = getWeaponStats(wt).recoilImpulse ?? 0;
-    if (recoil > 0 && aim) {
-      const dl = Math.hypot(aim.x - p.position.x, aim.y - (p.position.y + 1.4), aim.z - p.position.z) || 1;
-      this.room.moveSim.applyImpulse(p.id, { x: -(aim.x - p.position.x) / dl * recoil, y: -(aim.y - (p.position.y + 1.4)) / dl * recoil, z: -(aim.z - p.position.z) / dl * recoil }, 3);
-    }
-    weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
-    this.room.events.emit({ type: 'botShot', id: p.id, weapon: wt });
+    // aim the POP point, not the target. aimServe mutates aim with the
+    // arm-window bounce-serve / flak feet-serve / splash-serve / fuse
+    // solve; 'veto' = refuse the pull (past ~1.15x carry the burst
+    // always overshoots).
+    const serve = this.aimServe({ p, target, aim, muzzle, dist, dx0, dz0 }, wt);
+    if (serve === 'veto') {return;}
+    const fuseSolved = serve === 'fuse';
+    if (!this.shotGates(p, tr, wt, aim)) {return;}
+    this.stampShot(p, aim, wt, dist);
     if (wt === WeaponType.Melee) {
-      // The punch IS the player's swing - combat funnels it identically,
-      // and the broadcast swing lets observers see the melee. Speed is 0
-      // on the stat line so the visual uses the raw aim, not the led dir.
-      this.room.messages.botAttack(p.id, targetId, WeaponType.Melee);
-      this.room.messages.botFire(p.id, null, muzzle,
-        { x: (dx0 / dist) * BOLT_SPEED, y: (dy0 / dist) * BOLT_SPEED, z: (dz0 / dist) * BOLT_SPEED },
-        WeaponType.Melee, true);
+      this.meleeSwing(p, targetId, { muzzle, dx0, dy0, dz0, dist });
       return;
     }
     // Ordnance aim = max expected damage over direct vs ground shots -
@@ -542,8 +342,7 @@ s[kind] += 1; this.propels.set(id, s);
     // Radius ≥4 covers plasma-cannon-class slow splash too: a 90m/s bolt
     // can't airshot a skier, but its pop eats whoever stands under it.
     // Fuse-solved shots skip it - the pop point is already the aim.
-    const statsW = getWeaponStats(wt);
-    if (!fuseSolved && statsW.aoeRadius >= 4) {
+    if (!fuseSolved && getWeaponStats(wt).aoeRadius >= 4) {
       const gY = this.room.field
         ? Math.max(hmHeight(this.room.field, aim.x, aim.z), hmChord(this.room.field, aim.x, aim.z), this.room.moveSim.structureTop(aim.x, aim.z))
         : aim.y - 1.5;
@@ -558,51 +357,201 @@ s[kind] += 1; this.propels.set(id, s);
     const dir = fdir;
     const me0 = this.room.players.getPlayer(p.id);
     if (me0) {this.bloomCone(me0, dir, wt);}
-    // Human imperfection: occasionally skip self-splash checks entirely,
-    // simulating "fuck it" moments or not paying attention. No absolutes.
-    const imperfect = botRand() < 0.05;
-    if (!(imperfect && (getWeaponStats(wt)?.aoeRadius ?? 0) > 0) && this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {
-      return;
-    }
-    // Self-splash HP gate: don't fire splash weapons if the bot can't
-    // survive its own blast at the target's distance. Use the actual
-    // splash damage at that range, not the flat SELF_SPLASH_MAX.
-    // Heroic exception: if the shot will kill the target, fire anyway
-    // (the bot accepts the self-damage for the kill). No rigid rules.
-    const statsW2 = getWeaponStats(wt);
-
-    if (statsW2 && statsW2.aoeRadius > 0) {
-      const me = this.room.players.getAllPlayers().get(p.id);
-      const hp = me?.health ?? 100;
-      const selfSplash = aoeDamageAt(Math.max(0.5, dist), wt);
-      const willKill = target.health <= statsW2.directDamage;
-      // Cumulative self-damage budget: if the bot has taken too much
-      // self-damage recently, hold fire unless the shot will kill the
-      // target (heroic) or the situation is urgent (carrier chase -
-      // a shot at a flag carrier buys cap denial, not a duel).
-      const urgent = [...(this.room.flags?.flags.values() ?? [])].some((f): boolean => f.carrier === targetId);
-      const budget = this.selfDamageBudget.get(p.id) ?? 100;
-      const perk = perkMods(me?.perk);
-
-      if (selfSplash > 0 && !willKill && !urgent) {
-        const courage = this.skillOfCb?.(p.id)?.courage ?? 0.5;
-        // Courage scales the veto: brave bots (0.9) fire unless HP is below
-        // half the self-splash; timid ones (0.3) hold at 2x. No rigid rule.
-        const threshold = selfSplash * perk.selfDamage * (2 - courage);
-        // Humans sometimes don't pay attention or say "fuck it" - a small
-        // chance the bot skips the self-splash check entirely, simulating
-        // imperfect decision-making. No absolutes.
-        if (!imperfect && hp <= threshold + 5 && botRand() > 0.1) { return; }
-        if (budget < selfSplash * perk.selfDamage * 0.5 && botRand() > 0.05) { return; }
-      }
-      // Decrement budget on fire (regenerates in step())
-      if (selfSplash > 0) {
-        this.selfDamageBudget.set(p.id, budget - selfSplash * perk.selfDamage);
-      }
-    }
+    if (this.selfBlast.selfBlastVeto(p, target, targetId, { muzzle, dir, wt, dist })) {return;}
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
+  }
+
+  /** Recoil + telemetry stamped once the gates pass: the launcher kick
+   *  is real movement, bots feel it too. */
+  private stampShot(p: BotBody, aim: Vec3, wt: number, dist: number): void {
+    const recoil = getWeaponStats(wt).recoilImpulse ?? 0;
+    if (recoil > 0 && aim) {
+      const dl = Math.hypot(aim.x - p.position.x, aim.y - (p.position.y + 1.4), aim.z - p.position.z) || 1;
+      this.room.moveSim.applyImpulse(p.id, { x: -(aim.x - p.position.x) / dl * recoil, y: -(aim.y - (p.position.y + 1.4)) / dl * recoil, z: -(aim.z - p.position.z) / dl * recoil }, 3);
+    }
+    weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
+    this.room.events.emit({ type: 'botShot', id: p.id, weapon: wt });
+  }
+
+  /** Range-band weapon select - same judgment a player makes: a fist
+   *  inside 3m, the hold-out in knife range, hitscan close, the loadout's
+   *  mid-band primary, rockets at standoff. -1 = veto the pull.
+   *  Finisher pull: a wounded target (<25% hp) tempts the easy hold-out
+   *  instead of another heroic lob - the sidearm is a chip on a thin
+   *  target. ~40% of discharges take it; the rest stay on the primary,
+   *  because going all easy-hit is the dishonorable version. */
+  private pullWeapon(lo: BotLoadout, target: PlayerState, distXZ: number, dist: number, botId: string): number {
+    const airborne = Math.abs(target.velocity?.y ?? 0) > 4;
+    let wt = this.pickWeapon(lo, distXZ, dist, botId, airborne);
+    if (target.maxHealth > 0 && target.health / target.maxHealth < 0.25 && botRand() < 0.4) {wt = lo.side;}
+    // Armor grenade coats everyone in the blast - firing it at an enemy
+    // is arming him. Team plating goes through the belt path; a duel
+    // never wants this shot.
+    if (wt === WeaponType.ArmorGrenade) {return -1;}
+    return wt;
+  }
+
+  /** The punch IS the player's swing - combat funnels it identically,
+   *  and the broadcast swing lets observers see the melee. Speed is 0
+   *  on the stat line so the visual uses the raw aim, not the led dir. */
+  private meleeSwing(p: BotBody, targetId: string, a: { muzzle: Vec3; dx0: number; dy0: number; dz0: number; dist: number }): void {
+    const { muzzle, dx0, dy0, dz0, dist } = a;
+    this.room.messages.botAttack(p.id, targetId, WeaponType.Melee);
+    this.room.messages.botFire(p.id, null, muzzle,
+      { x: (dx0 / dist) * BOLT_SPEED, y: (dy0 / dist) * BOLT_SPEED, z: (dz0 / dist) * BOLT_SPEED },
+      WeaponType.Melee, true);
+  }
+
+  /** Every gate a drawn weapon passes before it may leave: energy
+   *  (Blaster drains the moveSim tank - same magazine, same bill),
+   *  first-pull tracking stamp, cadence, the grounded-only deploy
+   *  rule (feet on dirt AND not skiing), then pool ammo LAST - the
+   *  cadence gate stamps first so a rate-blocked pull doesn't eat a
+   *  round; a dry pool then refuses like a dry tank. */
+  private shotGates(p: BotBody, tr: { targetId: string; aim: Vec3; track: boolean | undefined; sig: number; err: Vec3; wt: number | undefined }, wt: number, aim: Vec3): boolean {
+    if (!payShotCost(wt, p.id,
+      (id): number | null => this.room.moveSim.energyOf(id),
+      (id, n): void => { this.room.moveSim.drainEnergy?.(id, n); })) {return false;}
+    if (tr.track === undefined) {this.markTrack(tr, wt, aim);}
+    if (!this.rateOk(p.id, wt)) {return false;}
+    if (getWeaponStats(wt).groundedOnly) {
+      const sim = this.room.moveSim.simOf(p.id);
+      if (!sim?.state.onGround || sim.input.skiHeld) {return false;}
+    }
+    return spendAmmo(this.room.players.getPlayer(p.id)?.ammoPool ?? new Map(), wt, this.clock / 1000);
+  }
+
+
+  /** Species pops contest the same projectile sweep as balls - fire
+   *  real shells so a shot can still whiff or body-block, identical
+   *  to a human's travel time. The projectile detonate pays damage
+   *  through crawlerHit and scores :prey telemetry. */
+  private dischargeCrawler(p: BotBody, tr: { targetId: string; aim: Vec3; track: boolean | undefined; sig: number; err: Vec3; wt: number | undefined }, aim: Vec3, fdir: Vec3): void {
+    const { targetId } = tr;
+    const muzzle0 = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    const cdx = aim.x - muzzle0.x, cdy = aim.y - muzzle0.y, cdz = aim.z - muzzle0.z;
+    const cdist = Math.hypot(cdx, cdy, cdz) || 1;
+    const lo0 = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
+    const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cdist, p.id);
+    if (!this.shotGates(p, tr, wt0, aim)) {return;}
+    // Launcher recoil: the kick is real movement, bots feel it too.
+    const recoil0 = getWeaponStats(wt0).recoilImpulse ?? 0;
+    if (recoil0 > 0) {this.room.moveSim.applyImpulse(p.id, { x: -cdx / cdist * recoil0, y: -cdy / cdist * recoil0, z: -cdz / cdist * recoil0 }, 3);}
+    weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
+    this.room.events.emit({ type: 'botShot', id: p.id, weapon: wt0 });
+    if (wt0 === WeaponType.Melee) {
+      const stats = getWeaponStats(WeaponType.Melee);
+      const bug = this.room.creatureSim.crawlerAt(Number(targetId.slice(2)));
+      if (bug && stats && Math.hypot(bug.x - muzzle0.x, bug.y - muzzle0.y, bug.z - muzzle0.z) <= stats.aoeRadius + 1.4) {
+        const {killed} = this.room.creatureSim.handleHit(p.id, bug.id, isSuper(p.id) ? 300 : stats.aoeDamage);
+        weaponStats.record(this.room.mode, `w${wt0}:prey`, stats.aoeDamage, killed, true);
+      }
+      this.room.messages.botAttack(p.id, targetId, WeaponType.Melee);
+      this.room.messages.botFire(p.id, null, muzzle0,
+        { x: (cdx / cdist) * BOLT_SPEED, y: (cdy / cdist) * BOLT_SPEED, z: (cdz / cdist) * BOLT_SPEED },
+        wt0, false);
+      return;
+    }
+    if (!this.room.projectiles.spawn(p.id, wt0, muzzle0, fdir, p.velocity)) {
+      fireSpeedless(this, p.id, muzzle0, fdir, wt0);
+    }
+  }
+
+  /** Shared context for the serve picks - the shooter's pull geometry.
+   *  aim is mutated in place: every serve rewrites the pull's target
+   *  point to where the shell should actually land. */
+  private serveGround(c: ServeCtx, gx: number, gz: number, fallback: number): void {
+    c.aim.x = gx; c.aim.z = gz;
+    c.aim.y = this.room.field ? hmHeight(this.room.field, gx, gz) : fallback;
+  }
+
+  /** Arm-gated ordnance under the arm window plays the BOUNCE-SERVE:
+   *  lob the dirt ~10m AHEAD of the runner's path - the shell thuds,
+   *  skids forward still cooking, and pops where they're headed.
+   *  Gate on the BODY arm time: GL's armTime is only its dirt-skip
+   *  window (bodyArmTime 0 pops bodies at any age), so lobbing the
+   *  dirt ahead at knife range throws away a hit it already has. */
+  private bounceServe(c: ServeCtx, stF: ReturnType<typeof getWeaponStats>): boolean {
+    const bodyArmF = stF?.bodyArmTime ?? stF?.armTime ?? 0;
+    if (bodyArmF <= 0 || stF.speed <= 0 || c.dist >= stF.speed * bodyArmF * 0.35 || c.dist <= 8) {return false;}
+    const { target, aim } = c;
+    const tv = target.velocity, ts = Math.hypot(tv.x, tv.z);
+    const lx = ts > 2 ? (tv.x / ts) * 10 : 0, lz = ts > 2 ? (tv.z / ts) * 10 : 0;
+    this.serveGround(c, aim.x + lx, aim.z + lz, aim.y - 1.5);
+    return true;
+  }
+
+  /** Flak feet-serve, conditionally: a ground-skip beats the LEAD, not
+   *  the lob - it pays vs fast lateral movers whose jink inside the
+   *  ~0.3s flight undoes velocity lead, and only on ground they can
+   *  land/cross. Direct lob wins vs straight runners and standoffs
+   *  (bench: unconditional serve cost 11% kills). */
+  private flakServe(c: ServeCtx, wt: number): boolean {
+    const { target, aim, dist, dx0, dz0 } = c;
+    if (wt !== WeaponType.Flak || dist <= 8 || dist >= 30) {return false;}
+    const tv = target.velocity;
+    const ux = dx0 / dist, uz = dz0 / dist; // unit shooter->target
+    const lat = Math.abs(tv.x * -uz + tv.z * ux); // lateral speed across the aim axis
+    const grounded = (this.room.field ? target.position.y - hmHeight(this.room.field, target.position.x, target.position.z) : 0) < 4;
+    if (lat <= 8 || !grounded) {return false;}
+    const ts = Math.hypot(tv.x, tv.z) || 1;
+    this.serveGround(c, aim.x + (tv.x / ts) * 4, aim.z + (tv.z / ts) * 4, aim.y - 1.4);
+    return true;
+  }
+
+  /** Splash-serve for direct-fire aoe guns (PlasmaCannon & friends):
+   *  vs fast lateral movers at range, aim the dirt under the led point -
+   *  a whiff becomes a guaranteed splash tag instead of a bolt landing
+   *  40m behind them. Straight runners still eat the direct hit. */
+  private splashServe(c: ServeCtx, stF: ReturnType<typeof getWeaponStats>): boolean {
+    const { target, aim, dist, dx0, dz0 } = c;
+    if (!stF || stF.aoeRadius <= 0 || stF.fuseOnly || stF.terrainBounce || (stF.bodyArmTime ?? stF.armTime ?? 0) !== 0 || stF.speed <= 0 || dist <= 20 || dist >= 80) {return false;}
+    const tv = target.velocity;
+    const ux = dx0 / dist, uz = dz0 / dist;
+    const lat = Math.abs(tv.x * -uz + tv.z * ux);
+    if (lat <= 8) {return false;}
+    this.serveGround(c, aim.x, aim.z, aim.y - 1.4);
+    return true;
+  }
+
+  /** Fuse-only carriers (MRV) detonate wherever the shell is at fuse -
+   *  aim the POP point, not the target. Solve the launch dir that puts
+   *  the fuse-end position on the target's led position; the ±5% band
+   *  that used to gate this starved every reach-capped aoe slug (rail,
+   *  plasma: contact pops, not airbursts - they were refused forever).
+   *  Bomblets release FORWARD of the pop, so the burst only pays when
+   *  it lands at-or-just-past the target - a close target gets overflown
+   *  (MRV's ~82m carry is a >60m weapon; inside the 45m acquire cap it
+   *  honestly has no shot), and confetti past ~1.4x is waste. */
+  private fuseSolve(c: ServeCtx, stF: ReturnType<typeof getWeaponStats>): 'fuse' | 'direct' | 'veto' {
+    if (!stF?.fuseOnly || stF.maxLifetime == null || stF.speed <= 0) {return 'direct';}
+    const { p, target, aim, muzzle, dist, dx0, dz0 } = c;
+    const f = stF.maxLifetime, inh = stF.inherit ?? 0.5;
+    const tv = target.velocity;
+    const qx = target.position.x + tv.x * f - muzzle.x - p.velocity.x * inh * f;
+    const qy = target.position.y + 1.2 + tv.y * f - muzzle.y - p.velocity.y * inh * f + 0.5 * GRAVITY * f * f;
+    const qz = target.position.z + tv.z * f - muzzle.z - p.velocity.z * inh * f;
+    const sf = stF.speed * f;
+    const ul = Math.hypot(qx, qy, qz) / sf;
+    if (ul < 0.85) {
+      // Too close for the fuse solve? Pop the carrier on the GROUND
+      // ~10m short of the led point - terrain contact detonates it
+      // point-blank and the rain falls on their path (the human
+      // 3-kills/min lane the carry band refused to model at all).
+      this.serveGround(c, aim.x - (dx0 / dist) * 10, aim.z - (dz0 / dist) * 10, target.position.y - 1.4);
+    } else if (ul > 1.15) {return 'veto';} // past ~1.15x carry the burst always overshoots (soak: 282 volleys at 120+m, 0 hits)
+    else {aim.x = muzzle.x + qx / sf; aim.y = muzzle.y + qy / sf; aim.z = muzzle.z + qz / sf;}
+    return 'fuse';
+  }
+
+  /** Aim-point serves, chosen once per pull. 'fuse' = the pop point is
+   *  the aim (skip the ordnance aim-y pass); 'veto' = refuse the pull. */
+  private aimServe(c: ServeCtx, wt: number): 'fuse' | 'direct' | 'veto' {
+    const stF = getWeaponStats(wt);
+    if (!this.bounceServe(c, stF) && !this.flakServe(c, wt)) {this.splashServe(c, stF);}
+    return this.fuseSolve(c, stF);
   }
 
   /** First discharge stamps the tracking mode from the drawn weapon:
@@ -648,34 +597,16 @@ s[kind] += 1; this.propels.set(id, s);
     // Human imperfection: occasionally skip self-splash checks entirely,
     // simulating "fuck it" moments or not paying attention. No absolutes.
     const imperfect = botRand() < 0.05;
-    if (!(imperfect && (getWeaponStats(wt)?.aoeRadius ?? 0) > 0) && this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {
-      return;
-    }
+    if (this.selfBlast.blastGate(p, { muzzle, dir, wt }, imperfect)) {return;}
     // Self-splash HP gate - a point shot has no target, so no willKill
     // or urgent exception applies: just survive the blast and keep
     // inside the self-damage budget.
-    const statsW2 = getWeaponStats(wt);
-
-    if (statsW2 && statsW2.aoeRadius > 0) {
-      const me = this.room.players.getAllPlayers().get(p.id);
-      const hp = me?.health ?? 100;
-      const selfSplash = aoeDamageAt(Math.max(0.5, dist), wt);
-      const budget = this.selfDamageBudget.get(p.id) ?? 100;
-      const perk = perkMods(me?.perk);
-
-      if (selfSplash > 0) {
-        if (hp <= selfSplash * perk.selfDamage * 1.5 + 5) { return; } // can't survive 1.5 hits
-        if (budget < selfSplash * perk.selfDamage * 1) { return; } // budget exhausted
-      }
-      // Decrement budget on fire (regenerates in step())
-      if (selfSplash > 0) {
-        this.selfDamageBudget.set(p.id, budget - selfSplash * perk.selfDamage);
-      }
-    }
+    if (this.selfBlast.pointHpVeto(p, wt, dist)) {return;}
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
   }
+
 
   /** Server-bot bloom: the same seeded cone the intent path applies to
    *  humans - bot shots have no shotId, so a per-arsenal sequence mixes
@@ -684,7 +615,7 @@ s[kind] += 1; this.propels.set(id, s);
   private bloomCone(me: { id: string; bloom: number; bloomAt: number }, dir: Vec3, wt: number): void {
     const bs = bloomRadius(me.bloom, me.bloomAt, wt, this.clock / 1000);
     if (bs.radius > 0) {
-      const [u1, u2] = jitter01(idSeed(me.id) ^ this.bloomSeq++);
+      const [u1, u2] = jitter01(idSeed(me.id) ^ this.bloomSeq); this.bloomSeq += 1;
       const jd = coneDir(dir, u1 * Math.PI * 2, Math.sqrt(u2) * bs.radius);
       dir.x = jd.x; dir.y = jd.y; dir.z = jd.z;
     }
@@ -692,112 +623,6 @@ s[kind] += 1; this.propels.set(id, s);
     me.bloomAt = this.clock / 1000;
   }
 
-  /** Self-radius clearance: an AOE shell that detonates on terrain or a
-   *  structure inside its own blast radius of the muzzle is a guaranteed
-   *  self-splash - humans see the hump between them and the target and
-   *  hold the rocket. March the ray fine enough not to skip a lip; if
-   *  ground or a wall top crosses it inside the blast envelope, the
-   *  shot doesn't exist to be taken. */
-  private selfBlastBlocked(muzzle: Vec3, dir: Vec3, wt: WeaponType, ownerVel: Vec3, shooterId?: string, shooterTeam?: string): boolean {
-    const stats = getWeaponStats(wt);
-    const aoer = stats?.aoeRadius ?? 0;
-    if (!this.room.field || !stats || aoer <= 0) {return false;}
-    // March the REAL ballistic path, not the aim ray: the shell inherits
-    // half the shooter's velocity, so a bot skiing downhill bends every
-    // shot below the checked line and clips lips the ray clears (soak
-    // autopsy: all self-frag blasts <2m over ground @~6m from muzzle).
-    const inh = stats.inherit ?? 0.5;
-    const vx = dir.x * stats.speed + ownerVel.x * inh;
-    let vy = dir.y * stats.speed + ownerVel.y * inh;
-    const vz = dir.z * stats.speed + ownerVel.z * inh;
-    const g = stats.gravity ? GRAVITY : 0;
-    let px = muzzle.x, py = muzzle.y, pz = muzzle.z;
-    let travelled = 0;
-    let flightT = 0;
-    let hitX: number | null = null, hitY = 0, hitZ = 0;
-    // Enemy bodies on the path pop the shell too - an intercept at 5m
-    // self-splashes exactly like a lip hit, and "a point-blank trade is
-    // a trade" only holds when the blast actually kills him (soak
-    // autopsy: most untraded selfK was a foe body eating the shell
-    // inside the shooter's blast envelope and surviving it).
-    const foes = [...this.room.players.getAllPlayers().values()]
-      .filter((q): boolean => q.id !== shooterId && !q.isDead && (!shooterTeam || q.team !== shooterTeam));
-    let bodyHit: { health: number } | null = null;
-    // Flight pops on segments; this march samples points - a razor lip
-    // apex between two samples is invisible to the check but real to
-    // the sim (residual lip selfK @4-5m). Fine-march the blast envelope
-    // where a pop is lethal, coarse-march the rest of the flight.
-    for (let stepN = 0; stepN < 400 && travelled < 80; stepN += 1) {
-      const dt = travelled < aoer + 3 ? 0.005 : 0.02;
-      vy += g * dt;
-      px += vx * dt; py += vy * dt; pz += vz * dt;
-      flightT += dt;
-      travelled += (vx * vx + vy * vy + vz * vz) ** 0.5 * dt;
-      const line = py + stats.bodyRadius;
-      const ground = Math.max(hmHeight(this.room.field, px, pz), hmChord(this.room.field, px, pz), this.room.moveSim.structureTop(px, pz));
-      if (ground > line) {
-        if (travelled < aoer) {return true;}
-        hitX = px; hitY = py; hitZ = pz;
-        break;
-      }
-      for (const f of foes) {
-        const bx = f.position.x - px, by = f.position.y + 1 - py, bz = f.position.z - pz;
-        if (bx * bx + by * by + bz * bz < 2.6) {
-          if (travelled < aoer) {
-            // Trade test: the pop lands inside our own blast envelope,
-            // so the shot only exists if the splash likely kills the
-            // body it's about to hit - a sacrifice, not a whiff.
-            bodyHit = f.health <= stats.aoeDamage * 0.8 ? f : null;
-            if (!bodyHit) {return true;}
-          }
-          hitX = px; hitY = py; hitZ = pz;
-          stepN = 400;
-          break;
-        }
-      }
-      if (hitX !== null) {break;}
-    }
-    // Self-collision ahead: the blast radius is measured shooter→pop at
-    // detonation, and a bot skiing INTO his own shot covers real distance
-    // during flight - a rocket the muzzle clears still frags him if his
-    // velocity delivers him inside the radius by impact time. A body hit
-    // that survives the trade test still has to clear this check.
-    if (hitX !== null) {
-      const sx = muzzle.x + ownerVel.x * flightT - hitX;
-      const sy = muzzle.y + ownerVel.y * flightT - hitY;
-      const sz = muzzle.z + ownerVel.z * flightT - hitZ;
-      // The projection assumes constant speed, but a skier on a descent
-      // (or a mid-flight propel - soak autopsy: propelK:0, aimed shots
-      // are the lip selfK) gains real m/s before the shell lands. Price
-      // the gain a downhill runner actually picks up in-flight (~half
-      // his speed again over the short flight), not a full safety band.
-      const speedGain = Math.min(6, Math.hypot(ownerVel.x, ownerVel.z) * flightT * 0.5);
-      const reach = aoer + speedGain;
-      if (sx * sx + sy * sy + sz * sz < reach * reach && !bodyHit) {return true;}
-    }
-    // Entity intercepts inside the blast envelope: a wandering ball,
-    // a species pop, or a teammate body on the muzzle line pops the
-    // shell at ITS distance - inside the shooter's own blast radius,
-    // for zero enemy damage (soak: point-blank selfK @5m, foe@140m).
-    // Enemy bodies stay legal - a point-blank trade is a trade.
-    const to = { x: muzzle.x + dir.x * aoer, y: muzzle.y + dir.y * aoer, z: muzzle.z + dir.z * aoer };
-    // Enemy domes eat the shell at the field edge - the flight sweep
-    // models them (projContact.shieldBlock), the clearance march can't
-    // miss what flight will hit: a bot firing across a dome edge pops
-    // his own shell inside his own blast envelope.
-    if (this.room.deployables.shieldBlock(muzzle, to, shooterId ?? '') !== null) {return true;}
-    if (this.room.ballSim?.sweepHit(muzzle, to, 1)) {return true;}
-    if (this.room.creatureSim?.sweepHit(muzzle, to, 1)) {return true;}
-    for (const q of this.room.players.getAllPlayers().values()) {
-      if (q.id === shooterId || q.isDead) {continue;}
-      if (shooterTeam && q.team !== shooterTeam) {continue;}
-      const ex = q.position.x - muzzle.x, ey = q.position.y - muzzle.y, ez = q.position.z - muzzle.z;
-      const t = Math.max(0, Math.min(1, (ex * dir.x + ey * dir.y + ez * dir.z) / aoer));
-      const rx = ex - dir.x * aoer * t, ry = ey - dir.y * aoer * t, rz = ez - dir.z * aoer * t;
-      if (rx * rx + ry * ry + rz * rz < 4) {return true;}
-    }
-    return false;
-  }
 
   pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string, airborne = false): number {
     // Gun-game: the ladder IS the arsenal - kit tables can't offer a
@@ -817,10 +642,14 @@ s[kind] += 1; this.propels.set(id, s);
     const picked = pickBotWeaponSafe(lo, distXZ, dist, hp, skill, s?.courage);
     const alt = this.deployPickFallback(botId, lo, picked, body?.armorClass);
     if (alt !== undefined) {return alt;}
-    // Same class gate players get in CombatHandler - the loadout tables
-    // stay honest, but a pick is refused at fire time too, not assumed.
-    if (classCanFire(body?.armorClass, picked)) {return picked;}
-    return [lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(body?.armorClass, w)) ?? WeaponType.Disc;
+    return this.classGatePick(lo, picked, body?.armorClass);
+  }
+
+  /** Same class gate players get in CombatHandler - the loadout tables
+   *  stay honest, but a pick is refused at fire time too, not assumed. */
+  private classGatePick(lo: BotLoadout, picked: number, armorClass: string | undefined): number {
+    if (classCanFire(armorClass, picked)) {return picked;}
+    return [lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(armorClass, w)) ?? WeaponType.Disc;
   }
 
   /** Deploy artillery only draws feet-down. If the band picked a
@@ -884,20 +713,31 @@ s[kind] += 1; this.propels.set(id, s);
     // fizzle until a nugget restocks it (brains see ctx.pickup for that).
     const body = this.room.players.getPlayer(p.id);
     if (body && body.beltCharges < BELT_THROW_COST) {return false;}
+    const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    const dirN = this.lobDir(p, aim, stats);
+    if (!riskSelf && this.selfBlast.selfBlastBlocked(muzzle, dirN, wt, p.velocity, p.id, body?.team ?? undefined)) {return false;}
+    if (body) {body.beltCharges -= BELT_THROW_COST;}
+    faceLaunch(p, dirN); // the throwing flick - model faces where it lobs
+    this.room.projectiles.spawn(p.id, wt, muzzle, dirN, p.velocity);
+    return true;
+  }
+
+  /** The lob's launch dir: seen-velocity lead (the aim point is a
+   *  memory, not the live body - splash belts shrug off a ~5m drift,
+   *  a Javelin's 0.25m skewer does not), ballistic θ solved from
+   *  range = v²·sin(2θ)/|g| instead of a guessed pitch (the grenade's
+   *  13m splash can't cover a 15m overshoot; rails stay flat), then
+   *  counter-aimed against the inherited half of the bot's own
+   *  velocity - a skiing bot's 10+ m/s of carry still swings a 40 m/s
+   *  toss off target (see RoomProjectiles.spawn). */
+  private lobDir(p: BotBody, aim: Vec3 & { vel?: BotVec }, stats: NonNullable<ReturnType<typeof getWeaponStats>>): Vec3 {
     let dx = aim.x - p.position.x, dz = aim.z - p.position.z;
     let d = Math.hypot(dx, dz) || 1;
-    // Seen-velocity lead: the aim point is a memory, not the live body -
-    // splash belts shrug off a ~5m drift; a Javelin's 0.25m skewer does
-    // not. Lead by the same velocity the eye measured, roughly the
-    // shell's flat flight time.
     if (aim.vel) {
       const flight = d / stats.speed;
       dx += aim.vel.x * flight; dz += aim.vel.z * flight;
       d = Math.hypot(dx, dz) || 1;
     }
-    // Ballistic lob: range = v²·sin(2θ)/|g| - solve θ for the target's
-    // distance instead of guessing a pitch, since the grenade's 13m
-    // splash can't cover a 15m overshoot. Rails stay flat.
     let pitch = 0.15;
     if (!stats.rayDelay) {
       const g = Math.abs(GRAVITY);
@@ -906,20 +746,11 @@ s[kind] += 1; this.propels.set(id, s);
     }
     const dir = { x: dx / d, y: Math.tan(pitch), z: dz / d };
     const len = Math.hypot(dir.x, dir.y, dir.z);
-    // The throw inherits half the bot's velocity (see RoomProjectiles.spawn)
-    // - a skiing bot's 10+ m/s of carry still swings a 40 m/s toss off
-    // target, so aim the launch against it.
     const vx = (dir.x / len) * stats.speed - p.velocity.x * 0.5;
     const vy = (dir.y / len) * stats.speed - p.velocity.y * 0.5;
     const vz = (dir.z / len) * stats.speed - p.velocity.z * 0.5;
     const vl = Math.hypot(vx, vy, vz) || 1;
-    const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
-    const dirN = { x: vx / vl, y: vy / vl, z: vz / vl };
-    if (!riskSelf && this.selfBlastBlocked(muzzle, dirN, wt, p.velocity, p.id, body?.team ?? undefined)) {return false;}
-    if (body) {body.beltCharges -= BELT_THROW_COST;}
-    faceLaunch(p, dirN); // the throwing flick - model faces where it lobs
-    this.room.projectiles.spawn(p.id, wt, muzzle, dirN, p.velocity);
-    return true;
+    return { x: vx / vl, y: vy / vl, z: vz / vl };
   }
 
   /** First push-class AOE weapon in the kit that can actually LAUNCH -
@@ -953,11 +784,7 @@ s[kind] += 1; this.propels.set(id, s);
     // Carrier truth lives in the flag sim, not the brain's goal pick -
     // a carrier fighting at the stand can hold a combat goal (running
     // unset) and the feet blast then fires as if he weren't loaded.
-    const carrying = this.room.flags
-      ? this.room.flagCarriedBy(id)
-      : Boolean((goal as { running?: boolean }).running);
-    if (carrying && !this.wasCarrying.get(id)) {this.propelT.delete(id);}
-    this.wasCarrying.set(id, carrying);
+    const carrying = this.propelCarrier(id, goal);
     // Self-splash costs real health now. A wounded bot holds fire -
     // except a desperate chaser: a loose enemy carrier far away means
     // the pursuit is already lost without the launch, so it may still
@@ -967,70 +794,47 @@ s[kind] += 1; this.propels.set(id, s);
     // no hp at all, so a wounded carrier keeps surfing it even when a
     // feet blast would be a suicide.
     const beltPull = getWeaponStats((this.loadouts.get(id) ?? BOT_LOADOUTS[0]!).belt)?.forceMode === 'pull';
-    if (hp < 45 && !(beltPull && carrying)) {
-      const me = this.room.players.getAllPlayers().get(id);
-      let thief: string | null = null;
-      for (const f of this.room.flags?.flags.values() ?? []) {
-        const cid = f.carrier;
-        if (cid && cid !== id && this.room.players.getAllPlayers().get(cid)?.team !== me?.team) { thief = cid; break; }
-      }
-      const carrier = thief ? this.room.players.getAllPlayers().get(thief) : undefined;
-      // Carrying IS urgency: a wounded carrier that can't blast dies
-      // at the stand inside the approach cooldown and drops the flag
-      // anyway - the launch buys the run home the grab already paid
-      // for (leg autopsy: return deaths at ~2% of route = at the stand).
-      let urgent = carrying;
-      if (carrier) {
-        const gx = carrier.position.x - p.position.x, gz = carrier.position.z - p.position.z;
-        const gap = Math.hypot(gx, gz);
-        // Urgent = the chase is lost without the launch: carrier far,
-        // or the gap is actively growing - carrier velocity pulls away
-        // along the chase line faster than the bot closes.
-        const sep = gap > 60;
-        const pulling = gap > 1 &&
-          ((carrier.velocity.x - sh.vel.x) * (gx / gap) + (carrier.velocity.z - sh.vel.z) * (gz / gap)) > 4;
-        urgent = sep || pulling;
-      }
-      // Even a lost chase doesn't buy a funeral: the feet blast costs
-      // the weapon's actual splash damage (halved by lightfoot) - under
-      // that plus a hair, the "launch" is just a suicide with extra steps.
-      // Scale the threshold by the weapon's aoeDamage, not a flat constant,
-      // so high-splash weapons (Mortar 80, Bombard 140) veto at realistic
-      // HP instead of the generic 30-hp floor.
-      const splashDmg = getWeaponStats((this.loadouts.get(id) ?? BOT_LOADOUTS[0]!).near)?.aoeDamage ?? SELF_SPLASH_MAX;
-      if (!urgent || hp <= splashDmg * perkMods(me?.perk).selfDamage + 5) {return;}
-    }
+    if (this.woundedPropelStop(id, p, sh, hp, carrying, beltPull)) {return;}
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);
-    // The entry blast is a timed instrument, not a cadence: inside the
-    // strike window a runner refires the moment its speed dips under the
-    // ceiling so the LAST blast's shove is still live at ring entry -
-    // cadence-firing spends it mid-approach and the capper arrives at
-    // ~23m/s inside the defense's kill zone (ring autopsy: in@28mps,
-    // 3.0s inside, 0 grabs).
-    const strike = goal.runner === true && dist < T.moves.strikeGd;
-    // Wave members chain too: a tasked push/escort transiting at the
-    // hop-gait mean (~13m/s) is food for the midfield blob - the soak's
-    // whole "called wave never arrives" defect (d542m, near0%, spd@13).
-    // Refiring on the speed trigger holds a wave member near his own
-    // ceiling instead of decaying back to walking between cadence shots.
-    const waveChain = !strike && goal.wave === true;
-    const chainCap = strike ? 48 : 30;
-    const blastNow = (strike && dist < 80 || waveChain) &&
-      Math.hypot(sh.vel.x, sh.vel.z) < chainCap &&
-      (this.propelT.get(id) ?? 0) < now + 1400; // still ~1s apart - each shove must land before the next
-    if (!blastNow && (this.propelT.get(id) ?? 0) > now) {return;}
-    // Hard floor only: a 50% grab-hp budget can't survive the route -
-    // propels ARE the speed and starving them flatlines transit (capRun
-    // regression: kata never grabbed at all). A quarter-hp floor keeps
-    // the grab from arriving one hit from a corpse while the blow-by
-    // stays armed inside the ring.
     const maxHp = this.room.players.getAllPlayers().get(id)?.maxHealth ?? 200;
-    if (goal.runner && dist > 60 && hp < maxHp * 0.25) {return;}
-    // Runners keep the burn going until the pole - the last blast IS
-    // the blow-by through the intercept line (overshoot = the grab).
-    if (dist < (surge ? 10 : 35)) {return;}
-    const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
+    const c: PropelCtx = { id, p, out, goal, sh, now, surge, carrying, hp, maxHp, dist, dx, dz, lo: this.loadouts.get(id) ?? BOT_LOADOUTS[0]! };
+    if (this.propelCadenceGates(c)) {return;}
+    this.propelLaunch(c, beltPull);
+  }
+
+  /** Carrier truth lives in the flag sim, not the brain's goal pick -
+   *  a carrier fighting at the stand can hold a combat goal (running
+   *  unset) and the feet blast then fires as if he weren't loaded.
+   *  Also re-arms the getaway blast on the grab edge (the approach
+   *  blasts' cooldown is up to 3.5s dead; soak's return-leg autopsy:
+   *  carriers die AT the stand inside that window). */
+  private propelCarrier(id: string, goal: { pos: BotVec; runner?: boolean; wave?: boolean }): boolean {
+    const carrying = this.room.flags
+      ? this.room.flagCarriedBy(id)
+      : Boolean((goal as { running?: boolean }).running);
+    if (carrying && !this.wasCarrying.get(id)) {this.propelT.delete(id);}
+    this.wasCarrying.set(id, carrying);
+    return carrying;
+  }
+
+  /** The wounded gate guards self-splash only - a pull belt's drag
+   *  costs no hp at all, so a wounded carrier keeps surfing it even
+   *  when a feet blast would be a suicide. true = veto. */
+  private woundedPropelStop(id: string, p: BotBody, sh: MoveState, hp: number, carrying: boolean, beltPull: boolean): boolean {
+    return hp < 45 && !(beltPull && carrying) && this.woundedPropelVeto(id, p, sh, carrying);
+  }
+
+  /** The launch half: pull-surf when the belt allows, crest when the
+   *  dirt drops away, heel blast otherwise - plus the post-launch
+   *  cooldown + jet pin. */
+  private propelLaunch(c: PropelCtx, beltPull: boolean): void {
+    // The strike window: inside it a runner refires the moment its speed
+    // dips under the ceiling so the LAST blast's shove is still live at
+    // ring entry - cadence-firing spends it mid-approach and the capper
+    // arrives at ~23m/s inside the defense's kill zone (ring autopsy:
+    // in@28mps, 3.0s inside, 0 grabs).
+    const strike = c.goal.runner === true && c.dist < T.moves.strikeGd;
     // A pull-belt carrier never feet/crest-blasts: lobbing the implosion
     // ahead drags him forward with ZERO self-splash - the feet blast at
     // the stand is how healthy grabs turned into one-hit carriers
@@ -1040,46 +844,16 @@ s[kind] += 1; this.propels.set(id, s);
     // blast, so a healthy runner pays hp for full-speed launches, then
     // swaps to hp-free pull surfs so the grab still arrives half-alive.
     // A carrier never pays: hp at the flag is the whole game.
-    const spendHp = goal.runner === true && hp > maxHp * 0.6;
-    if (beltPull && (carrying || (goal.runner && !spendHp))) {
-      const nx = dx / dist, nz = dz / dist;
-      if (this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 })) {
-        this.propelMark(id, 'pull', now);
-        this.propelT.set(id, now + 3500);
-        this.propelJetUntil.set(id, now + 900);
-        logger.info('Bot pull surf', { id });
-        return;
-      }
-      // Dry belt or unsafe arc: a carrier still pays hp for speed on the
-      // open leg - real cappers disc-jump through the midfield; the no-pay
-      // rule exists for the STAND (grab re-arm stacked blasts into
-      // one-hit carriers), not for 300m of dry transit where a 5-charge
-      // belt is long since spent (capdbg: 2 pulls then nothing - carry
-      // held ~32m/s on hop-gait alone). Inside the cap zone or low hp,
-      // holding is still correct: a fragile carrier's last blast is the
-      // ring entry, not another burn.
-      if (carrying && (dist < 120 || hp < maxHp * 0.45)) {return;}
-    }
+    const spendHp = c.goal.runner === true && c.hp > c.maxHp * 0.6;
+    if (beltPull && (c.carrying || (c.goal.runner && !spendHp)) && this.pullSurf(c)) {return;}
     // A blast doesn't need contact, it needs dirt close enough to pop
     // inside the shove envelope - a hop-gait transit (wave members:
     // soak spd@13, near0% arrival) is airborne half the time and was
     // falling through to the crest path that almost never qualifies.
+    const { p, sh } = c;
     const floor = this.room.field ? Math.max(hmHeight(this.room.field, p.position.x, p.position.z), hmChord(this.room.field, p.position.x, p.position.z)) : p.position.y;
     if (!sh.onGround && p.position.y - floor > 6) {
-      // Crest blast: jetting up a face, the hill drops away under the
-      // bot - a straight-down shot at its own feet banks the blast as
-      // pure height, the T2 "lose contact, shoot the floor" trick.
-      if (!this.room.field || dist < 60) {return;}
-      if (floor < p.position.y - 18) {return;}         // too high already - blast can't reach the dirt
-      if (Math.hypot(sh.vel.x, sh.vel.z) < 8) {return;} // needs real run speed to mean anything
-      if (sh.vel.y < -2) {return;}                      // falling - the moment passed
-      const wt = this.propelWeapon(lo);
-      this.room.projectiles.spawn(id, wt,
-        { x: p.position.x, y: p.position.y + 0.2, z: p.position.z },
-        { x: 0, y: -1, z: 0 }, p.velocity);
-      this.propelT.set(id, now + 8000);
-      this.propelMark(id, 'crest', now);
-      logger.info('Bot crest blast', { id });
+      this.crestBlast(c, floor);
       return;
     }
     // A long pursuit is allowed to boost mid-engagement - a chaser that
@@ -1088,79 +862,188 @@ s[kind] += 1; this.propels.set(id, s);
     // the runner: dueling interceptors at 60m is how pushes die at ~40m
     // out (ring autopsy: mdD@41m). His clear is the escort's job; his
     // blast is the only pass through.
-    if (out.fire && !surge && dist < 60) {return;}
-    // A heel blast at speed is only "wasted" if the bot isn't running a
-    // route - a capper's job is SUSTAINED 25-35m/s, and speed decays on
-    // every flat stretch, so runners re-blast before the run dies.
-    // Holding the 12m/s launch ceiling for everyone else capped route
-    // arrivals at ~10-18m/s - inside ring defense's kill zone.
-    // The strike window escalates it: inside the defended ring a runner
-    // disc-jumps on a tighter cadence and keeps blasting past the usual
-    // ceiling - ring entries at ~27m/s die in ~3s where a 45m/s
-    // blow-through clears the ring before the defense re-acquires.
+    if (this.propelShotGates(c, strike)) {return;}
+    this.heelOrPull(c);
+    // Runners chain on the human cadence (~2.8s between disc-jumps);
+    // everyone else pays the full 8s - chaining is blood + ammo, and a
+    // bot with somewhere to be trades it gladly while a roamer shouldn't.
+    this.propelT.set(c.id, c.now + (c.surge ? 2200 : 8000));
+    this.propelJetUntil.set(c.id, c.now + 900); // ride the shove skyward like a real disc-jump
+    logger.info('Bot propel', { id: c.id });
+  }
+
+  /** Cadence + survivability gates ahead of the launch pick: the chain
+   *  refire window (each shove must land before the next, ~1s apart),
+   *  the quarter-hp hard floor (a 50% grab-hp budget can't survive the
+   *  route - capRun regression: kata never grabbed at all), and the
+   *  near-pole stop (the last blast IS the blow-by). true = veto. */
+  private propelCadenceGates(c: PropelCtx): boolean {
+    if (!this.blastChain(c) && (this.propelT.get(c.id) ?? 0) > c.now) {return true;}
+    if (c.goal.runner && c.dist > 60 && c.hp < c.maxHp * 0.25) {return true;}
+    // Runners keep the burn going until the pole - the last blast IS
+    // the blow-by through the intercept line (overshoot = the grab).
+    return c.dist < (c.surge ? 10 : 35);
+  }
+
+  /** The chain refire window: inside the strike window a runner refires
+   *  the moment its speed dips under the ceiling so the LAST blast's
+   *  shove is still live at ring entry; wave members chain too (a tasked
+   *  push/escort transiting at the hop-gait mean ~13m/s is food for the
+   *  midfield blob - soak "called wave never arrives": d542m, near0%).
+   *  Still ~1s apart - each shove must land before the next. */
+  private blastChain(c: PropelCtx): boolean {
+    const strike = c.goal.runner === true && c.dist < T.moves.strikeGd;
+    const waveChain = !strike && c.goal.wave === true;
+    const chainCap = strike ? 48 : 30;
+    return (strike && c.dist < 80 || waveChain) &&
+      Math.hypot(c.sh.vel.x, c.sh.vel.z) < chainCap &&
+      (this.propelT.get(c.id) ?? 0) < c.now + 1400;
+  }
+
+  /** The last vetoes before the launch pick: a close non-surge goal
+   *  doesn't trade fire for speed (a chaser that must choose never
+   *  catches a carrier; dueling interceptors at 60m is how pushes die
+   *  at ~40m out - ring autopsy mdD@41m), the moving ceiling (12m/s for
+   *  roamers, 50/55 inside the surge/strike bands - ring entries at
+   *  ~27m/s die in ~3s where a 45m/s blow-through clears it), and the
+   *  mild-descent rule (don't buy with a fuse what gravity sells for
+   *  free; a STEEP face still earns the flat speed-disc geometry).
+   *  No energy gate by design: a heel blast costs ammo + hp, NOT jet
+   *  fuel - gating it on a charged tank stranded every trapped climber. */
+  private propelShotGates(c: PropelCtx, strike: boolean): boolean {
+    if (c.out.fire && !c.surge && c.dist < 60) {return true;}
     let movingCap = 12;
-  if (surge) {movingCap = strike ? 50 : 55;}
-    if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) {return;}
-    // No energy gate here by design: a heel blast costs ammo + hp, NOT
-    // jet fuel - gating it on a charged tank stranded every trapped
-    // climber whose tank was dry from the climb (the massif-pocket soak
-    // orbit). Players disc-jump on an empty tank precisely because it's
-    // the fuel-free launch.
-    // Don't buy with a fuse what gravity sells for free: a mild descent
-    // skis to speed without the launch, and the blast's fixed up-share
-    // is just wasted hang time. A STEEP face is different - the
-    // speed-disc geometry fires nearly flat and trades almost no up-pop.
-    if (this.room.field) {
-      const nx0 = dx / dist, nz0 = dz / dist;
-      const ahead = hmHeight(this.room.field, p.position.x + nx0 * 40, p.position.z + nz0 * 40);
-      const drop40 = p.position.y - ahead;
-      if (drop40 > 6 && drop40 < 14) {return;}
+    if (c.surge) {movingCap = strike ? 50 : 55;}
+    if (Math.hypot(c.sh.vel.x, c.sh.vel.z) > movingCap) {return true;}
+    if (!this.room.field) {return false;}
+    const nx0 = c.dx / c.dist, nz0 = c.dz / c.dist;
+    const drop40 = c.p.position.y - hmHeight(this.room.field, c.p.position.x + nx0 * 40, c.p.position.z + nz0 * 40);
+    return drop40 > 6 && drop40 < 14;
+  }
+
+  /** The wounded-bot gate's exception logic: a wounded chaser still
+   *  pays blood when the enemy carrier is loose far away or pulling
+   *  gap (the pursuit is already lost without the launch), and a
+   *  wounded carrier always gets the launch - he dies AT the stand
+   *  inside the approach cooldown and drops the flag anyway (leg
+   *  autopsy: return deaths at ~2% of route = at the stand). Never
+   *  enough to outright suicide on the pad: the weapon's real splash
+   *  price is the floor, not a flat constant. true = veto. */
+  private woundedPropelVeto(id: string, p: BotBody, sh: MoveState, carrying: boolean): boolean {
+    const me = this.room.players.getAllPlayers().get(id);
+    const hp = me?.health ?? 100;
+    const urgent = this.propelUrgent(id, p, sh, carrying, me);
+    const splashDmg = getWeaponStats((this.loadouts.get(id) ?? BOT_LOADOUTS[0]!).near)?.aoeDamage ?? SELF_SPLASH_MAX;
+    return !urgent || hp <= splashDmg * perkMods(me?.perk).selfDamage + 5;
+  }
+
+  /** Urgent = the chase is lost without the launch: carrying always
+   *  counts (a wounded carrier dies AT the stand and drops the flag
+   *  anyway), else the enemy carrier is far or the gap is actively
+   *  growing - his velocity pulls away along the chase line faster
+   *  than the bot closes. */
+  private propelUrgent(id: string, p: BotBody, sh: MoveState, carrying: boolean, me: PlayerState | undefined): boolean {
+    let thief: string | null = null;
+    for (const f of this.room.flags?.flags.values() ?? []) {
+      const cid = f.carrier;
+      if (cid && cid !== id && this.room.players.getAllPlayers().get(cid)?.team !== me?.team) { thief = cid; break; }
     }
-    const nx = dx / dist, nz = dz / dist;
-    // Pull-preference isn't exclusive: the main-gun heel blast stays in
-    // the toolkit - a pull surfer still disc-jumps off the spinfusor a
-    // share of the time like a human mixing techniques.
-    const wantsPull = getWeaponStats(lo.belt)?.forceMode === 'pull'
+    const carrier = thief ? this.room.players.getAllPlayers().get(thief) : undefined;
+    if (!carrier) {return carrying;}
+    const gx = carrier.position.x - p.position.x, gz = carrier.position.z - p.position.z;
+    const gap = Math.hypot(gx, gz);
+    const sep = gap > 60;
+    const pulling = gap > 1 &&
+      ((carrier.velocity.x - sh.vel.x) * (gx / gap) + (carrier.velocity.z - sh.vel.z) * (gz / gap)) > 4;
+    return sep || pulling;
+  }
+
+  /** The nitron pull-surf launch: implosion ~18m ahead, the bot's own
+   *  approach speed puts it in the pull envelope when the disc pops.
+   *  true = propel handled (launched, or vetoed - dry belt or unsafe
+   *  arc inside the cap zone where holding is still correct). */
+  private pullSurf(c: PropelCtx): boolean {
+    const nx = c.dx / c.dist, nz = c.dz / c.dist;
+    if (this.lobAt(c.p, { x: c.p.position.x + nx * 18, y: c.p.position.y - 1, z: c.p.position.z + nz * 18 })) {
+      this.propelMark(c.id, 'pull', c.now);
+      this.propelT.set(c.id, c.now + 3500);
+      this.propelJetUntil.set(c.id, c.now + 900);
+      logger.info('Bot pull surf', { id: c.id });
+      return true;
+    }
+    // Dry belt or unsafe arc: a carrier still pays hp for speed on the
+    // open leg - real cappers disc-jump through the midfield; the no-pay
+    // rule exists for the STAND (grab re-arm stacked blasts into
+    // one-hit carriers), not for 300m of dry transit where a 5-charge
+    // belt is long since spent (capdbg: 2 pulls then nothing - carry
+    // held ~32m/s on hop-gait alone). Inside the cap zone or low hp,
+    // holding is still correct: a fragile carrier's last blast is the
+    // ring entry, not another burn.
+    return c.carrying && (c.dist < 120 || c.hp < c.maxHp * 0.45);
+  }
+
+  /** Crest blast: jetting up a face, the hill drops away under the bot -
+   *  a straight-down shot at its own feet banks the blast as pure
+   *  height, the T2 "lose contact, shoot the floor" trick. All the
+   *  early outs simply don't launch (caller returns). */
+  private crestBlast(c: PropelCtx, floor: number): void {
+    const { p, sh, dist } = c;
+    if (!this.room.field || dist < 60) {return;}
+    if (floor < p.position.y - 18) {return;}         // too high already - blast can't reach the dirt
+    if (Math.hypot(sh.vel.x, sh.vel.z) < 8) {return;} // needs real run speed to mean anything
+    if (sh.vel.y < -2) {return;}                      // falling - the moment passed
+    const wt = this.propelWeapon(c.lo);
+    this.room.projectiles.spawn(c.id, wt,
+      { x: p.position.x, y: p.position.y + 0.2, z: p.position.z },
+      { x: 0, y: -1, z: 0 }, p.velocity);
+    this.propelT.set(c.id, c.now + 8000);
+    this.propelMark(c.id, 'crest', c.now);
+    logger.info('Bot crest blast', { id: c.id });
+  }
+
+  /** Pull-preference isn't exclusive: the main-gun heel blast stays in
+   *  the toolkit - a pull surfer still disc-jumps off the spinfusor a
+   *  share of the time like a human mixing techniques. */
+  private heelOrPull(c: PropelCtx): void {
+    const { p, id } = c;
+    const nx = c.dx / c.dist, nz = c.dz / c.dist;
+    const wantsPull = getWeaponStats(c.lo.belt)?.forceMode === 'pull'
       && botRand() < ((this.skillOfCb(id)?.beltPull ?? false) ? 0.8 : 0.4);
     if (wantsPull) {
       // Implosion ~18m ahead - the bot's own approach speed puts it in
       // the pull envelope when the disc pops. A refused lob (dry belt,
       // unsafe arc) still buys the heel blast instead of a dry cooldown.
       if (this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 })) {
-        this.propelMark(id, 'pull', now);
+        this.propelMark(id, 'pull', c.now);
       } else {
-        const wt0 = this.propelWeapon(lo);
-        const muzzle0 = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
-        const hy0 = p.position.y - classCapsule(p.armorClass).eye - muzzle0.y;
-        const hl0 = Math.hypot(-nx * 1.8, hy0, -nz * 1.8) || 1;
-        this.room.projectiles.spawn(id, wt0, muzzle0, { x: (-nx * 1.8) / hl0, y: hy0 / hl0, z: (-nz * 1.8) / hl0 }, p.velocity);
-        this.propelMark(id, 'heel', now);
+        this.heelLaunch(c, this.propelWeapon(c.lo), 1.8, classCapsule(p.armorClass).eye);
       }
     } else {
       // Classic disc-jump, angled by the slope: firing back-and-low
       // behind the heels on a descent puts the shove mostly horizontal
       // into the ski line (pure speed), while flat/uphill starts aim
       // under the body so the blast banks as height.
-      const wt = this.propelWeapon(lo);
-      const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
       let back = 1.8, drop = classCapsule(p.armorClass).eye;
       if (this.room.field) {
         const aheadH = hmHeight(this.room.field, p.position.x + nx * 20, p.position.z + nz * 20);
         const slope = p.position.y - aheadH; // >0 means the route falls away
         if (slope > 4) { back = 3; drop *= 0.55; } // speed-disc geometry
       }
-      const hx = p.position.x - nx * back - muzzle.x;
-      const hy = p.position.y - drop - muzzle.y;
-      const hz = p.position.z - nz * back - muzzle.z;
-      const len = Math.hypot(hx, hy, hz) || 1;
-      this.room.projectiles.spawn(id, wt, muzzle, { x: hx / len, y: hy / len, z: hz / len }, p.velocity);
-      this.propelMark(id, 'heel', now);
+      this.heelLaunch(c, this.propelWeapon(c.lo), back, drop);
     }
-    // Runners chain on the human cadence (~2.8s between disc-jumps);
-    // everyone else pays the full 8s - chaining is blood + ammo, and a
-    // bot with somewhere to be trades it gladly while a roamer shouldn't.
-    this.propelT.set(id, now + (surge ? 2200 : 8000));
-    this.propelJetUntil.set(id, now + 900); // ride the shove skyward like a real disc-jump
-    logger.info('Bot propel', { id });
+  }
+
+  /** The heel blast itself: back-and-low behind the heels at `back`/`drop`
+   *  - real projectile, real self-shove via processAOE's bot branch. */
+  private heelLaunch(c: PropelCtx, wt: number, back: number, drop: number): void {
+    const { p, id } = c;
+    const nx = c.dx / c.dist, nz = c.dz / c.dist;
+    const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    const hx = p.position.x - nx * back - muzzle.x;
+    const hy = p.position.y - drop - muzzle.y;
+    const hz = p.position.z - nz * back - muzzle.z;
+    const len = Math.hypot(hx, hy, hz) || 1;
+    this.room.projectiles.spawn(id, wt, muzzle, { x: hx / len, y: hy / len, z: hz / len }, p.velocity);
+    this.propelMark(id, 'heel', c.now);
   }
 }
