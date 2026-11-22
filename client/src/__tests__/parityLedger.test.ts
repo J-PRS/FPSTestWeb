@@ -14,7 +14,7 @@ import * as THREE from 'three';
 // transit-corrected ghost epoch. Regression in any of these reproduces
 // as silent dmg-echo/kb-echo misses in soak - the complaint classes.
 
-const VID = (): string => `v${Math.random().toString(36).slice(2)}`;
+const vid = (): string => `v${Math.random().toString(36).slice(2)}`;
 
 describe('kbEchoHorizon', (): void => {
   it('floors at 1600 and grows with RTT, never below echo round-trip', (): void => {
@@ -53,7 +53,7 @@ describe('kbStampDeadline', (): void => {
 
 describe('damage echo ledger', (): void => {
   it('merges same victim+wt+shotId stamps, splits different ones', (): void => {
-    const v = VID();
+    const v = vid();
     const before = parityProbes.echoesStamped;
     expectDamageEcho(v, 25, 1, 'sh1');
     expectDamageEcho(v, 25, 1, 'sh1'); // same -> merge
@@ -67,7 +67,7 @@ describe('damage echo ledger', (): void => {
   });
 
   it('shot-aware confirm prefers the matching stamp among same-victim echoes', (): void => {
-    const v = VID();
+    const v = vid();
     expectDamageEcho(v, 10, 1, 'AAA');
     expectDamageEcho(v, 40, 1, 'BBB');
     const before = parityProbes.echoesConfirmed;
@@ -79,8 +79,25 @@ describe('damage echo ledger', (): void => {
     expect(hasPendingEcho(v)).toBe(false);
   });
 
+  it('a confirm tagged to a different shot cannot swallow a shotId-bound whiff', (): void => {
+    const v = vid();
+    // Painted hit stamped under shot A whiffs; the wire then credits a
+    // hit from shot B. Before the strict fallback, B's confirm retired
+    // A's pending echo and the whiff never reached the dump.
+    expectDamageEcho(v, 25, 1, 'shotA');
+    const confirmedBefore = parityProbes.echoesConfirmed;
+    confirmDamageEcho(v, 'shotB');
+    expect(parityProbes.echoesConfirmed - confirmedBefore).toBe(0);
+    expect(hasPendingEcho(v)).toBe(true); // expires as a miss instead
+    // B's confirm may still settle an unlabeled stamp on the victim.
+    expectDamageEcho(v, 10, 1);
+    confirmDamageEcho(v, 'shotB');
+    sweepDamageEchoes(performance.now() + 15_000, 0);
+    expect(hasPendingEcho(v)).toBe(false);
+  });
+
   it('a shotId-bound echo cannot expire before the shell TTL horizon', (): void => {
-    const v = VID();
+    const v = vid();
     expectDamageEcho(v, 50, 1, 'ttl1');
     const now = performance.now();
     // wt:1 maxLifetime=12s -> deadline = stamp + 900 + min(12000,9000):
@@ -93,7 +110,7 @@ describe('damage echo ledger', (): void => {
   });
 
   it('a victim who died around the stamp voids the verdict', (): void => {
-    const v = VID();
+    const v = vid();
     const voidsBefore = parityProbes.echoesVoided ?? 0;
     expectDamageEcho(v, 30, 1, 'dead1');
     noteVictimDeath(v); // server skips dead targets - echo can never confirm
@@ -103,7 +120,7 @@ describe('damage echo ledger', (): void => {
   });
 
   it('a respawned victim is judgeable again', (): void => {
-    const v = VID();
+    const v = vid();
     noteVictimDeath(v);
     noteVictimRespawn(v);
     expectDamageEcho(v, 30, 1, 'revive1');
@@ -114,14 +131,14 @@ describe('damage echo ledger', (): void => {
   });
 
   it('a non-server-simmed weapon echo expires silently', (): void => {
-    const v = VID();
+    const v = vid();
     expectDamageEcho(v, 25, 29); // wt:29 has no WEAPONS row -> never simmed
     sweepDamageEchoes(performance.now() + 15_000, 0);
     expect(hasPendingEcho(v)).toBe(false);
   });
 
   it('fates arriving after an expired shot count as fate-late, not a fresh verdict', (): void => {
-    const v = VID();
+    const v = vid();
     expectDamageEcho(v, 30, 1, 'late1');
     sweepDamageEchoes(performance.now() + 15_000, 0);
     noteShellFate('late1', { x: 1, y: 2, z: 3 }); // lands in expiredShots
@@ -129,8 +146,8 @@ describe('damage echo ledger', (): void => {
   });
 
   it('a fan pull reports the fate nearest the predicted contact, not the last destroy', (): void => {
-    const v = VID();
-    const shot = `fan-${VID()}`;
+    const v = vid();
+    const shot = `fan-${vid()}`;
     expectDamageEcho(v, 9, 6, shot, { x: 0, y: 0, z: 0 });
     noteShellFate(shot, { x: 100, y: 0, z: 0 }); // sibling pellet, far away
     noteShellFate(shot, { x: 2, y: 0, z: 0 });   // the pellet that mattered
@@ -142,7 +159,7 @@ describe('damage echo ledger', (): void => {
   });
 
   it('a wire confirm landing BEFORE the stamp satisfies it (ordering inversion)', (): void => {
-    const v = VID();
+    const v = vid();
     const confirmedBefore = parityProbes.echoesConfirmed;
     // Server shell outran the replica: the playerHit arrives while no
     // echo is pending, then the painted contact stamps a beat later.
@@ -154,7 +171,7 @@ describe('damage echo ledger', (): void => {
   });
 
   it('a stale pre-confirm cannot satisfy a fresh-session stamp', (): void => {
-    const v = VID();
+    const v = vid();
     confirmDamageEcho(v, 'stale1');
     voidPendingEchoes(); // reclaim - the pre-confirm died with the old socket
     expectDamageEcho(v, 13, 46, 'stale1');
@@ -163,7 +180,7 @@ describe('damage echo ledger', (): void => {
   });
 
   it('a session reset voids pending echoes instead of reporting dead-wire misses', (): void => {
-    const v = VID();
+    const v = vid();
     const voidsBefore = parityProbes.echoesVoided ?? 0;
     expectDamageEcho(v, 25, 1, 'reconnect1');
     voidPendingEchoes(); // reclaim: the confirming playerHit died with the old socket

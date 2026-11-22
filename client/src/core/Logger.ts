@@ -35,8 +35,13 @@ export namespace Logger {
     })();
 
   let currentLevel: LogLevel = LogLevel.INFO;
-  // Console output is WARN+ only — INFO/DEBUG still land in the Alt+Q buffer
+  // Console output is WARN+ only - INFO/DEBUG still land in the Alt+Q buffer.
+  // On a public deploy (https, not dev) the console stays SILENT: every
+  // line already lands in the Alt+Q buffer and WARN+ ships to client-log,
+  // so console noise is pure cost for players. `?console` opts back in
+  // for operators debugging live sessions.
   const consoleLevel: LogLevel = LogLevel.WARN;
+  export const consoleOpen = (): boolean => isDevHost() || urlParams.has('console');
   let currentTag = '';
   const logBuffer: string[] = [];
   const maxBufferSize = 1000; // Keep last 1000 log entries
@@ -150,7 +155,7 @@ export namespace Logger {
     const prefix = currentTag ? `[${currentTag}]` : '';
     const fullMessage = `${timestamp} ${prefix} [${levelStr}] ${message}`;
 
-    if (level >= consoleLevel) {
+    if (level >= consoleLevel && consoleOpen()) {
       writingToConsole = true;
       try {
         writeConsole(level, fullMessage, context);
@@ -439,8 +444,10 @@ if (typeof window !== 'undefined') {
   for (const m of ['log', 'info', 'warn', 'error'] as const) {
     const orig = console[m].bind(console);
     // log/info stay buffered for Alt+Q but don't hit the console — only
-    // warn/error pass through (mirrors the Logger console filter)
-    const passthrough = m === 'warn' || m === 'error';
+    // warn/error pass through (mirrors the Logger console filter). On a
+    // public deploy the console stays silent entirely - everything still
+    // lands in the buffer; `?console` opts back in.
+    const passthrough = (m === 'warn' || m === 'error') && Logger.consoleOpen();
     console[m] = (...args: unknown[]): void => {
       // Raw console lines keep their level for the panel's coloring —
       // log/info read as INFO, warn/error stay warn/error.

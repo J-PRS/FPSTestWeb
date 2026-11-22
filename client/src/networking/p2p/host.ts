@@ -117,7 +117,7 @@ export class P2PHost {
     moveResync: (pid, pos, yaw, fullEnergy): void => this.moveShadows.resync(pid, pos, yaw, fullEnergy),
     moveTrack: (pid, pos, yaw): void => {
       const p = this.playerManager.getPlayer(pid);
-      this.moveShadows.track(pid, pos, yaw, p?.perk, p?.team);
+      this.moveShadows.track(pid, pos, yaw, { perk: p?.perk, team: p?.team });
       this.moveShadows.markReseated(pid);
     },
     moveMute: (pid): void => this.moveShadows.markReseated(pid),

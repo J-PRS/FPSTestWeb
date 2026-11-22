@@ -206,7 +206,7 @@ field itself to end of file.
    Written when a `matchToken` arrives while the recorder is live —
    the demo file then carries demo+receipt as one submission artifact.
    `_tools/verify.ts` prints `SIG-VALID`/`SIG-INVALID` when
-   `KRIBES_SIGN_KEY` is set, presence only otherwise. Absent on offline
+   `ANABATIC_SIGN_KEY` is set, presence only otherwise. Absent on offline
    (serverless) recordings.
 
 ## Version history

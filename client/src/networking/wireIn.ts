@@ -352,7 +352,7 @@ this.handlerThrows += 1;
   private onProjGone(data: Uint8Array): void {
     const g = decodeProjGone(data);
     if (g) {
-      try { this.h.onProjectileDestroyed?.(`sp-${g.projId}`, g.shotId, g.position, g.age, g.fizzle, g.planted); }
+      try { this.h.onProjectileDestroyed?.(`sp-${g.projId}`, g.shotId, g.position, g.age, g.fizzle, g.planted, g.hit); }
       catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projGone: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
     }
   }
@@ -461,7 +461,7 @@ this.handlerThrows += 1;
     jetpack: (data): void | undefined => this.h.onPlayerJetpack?.(data.playerId, data.position),
     projectileCreated: (data): void | undefined => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet, data.age, data.t, data.variant),
     playerShot: (data): void | undefined => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
-    projectileDestroyed: (data): void | undefined => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId, data.position ?? undefined, data.age ?? undefined, data.fizzle === true, data.planted === true),
+    projectileDestroyed: (data): void | undefined => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId, data.position ?? undefined, data.age ?? undefined, data.fizzle === true, data.planted === true, data.hit === true),
     snapshot: (data): void | undefined => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
     stateHash: (data): void | undefined => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.replica),
     correction: (data): void => this.h.handleCorrection(data),
@@ -478,7 +478,7 @@ this.handlerThrows += 1;
     crawlRoster: (data): void | undefined => this.h.onCrawlRoster?.(data),
     // Server-issued RTT probe - echo it back untouched so the server
     // measures round-trip itself instead of trusting our reported ping.
-    ping: (data): void => this.h.pingReceived(data.timestamp),
+    ping: (data): void => this.h.pingReceived(data.timestamp, typeof data.clk === 'number' ? data.clk : undefined),
     pong: (data): void => this.h.pongReceived(data.timestamp),
     srvPing: (data): void => { this.h.noteSrvPing?.(typeof data.rtt === 'number' ? data.rtt : null); },
     chat: (data): void | undefined => this.h.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),

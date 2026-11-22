@@ -125,13 +125,18 @@ export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotI
 export function confirmDamageEcho(victim: string, shotId?: string | null): void {
   // Shot-aware consume: multiple pending echoes on one victim (fan
   // bursts, fast re-shots) must not let a stray confirm eat the wrong
-  // stamp - prefer the shotId match, fall back to victim-only.
+  // stamp - prefer the shotId match. A confirm tagged to a different
+  // shot may only settle an UNLABELED stamp: a labeled echo belongs to
+  // its own shell, and letting shot B's wire hit retire shot A's
+  // pending verdict is how whiffed direct hits went silent in dumps.
   let i = shotId ? dmgEchoes.findIndex((e): boolean => e.victim === victim && (e.shotId ?? null) === shotId) : -1;
-  if (i === -1) {i = dmgEchoes.findIndex((e): boolean => e.victim === victim);}
+  if (i === -1) {i = dmgEchoes.findIndex((e): boolean => e.victim === victim && (shotId == null || e.shotId == null));}
   if (i !== -1) {parityProbes.echoesConfirmed += 1; dmgEchoes.splice(i, 1); return;}
   const now = performance.now();
   preConfirmed.set(`${victim}|${shotId ?? ''}`, now);
-  preConfirmed.set(`${victim}|`, now);
+  // The victim-only key must not let shot B's confirm pre-satisfy shot
+  // A's later stamp - only an unlabeled confirm is shot-agnostic.
+  if (shotId == null) {preConfirmed.set(`${victim}|`, now);}
   for (const [k, t] of preConfirmed) {if (now - t > PRECONFIRM_MS) {preConfirmed.delete(k);}}
 }
 
@@ -160,7 +165,7 @@ export function noteVictimRespawn(victim: string): void { victimDiedAt.delete(vi
 // "intent never ran" from "destroy never arrived" without a packet dump.
 export const parityProbes: {
   fatesSeen: number; echoesStamped: number; echoesConfirmed: number;
-  destroysSeen: number; deadOnArrival: number; trajUnbound?: number; trajBounced?: number; echoesVoided?: number; msgSeen: Record<string, number>;
+  destroysSeen: number; deadOnArrival: number; trajUnbound?: number; trajBounced?: number; trajSelf?: number; trajHit?: number; echoesVoided?: number; msgSeen: Record<string, number>;
 } = { fatesSeen: 0, echoesStamped: 0, echoesConfirmed: 0, destroysSeen: 0, deadOnArrival: 0, msgSeen: {} };
 
 // My shells' replica-vs-fate distances - offM as a population, not just
@@ -168,14 +173,45 @@ export const parityProbes: {
 // detonation point when the gone edge lands is the trajectory-divergence
 // census: the tail (p95) is the honest number a ghost-hit rate lives on.
 const trajDivs: number[] = [];
+// Wire-hit-flagged samples: body contacts live in server-truth space
+// ~a render-epoch ahead of the replica's stale capsules, so their gap
+// measures target lag - kept measurable but out of the world-contact
+// p50 that names real arc error.
+const trajHitDivs: number[] = [];
 // Per-weapon split of the same samples - an aggregate p50 can't tell a
 // healthy bolt (0.5m) from a drifting disc (8m); the dump names the
 // offenders instead of averaging them away.
 const trajByWt = new Map<number, number[]>();
+const trajRing: { d: number; wt?: number; age: number; sa: number; bind: number; self: number; mir: number; al?: number; lat?: number }[] = [];
+export function trajRecent(): readonly { d: number; wt?: number; age: number; sa: number; bind: number; self: number; mir: number; al?: number; lat?: number }[] { return trajRing; }
 // Outlier context - a 100m+ replica-vs-fate gap classifies differently
 // if the replica already self-detonated (its own contact vs the wire's)
 // than one still mid-flight at fate arrival (early server kill).
-export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean, age?: number, boundAt?: number, srvAge?: number, mirrored?: boolean): void {
+interface TrajDiv { d: number; al?: number; lat?: number; wt?: number; selfPopped?: boolean; age?: number; boundAt?: number; srvAge?: number; mirrored?: boolean; hit?: boolean }
+
+function trajRow(t: TrajDiv): { d: number; wt?: number; age: number; sa: number; bind: number; self: number; mir: number; al?: number; lat?: number } {
+  const { age, srvAge, boundAt } = t;
+  return { d: Number(t.d.toFixed(1)), wt: t.wt, age: age === undefined ? -1 : Number(age.toFixed(2)), sa: srvAge === undefined ? -1 : Number(srvAge.toFixed(2)), bind: Number(boundAt!.toFixed(2)), self: t.selfPopped ? 1 : 0, mir: t.mirrored ? 1 : 0,
+    al: t.al === undefined || t.al < 0 ? undefined : Number(t.al.toFixed(1)), lat: t.lat === undefined || t.lat < 0 ? undefined : Number(t.lat.toFixed(1)) };
+}
+
+/** A hit-confirmed shell's divergence is its own population - measured
+ *  off the contact point the wire actually scored, not a painted miss. */
+function noteTrajHit(d: number): void {
+  trajHitDivs.push(d);
+  if (trajHitDivs.length > 64) {trajHitDivs.shift();}
+  parityProbes.trajHit = (parityProbes.trajHit ?? 0) + 1;
+}
+
+function noteTrajWt(wt: number, d: number): void {
+  const a = trajByWt.get(wt) ?? [];
+  a.push(d);
+  if (a.length > 32) {a.shift();}
+  trajByWt.set(wt, a);
+}
+
+export function noteTrajDiv(t: TrajDiv): void {
+  const { d, wt, boundAt } = t;
   // Two populations, different meanings: an UNBOUND replica (the create
   // echo never re-anchored it) flies its live-muzzle arc - offset from
   // the server shell by shooter-speed × spawn-lag (~10-20m is normal,
@@ -183,15 +219,16 @@ export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean, age?: 
   // trajDivs makes the p50 read echo loss as arc divergence, so unbound
   // samples get their own counter and only bound replicas feed the stat.
   if (boundAt === undefined || boundAt < 0) {parityProbes.trajUnbound = (parityProbes.trajUnbound ?? 0) + 1; return;}
+  if (t.hit) {noteTrajHit(d); return;}
   trajDivs.push(d);
   if (trajDivs.length > 64) {trajDivs.shift();}
-  if (wt !== undefined) {
-    const a = trajByWt.get(wt) ?? [];
-    a.push(d);
-    if (a.length > 32) {a.shift();}
-    trajByWt.set(wt, a);
-  }
-  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0, age: age === undefined ? '?' : Number(age.toFixed(2)), bind: Number(boundAt.toFixed(2)), sa: srvAge === undefined ? '?' : Number(srvAge.toFixed(2)), mir: mirrored ? 1 : 0 });}
+  // Recent samples with full epoch context - the p50 alone can't tell
+  // tick-quantized death ages from a real spawn-epoch gap; the ring shows
+  // whether ~speed·tickMs clusters sit at srvAge≈age or skewed epochs.
+  trajRing.push(trajRow(t));
+  if (trajRing.length > 12) {trajRing.shift();}
+  if (wt !== undefined) {noteTrajWt(wt, d);}
+  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: t.selfPopped ? 1 : 0, age: t.age === undefined ? '?' : Number(t.age.toFixed(2)), bind: Number(boundAt.toFixed(2)), sa: t.srvAge === undefined ? '?' : Number(t.srvAge.toFixed(2)), mir: t.mirrored ? 1 : 0 });}
 }
 export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
   const s = trajDivs.toSorted((a, b) => a - b);
@@ -268,60 +305,73 @@ export function sweepDamageEchoes(now: number, stallMs = 0): void {
     // srvAt:none + fate-late pairing class). Same horizon the kb stamps
     // use: full shell life, 9s cap.
     const deadline = e.t + 900 + Math.min(ttlMs, 9000) + stallMs;
-    if (now > deadline) {
-      // Bodyless + carrier-spawned weapons (MRVBomblet, melee, beams)
-      // have no shotId-bound shell fate - the client intent is never
-      // reborn server-side, so a 'none' verdict can't distinguish a lost
-      // intent from "no fate contract exists". Skip those: noise was
-      // drowning the real verdicts (wt:29 srvAt:none in every soak).
-      if (e.wt !== undefined && !serverSimmed(e.wt)) {dmgEchoes.splice(i, 1); continue;}
-      // Victim died inside the stamp→verdict window - the server skips
-      // dead targets before any refuse/confirm path can run, so this
-      // echo can never prove a miss: unjudgeable, not a complaint.
-      const died = victimDiedAt.get(e.victim);
-      if (died !== undefined && died >= e.t - 500) {
-        parityProbes.echoesVoided = (parityProbes.echoesVoided ?? 0) + 1;
-        dmgEchoes.splice(i, 1);
-        continue;
-      }
-      const fateList = e.shotId ? shellFates.get(e.shotId)?.ats : undefined;
-      // Nearest fate to the predicted contact is the trajectory verdict -
-      // single-shell pulls have exactly one, fan pulls pick their pellet.
-      let fate: { x: number; y: number; z: number } | undefined;
-      if (fateList && fateList.length > 0) {
-        fate = e.at
-          ? fateList.reduce((best, p): typeof p => Math.hypot(p.x - e.at!.x, p.y - e.at!.y, p.z - e.at!.z) < Math.hypot(best.x - e.at!.x, best.y - e.at!.y, best.z - e.at!.z) ? p : best)
-          : fateList[0];
-      }
-      const detail: Record<string, unknown> = Object.assign({}, {victim: e.victim,dmg: e.dmg}, (e.wt === undefined ? {} : { wt: e.wt }), { shot: e.shotId ?? '?' });
-      if (e.at) {detail.at = `${e.at.x.toFixed(0)},${e.at.y.toFixed(0)},${e.at.z.toFixed(0)}`;}
-      // Aim staleness: the wire pos of the victim at stamp time vs the
-      // point the hit painted - if the victim wasn't actually there, the
-      // server legitimately missed no matter where the shell went.
-      if (e.vWire && e.at) {
-        detail.vWire = `${e.vWire.x.toFixed(0)},${e.vWire.y.toFixed(0)},${e.vWire.z.toFixed(0)}`;
-        detail.aimOff = Number(Math.hypot(e.at.x - e.vWire.x, e.at.y - e.vWire.y, e.at.z - e.vWire.z).toFixed(1));
-      }
-      // Trajectory divergence: the server's detonate point vs the
-      // predicted contact - if the shell itself flew differently, the
-      // spawn claim/coalescing changed its arc.
-      if (fate && e.at) {
-        detail.srvAt = `${fate.x.toFixed(0)},${fate.y.toFixed(0)},${fate.z.toFixed(0)}`;
-        detail.offM = Number(Math.hypot(fate.x - e.at.x, fate.y - e.at.y, fate.z - e.at.z).toFixed(1));
-      } else if (fate) {
-        detail.srvAt = `${fate.x.toFixed(0)},${fate.y.toFixed(0)},${fate.z.toFixed(0)}`;
-      } else {
-        detail.srvAt = 'none'; // server shell never detonated - intent died before it ran
-      }
-      if (fateList && fateList.length > 1) {detail.fates = fateList.length;}
-      parityMiss('dmg-echo', detail);
-      if (e.shotId) {
-        expiredShots.set(e.shotId, now);
-        if (expiredShots.size > 64) {for (const [k, t0] of expiredShots) {if (now - t0 > 15_000) {expiredShots.delete(k);}}}
-      }
-      dmgEchoes.splice(i, 1);
-    }
+    if (now > deadline && expireEcho(e, now)) {dmgEchoes.splice(i, 1);}
   }
+}
+
+/** Nearest fate to the predicted contact is the trajectory verdict -
+ *  single-shell pulls have exactly one, fan pulls pick their pellet. */
+function nearestFate(e: DmgEcho): { fate?: { x: number; y: number; z: number }; count: number } {
+  const fateList = e.shotId ? shellFates.get(e.shotId)?.ats : undefined;
+  if (!fateList || fateList.length === 0) {return { count: 0 };}
+  if (!e.at) {return { fate: fateList[0], count: fateList.length };}
+  const { at } = e;
+  return {
+    fate: fateList.reduce((best, p): typeof p => Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z) < Math.hypot(best.x - at.x, best.y - at.y, best.z - at.z) ? p : best),
+    count: fateList.length,
+  };
+}
+
+/** Detail row for a dmg-echo ghost verdict: painted contact, aim
+ *  staleness (wire pos vs painted point), trajectory divergence
+ *  (server detonate point vs painted contact). */
+function echoMissDetail(e: DmgEcho, fate: { x: number; y: number; z: number } | undefined, fates: number): Record<string, unknown> {
+  const detail: Record<string, unknown> = Object.assign({}, {victim: e.victim,dmg: e.dmg}, (e.wt === undefined ? {} : { wt: e.wt }), { shot: e.shotId ?? '?' });
+  if (e.at) {detail.at = `${e.at.x.toFixed(0)},${e.at.y.toFixed(0)},${e.at.z.toFixed(0)}`;}
+  // Aim staleness: the wire pos of the victim at stamp time vs the
+  // point the hit painted - if the victim wasn't actually there, the
+  // server legitimately missed no matter where the shell went.
+  if (e.vWire && e.at) {
+    detail.vWire = `${e.vWire.x.toFixed(0)},${e.vWire.y.toFixed(0)},${e.vWire.z.toFixed(0)}`;
+    detail.aimOff = Number(Math.hypot(e.at.x - e.vWire.x, e.at.y - e.vWire.y, e.at.z - e.vWire.z).toFixed(1));
+  }
+  // Trajectory divergence: the server's detonate point vs the
+  // predicted contact - if the shell itself flew differently, the
+  // spawn claim/coalescing changed its arc.
+  if (fate) {detail.srvAt = `${fate.x.toFixed(0)},${fate.y.toFixed(0)},${fate.z.toFixed(0)}`;}
+  else {detail.srvAt = 'none';} // server shell never detonated - intent died before it ran
+  if (fate && e.at) {detail.offM = Number(Math.hypot(fate.x - e.at.x, fate.y - e.at.y, fate.z - e.at.z).toFixed(1));}
+  if (fates > 1) {detail.fates = fates;}
+  return detail;
+}
+
+function noteExpiredShot(shotId: string, now: number): void {
+  expiredShots.set(shotId, now);
+  if (expiredShots.size <= 64) {return;}
+  for (const [k, t0] of expiredShots) {if (now - t0 > 15_000) {expiredShots.delete(k);}}
+}
+
+/** Expired echo verdict. false = drop with no complaint (unjudgeable
+ *  classes); true = splice after the miss was counted. */
+function expireEcho(e: DmgEcho, now: number): boolean {
+  // Bodyless + carrier-spawned weapons (MRVBomblet, melee, beams)
+  // have no shotId-bound shell fate - the client intent is never
+  // reborn server-side, so a 'none' verdict can't distinguish a lost
+  // intent from "no fate contract exists". Skip those: noise was
+  // drowning the real verdicts (wt:29 srvAt:none in every soak).
+  if (e.wt !== undefined && !serverSimmed(e.wt)) {return true;}
+  // Victim died inside the stamp→verdict window - the server skips
+  // dead targets before any refuse/confirm path can run, so this
+  // echo can never prove a miss: unjudgeable, not a complaint.
+  const died = victimDiedAt.get(e.victim);
+  if (died !== undefined && died >= e.t - 500) {
+    parityProbes.echoesVoided = (parityProbes.echoesVoided ?? 0) + 1;
+    return true;
+  }
+  const { fate, count } = nearestFate(e);
+  parityMiss('dmg-echo', echoMissDetail(e, fate, count));
+  if (e.shotId) {noteExpiredShot(e.shotId, now);}
+  return true;
 }
 
 /** Dump section - the census line leads, recent misses follow
@@ -333,15 +383,28 @@ export function parityLines(): string[] {
     return s ? `${k}=${n}/${s}(${(n / s * 100).toFixed(1)}%)` : `${k}=${n}`;
   }).join(' ');
   lines.push(`parity: misses=${total}${byKind ? ` ${byKind}` : ''}`);
+  // The echo ledger's whole story - a whiff that never complains reads
+  // as clean here only if pending/voided are visible too (a painted
+  // number swallowed by a victim-death void or still inside its verdict
+  // window is silent until this line exists).
+  if (parityProbes.echoesStamped > 0) {
+    lines.push(`  echoes: stamped=${parityProbes.echoesStamped} confirmed=${parityProbes.echoesConfirmed} voided=${parityProbes.echoesVoided ?? 0} pending=${dmgEchoes.length}`);
+  }
   const td = trajDivStats();
   if (td.n > 0 || parityProbes.trajUnbound) {
-    lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8} unbound=${parityProbes.trajUnbound ?? 0} bounced=${parityProbes.trajBounced ?? 0}`);
+    lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8} unbound=${parityProbes.trajUnbound ?? 0} bounced=${parityProbes.trajBounced ?? 0} self=${parityProbes.trajSelf ?? 0} hit=${trajHitDivs.length > 0 ? `${(trajHitDivs.toSorted((a, b) => a - b)[Math.floor(trajHitDivs.length * 0.5)] ?? 0).toFixed(1)}m(n${trajHitDivs.length})` : '0'}`);
     const perWt = [...trajByWt.entries()]
       .map(([wt, a]): string => {
         const s = a.toSorted((x, y): number => x - y);
         return `wt${wt}:${(s[Math.floor(s.length * 0.5)] ?? 0).toFixed(1)}m(n${a.length})`;
       }).join(' ');
     if (perWt) {lines.push(`  shell-traj-bywt: ${perWt}`);}
+    // Last samples verbatim - epoch columns split "server shell died a
+    // tick early" (sa ~ age - transit) from a spawn-epoch gap.
+    const rec = trajRecent().slice(-6)
+      .map((r): string => `${r.d}m w${r.wt} a${r.age}/sa${r.sa} b${r.bind}${r.al === undefined ? '' : ` al${r.al}/lt${r.lat}`}${r.self ? ' SELF' : ''}${r.mir ? ' MIR' : ''}`)
+      .join(' | ');
+    if (rec) {lines.push(`  shell-traj-recent: ${rec}`);}
   }
   for (const r of rows.slice(-8).toReversed()) {
     lines.push(`  parity-${r.kind}: ${r.detail}`);

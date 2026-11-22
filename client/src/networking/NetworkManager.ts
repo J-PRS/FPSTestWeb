@@ -109,7 +109,8 @@ export class NetworkManager {
    *  (rejected predicted self-splash leaves client health divergent). */
   public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined, shotId?: string, armorClass?: string) => void) | null = null;
   public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
-  public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, age?: number, fizzle?: boolean, planted?: boolean) => void) | null = null;
+  // oxlint-disable-next-line max-params -- wire-event signature, mandated by the gone payload
+  public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, age?: number, fizzle?: boolean, planted?: boolean, hit?: boolean) => void) | null = null;
   /** Belt-sticky combo - rider server id glued dead-center onto host id. */
   public onProjRide: ((riderId: string, hostId: string) => void) | null = null;
   public onSpearCollect: ((ownerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
@@ -855,8 +856,11 @@ this.sendDrops += 1;
   private clockSynced = false;
 
   /** Server-side RTT probe - echo verbatim; the timestamp is the
-   *  server's clock, not ours. */
-  pingReceived(timestamp: number): void {
+   *  server's clock, not ours. `clk` is the server's own measure of our
+   *  offset error (from fireAt uplink transit, + = we run behind): the
+   *  stamp+rtt/2 estimator can't see asymmetric links, so the feedback
+   *  closes the loop the geometry can't. Gains below. */
+  pingReceived(timestamp: number, clkBias?: number): void {
     this.send({ type: 'pong', timestamp });
     const sample = timestamp + this.telemetry.ping / 2 - Date.now();
     // Big jumps re-seat outright (clock step / reconnect); small ones
@@ -866,6 +870,12 @@ this.sendDrops += 1;
       this.clockSynced = true;
     } else {
       this.clockOffset += (sample - this.clockOffset) * 0.2;
+    }
+    if (clkBias !== undefined && Number.isFinite(clkBias)) {
+      // Proportional gain: a big measured error converges in ~2 probes
+      // (early-shell re-anchors need it now); small residuals take the
+      // damped half-step so jitter can't pump the offset.
+      this.clockOffset += clkBias * (Math.abs(clkBias) > 15 ? 0.8 : 0.4);
     }
   }
 

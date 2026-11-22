@@ -32,7 +32,7 @@ const EVENTS: JournalEv[] = [
 // The live side of the replay pair — applies a journaled call verbatim.
 function apply(sim: RoomMoveSim, ev: JournalEv): void {
   switch (ev.kind) {
-    case 'track': { sim.track(ev.pid, ev.pos, ev.yaw, ev.perk, ev.team, ev.bot, ev.armorClass); break; }
+    case 'track': { sim.track(ev.pid, ev.pos, ev.yaw, { perk: ev.perk, team: ev.team, bot: ev.bot, armorClass: ev.armorClass }); break; }
     case 'input': { sim.setInput(ev.pid, ev.input, ev.status, ev.seq); break; }
     case 'impulse': { sim.applyImpulse(ev.pid, ev.dv); break; }
     case 'resync': { sim.resync(ev.pid, ev.pos, ev.yaw, ev.fullEnergy); break; }
@@ -42,6 +42,7 @@ function apply(sim: RoomMoveSim, ev: JournalEv): void {
     case 'water': { sim.setWaterLevel(ev.level); break; }
     case 'hash': { break;
     }
+    default: { break; }
   }
 }
 
