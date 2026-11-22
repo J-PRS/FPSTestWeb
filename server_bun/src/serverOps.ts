@@ -27,7 +27,7 @@ export function totalPlayers(g: GameServer): number {
 }
   /** Server-browser card: what a master list / LAN browser displays per
    *  host. Cheap to poll — one row per room, no per-player data. */
-export function getServerInfo(g: GameServer) {
+export function getServerInfo(g: GameServer): Record<string, unknown> {
     const uptimeS = Math.floor((wallNow() - g.ops.startedAt) / 1000);
     return {
       name: CONFIG.serverName,
@@ -41,7 +41,7 @@ export function getServerInfo(g: GameServer) {
     };
   }
 
-export function getHealthStatus(g: GameServer) {
+export function getHealthStatus(g: GameServer): Record<string, unknown> {
     // 'degraded' when anything's already on fire: a quarantined room
     // stopped simulating, or the tick loop is running meaningfully late.
     // A monitor polling /health sees the failure instead of 'running'.
@@ -50,12 +50,15 @@ export function getHealthStatus(g: GameServer) {
     // loop is losing a real slice of the 50ms budget, not normal jitter.
     const lagBad = g.ops.tickLagSamples > 100 && g.ops.tickLagMsSum / g.ops.tickLagSamples > 20;
     const degraded = quarantined.length > 0 || lagBad;
-    return Object.assign({}, {status: g.draining ? 'draining' : (degraded ? 'degraded' : 'running'),version: SERVER_VERSION,build: SERVER_BUILD,bun: Bun.version,players: totalPlayers(g),maxPlayers: CONFIG.globalMaxPlayers || CONFIG.maxPlayers,tickRate: CONFIG.tickRate,boot: process.env.FPS_BOOT ?? null}, (quarantined.length > 0 ? { quarantined } : {}), (lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {}));
+    let status = 'running';
+    if (g.draining) {status = 'draining';}
+    else if (degraded) {status = 'degraded';}
+    return Object.assign({}, {status,version: SERVER_VERSION,build: SERVER_BUILD,bun: Bun.version,players: totalPlayers(g),maxPlayers: CONFIG.globalMaxPlayers || CONFIG.maxPlayers,tickRate: CONFIG.tickRate,boot: process.env.FPS_BOOT ?? null}, (quarantined.length > 0 ? { quarantined } : {}), (lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {}));
   }
 
   /** Ops snapshot for /metrics — counts since boot plus tick-lag stats,
    *  with per-room occupancy/ball counts for match-level observability. */
-export function getMetrics(g: GameServer) {
+export function getMetrics(g: GameServer): Record<string, unknown> {
     const o = g.ops;
     const now = wallNow();
     // Event-loop stall histogram — catches what tickLag can't: ANY long
@@ -103,9 +106,9 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
       // Clock-offset instrument: fireAt uplink vs the unblended pong
       // channel. Persistent nonzero bias is the rewind/fireAt window
       // skew, the number behind trajDiv/dmg-echo drift.
-      uplinkBias: ((): { n: number; avg: number; maxAbs: number } | undefined => {
+      uplinkBias: ((): { n: number; avg: number; maxAbs: number; life: { n: number; avg: number; maxAbs: number } } | undefined => {
         const b = r.moveSim.uplinkBiasStats();
-        return b.n > 0 ? b : undefined;
+        return b.n > 0 || b.life.n > 0 ? b : undefined;
       })(),
       // Since-boot judge/claim counters — the room's 15s rollup clears
       // per flush, so scrapes need the cumulative mirror.
@@ -191,7 +194,7 @@ function threadCpu(): { tid: number; comm: string; cpuMs: number }[] | undefined
         out.push({ tid: Number(tid), comm, cpuMs: Math.round((utime + stime) * 10) }); // 100Hz jiffies
       } catch { /* thread exited mid-read */ }
     }
-    return out.sort((a, b): number => b.cpuMs - a.cpuMs).slice(0, 12);
+    return out.toSorted((a, b): number => b.cpuMs - a.cpuMs).slice(0, 12);
   } catch { return undefined; }
 }
 

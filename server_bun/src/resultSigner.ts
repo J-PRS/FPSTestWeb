@@ -23,7 +23,7 @@ function canon(v: unknown): string {
   }
   if (Array.isArray(v)) {return `[${v.map(canon).join(',')}]`;}
   const o = v as Record<string, unknown>;
-  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canon(o[k])}`).join(',')}}`;
+  return `{${Object.keys(o).toSorted().map((k) => `${JSON.stringify(k)}:${canon(o[k])}`).join(',')}}`;
 }
 
 export interface MatchRecord {
@@ -78,7 +78,9 @@ export class ResultSigner {
 }
 
 /** Env key — absent means unsigned dev tokens (shape-verifiable but not
- *  forgery-proof; the leaderboard rejects unsigned in prod). */
-export const SIGN_SECRET = process.env.KRIBES_SIGN_KEY ?? null;
+ *  forgery-proof; the leaderboard rejects unsigned in prod).
+ *  ANABATIC_SIGN_KEY is canonical; KRIBES_SIGN_KEY is the legacy alias
+ *  from the pre-rename deploy - drop once ops migrates the var. */
+export const SIGN_SECRET = process.env.ANABATIC_SIGN_KEY ?? process.env.KRIBES_SIGN_KEY ?? null;
 let seq = 0;
 export const nextMatchId = (room: string): string => `${room}-${Date.now().toString(36)}-${(seq += 1)}`;

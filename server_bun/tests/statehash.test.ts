@@ -12,7 +12,7 @@ describe('computeStateHash', () => {
 
   test('is order-insensitive (reconnects reorder the roster)', () => {
     const forward = computeStateHash(players);
-    const backward = computeStateHash([...players].reverse());
+    const backward = computeStateHash(players.toReversed());
     expect(forward).toBe(backward);
   });
 
@@ -57,14 +57,14 @@ describe('computeStateHash', () => {
 describe('room rng seeding', () => {
   test('same seed reproduces the same draw stream; seedless stays ambient', async () => {
     const { Room } = await import('../src/Room.ts');
-    const a = new Room('a', null, '', undefined, false, 4242);
-    const b = new Room('b', null, '', undefined, false, 4242);
+    const a = new Room('a', null, '', undefined, { moveAuthority: false, seed: 4242 });
+    const b = new Room('b', null, '', undefined, { moveAuthority: false, seed: 4242 });
     // Ctor-time consumers (spawn scatter) draw off the stream — compare
     // the two seeded rooms to each other so that consumption is aligned.
     expect(a.rngStream?.draws).toBe(b.rngStream?.draws);
     for (let i = 0; i < 50; i += 1) { expect(a.rng()).toBe(b.rng()); }
     // Unseeded room keeps the injectable default (botRand).
-    const c = new Room('c', null, '', undefined, false);
+    const c = new Room('c', null, '', undefined, { moveAuthority: false });
     expect(c.rngSeed).toBeUndefined();
     a.dispose(); b.dispose(); c.dispose();
   });

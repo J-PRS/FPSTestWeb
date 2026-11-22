@@ -23,6 +23,7 @@ import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 import { wireMeterSnapshot } from './wireMeter.ts';
 import { roomModsOf, type RoomMods } from '../../shared/protocol.ts';
+import type { submitDemo } from './leaderboard.ts';
 
 export interface HttpCtx {
   gameServer: GameServer;
@@ -342,29 +343,13 @@ const DEMO_IP_WINDOW_MS = 60_000;
 export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
   const lb = await import('./leaderboard.ts');
   if (url.pathname === '/leaderboard/submit' && req.method === 'POST') {
-    const ip = req && ctx.requestIP?.(req)?.address;
-    if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
-        !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT, 1024)) {
-      return json({ ok: false, error: 'Too many submissions' }, { status: 429 });
-    }
-    const body = await req.arrayBuffer();
-    if (body.byteLength > 16 * 1024 * 1024) {
-      return json({ ok: false, error: 'Upload too large' }, { status: 413 });
-    }
-    let chal = null;
-    const chalParam = url.searchParams.get('chal');
-    if (chalParam) {
-      try { chal = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(chalParam), c => c.charCodeAt(0)))); }
-      catch { return json({ ok: false, error: 'bad challenge param' }, { status: 400 }); }
-    }
-    const r = await lb.submitDemo(body, chal);
-    return json(r, { status: r.ok ? 200 : 422 });
+    return leaderboardSubmit(ctx, req, url, lb);
   }
   if (url.pathname === '/challenge' && req.method === 'GET') {
     const c = await lb.mintChallenge();
     // 200 either way — a 503 paints a red console line on every visitor's
     // boot even though keyless signing is a valid prod state.
-    return json(c ?? { disabled: true, reason: 'KRIBES_SIGN_KEY unset' });
+    return json(c ?? { disabled: true, reason: 'ANABATIC_SIGN_KEY unset' });
   }
   if (url.pathname === '/leaderboard' && req.method === 'GET') {
     return json({ board: lb.board(url.searchParams.get('mode') ?? undefined) });
@@ -372,79 +357,110 @@ export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Pr
   return corsResponse('Not found', { status: 404 });
 }
 
-export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
-  // Chunked game stream: POST /demos/stream?session=<id>&seq=<n> —
-  // each body is a complete .demo slice; files land as stream_<id>_<seq>.
-  if (url.pathname === '/demos/stream' && req.method === 'POST') {
-    const ip = req && ctx.requestIP?.(req)?.address;
-    if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
-        !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT * 10, 1024)) {
-      return json({ success: false, error: 'Too many uploads' }, { status: 429 });
+/** POST /leaderboard/submit - IP-budgeted demo upload (the same body
+ *  size class as clip uploads, so the same window). Split out of
+ *  leaderboardRoute for the complexity ratchet; the submit verdicts
+ *  live in leaderboard.ts. */
+async function leaderboardSubmit(ctx: HttpCtx, req: Request, url: URL, lb: { submitDemo: typeof submitDemo }): Promise<Response> {
+  const ip = req && ctx.requestIP?.(req)?.address;
+  if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
+      !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT, 1024)) {
+    return json({ ok: false, error: 'Too many submissions' }, { status: 429 });
+  }
+  const body = await req.arrayBuffer();
+  if (body.byteLength > 16 * 1024 * 1024) {
+    return json({ ok: false, error: 'Upload too large' }, { status: 413 });
+  }
+  let chal = null;
+  const chalParam = url.searchParams.get('chal');
+  if (chalParam) {
+    try { chal = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(chalParam), c => c.charCodeAt(0)))); }
+    catch { return json({ ok: false, error: 'bad challenge param' }, { status: 400 }); }
+  }
+  const r = await lb.submitDemo(body, chal);
+  return json(r, { status: r.ok ? 200 : 422 });
+}
+
+/** Upload flood gate - loopback is exempt, everyone else is windowed. */
+function demoUploadAllowed(ctx: HttpCtx, req: Request, limit: number): boolean {
+  const ip = req && ctx.requestIP?.(req)?.address;
+  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
+  return windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, limit, 1024);
+}
+
+// Chunked game stream: each body is a complete .demo slice; files land as
+// stream_<id>_<seq>.
+async function demoStreamPost(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
+  if (!demoUploadAllowed(ctx, req, DEMO_IP_LIMIT * 10)) {
+    return json({ success: false, error: 'Too many uploads' }, { status: 429 });
+  }
+  const body = await req.arrayBuffer();
+  if (body.byteLength > 16 * 1024 * 1024) {
+    return json({ success: false, error: 'Chunk too large' }, { status: 413 });
+  }
+  try {
+    const meta = await ctx.demoStorage.saveStream(body, url.searchParams.get('session') ?? '', Number(url.searchParams.get('seq') ?? 0));
+    return json(Object.assign({}, {success: true}, meta));
+  } catch (error) {
+    return json({ success: false, error: (error as Error).message }, { status: 400 });
+  }
+}
+
+async function demoUploadPost(ctx: HttpCtx, req: Request): Promise<Response> {
+  if (!demoUploadAllowed(ctx, req, DEMO_IP_LIMIT)) {
+    return json({ success: false, error: 'Too many uploads' }, { status: 429 });
+  }
+  try {
+    // Reject oversized uploads before buffering the body — clips are
+    // ~seconds of binary frames, 16MB is a generous ceiling
+    const contentLength = Number(req.headers.get('content-length') ?? 0);
+    if (contentLength > 16 * 1024 * 1024) {
+      return json({ success: false, error: 'Upload too large' }, { status: 413 });
     }
     const body = await req.arrayBuffer();
     if (body.byteLength > 16 * 1024 * 1024) {
-      return json({ success: false, error: 'Chunk too large' }, { status: 413 });
+      return json({ success: false, error: 'Upload too large' }, { status: 413 });
     }
-    try {
-      const meta = await ctx.demoStorage.saveStream(body, url.searchParams.get('session') ?? '', Number(url.searchParams.get('seq') ?? 0));
-      return json(Object.assign({}, {success: true}, meta));
-    } catch (error) {
-      return json({ success: false, error: (error as Error).message }, { status: 400 });
+    logger.info('Demo upload received', { size: body.byteLength });
+    const meta = await ctx.demoStorage.saveDemo(body);
+    if (!meta.filename) {
+      return json({ success: false, rejected: true, reason: 'Below minimum lifetime' });
     }
+    return json(Object.assign({}, {success: true}, meta));
+  } catch (error) {
+    const msg = (error as Error).message;
+    logger.warn('Demo upload failed', { error: msg });
+    // Malformed input is the uploader's fault (400); a storage fault is
+    // ours (500) — and its internals don't belong in the response.
+    const bad = msg.startsWith('Malformed demo');
+    return json({ success: false, error: bad ? msg : 'Upload failed' }, { status: bad ? 400 : 500 });
   }
-  if (url.pathname === '/demos/upload' && req.method === 'POST') {
-    const ip = req && ctx.requestIP?.(req)?.address;
-    if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
-        !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT, 1024)) {
-      return json({ success: false, error: 'Too many uploads' }, { status: 429 });
-    }
-    try {
-      // Reject oversized uploads before buffering the body — clips are
-      // ~seconds of binary frames, 16MB is a generous ceiling
-      const contentLength = Number(req.headers.get('content-length') ?? 0);
-      if (contentLength > 16 * 1024 * 1024) {
-        return json({ success: false, error: 'Upload too large' }, { status: 413 });
-      }
-      const body = await req.arrayBuffer();
-      if (body.byteLength > 16 * 1024 * 1024) {
-        return json({ success: false, error: 'Upload too large' }, { status: 413 });
-      }
-      logger.info('Demo upload received', { size: body.byteLength });
-      const meta = await ctx.demoStorage.saveDemo(body);
-      if (!meta.filename) {
-        return json({ success: false, rejected: true, reason: 'Below minimum lifetime' });
-      }
-      return json(Object.assign({}, {success: true}, meta));
-    } catch (error) {
-      const msg = (error as Error).message;
-      logger.warn('Demo upload failed', { error: msg });
-      // Malformed input is the uploader's fault (400); a storage fault is
-      // ours (500) — and its internals don't belong in the response.
-      const bad = msg.startsWith('Malformed demo');
-      return json({ success: false, error: bad ? msg : 'Upload failed' }, { status: bad ? 400 : 500 });
-    }
-  }
+}
 
-  if (req.method === 'GET') {
-    const filename = url.pathname.slice('/demos/'.length);
-    if (filename === 'upload' || filename === '') {
-      return corsResponse('Not found', { status: 404 });
-    }
-    // Extracted-clip library (demos/shots/**) - the client LOCAL list.
-    if (filename === 'local') {
-      return json({ demos: await ctx.demoStorage.listLocal() });
-    }
-    const data = await ctx.demoStorage.loadDemo(filename);
-    if (!data) {
-      logger.info('Demo download not found', { filename });
-      return corsResponse('Not found', { status: 404 });
-    }
-    logger.info('Demo downloaded', { filename, size: data.byteLength });
-    return corsResponse(data, {
-      headers: { 'Content-Type': 'application/octet-stream' },
-    });
+async function demoGet(ctx: HttpCtx, url: URL): Promise<Response> {
+  const filename = url.pathname.slice('/demos/'.length);
+  if (filename === 'upload' || filename === '') {
+    return corsResponse('Not found', { status: 404 });
   }
+  // Extracted-clip library (demos/shots/**) - the client LOCAL list.
+  if (filename === 'local') {
+    return json({ demos: await ctx.demoStorage.listLocal() });
+  }
+  const data = await ctx.demoStorage.loadDemo(filename);
+  if (!data) {
+    logger.info('Demo download not found', { filename });
+    return corsResponse('Not found', { status: 404 });
+  }
+  logger.info('Demo downloaded', { filename, size: data.byteLength });
+  return corsResponse(data, {
+    headers: { 'Content-Type': 'application/octet-stream' },
+  });
+}
 
+export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
+  if (url.pathname === '/demos/stream' && req.method === 'POST') {return demoStreamPost(ctx, req, url);}
+  if (url.pathname === '/demos/upload' && req.method === 'POST') {return demoUploadPost(ctx, req);}
+  if (req.method === 'GET') {return demoGet(ctx, url);}
   return corsResponse('Not found', { status: 404 });
 }
 

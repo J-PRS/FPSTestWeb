@@ -352,7 +352,10 @@ export type ServerMessage =
       fizzle?: boolean;
       /** Authority planted a reclaimable corpse (stats.plants) at the
        *  contact - replicas embed instead of popping. */
-      planted?: boolean }
+      planted?: boolean;
+      /** Body contact (vs terrain) - diagnostics: trajDiv on hits
+       *  measures target render-lag, not arc error. */
+      hit?: boolean }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number;
       /** §4.7 replica lanes keyed by kind name - `hash` the client
@@ -404,7 +407,9 @@ export type ServerMessage =
   // Roster for joiners/reconnects - current segment state of every live ball
   | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; et?: number; slowT?: number; damp?: boolean; t: number }[] }
   // Server-issued RTT probe - the client echoes it back as 'pong'.
-  | { type: 'ping'; timestamp: number }
+  // clk: measured client clock-offset error (ms, + = client behind) -
+  // the asymmetric-link correction stamp+rtt/2 can't express.
+  | { type: 'ping'; timestamp: number; clk?: number }
   | { type: 'pong'; timestamp: number }
   // Server-measured RTT echoed to the probed player - the scoreboard's
   // client/server ping pair; the client number counts its own event-loop

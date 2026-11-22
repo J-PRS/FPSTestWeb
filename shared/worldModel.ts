@@ -371,6 +371,11 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // embed at the contact instead of popping. Never re-derived from
       // position: the wire says so or it didn't happen.
       { name: 'planted', wire: 'bool', channel: 'edge', absent: null },
+      // Body contact (player/creature), not terrain - the contact lives
+      // in server-truth space ~a render-epoch ahead of the replica's
+      // stale capsules, so trajDiv on hits measures target lag, not arc
+      // error. Lets the probe split the populations honestly.
+      { name: 'hit', wire: 'bool', channel: 'edge', absent: null },
     ],
     // Belt-sticky combo: `projectileId` is the RIDER glued dead-center
     // onto `host` - replicas parent to the host's path the same tick.

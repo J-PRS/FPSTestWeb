@@ -220,21 +220,9 @@ const serveOpts = {
       return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow() });
     }
 
-    // P2P signalling: /rtc?room=CODE — two sockets per room, opaque relay.
-    if (url.pathname === '/rtc') {
-      const room = url.searchParams.get('room') ?? '';
-      if (!/^[a-zA-Z0-9_-]{1,32}$/.test(room)) {
-        return new Response('Bad room', { status: 400 });
-      }
-      const open = url.searchParams.get('open') === '1';
-      return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow(), rtc: true, room, open });
-    }
-
-    // Server-peer WebRTC signalling: /rtcs — one shot offer/answer, then
-    // the DataChannel becomes the game socket.
-    if (url.pathname === '/rtcs') {
-      return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow(), rtcs: true });
-    }
+    const rtc = rtcUpgrade(req, srv, url);
+    if (rtc === 'upgraded') {return undefined;}
+    if (rtc) {return rtc;}
 
     // Dev-watch graceful door: Windows kill() is TerminateProcess — no
     // SIGTERM reaches the child, so restart would hard-drop every socket
@@ -255,32 +243,60 @@ const serveOpts = {
       return corsResponse('shutting down', { status: 200 });
     }
 
-    const route = ROUTES[url.pathname];
-    if (route) {return route(url, req);}
-
-    // Prefix routes — path carries params (admin query args, demo filename).
-    if (url.pathname.startsWith('/admin/')) {return adminRoute(httpCtx, req, url);}
-    if (url.pathname.startsWith('/demos/')) {return demoRoute(httpCtx, req, url);}
-    if (url.pathname.startsWith('/leaderboard') || url.pathname === '/challenge') {return leaderboardRoute(httpCtx, req, url);}
-    // Clip-feed deep links — OG card for crawlers, refresh into the client.
-    if (url.pathname === '/clips' || url.pathname.startsWith('/clips/')) {
-      return clipRoute(httpCtx, url);
-    }
-    if (url.pathname.startsWith('/maps/')) {return mapBinRoute(url);}
-    if (url.pathname === '/client-log' && req.method === 'POST') {
-      return clientLogRoute(req, corsResponse, srv.requestIP(req)?.address ?? '');
-    }
-
-    if (url.pathname === '/results' && req.method === 'POST') {
-      return matchResultsRoute(req, corsResponse);
-    }
-
-    return corsResponse('Not found', { status: 404 });
+    return gameHttp(req, url, srv);
   },
 };
 
+/** RTC/P2P upgrade endpoints behind the parked-lane gate (CONFIG.rtcLanes,
+ *  off by default): /rtc = two-socket opaque P2P signalling relay,
+ *  /rtcs = server-peer offer/answer then the DataChannel becomes the
+ *  game socket. 'upgraded' marks a socket that took over (fetch must
+ *  return undefined); undefined falls through to the HTTP routes —
+ *  /rtcconfig and /rtc/lobbies live there so the gate covers them too. */
+function rtcUpgrade(req: Request, srv: Bun.Server<WebSocketData>, url: URL): Response | 'upgraded' | undefined {
+  const isRtcPath = url.pathname === '/rtc' || url.pathname === '/rtcs'
+    || url.pathname === '/rtcconfig' || url.pathname === '/rtc/lobbies';
+  if (!isRtcPath) {return undefined;}
+  // Parked lanes 404 before any upgrade is attempted.
+  if (!CONFIG.rtcLanes) {return corsResponse('Not found', { status: 404 });}
+  if (url.pathname === '/rtc') {
+    const room = url.searchParams.get('room') ?? '';
+    if (!/^[a-zA-Z0-9_-]{1,32}$/.test(room)) {return new Response('Bad room', { status: 400 });}
+    const open = url.searchParams.get('open') === '1';
+    return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow(), rtc: true, room, open }) ?? 'upgraded';
+  }
+  if (url.pathname === '/rtcs') {
+    return wsUpgrade(srv, req, { playerId: '', connectedAt: wallNow(), rtcs: true }) ?? 'upgraded';
+  }
+  // /rtcconfig + /rtc/lobbies are plain HTTP - handled in gameHttp.
+  return undefined;
+}
+
+/** The non-upgrade route tail: exact-match table, then prefix routes
+ *  (path carries params - admin query args, demo filename), then 404.
+ *  Split out of fetch() for the complexity ratchet; same order. */
+function gameHttp(req: Request, url: URL, srv: Bun.Server<WebSocketData>): Response | Promise<Response> | undefined {
+  const route = ROUTES[url.pathname];
+  if (route) {return route(url, req);}
+  if (url.pathname.startsWith('/admin/')) {return adminRoute(httpCtx, req, url);}
+  if (url.pathname.startsWith('/demos/')) {return demoRoute(httpCtx, req, url);}
+  if (url.pathname.startsWith('/leaderboard') || url.pathname === '/challenge') {return leaderboardRoute(httpCtx, req, url);}
+  // Clip-feed deep links - OG card for crawlers, refresh into the client.
+  if (url.pathname === '/clips' || url.pathname.startsWith('/clips/')) {
+    return clipRoute(httpCtx, url);
+  }
+  if (url.pathname.startsWith('/maps/')) {return mapBinRoute(url);}
+  if (url.pathname === '/client-log' && req.method === 'POST') {
+    return clientLogRoute(req, corsResponse, srv.requestIP(req)?.address ?? '');
+  }
+  if (url.pathname === '/results' && req.method === 'POST') {
+    return matchResultsRoute(req, corsResponse);
+  }
+  return corsResponse('Not found', { status: 404 });
+}
+
 const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> =>
-  Bun.serve<WebSocketData>({ port: CONFIG.port, ...serveOpts });
+  Bun.serve<WebSocketData>(Object.assign({ port: CONFIG.port }, serveOpts));
 
 // The reclaim probe is async but no-async-await is repo law — the bind
 // runs as a flat promise chain and `server` stays a late-bound handle
@@ -318,57 +334,67 @@ tryServe(0)
 // stop the WS game, so all errors are logged-and-continue inside start().
 if (CONFIG.wtPort > 0) {
   try {
-    const { readFileSync: rf, existsSync: fileExists } = await import('node:fs');
-    const { createHash, X509Certificate } = await import('node:crypto');
-    // Dev convenience: a checked-in certs/dev.{crt,key} pair means "WT on"
-    // without env wiring — certs/ is dev-only self-signed anyway.
-    const usingDevCert = !CONFIG.wtCertPath;
-    const certPath = CONFIG.wtCertPath || `${import.meta.dir}/../certs/dev.crt`;
-    const keyPath = CONFIG.wtKeyPath || `${import.meta.dir}/../certs/dev.key`;
-    if (!fileExists(certPath) || !fileExists(keyPath)) {
-      logger.warn('WebTransport disabled — no cert/key (env or certs/dev.*)', {});
-    } else {
-    // Chrome pins only certs that are valid AND ≤14-day-lived, so the dev
-    // pair is minted 13-day — and silently bricks the WT tier every two
-    // weeks when it lapses. Dev pair only: regen at <48h to expiry so an
-    // unchecked-in week never degrades the ladder to bare WS again.
-    if (usingDevCert) {
-      const validTo = new Date(new X509Certificate(rf(certPath, 'utf8')).validTo).getTime();
-      if (validTo - Date.now() < 48 * 3600 * 1000) {
-        const { spawnSync } = await import('node:child_process');
-        // EC + CA:FALSE are load-bearing — Chrome refuses
-        // serverCertificateHashes on RSA and CA certs; openssl req -x509
-        // defaults RSA + CA:TRUE, exactly the rejection we hit.
-        const r = spawnSync('openssl', ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-keyout', keyPath, '-out', certPath, '-days', '13', '-nodes', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1', '-addext', 'basicConstraints=critical,CA:FALSE'], { stdio: 'pipe' });
-        if (r.status === 0) {logger.info('WebTransport dev cert regenerated (was expiring <48h)', { validTo });}
-        else {logger.warn('WebTransport dev cert expiring but regen failed — WT tier will degrade', { validTo, stderr: String(r.stderr) });}
-      }
-    }
-    const certPem = rf(certPath, 'utf8');
-    // DER hash is what serverCertificateHashes expects — PEM is just the
-    // base64 wrapper, so decode via X509Certificate to get the raw bytes.
-    const wtOpts = { port: CONFIG.wtPort, certPem, keyPem: rf(keyPath, 'utf8') };
-    // AddrInUse = an orphaned child squatting the QUIC port (the TCP
-    // squatter-killer can't see UDP). Reclaim from bun.exe holders, then
-    // retry with backoff - a just-killed holder's socket takes ~seconds
-    // to release, so one immediate retry still fails and parks the tier
-    // WS-only for the process's whole life.
-    let wtOk = await wtServer.start(wtOpts);
-    for (let retry = 0; !wtOk && retry < 4; retry += 1) {
-      if (retry === 0 && !killUdpPortHolders(CONFIG.wtPort)) {break;}
-      await new Promise((res): void => { setTimeout(res, 1000 * (retry + 1)); });
-      wtOk = await wtServer.start(wtOpts);
-    }
-    // Advertise only a live bind — a failed start leaving the hash set
-    // makes /wthash point clients at a dead UDP port (the flap-era
-    // ERR_CONNECTION_RESET churn that looked like a transport bug).
-    if (wtOk) {wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');}
-    else {wtDisabledWhy = 'bind failed';}
-    }
+    await wtTierBoot();
   } catch (error) {
     wtDisabledWhy = 'cert/key unreadable';
     logger.warn('WebTransport disabled — cert/key unreadable', { error: (error as Error).message });
   }
+}
+
+// Chrome pins only certs that are valid AND ≤14-day-lived, so the dev
+// pair is minted 13-day — and silently bricks the WT tier every two
+// weeks when it lapses. Dev pair only: regen at <48h to expiry so an
+// unchecked-in week never degrades the ladder to bare WS again.
+async function wtCertRegen(certPath: string, keyPath: string): Promise<void> {
+  const { readFileSync: rf } = await import('node:fs');
+  const { X509Certificate } = await import('node:crypto');
+  const validTo = new Date(new X509Certificate(rf(certPath, 'utf8')).validTo).getTime();
+  if (validTo - Date.now() >= 48 * 3600 * 1000) {return;}
+  const { spawnSync } = await import('node:child_process');
+  // EC + CA:FALSE are load-bearing — Chrome refuses
+  // serverCertificateHashes on RSA and CA certs; openssl req -x509
+  // defaults RSA + CA:TRUE, exactly the rejection we hit.
+  const r = spawnSync('openssl', ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-keyout', keyPath, '-out', certPath, '-days', '13', '-nodes', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1', '-addext', 'basicConstraints=critical,CA:FALSE'], { stdio: 'pipe' });
+  if (r.status === 0) {logger.info('WebTransport dev cert regenerated (was expiring <48h)', { validTo });}
+  else {logger.warn('WebTransport dev cert expiring but regen failed — WT tier will degrade', { validTo, stderr: String(r.stderr) });}
+}
+
+async function wtTierBoot(): Promise<void> {
+  const { readFileSync: rf, existsSync: fileExists } = await import('node:fs');
+  const { createHash, X509Certificate } = await import('node:crypto');
+  // Dev convenience: a checked-in certs/dev.{crt,key} pair means "WT on"
+  // without env wiring — certs/ is dev-only self-signed anyway.
+  const certPath = CONFIG.wtCertPath || `${import.meta.dir}/../certs/dev.crt`;
+  const keyPath = CONFIG.wtKeyPath || `${import.meta.dir}/../certs/dev.key`;
+  if (!fileExists(certPath) || !fileExists(keyPath)) {
+    logger.warn('WebTransport disabled — no cert/key (env or certs/dev.*)', {});
+    return;
+  }
+  // Regen runs for env-pinned pairs too: prod uses the same self-signed
+  // EC shape, and Chrome's <=14-day pin window makes every pinnable cert
+  // self-signed by necessity. A real CA cert (90d+) never reaches the
+  // <48h trigger inside wtCertRegen, so this is safe unconditionally.
+  await wtCertRegen(certPath, keyPath);
+  const certPem = rf(certPath, 'utf8');
+  // DER hash is what serverCertificateHashes expects — PEM is just the
+  // base64 wrapper, so decode via X509Certificate to get the raw bytes.
+  const wtOpts = { port: CONFIG.wtPort, certPem, keyPem: rf(keyPath, 'utf8') };
+  // AddrInUse = an orphaned child squatting the QUIC port (the TCP
+  // squatter-killer can't see UDP). Reclaim from bun.exe holders, then
+  // retry with backoff - a just-killed holder's socket takes ~seconds
+  // to release, so one immediate retry still fails and parks the tier
+  // WS-only for the process's whole life.
+  let wtOk = await wtServer.start(wtOpts);
+  for (let retry = 0; !wtOk && retry < 4; retry += 1) {
+    if (retry === 0 && !killUdpPortHolders(CONFIG.wtPort)) {break;}
+    await new Promise((res): void => { setTimeout(res, 1000 * (retry + 1)); });
+    wtOk = await wtServer.start(wtOpts);
+  }
+  // Advertise only a live bind — a failed start leaving the hash set
+  // makes /wthash point clients at a dead UDP port (the flap-era
+  // ERR_CONNECTION_RESET churn that looked like a transport bug).
+  if (wtOk) {wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');}
+  else {wtDisabledWhy = 'bind failed';}
 }
 
 // Direct wss tier - opt-in via env (FPS_TLS_PORT + cert/key paths): a
@@ -387,11 +413,10 @@ if (CONFIG.tlsCertPath || CONFIG.tlsKeyPath) {
     } else {
       const bindTls = (): ReturnType<typeof Bun.serve<WebSocketData>> | null => {
         try {
-          return Bun.serve<WebSocketData>({
+          return Bun.serve<WebSocketData>(Object.assign({
             port: CONFIG.tlsPort,
             tls: { cert: Bun.file(certPath), key: Bun.file(keyPath) },
-            ...serveOpts,
-          });
+          }, serveOpts));
         } catch (error) {
           logger.warn('Direct TLS bind failed', { error: (error as Error).message });
           return null;

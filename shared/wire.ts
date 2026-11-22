@@ -1222,13 +1222,17 @@ export interface WireProjGone {
    *  Trailing cause byte 2; old readers see a normal despawn, which is
    *  the honest fallback (vanish) anyway. */
   planted?: boolean;
+  /** Body contact (vs terrain) - trailing flags byte bit0 after the
+   *  cause byte. Diagnostics only: lets trajDiv split server-truth
+   *  body contacts from world contacts honestly. */
+  hit?: boolean;
 }
 
 export function encodeProjGone(g: WireProjGone): Uint8Array {
   const sid = g.shotId === undefined ? null : ENC.encode(g.shotId);
   let cause = 0;
   if (g.fizzle) {cause = 1;} else if (g.planted) {cause = 2;}
-  const len = 22 + (sid ? 1 + sid.length : 0) + (cause ? 1 : 0);
+  const len = 22 + (sid ? 1 + sid.length : 0) + (cause || g.hit ? 1 : 0) + (g.hit ? 1 : 0);
   const { u8, dv } = evScratch(len);
   const b = u8.byteOffset;
   let o = 0;
@@ -1237,7 +1241,8 @@ export function encodeProjGone(g: WireProjGone): Uint8Array {
   dv.setFloat32(b + o, g.age, true); o += 4;
   dv.setFloat32(b + o, g.position.x, true); dv.setFloat32(b + o + 4, g.position.y, true); dv.setFloat32(b + o + 8, g.position.z, true); o += 12;
   if (sid) { u8[o] = sid.length; o += 1; u8.set(sid, o); o += sid.length; }
-  if (cause) { u8[o] = cause; }
+  if (cause || g.hit) { u8[o] = cause; o += 1; }
+  if (g.hit) { u8[o] = 1; }
   return u8.subarray(0, len);
 }
 
@@ -1255,8 +1260,9 @@ export function decodeProjGone(u8: Uint8Array): WireProjGone | null {
     shotId = DEC.decode(u8.subarray(o, o + n)); o += n;
   }
   if (!Number.isFinite(age) || !Number.isFinite(position.x + position.y + position.z)) {return null;}
-  const cause = o < u8.length ? d.getUint8(o) : 0;
-  return { projId, age, position, shotId, fizzle: cause === 1, planted: cause === 2 };
+  const cause = o < u8.length ? d.getUint8(o) : 0; if (o < u8.length) {o += 1;}
+  const flags = o < u8.length ? d.getUint8(o) : 0;
+  return { projId, age, position, shotId, fizzle: cause === 1, planted: cause === 2, hit: (flags & 1) !== 0 || undefined };
 }
 
 

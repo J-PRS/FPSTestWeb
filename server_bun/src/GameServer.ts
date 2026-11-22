@@ -51,6 +51,9 @@ const FAST_MSG_TYPES = new Set([
   'ping', 'pong', 'clientStats', 'tickNack',
   'position', 'inputMove', 'teleport', 'jump', 'jetpack',
 ]);
+/** Marker `parseJsonOr` returns on bad frames - a Symbol so a parsed
+ *  payload can never collide with it. */
+const PARSE_FAIL = Symbol('json-parse-fail');
 
 export class GameServer {
   // One match's state per room - players land in 'default' unless the join
@@ -300,11 +303,32 @@ export class GameServer {
   /** Unseated sockets per source IP: upgraded but not yet joined.
    *  Cap bounds the held-zombie flood the kernel SYN rate can't see. */
   private pendingByIp = new Map<string, Set<ServerWebSocket<WebSocketData>>>();
+  /** Completed joins per egress IP - a proven address earns pending
+   *  headroom. A school NAT puts hundreds of real players behind one
+   *  egress and a flat cap locks them out exactly when they pile in;
+   *  a never-joined IP still gets the small flood cap. */
+  private provenByIp = new Map<string, number>();
   private static readonly PENDING_PER_IP = 8;
+  private static readonly PENDING_PROVEN_MAX = 64;
+  private static readonly PROVEN_IPS_CAP = 4096;
 
   unseatAllow(ip: string | undefined): boolean {
     const s = ip === undefined ? undefined : this.pendingByIp.get(ip);
-    return s === undefined || s.size < GameServer.PENDING_PER_IP;
+    const proven = ip === undefined ? 0 : (this.provenByIp.get(ip) ?? 0);
+    const cap = Math.min(GameServer.PENDING_PER_IP + proven, GameServer.PENDING_PROVEN_MAX);
+    return s === undefined || s.size < cap;
+  }
+
+  /** A socket leaving the pending ledger with a seat proves its egress -
+   *  closing the tab pre-join (seated=false) proves nothing. */
+  private leavePending(ws: ServerWebSocket<WebSocketData>, ip: string | undefined, seated: boolean): void {
+    const s = ip === undefined ? undefined : this.pendingByIp.get(ip);
+    if (!s?.delete(ws)) {return;}
+    if (seated) {
+      this.provenByIp.set(ip!, (this.provenByIp.get(ip!) ?? 0) + 1);
+      if (this.provenByIp.size > GameServer.PROVEN_IPS_CAP) {evictEldest(this.provenByIp);}
+    }
+    if (s.size === 0) {this.pendingByIp.delete(ip!);}
   }
 
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
@@ -338,9 +362,7 @@ export class GameServer {
     // stamps playerId deep in SessionManager, so the first message that
     // reads one is the seat signal.
     if (ws.data.playerId) {
-      const ip = ws.data.clientIp ?? ws.remoteAddress;
-      const s = ip ? this.pendingByIp.get(ip) : undefined;
-      if (s?.delete(ws) && s.size === 0) {this.pendingByIp.delete(ip!);}
+      this.leavePending(ws, ws.data.clientIp ?? ws.remoteAddress, true);
     }
     try {
     // Wrap first: the binary metering tag needs byte 1 - a DataView +
@@ -398,64 +420,14 @@ export class GameServer {
           this.onJsonText(ws, text);
           return;
         }
-        // Per-socket decode slot: ~30Hz × n frames' worth of object churn
-        // becomes zero-alloc. Every consumer copies field-wise inside the
-        // handler - nothing may retain `pos` past this call.
-        // The binary input path: inputMove edges ride the same lane as
-        // position reports - the change-only journal lands ~50ms fresher
-        // than the JSON stream it duplicates (edge timing = replay fidelity).
-        // Binary claims - the decoders' bounded reads + finite checks
-        // ARE the validation, same trusted dispatch as position frames.
-        if (u8[1] === WIRE_JUMP || u8[1] === WIRE_JETPACK) {
-          const c = decodePosClaim(u8, u8[1]!);
-          if (c) {
-            try {
-              this.handleGameMessageTrusted(room, existingId, { type: u8[1] === WIRE_JUMP ? 'jump' : 'jetpack', position: c.position });
-            } catch (error) {
-              logger.error('Message handler failed', { playerId: existingId, type: 'posClaim(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
-              try { onFatal(); } catch { /* socket already dying */ }
-            }
-          }
-          return;
-        }
-        if (u8[1] === WIRE_SHOT) {
-          const s = decodeShot(u8);
-          if (s) {
-            try {
-              this.handleGameMessageTrusted(room, existingId, { type: 'shotFired', weaponType: s.weaponType, pos: s.pos, dir: s.dir, shotId: s.shotId, fireAt: s.fireAt });
-            } catch (error) {
-              logger.error('Message handler failed', { playerId: existingId, type: 'shotFired(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
-              try { onFatal(); } catch { /* socket already dying */ }
-            }
-          }
-          return;
-        }
-        if (u8[1] === WIRE_INPUTMOVE) {
-          const im = decodeInputMove(u8);
-          if (im) {
-            try {
-              this.handleGameMessageTrusted(room, existingId, im);
-            } catch (error) {
-              logger.error('Message handler failed', { playerId: existingId, type: 'inputMove(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
-              try { onFatal(); } catch { /* socket already dying */ }
-            }
-          }
-          return;
-        }
-        const pos = decodePosition(u8, data.posScratch ??= {
-          type: 'position',
-          position: { x: 0, y: 0, z: 0 },
-          rotation: { yaw: 0, pitch: 0 },
-          velocity: { x: 0, y: 0, z: 0 },
-          seq: 0, ping: 0,
-        });
-        if (pos) {
+        const msg = this.decodeBinaryMessage(u8, data);
+        if (msg) {
           // Same containment as the JSON lane - a throwing handler drops
           // this socket, not the process.
           try {
-            this.handleGameMessageTrusted(room, existingId, pos);
+            this.handleGameMessageTrusted(room, existingId, msg);
           } catch (error) {
-            logger.error('Message handler failed', { playerId: existingId, type: 'position(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
+            logger.error('Message handler failed', { playerId: existingId, type: `binary:${msg.type}`, err: error instanceof Error ? error.stack ?? error.message : String(error) });
             try { onFatal(); } catch { /* socket already dying */ }
           }
         }
@@ -463,70 +435,125 @@ export class GameServer {
     }
   }
 
-  /** The text/JSON path - WS strings and WIRE_JSON frames share it. */
-  private onJsonText(ws: ServerWebSocket<WebSocketData>, text: string): void {
-    const message = text;
-    // Pre-join CPU guard: an unseated socket's only legitimate frame is
-    // the (small) join handshake - unlimited 1MB JSON parses are free DoS.
-    if (!ws.data.playerId) {
-      ws.data.preJoin = (ws.data.preJoin ?? 0) + 1;
-      if (message.length > 64 * 1024 || ws.data.preJoin > 16) {
-        ws.close(1008, 'pre-join flood');
-        return;
+  /** Binary-frame decode: kind to ClientMessage, one trusted dispatch
+   *  for every lane. The decoders' bounded reads + finite checks ARE the
+   *  validation - null = malformed frame, dropped silently (the meter
+   *  already counted it). Per-socket `posScratch` keeps the ~30Hz x n
+   *  position path zero-alloc - nothing may retain the decoded message
+   *  past the dispatch call. inputMove edges ride this lane for timing:
+   *  the change-only journal lands ~50ms fresher than the JSON stream it
+   *  duplicates. New binary kinds = a case here, not a new block. */
+  private decodeBinaryMessage(u8: Uint8Array, data: WebSocketData): ClientMessage | null {
+    switch (u8[1]) {
+      case WIRE_JUMP:
+      case WIRE_JETPACK: {
+        const c = decodePosClaim(u8, u8[1]!);
+        return c ? { type: u8[1] === WIRE_JUMP ? 'jump' : 'jetpack', position: c.position } as ClientMessage : null;
+      }
+      case WIRE_SHOT: {
+        const s = decodeShot(u8);
+        return s ? { type: 'shotFired', weaponType: s.weaponType, pos: s.pos, dir: s.dir, shotId: s.shotId, fireAt: s.fireAt } as ClientMessage : null;
+      }
+      case WIRE_INPUTMOVE: {
+        return decodeInputMove(u8);
+      }
+      default: {
+        if (!data.posScratch) {
+          data.posScratch = {
+            type: 'position',
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { yaw: 0, pitch: 0 },
+            velocity: { x: 0, y: 0, z: 0 },
+            seq: 0, ping: 0,
+          };
+        }
+        return decodePosition(u8, data.posScratch);
       }
     }
-    let raw!: unknown; // oxlint-disable-line init-declarations -- assigned in try/catch below
+  }
+
+  /** A seated id with no player room is a spectator or a still-connecting
+   *  seat (join deferred on terrainReady). Returns the spec room for verbs
+   *  spectators legitimately send, 'handled' when it dispatched a re-intent,
+   *  'drop' for everything else. Spectators are read-only EXCEPT the verbs
+   *  that serve them too: ping/pong (their RTT probe), clientStats,
+   *  snapshotRequest/resync (a gapped spec otherwise desyncs permanently),
+   *  tickNack (scoped to their own intro window by nackFor, not room-wide).
+   *  A spectator's join is a real join intent - the AFK-demoted tab's
+   *  reseat() lands here, and seatJoiner evicts the spec seat for the same
+   *  id; swallowing it ghosts the client forever. A still-connecting seat's
+   *  join/switchRoom are re-intents, not noise - swallowing them locks the
+   *  client to whatever room the stale deferred seat lands in. Returns
+   *  undefined when the message was consumed (dispatched or dropped). */
+  private specGate(ws: ServerWebSocket<WebSocketData>, existingPlayerId: string, raw: unknown): Room | undefined {
+    const spec = this.specRooms.get(existingPlayerId);
+    const t = (raw as { type?: string }).type;
+    if (spec && t === 'join') {this.handleHandshake(ws, raw); return undefined;}
+    if (!spec && this.registry.state(existingPlayerId) === 'connecting') {
+      if (t === 'join') {this.handleHandshake(ws, raw); return undefined;}
+      if (t === 'switchRoom') {this.switcher.switchRoom(ws, existingPlayerId, raw); return undefined;}
+    }
+    if (!spec || !GameServer.SPEC_VERBS.has(t ?? '')) {return undefined;}
+    return spec;
+  }
+
+  /** Seated-socket dispatch: room hops cross room ownership so they are
+   *  handled at the dispatcher, not inside one room's MessageHandler. */
+  private dispatchSeated(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, raw: unknown): void {
+    if ((raw as { type?: string }).type === 'switchRoom') {
+      this.switcher.switchRoom(ws, playerId, raw);
+      return;
+    }
+    this.handleGameMessage(room, playerId, raw, ws);
+  }
+
+  /** Pre-join CPU guard: an unseated socket's only legitimate frame is the
+   *  (small) join handshake - unlimited 1MB JSON parses are free DoS. */
+  private preJoinFlood(ws: ServerWebSocket<WebSocketData>, len: number): boolean {
+    if (ws.data.playerId) {return false;}
+    ws.data.preJoin = (ws.data.preJoin ?? 0) + 1;
+    if (len > 64 * 1024 || ws.data.preJoin > 16) {
+      ws.close(1008, 'pre-join flood');
+      return true;
+    }
+    return false;
+  }
+
+  /** Parse failure costs only its own sender. Sentinel instead of null so
+   *  a legitimate `null` message still reaches the shape checks below. */
+  private parseJsonOr(ws: ServerWebSocket<WebSocketData>, text: string): unknown {
     try {
-      raw = JSON.parse(text);
+      return JSON.parse(text);
     } catch {
       this.invalidWarn(ws.data.playerId, 'Failed to parse JSON');
       this.garbageStrike(ws);
-      return;
+      return PARSE_FAIL;
     }
+  }
+
+  /** The text/JSON path - WS strings and WIRE_JSON frames share it. */
+  private onJsonText(ws: ServerWebSocket<WebSocketData>, text: string): void {
+    const message = text;
+    if (this.preJoinFlood(ws, message.length)) {return;}
+    const raw = this.parseJsonOr(ws, text);
+    if (raw === PARSE_FAIL) {return;}
 
     const existingPlayerId = ws.data.playerId;
-    let room = existingPlayerId ? this.roomOfPlayer(existingPlayerId) : undefined;
-    if (existingPlayerId && !room) {
-      // Spectators are read-only EXCEPT the verbs that serve them too:
-      // ping/pong (their RTT probe), clientStats, snapshotRequest/resync
-      // (a gapped spec otherwise desyncs permanently), tickNack (scoped
-      // to their own intro window by nackFor, not room-wide).
-      room = this.specRooms.get(existingPlayerId);
-      // A spectator's join is a real join intent - the AFK-demoted tab's
-      // reseat() lands here, and seatJoiner evicts the spec seat for the
-      // same id. Swallowing it ghosts the client forever (everyone-red,
-      // teamless UI - the seat never comes back).
-      if (room && (raw as { type?: string }).type === 'join') {this.handleHandshake(ws, raw); return;}
-      // A still-connecting seat (join deferred on terrainReady) has no
-      // room yet - join/switchRoom from it are re-intents, not noise.
-      // Swallowing them here locks the client to whatever room the stale
-      // deferred seat lands in (the hop-during-load hole).
-      if (!room && this.registry.state(existingPlayerId) === 'connecting') {
-        const t = (raw as { type?: string }).type;
-        if (t === 'join') {this.handleHandshake(ws, raw); return;}
-        if (t === 'switchRoom') {this.switcher.switchRoom(ws, existingPlayerId, raw); return;}
-      }
-      if (!room || !GameServer.SPEC_VERBS.has((raw as { type?: string }).type ?? '')) {return;}
-    }
+    const room = existingPlayerId
+      ? this.roomOfPlayer(existingPlayerId) ?? this.specGate(ws, existingPlayerId, raw)
+      : undefined;
+    if (existingPlayerId && !room) {return;}
 
     // A bad message must only cost its own sender - anything downstream
     // that throws (handler bug, malformed fields the shape checks missed)
     // logs the player + message type and drops that socket, not the process.
     try {
-    if (!existingPlayerId || !room) {
+    if (!room || !existingPlayerId) {
       this.handleHandshake(ws, raw);
       return;
     }
 
-    // A room hop crosses room ownership - handle it at the dispatcher, not
-    // inside one room's MessageHandler.
-    const probe = raw as { type?: string };
-    if (probe.type === 'switchRoom') {
-      this.switcher.switchRoom(ws, existingPlayerId, raw);
-      return;
-    }
-
-    this.handleGameMessage(room, existingPlayerId, raw, ws);
+    this.dispatchSeated(ws, room, existingPlayerId, raw);
     } catch (error) {
       const t = (raw as { type?: string })?.type ?? '?';
       logger.error('Message handler failed', { playerId: existingPlayerId, type: t, err: error instanceof Error ? error.stack ?? error.message : String(error) });
@@ -541,11 +568,7 @@ export class GameServer {
     const {playerId} = ws.data;
     // Leave the unseated ledger unconditionally: a socket that seated on
     // its join frame and sent nothing since still holds a pending entry.
-    {
-      const ip = ws.data.clientIp ?? ws.remoteAddress;
-      const s = ip ? this.pendingByIp.get(ip) : undefined;
-      if (s?.delete(ws) && s.size === 0) {this.pendingByIp.delete(ip!);}
-    }
+    this.leavePending(ws, ws.data.clientIp ?? ws.remoteAddress, Boolean(playerId));
     if (!playerId) {return;}
     // Throttle entries keyed by playerId must die with the socket -
     // otherwise they linger until the 4096 wholesale clear, which also
@@ -773,41 +796,50 @@ export class GameServer {
         roomModsOf(rs as RoomMods));
       if (!room) {continue;}
       for (const ps of rs.players) {
-        if (!ps || typeof ps.id !== 'string' || typeof ps.token !== 'string') {continue;}
-        // A corrupt blob must not seed NaN bodies into a live room.
-        if (!ps.pos || !Number.isFinite(ps.pos.x) || !Number.isFinite(ps.pos.y) || !Number.isFinite(ps.pos.z)) {continue;}
-        if (ps.vel && !(Number.isFinite(ps.vel.x) && Number.isFinite(ps.vel.y) && Number.isFinite(ps.vel.z))) {continue;}
-        if (ps.health !== undefined && !Number.isFinite(ps.health)) {continue;}
-        if (room.players.getPlayer(ps.id)) {continue;}
-        let armor = ps.armorClass ?? 'medium';
-        if (room.mods.instagib === true) {armor = 'light';}
-        else if (room.mods.igun === true) {armor = 'medium';}
-        const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', armor);
-        p.position = Object.assign({}, ps.pos);
-        p.velocity = Object.assign({}, ps.vel);
-        p.rotation.yaw = ps.yaw ?? 0;
-        p.rotation.pitch = ps.pitch ?? 0;
-        p.lastValidPosition = Object.assign({}, ps.pos);
-        if (typeof ps.health === 'number') {p.health = ps.health;}
-        p.isDead = ps.isDead === true;
-        p.pendingRespawn = p.isDead;
-        p.name = ps.name;
-        // Banked mid-match picks ride the blob - a restart must not eat
-        // the classUpdate/perkUpdate the player was owed at next life.
-        p.pendingClass = room.mods.instagib !== true && room.mods.igun !== true && (ps.pendingClass === 'light' || ps.pendingClass === 'medium' || ps.pendingClass === 'heavy') ? ps.pendingClass : undefined;
-        p.pendingPerk = ps.pendingPerk;
-        // A mid-fight seat, not a fresh spawn - no protection bubble.
-        p.protectedUntil = simMs(0);
-        room.sessionTokens.set(ps.id, ps.token);
-        this.playerRoom.set(ps.id, room);
-        this.registry.seedGrace(ps.id, room.name, this.reconnectGraceMs,
-          (): void => this.removePlayerCompletely(room, ps.id, 'grace period'));
-        room.messages.onPlayerDisconnected(ps.id);
-seated += 1;
+        if (ps && this.restoreSeat(room, ps)) {seated += 1;}
       }
       logger.info('Restored seats across restart', { room: room.name, players: rs.players.length });
     }
     if (seated) {logger.info('Restart restore complete', { seats: seated });}
+  }
+
+  /** Shape gate for one restart seat: a corrupt blob must not seed NaN
+   *  bodies into a live room. */
+  private static badSeat(ps: RestoreSeat): boolean {
+    if (typeof ps.id !== 'string' || typeof ps.token !== 'string') {return true;}
+    if (!ps.pos || !Number.isFinite(ps.pos.x) || !Number.isFinite(ps.pos.y) || !Number.isFinite(ps.pos.z)) {return true;}
+    if (ps.vel && !(Number.isFinite(ps.vel.x) && Number.isFinite(ps.vel.y) && Number.isFinite(ps.vel.z))) {return true;}
+    return ps.health !== undefined && !Number.isFinite(ps.health);
+  }
+
+  /** One seat out of the restart blob - false skips the seat. */
+  private restoreSeat(room: Room, ps: RestoreSeat): boolean {
+    if (GameServer.badSeat(ps) || room.players.getPlayer(ps.id)) {return false;}
+    let armor = ps.armorClass ?? 'medium';
+    if (room.mods.instagib === true) {armor = 'light';}
+    else if (room.mods.igun === true) {armor = 'medium';}
+    const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', armor);
+    p.position = Object.assign({}, ps.pos);
+    p.velocity = Object.assign({}, ps.vel);
+    p.rotation.yaw = ps.yaw ?? 0;
+    p.rotation.pitch = ps.pitch ?? 0;
+    p.lastValidPosition = Object.assign({}, ps.pos);
+    if (typeof ps.health === 'number') {p.health = ps.health;}
+    p.isDead = ps.isDead === true;
+    p.pendingRespawn = p.isDead;
+    p.name = ps.name;
+    // Banked mid-match picks ride the blob - a restart must not eat the
+    // classUpdate/perkUpdate the player was owed at next life.
+    p.pendingClass = room.mods.instagib !== true && room.mods.igun !== true && (ps.pendingClass === 'light' || ps.pendingClass === 'medium' || ps.pendingClass === 'heavy') ? ps.pendingClass : undefined;
+    p.pendingPerk = ps.pendingPerk;
+    // A mid-fight seat, not a fresh spawn - no protection bubble.
+    p.protectedUntil = simMs(0);
+    room.sessionTokens.set(ps.id, ps.token);
+    this.playerRoom.set(ps.id, room);
+    this.registry.seedGrace(ps.id, room.name, this.reconnectGraceMs,
+      (): void => this.removePlayerCompletely(room, ps.id, 'grace period'));
+    room.messages.onPlayerDisconnected(ps.id);
+    return true;
   }
 
   stop(): void {
