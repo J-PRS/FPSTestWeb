@@ -3,11 +3,13 @@
  * an enemy marker is a privilege of DETECTION, not a roster echo.
  *
  * Two sight channels feed one per-viewer contact table:
- *  - personal LOS: every ~1s each living non-bot player sweeps hostiles
- *    inside SIGHT_M through the shared botLos march (terrain + structure
- *    occlusion, memoized). A sighting lands on every teammate's table at
- *    BASE linger (the loose/shared read) AND on the observer's own table
- *    at perk-scaled linger (recon remembers longer, nobody else does).
+ *  - eyes: every ~1s each living player - human AND bot - sweeps
+ *    hostiles inside SIGHT_M through the shared botLos march (terrain +
+ *    structure occlusion, memoized; bots already pay the same march in
+ *    their own senses, so allied eyes are nearly free). A sighting
+ *    lands on every teammate's table at BASE linger (the loose/shared
+ *    read) AND on the observer's own table at perk-scaled linger (recon
+ *    remembers longer, nobody else does; bots' own tables go unread).
  *  - sensor masts: tickSensor's pulse sweep calls noteSensor(), which
  *    stamps the same base linger for the owning side.
  *
@@ -129,7 +131,7 @@ export class RoomIntel {
     const players = [...this.room.players.getAllPlayers().values()] as unknown as Row[];
     const sight2 = SIGHT_M * SIGHT_M;
     for (const v of players) {
-      if (v.isDead || v.isBot) {continue;}
+      if (v.isDead) {continue;}
       this.sweepObserver(v, players, teams, sight2, now);
     }
     this.emit(now, players);

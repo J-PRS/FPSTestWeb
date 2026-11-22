@@ -25,6 +25,18 @@ describe('scenario: intel IFF', () => {
     expect(has(room, 'spot', 'mate')).toBe(false); // teammates never marked
   });
 
+  it('a bot ally shares his sighting to human teammates', () => {
+    const room = mkRoom({}, 'tdm');
+    room.players.addPlayer('bot', 'alpha', 'none', 'medium', true);
+    room.players.addPlayer('me', 'alpha', 'none', 'medium');
+    room.players.addPlayer('foe', 'bravo', 'none', 'medium');
+    pin(room, 'bot', { x: 0, y: 30, z: 0 });
+    pin(room, 'me', { x: 0, y: 30, z: 400 }); // far away - my own eyes see nothing
+    pin(room, 'foe', { x: 0, y: 30, z: 50 }); // visible to the bot only
+    step(room, 30);
+    expect(has(room, 'me', 'foe')).toBe(true);
+  });
+
   it('a structure between sightline and target blocks detection', () => {
     const room = mkRoom({
       structures: [{ kind: 'box', pos: { x: 0, y: 20, z: 25 }, size: { x: 20, y: 30, z: 4 } }],
