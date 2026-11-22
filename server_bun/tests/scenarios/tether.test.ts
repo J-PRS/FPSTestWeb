@@ -26,7 +26,7 @@ describe('scenario: tether snare', () => {
     pin(room, 'engi', { x: 20, y: 0, z: 0 });
     engi.beltCharges = 10;
     expect(room.deployables.handleDeploy('engi', 'tether', { x: 30, y: 0, z: 0 })).toBe(true);
-    room.moveSim.track('runner', { x: 35.8, y: 0, z: 0 }, 0, undefined, sideOfRunner);
+    room.moveSim.track('runner', { x: 35.8, y: 0, z: 0 }, 0, { team: sideOfRunner });
     pin(room, 'runner', { x: 35.8, y: 0, z: 0 });
     room.moveSim.applyImpulse('runner', { x: 40, y: 0, z: 0 });
     return room;

@@ -14,7 +14,7 @@ describe('scenario: held jet rides the tick frame', () => {
     const p = firstPlayer(room);
     seat(room, p.id);
     pin(room, p.id, { x: 0, y: 31, z: 0 });
-    room.moveSim.track(p.id, p.position, 0, p.perk);
+    room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
 
     // Mount the production fanout as a sim and capture the spectator's
     // binary frame (same path replica() uses — wireIds roster + v3 ticks).

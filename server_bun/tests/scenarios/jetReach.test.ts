@@ -30,7 +30,7 @@ function jetTrial(cls: ArmorClass, input: Partial<MoveInput>): Trial {
   // addPlayer doesn't seed a move shadow — humans get one via the join
   // message path; here the sim has to be tracked + bodied like the
   // roster's applyClass does, or the jet thrust divides by mass 1.
-  room.moveSim.track(p.id, p.position, 0, p.perk);
+  room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
   room.moveSim.setSpeedScale(p.id, st.speedScale);
   room.moveSim.setBody(p.id, st.mass, st.eyeHeight, st.radius);
   room.moveSim.setInput(p.id, input);
@@ -40,10 +40,10 @@ function jetTrial(cls: ArmorClass, input: Partial<MoveInput>): Trial {
     // First-empty time is the fuel-law check: after that the tank
     // sputters (regen 8/s vs drain 15/s), so "ticks with fuel" would
     // measure the equilibrium flicker, not the burn.
-    if (dryAt < 0 && (room.moveSim.energyOf(p.id) ?? 0) <= 0) dryAt = i * DT;
+    if (dryAt < 0 && (room.moveSim.energyOf(p.id) ?? 0) <= 0) {dryAt = i * DT;}
     step(room, 1, DT);
-    const y = room.moveSim.simState(p.id)!.pos.y;
-    if (y > peak) peak = y;
+    const {y} = room.moveSim.simState(p.id)!.pos;
+    if (y > peak) {peak = y;}
   }
   return { height: peak - (FLOOR + st.eyeHeight), dryAt };
 }
@@ -64,7 +64,7 @@ describe('scenario: jet reach per class', () => {
     // 60 energy ÷ 15/s drain — the fuel law is class-blind by design;
     // only thrust accel differs (mass). ±0.1s for tick granularity.
     for (const m of [standstill, jumpstart])
-      for (const [, t] of m) expect(t.dryAt).toBeCloseTo(ENERGY.max / ENERGY.jetDrain, 1);
+      {for (const [, t] of m) {expect(t.dryAt).toBeCloseTo(ENERGY.max / ENERGY.jetDrain, 1);}}
   });
 
   it('standstill: every class lifts off — and orders by mass', () => {
@@ -72,7 +72,7 @@ describe('scenario: jet reach per class', () => {
     // so the pack launches from a stand now. Light should get real
     // altitude; heavy just needs to break the dead-zone — and the
     // ordering must stay strict.
-    for (const cls of CLASSES) expect(standstill.get(cls)!.height).toBeGreaterThan(1);
+    for (const cls of CLASSES) {expect(standstill.get(cls)!.height).toBeGreaterThan(1);}
     expect(standstill.get('light')!.height).toBeGreaterThan(20);
     expect(standstill.get('light')!.height).toBeGreaterThan(standstill.get('medium')!.height);
     expect(standstill.get('medium')!.height).toBeGreaterThan(standstill.get('heavy')!.height);
@@ -91,6 +91,6 @@ describe('scenario: jet reach per class', () => {
     // 20s of held jet can't produce runaway altitude: once dry there's
     // only gravity. Peak must sit under the no-drag ballistic ceiling.
     for (const m of [standstill, jumpstart])
-      for (const [, t] of m) expect(t.height).toBeLessThan(500);
+      {for (const [, t] of m) {expect(t.height).toBeLessThan(500);}}
   });
 });

@@ -93,6 +93,14 @@ export interface Shadow {
    *  can't buy tolerance since it must fool BOTH channels. */
   clientTransitEma: number;
   serverTransitEma: number;
+  /** Ping/pong-only uplink channel (rtt/2), kept unblended so fireAt
+   *  claims can be measured against an independent estimate. */
+  pongTransitEma: number;
+  /** EMA of (fireAt-derived uplink - pongTransitEma): the client's
+   *  serverNowMs offset error. ~0 on a symmetric synced link; a
+   *  persistent sign means every clock-bounded gate skews that way. */
+  uplinkBias: number;
+  uplinkBiasN: number;
   /** EMA of |sample − transitEma| on the active channel — link jitter.
    *  The correction lead scales DOWN as variance rises: the EMA is the
    *  best guess for a stable link, but on a jittery one the snap

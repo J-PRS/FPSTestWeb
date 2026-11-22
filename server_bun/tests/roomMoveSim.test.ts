@@ -175,7 +175,7 @@ describe('RoomMoveSim', () => {
     const base = new RoomMoveSim(flat);
     const feat = new RoomMoveSim(flat);
     base.track('b', { x: 0, y: 0, z: 0 }, 0);
-    feat.track('f', { x: 0, y: 0, z: 0 }, 0, 'featherjets');
+    feat.track('f', { x: 0, y: 0, z: 0 }, 0, { perk: 'featherjets' });
     base.setInput('b', { jetHeld: true });
     feat.setInput('f', { jetHeld: true });
     // At 5s the base tank (60/15=4s) is dry; featherjets (60/10.5≈5.7s)
@@ -482,5 +482,24 @@ describe('RoomMoveSim', () => {
     // Untracked ids are a no-op.
     m.feedUplink('ghost', 80);
     expect(m.transitOf('ghost')).toBe(0);
+  });
+
+  test('uplinkBias measures fireAt uplink against the unblended pong channel', () => {
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    // Pong channel only — uplink samples alone never seed the bias base.
+    for (let i = 0; i < 5; i++) {m.feedUplink('p1', 100);}
+    expect(m.uplinkBiasStats().n).toBe(0);
+    // rtt 40 → pong transit 20; a matching uplink stream biases ~0.
+    for (let i = 0; i < 5; i++) {m.feedTransit('p1', 40);}
+    for (let i = 0; i < 30; i++) {m.feedUplink('p1', 20);}
+    expect(Math.abs(m.uplinkBiasStats().avg)).toBeLessThan(5);
+    // Uplink running long vs pong rtt/2 = under-dated fireAt (client
+    // offset behind server truth): a positive drift.
+    for (let i = 0; i < 30; i++) {m.feedUplink('p1', 60);}
+    const b = m.uplinkBiasStats();
+    expect(b.n).toBe(1);
+    expect(b.avg).toBeGreaterThan(20);
+    expect(b.maxAbs).toBeGreaterThan(20);
   });
 });

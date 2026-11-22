@@ -98,7 +98,7 @@ export function replayJournal(events: JournalEv[], sim: RoomMoveSim, hashFn: () 
  *  the caller stops replay there (t is the divergence tick). */
 function applyJournalEv(sim: RoomMoveSim, ev: JournalEv, hashFn: () => number): boolean {
   switch (ev.kind) {
-    case 'track': {sim.track(ev.pid, ev.pos, ev.yaw, ev.perk, ev.team, ev.bot, ev.armorClass); return false;}
+    case 'track': {sim.track(ev.pid, ev.pos, ev.yaw, { perk: ev.perk, team: ev.team, bot: ev.bot, armorClass: ev.armorClass }); return false;}
     case 'untrack': {sim.untrack(ev.pid); return false;}
     case 'input': {sim.setInput(ev.pid, ev.input, ev.status, ev.seq); return false;}
     case 'impulse': {sim.applyImpulse(ev.pid, ev.dv); return false;}

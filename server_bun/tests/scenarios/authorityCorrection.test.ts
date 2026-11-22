@@ -14,7 +14,7 @@ describe('scenario: move-authority corrections', () => {
       readyState: 1,
       send: (d: string | ArrayBuffer | Uint8Array) => { sent.push(JSON.parse(d as string) as ServerMessage); return 0; },
     } as never);
-    room.moveSim.track(p.id, p.position, 0, p.perk);
+    room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
 
     // First report seeds the shadow (returns null — nothing to judge yet).
     room.messages.handleMessage(p.id, {
@@ -68,7 +68,7 @@ describe('scenario: move-authority corrections', () => {
   it('a declared warp nowhere explainable is refused — the shadow stays put', () => {
     const room = mkRoom({ bots: 1 }, '', 1337, true);
     const p = firstPlayer(room);
-    room.moveSim.track(p.id, p.position, 0, p.perk);
+    room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
     pin(room, p.id, { x: 0, y: 31, z: 0 });
     const before = { ...p.position };
     // A 400m teleport claim: not near the record, no skillUse — a

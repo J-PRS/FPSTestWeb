@@ -6,7 +6,7 @@ describe('scenario: inputMove seq gate', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
     pin(room, p.id, { x: 0, y: 31, z: 0 });
-    room.moveSim.track(p.id, p.position, 0, p.perk);
+    room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
 
     // seq=10 commits: ski flag + claimed status channel latch on.
     room.messages.handleMessage(p.id, {
@@ -39,13 +39,13 @@ describe('scenario: inputMove seq gate', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
     pin(room, p.id, { x: 0, y: 31, z: 0 });
-    room.moveSim.track(p.id, p.position, 0, p.perk);
+    room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
 
     const applied: number[] = [];
     const q = room.moveSim.queueInput.bind(room.moveSim);
     room.moveSim.queueInput = (pid: string, input: Partial<{ forward: number }>, status = 0, seq?: number) => {
       const ok = q(pid, input, status, seq);
-      if (seq !== undefined && ok !== false) applied.push(seq);
+      if (seq !== undefined && ok !== false) {applied.push(seq);}
       return ok;
     };
 
@@ -78,7 +78,7 @@ describe('scenario: inputMove seq gate', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
     pin(room, p.id, { x: 0, y: 31, z: 0 });
-    room.moveSim.track(p.id, p.position, 0, p.perk);
+    room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
 
     const held: ({ f: number } | undefined)[] = [];
     const q = room.moveSim.queueInput.bind(room.moveSim);

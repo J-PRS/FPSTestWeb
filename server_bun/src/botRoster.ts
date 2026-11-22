@@ -75,19 +75,7 @@ export class BotRoster {
       const kitIdx = (this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length;
       const wildcard = botRand() < 0.125;
       const insta = this.room.mods.instagib === true;
-      let loadout;
-      if (insta) {
-        // Instagib kit: every band slot is the railgun, the belt is the
-        // hook - pickBotWeapon can only ever draw legal weapons, and an
-        // empty alt table freezes adaptOnRespawn's reroll too.
-        loadout = { perk: 'jumpstart' as const, near: WeaponType.Railgun, mid: WeaponType.Railgun, far: WeaponType.Railgun, belt: WeaponType.Hook, side: WeaponType.Railgun };
-      } else if (process.env.FPS_SOAK_RANDLO === '1') {loadout = { perk: 'lifesteal' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) };}
-      else {
-        loadout = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;
-        // Perk is a spawn roll, not kit identity - the authored table
-        // fields the weapons, the perk table fields the person.
-        loadout = Object.assign({}, loadout, {perk: rollBotPerk(loadout, botRand)});
-      }
+      const loadout = this.rollLoadout(insta, wildcard, kitIdx);
       this.alts.set(id, insta ? {} : (wildcard ? WILDCARD_SLOTS : (BOT_ALT_SLOTS[kitIdx] ?? {})));
       // Kit picks the body, then the squad's weighted fill picks the
       // job — plated/mortar kits anchor heavy, featherjets flies light,
@@ -142,9 +130,22 @@ export class BotRoster {
       this.thinkPhase.set(id, ph % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
-      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk, p.team, true, cls);
+      this.room.moveSim.track(id, p.position, p.rotation.yaw, { perk: p.perk, team: p.team, bot: true, armorClass: cls });
     }
     if (n > 0) {logger.info('Bots spawned', { room: this.room.name, count: n });}
+  }
+
+  /** Spawn-roll the kit. Instagib fields an all-railgun table (the belt
+   *  is the hook; an empty alt table freezes adaptOnRespawn's reroll);
+   *  soak-randlo fields fully random bands; otherwise the authored
+   *  kit/wildcard picks weapons and the perk table picks the person. */
+  private rollLoadout(insta: boolean, wildcard: boolean, kitIdx: number): BotLoadout {
+    if (insta) {
+      return { perk: 'jumpstart', near: WeaponType.Railgun, mid: WeaponType.Railgun, far: WeaponType.Railgun, belt: WeaponType.Hook, side: WeaponType.Railgun };
+    }
+    if (process.env.FPS_SOAK_RANDLO === '1') {return { perk: 'lifesteal', near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) };}
+    const base = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;
+    return Object.assign({}, base, {perk: rollBotPerk(base, botRand)});
   }
 
   /** Team's difficulty spec from spec.botSkill — a bare tier covers

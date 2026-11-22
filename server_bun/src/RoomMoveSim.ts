@@ -164,7 +164,7 @@ export class RoomMoveSim {
     // Replay seats taken while the field was still loading — reseated
     // grace arms them since pre-gameState frames may still be in flight.
     for (const [pid, t] of this.pendingTrack) {
-      this.track(pid, t.pos, t.yaw, t.perk, t.team, t.bot, t.armorClass);
+      this.track(pid, t.pos, t.yaw, t);
       this.markReseated(pid);
     }
     this.pendingTrack.clear();
@@ -225,7 +225,8 @@ this.structEpoch += 1;
 
   /** Call on join/spawn — seeds the sim at the reported spot. `team`
    *  feeds team-gated colliders (gate shields pass allies). */
-  track(playerId: string, pos: Vec3Like, yaw: number, perk?: string, team?: string, bot?: boolean, armorClass?: string): void {
+  track(playerId: string, pos: Vec3Like, yaw: number, opts?: { perk?: string; team?: string; bot?: boolean; armorClass?: string }): void {
+    const { perk, team, bot, armorClass } = opts ?? {};
     this.jev({ kind: 'track', pid: playerId, pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team, bot, armorClass });
     if (!this.surface) {
       this.pendingTrack.set(playerId, { pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team, bot, armorClass });
@@ -255,7 +256,7 @@ this.structEpoch += 1;
       mergeIn: {}, jetIn: {},
       lastRepPos: null,
       gapStreak: 0, gapAt: 0, gapClosedAt: 0, gapRunMs: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
-      transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, transitVar: 0, reportVar: 0,
+      transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, pongTransitEma: 0, uplinkBias: 0, uplinkBiasN: 0, transitVar: 0, reportVar: 0,
     });
     {const sh = this.shadows.get(playerId); if (sh) {sh.sim.waterLevel = this.waterLevel; sh.sim.jumpstart = mods.jumpstart;}}
     // The sim body derives from the class at creation — the default eye
@@ -822,18 +823,26 @@ sh.gapStreak += 1;
     const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
     sh.transitVar = sh.transitVar * 0.9 + Math.abs(tr - sh.transitEma) * 0.1;
     sh.serverTransitEma = sh.serverTransitEma === 0 ? tr : sh.serverTransitEma * 0.9 + tr * 0.1;
+    sh.pongTransitEma = sh.pongTransitEma === 0 ? tr : sh.pongTransitEma * 0.9 + tr * 0.1;
     this.syncTransit(sh);
   }
 
-  /** Claim-declared uplink sample: `fireAt` is the shooter's server-clock
-   *  estimate of its trigger instant, so (arrival − fireAt) is THIS
-   *  claim's real uplink transit — per-claim truth where the ping/pong
-   *  EMA is a smoothed guess. Feeds the same server channel: a forged
-   *  fireAt is bounded the same way a fabricated pong is (inflating it
-   *  only shrinks the forger's own rendered lead). */
+  /** Claim-declared uplink sample: `arrival − fireAt` is THIS claim's
+   *  real uplink transit: per-claim truth where the ping/pong EMA is a
+   *  smoothed guess. Feeds the same server channel: a forged fireAt is
+   *  bounded the same way a fabricated pong is (inflating it only
+   *  shrinks the forger's own rendered lead). Each sample is also
+   *  measured against the unblended pong channel; the residual is the
+   *  client's serverNow offset error, the value the rewind/fireAt
+   *  windows silently depend on. */
   feedUplink(playerId: string, uplinkMs: number): void {
     const sh = this.shadows.get(playerId);
     if (!sh || !(uplinkMs >= 0)) {return;}
+    if (sh.pongTransitEma > 0) {
+      const bias = uplinkMs - sh.pongTransitEma;
+      sh.uplinkBias += (bias - sh.uplinkBias) * 0.1;
+      sh.uplinkBiasN += 1;
+    }
     const tr = Math.min(uplinkMs, TRANSIT_EMA_CAP_MS);
     sh.serverTransitEma = sh.serverTransitEma === 0 ? tr : sh.serverTransitEma * 0.9 + tr * 0.1;
     this.syncTransit(sh);
@@ -871,6 +880,18 @@ sh.gapStreak += 1;
    *  lag-comp bounds can key off the real path instead of client claims. */
   transitVarOf(playerId: string): number {
     return this.shadows.get(playerId)?.transitVar ?? 0;
+  }
+
+  /** Room rollup of the clock-offset instrument: avg + worst |bias|
+   *  across shadows with enough fireAt samples to mean something. */
+  uplinkBiasStats(): { n: number; avg: number; maxAbs: number } {
+    let n = 0, sum = 0, maxAbs = 0;
+    for (const sh of this.shadows.values()) {
+      if (sh.uplinkBiasN < 5) {continue;}
+      n += 1; sum += sh.uplinkBias;
+      maxAbs = Math.max(maxAbs, Math.abs(sh.uplinkBias));
+    }
+    return { n, avg: n ? Math.round(sum / n) : 0, maxAbs: Math.round(maxAbs) };
   }
 
   /** Both raw channels — the effective estimate is min(client, server

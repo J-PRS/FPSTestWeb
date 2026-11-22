@@ -14,7 +14,7 @@ describe('scenario: jump pad', () => {
     expect(room.deployables.handleDeploy('engi', 'pad', { x: 5, y: 30, z: 0 })).toBe(true);
     const d = [...(room.deployables as unknown as { items: Map<number, { pos: { x: number; y: number; z: number } }> }).items.values()][0]!;
     room.players.addPlayer('runner', 'bravo', 'none', 'medium');
-    room.moveSim.track('runner', { x: d.pos.x, y: d.pos.y + 0.5, z: d.pos.z }, 0, undefined, 'bravo');
+    room.moveSim.track('runner', { x: d.pos.x, y: d.pos.y + 0.5, z: d.pos.z }, 0, { team: 'bravo' });
     pin(room, 'runner', { x: d.pos.x, y: d.pos.y + 0.5, z: d.pos.z });
     step(room, 10); // 0.5s - inside the arm window, still quiet
     expect(room.moveSim.simState('runner')!.vel.y).toBeLessThan(20);

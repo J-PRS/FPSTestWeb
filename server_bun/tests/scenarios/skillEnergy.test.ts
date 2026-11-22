@@ -7,7 +7,7 @@ describe('scenario: skill energy on the shadow sim', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
     pin(room, p.id, { x: 0, y: 31, z: 0 });
-    room.moveSim.track(p.id, p.position, 0, p.perk);
+    room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
     expect(room.moveSim.energyOf(p.id)).toBe(ENERGY.max);
 
     room.messages.handleMessage(p.id, {
@@ -22,7 +22,7 @@ describe('scenario: skill energy on the shadow sim', () => {
 
     // Held cloak burns the speed-priced drain — a pinned player sits at
     // the 1/s floor; regen is suppressed while any skill drain is active.
-    room.moveSim.tick(1.0);
+    room.moveSim.tick(1);
     expect(room.moveSim.energyOf(p.id)!).toBeCloseTo(afterAnte - cloakDrainPerSec(0), 5);
 
     // Drop the bit: drain stops and the tank refills.
@@ -32,7 +32,7 @@ describe('scenario: skill energy on the shadow sim', () => {
     });
     room.moveSim.tick(0); // drain the queued cloak-off before measuring regen
     const before = room.moveSim.energyOf(p.id)!;
-    room.moveSim.tick(1.0);
+    room.moveSim.tick(1);
     expect(room.moveSim.energyOf(p.id)!).toBeGreaterThan(before);
   });
 
@@ -40,7 +40,7 @@ describe('scenario: skill energy on the shadow sim', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
     pin(room, p.id, { x: 0, y: 31, z: 0 });
-    room.moveSim.track(p.id, p.position, 0, p.perk);
+    room.moveSim.track(p.id, p.position, 0, { perk: p.perk });
     room.moveSim.drainEnergy(p.id, ENERGY.max - 5); // near-empty tank
     room.messages.handleMessage(p.id, {
       type: 'inputMove', seq: 1,

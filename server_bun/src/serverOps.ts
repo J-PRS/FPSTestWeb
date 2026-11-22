@@ -100,6 +100,13 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
       pickups: r.pickups?.snapshot().length ?? 0,
       gracePending: r.sessions?.graceInRoom(r.name) ?? 0,
       ballSimNow: r.ballSim.simNow,
+      // Clock-offset instrument: fireAt uplink vs the unblended pong
+      // channel. Persistent nonzero bias is the rewind/fireAt window
+      // skew, the number behind trajDiv/dmg-echo drift.
+      uplinkBias: ((): { n: number; avg: number; maxAbs: number } | undefined => {
+        const b = r.moveSim.uplinkBiasStats();
+        return b.n > 0 ? b : undefined;
+      })(),
       // Since-boot judge/claim counters — the room's 15s rollup clears
       // per flush, so scrapes need the cumulative mirror.
       health: Object.fromEntries(r.healthTotal),

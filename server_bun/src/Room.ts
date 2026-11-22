@@ -1234,6 +1234,12 @@ export class Room {
   }
 
   private handlerInfo(roomName: string): RoomInfo {
+    // Object.assign, not spread: oxc bans rest-spread properties, and
+    // the merged Partial needs the one cast on the way out anyway.
+    return Object.assign(this.infoBase(roomName), this.infoPing(), this.infoWire(), this.infoCombat()) as RoomInfo;
+  }
+
+  private infoBase(roomName: string): Partial<RoomInfo> {
     return {
       room: roomName,
       mode: this.mode,
@@ -1283,6 +1289,14 @@ export class Room {
       rng: (): number => this.rng(),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
+    };
+  }
+
+  /** Ping/nack/reconnect-window closures of the handler table (split
+   *  for the line-count ratchet - the merged literal casts back to
+   *  RoomInfo since Partial spreads cannot prove required fields). */
+  private infoPing(): Partial<RoomInfo> {
+    return {
       // tickNack: reuse the introSeq full-window  -  every record goes full
       // for ~1s, which reseeds every client's baselines whether they
       // nacked or not (records are shared; scoping per-socket isn't
@@ -1353,6 +1367,12 @@ export class Room {
         const uplink = wallNow() - fireAt;
         if (uplink >= 0 && uplink <= 2000) {this.moveSim.feedUplink(pid, uplink);}
       },
+    };
+  }
+
+  /** Binary-wire + claim-verb closures of the handler table. */
+  private infoWire(): Partial<RoomInfo> {
+    return {
       // playerHit on the binary lane: one encodeHit per event rides the
       // same batch as the tick frame  -  ~20B vs ~160B JSON, the client's
       // own wireIds map resolves ids back. 'environment' encodes wid 0.
@@ -1418,7 +1438,7 @@ export class Room {
       },
       moveTrack: (pid, pos, yaw): void => {
         const p = this.players.getPlayer(pid);
-        this.moveSim.track(pid, pos, yaw, p?.perk, p?.team, p?.isBot, p?.armorClass);
+        this.moveSim.track(pid, pos, yaw, { perk: p?.perk, team: p?.team, bot: p?.isBot, armorClass: p?.armorClass });
         // Re-seats (room hop) have stale position frames in flight  -  arm
         // the same grace resync() uses so they can't seed the fresh
         // shadow at the old seat and flag the real spawn landing a cheat.
@@ -1435,6 +1455,12 @@ export class Room {
       // later like real chat, not a scripted call-and-response.
 
       moveAuthority: (): boolean => this.moveAuthority,
+    };
+  }
+
+  /** Proximity/authority closures of the handler table. */
+  private infoCombat(): Partial<RoomInfo> {
+    return {
       health: this.health,
       envRange: (pid): number => {
         const p = this.players.getPlayer(pid);

@@ -23,7 +23,7 @@ describe('scenario: motion sensor', () => {
     room.players.addPlayer('foe', 'bravo', 'none', 'medium');
     pin(room, 'engi', { x: 0, y: 30, z: 0 });
     pin(room, 'mate', { x: 0, y: 30, z: 10 });
-    room.moveSim.track('foe', { x: 20, y: 30, z: 0 }, 0, 'none', 'bravo');
+    room.moveSim.track('foe', { x: 20, y: 30, z: 0 }, 0, { perk: 'none', team: 'bravo' });
     pin(room, 'foe', { x: 20, y: 30, z: 0 });
     room.players.getPlayer('engi')!.beltCharges = 10;
     expect(room.deployables.handleDeploy('engi', 'motion', { x: 5, y: 30, z: 3 })).toBe(true);

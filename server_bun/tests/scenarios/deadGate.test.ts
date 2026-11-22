@@ -17,7 +17,7 @@ describe('scenario: dead-sender gate', () => {
       weaponType: 10 /* Melee */,
     } as never);
     room.messages.handleMessage(a.id, { type: 'teleport', position: { x: 99, y: 31, z: 99 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } });
-    room.moveSim.track(a.id, a.position, 0, a.perk);
+    room.moveSim.track(a.id, a.position, 0, { perk: a.perk });
     room.messages.handleMessage(a.id, {
       type: 'inputMove', seq: 1,
       input: { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 4 }, rotation: { yaw: 0, pitch: 0 },
