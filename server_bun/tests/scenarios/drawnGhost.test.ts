@@ -111,6 +111,47 @@ describe('scenario: drawn-ghost aim report', () => {
     expect(hp(room, 'vic')).toBeLessThan(hp0);
   });
 
+  it('a report arriving after the shell swept past still pays the drawn body', () => {
+    const { room, vic } = pair();
+    room.wireIds.set('vic', 7);
+    room.widToId.set(7, 'vic');
+    const drawn = { x: vic.x, y: vic.y, z: vic.z + 4 };
+    const hp0 = hp(room, 'vic');
+    // Shell flies the drawn line with NO report yet - the live sweep
+    // misses the wire capsule by 4m and keeps flying (the whiff shape:
+    // close-range pops beat a 20Hz report + uplink to the read window).
+    room.projectiles.spawn('sh', WeaponType.BoltLauncher,
+      { x: -30, y: 31.4, z: drawn.z }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    step(room, 6); // ~0.3s - shell just past x=0, still live
+    expect(hp(room, 'vic')).toBe(hp0);
+    // Now the swept-hit report lands: retroactive check of the shell's
+    // real flight path detonates it at the drawn spot.
+    room.messages.moves.handlePosition('sh', {
+      type: 'position',
+      position: { x: -30, y: 31, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
+      seq: 1, aim: { wid: 7, x: drawn.x, y: drawn.y, z: drawn.z },
+    });
+    expect(hp(room, 'vic')).toBeLessThan(hp0);
+  });
+
+  it('a forged late report outside slack still buys nothing', () => {
+    const { room, vic } = pair();
+    room.wireIds.set('vic', 7);
+    room.widToId.set(7, 'vic');
+    const drawn = { x: vic.x, y: vic.y, z: vic.z + 6.5 }; // outside 6m slack
+    const hp0 = hp(room, 'vic');
+    room.projectiles.spawn('sh', WeaponType.BoltLauncher,
+      { x: -30, y: 31.4, z: drawn.z }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    step(room, 6);
+    room.messages.moves.handlePosition('sh', {
+      type: 'position',
+      position: { x: -30, y: 31, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
+      seq: 1, aim: { wid: 7, x: drawn.x, y: drawn.y, z: drawn.z },
+    });
+    step(room, 6);
+    expect(hp(room, 'vic')).toBe(hp0);
+  });
+
   it('the same blast without a report is an honest env refusal', () => {
     const { room, vic } = pair();
     const hp0 = hp(room, 'vic');

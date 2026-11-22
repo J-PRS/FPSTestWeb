@@ -248,6 +248,9 @@ export interface RoomInfo {
   fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number, dmgMult?: number, variant?: number) => string | null;
   /** Chambered perk: any admitted pull fades the shooter's live shells. */
   fizzleProjectiles?: (ownerId: string) => void;
+  /** Late drawn-ghost report: retroactively test the reporter's live
+   *  shells whose flight may already have swept past the drawn body. */
+  ghostSweep?: (playerId: string, victimId: string, pt: Vec3) => void;
   /** Beam-intent resolution — the honest ray a Lightning tick strikes
    *  (terrain/wall/player/creature, earliest wins). Room.beamSweep. */
   beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates?: boolean, snapPad?: number, coneCos2?: number) => BeamContact | null;
@@ -840,6 +843,7 @@ export class MessageHandler {
   moveMute(playerId: string): void { this.roomInfo.moveMute?.(playerId); }
   cloakHidden(playerId: string): boolean { return this.roomInfo.cloakHidden?.(playerId) ?? false; }
   idOfWid(wid: number): string | undefined { return this.roomInfo.idOfWid?.(wid); }
+  ghostSweep(playerId: string, victimId: string, pt: Vec3): void { this.roomInfo.ghostSweep?.(playerId, victimId, pt); }
 
   // jump/jetpack are pure presence relays — same shape, dead check, echo
   // to everyone but the sender for remote-side jump-dust/jet FX.

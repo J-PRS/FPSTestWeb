@@ -115,6 +115,7 @@ function infoPing(room: Room): Partial<RoomInfo> {
     // oxlint-disable-next-line max-params -- RoomInfo.fireProjectile's signature is interface-mandated
     fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS, dmgMult, variant): string | null => room.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS, dmgMult, variant),
     fizzleProjectiles: (pid): void => room.projectiles.fizzleOwner(pid),
+    ghostSweep: (pid, victimId, pt): void => room.projectiles.ghostLateSweep(pid, victimId, pt),
     // oxlint-disable-next-line max-params -- RoomInfo.beamSweep's signature is interface-mandated
     beamSweep: (pid, muzzle, dir, range, includeTeammates, snapPad, coneCos2): BeamContact | null => room.beamSweep(pid, muzzle, dir, range, includeTeammates, snapPad, coneCos2),
     ballHit: (pid, id, dmg) => room.ballSim.handleHit(pid, id, dmg),

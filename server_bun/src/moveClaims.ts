@@ -39,6 +39,9 @@ export interface MoveHost {
   cloakHidden?(playerId: string): boolean;
   /** Drawn-ghost reports carry a u16 wireId - resolves back to a seat. */
   idOfWid?(wid: number): string | undefined;
+  /** Fresh drawn-ghost report arrived: retroactively test the reporter's
+   *  live shells whose flight may already have swept past the drawn body. */
+  ghostSweep?(playerId: string, victimId: string, pt: Vec3): void;
 }
 
 export class MoveClaims {
@@ -127,6 +130,7 @@ export class MoveClaims {
     g.set(aimId, { x: aim.x, y: aim.y, z: aim.z, at: now });
     // Reports past the read window credit nothing - prune lazily.
     if (g.size > 8) {for (const [k, v] of g) {if (now - v.at > 2000) {g.delete(k);}}}
+    this.h.ghostSweep?.(playerId, aimId, aim);
   }
 
   /** Authority mode: the sim owns position — the report only feeds it

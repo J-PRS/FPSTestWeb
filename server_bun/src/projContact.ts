@@ -10,6 +10,7 @@ import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { wallNow } from './wallClock.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import { renderLagOf, renderLagOfTarget, renderLagBoundOf, REWIND_MS } from './rewind.ts';
+import { GRAVITY } from '../../shared/movement.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 
@@ -186,6 +187,59 @@ function bodySweep(cx: Sweep): boolean {
     return true;
   }
 
+
+
+/** Late drawn-ghost adjudication: a swept-hit report can land AFTER the
+ *  shell it describes already swept past (close-range pops beat a ~20Hz
+ *  position frame plus uplink transit). When a fresh report arrives, the
+ *  reporter's live shells get one retroactive test: did the shell's last
+ *  ~250ms of real flight pass within kill reach of the drawn spot? Same
+ *  trust model as ghostSpot - the spot must sit within drift slack of
+ *  the rewound or live position, and the segment tested is the shell's
+ *  own flown path, so a forged spot can only claim hits along a
+ *  trajectory the server actually flew. */
+export function ghostLateTry(r: ContactHost, proj: LiveProj, victimId: string, victim: PlayerState, pt: Vec3): boolean {
+    const {p, stats} = proj;
+    if (stats.fuseOnly || stats.pierce || stats.stick) {return false;}
+    const bodyArm = stats.bodyArmTime ?? stats.armTime;
+    if (bodyArm !== undefined && p.age < bodyArm) {return false;}
+    const owner = r.room.players.getPlayer(proj.ownerId);
+    const speed = dhypot3(victim.velocity.x, victim.velocity.y, victim.velocity.z);
+    const back = ghostBack(r, owner, proj.ownerId, victimId);
+    const tp = rewindPos(victim, back, r.field);
+    const slack = 6 + speed * (back + 250) / 1000;
+    const dR = dhypot3(pt.x - tp.x, pt.y - tp.y, pt.z - tp.z);
+    const dL = dhypot3(pt.x - victim.position.x, pt.y - victim.position.y, pt.z - victim.position.z);
+    if (dR > slack && dL > slack) {return false;}
+    return latePay(r, proj, victimId, victim, { pt, tp, back });
+  }
+
+  /** The shell's real flight vs the drawn capsule: chord the last ~250ms
+   *  of arc back from the live shell (straight-segment chord error
+   *  ~0.9m at 250ms, inside the capsule+reach envelope), detonate at
+   *  the closest approach when it threads the body. */
+  function latePay(r: ContactHost, proj: LiveProj, victimId: string, victim: PlayerState, spot: { pt: Vec3; tp: Vec3; back: number }): boolean {
+    const { pt, tp, back } = spot;
+    const {p, stats} = proj;
+    const L = Math.min(p.age, 0.25);
+    if (L <= 0) {return false;}
+    const g = stats.gravity ? GRAVITY : 0;
+    const backPos = { x: p.pos.x - p.vel.x * L, y: p.pos.y - p.vel.y * L + 0.5 * g * L * L, z: p.pos.z - p.vel.z * L };
+    const cap = classCapsule(victim.armorClass);
+    const reach = Math.max(stats.bodyRadius, hitRadiusAt(proj.weaponType, p.age));
+    const pc = { x: pt.x, y: pt.y + cap.centerOff, z: pt.z };
+    const pd = segCapsuleDist(backPos, p.pos, pc.x, pc.y - cap.half, pc.y + cap.half, pc.z);
+    const scale = r.field ? wakeScaleAt(pc.y - cap.half - cap.radius - hmHeight(r.field, tp.x, tp.z)) : 1;
+    const treach = stats.bodyRadius + Math.max(0, reach - stats.bodyRadius) * scale;
+    if (!(pd <= treach + cap.radius)) {return false;}
+    const t = segPointT(backPos, p.pos, pc);
+    const at = { x: backPos.x + (p.pos.x - backPos.x) * t, y: backPos.y + (p.pos.y - backPos.y) * t, z: backPos.z + (p.pos.z - backPos.z) * t };
+    const gd = dhypot3(pt.x - victim.position.x, pt.y - victim.position.y, pt.z - victim.position.z);
+    if (gd > 1.5) {logger.info('ghost hit', { shooter: proj.ownerId, victim: victimId, deltaM: Number(gd.toFixed(1)), backMs: back, drawn: 1, late: 1, wt: proj.weaponType });}
+    r.room.health?.set('ghostDrawn', (r.room.health?.get('ghostDrawn') ?? 0) + 1);
+    r.detonate(proj, at, victimId, undefined, pd <= cap.radius + stats.bodyRadius);
+    return true;
+  }
 
 
 export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, dt: number): boolean {

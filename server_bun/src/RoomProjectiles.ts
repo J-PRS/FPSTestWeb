@@ -33,10 +33,11 @@ import type { RoomMods } from '../../shared/protocol.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { MessageHandler } from './MessageHandler.ts';
-import { stepContact, dischargeRay } from './projContact.ts';
+import { stepContact, dischargeRay, ghostLateTry } from './projContact.ts';
 import { perkMods, flyRampMult, chamberedEligible } from '../../shared/perks.ts';
 import { weaponStats } from './weaponStats.ts';
 import { encodeProjSpawn, encodeProjGone } from '../../shared/wire.ts';
+import { CONFIG } from './config.ts';
 
 export interface LiveProj {
   id: string;
@@ -458,6 +459,21 @@ export class RoomProjectiles {
    *  first touch and reports whether the shell is gone. */
   private stepContact(proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, dt: number): boolean {
     return stepContact(this, proj, stats, from, dt);
+  }
+
+  /** Late drawn-ghost report: a fresh aim spot naming `victimId` just
+   *  arrived — retroactively test the reporter's live shells whose
+   *  recent flight may have already swept past the body (close-range
+   *  pops beat the ~20Hz report + uplink transit to the read window). */
+  ghostLateSweep(shooterId: string, victimId: string, pt: Vec3): void {
+    const victim = this.room.players.getPlayer(victimId);
+    if (victim === undefined || victim === null || victim.isDead) {return;}
+    const shooter = this.room.players.getPlayer(shooterId);
+    if (!CONFIG.friendlyFire && victim.team !== undefined && shooter?.team === victim.team) {return;}
+    for (const proj of this.projs.values()) {
+      if (proj.ownerId !== shooterId || proj.stuck) {continue;}
+      if (ghostLateTry(this, proj, victimId, victim, pt)) {return;}
+    }
   }
 
   /** Fire the shell's hitscan beam along its velocity line. */
