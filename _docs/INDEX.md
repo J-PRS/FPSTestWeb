@@ -1,4 +1,4 @@
-# Documentation index — KRIBES
+# Documentation index — ANABATIC
 
 The project produces a lot of documentation. This file is the map.
 **Read this first** before digging in `_docs/` (200+ files).
@@ -118,6 +118,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-07_MAPSHOT_BLIND_SHOTS.md` | check.sh mapshot step runs without E2E_GPU - captured 4KB black JOINING screens while gate passed; GPU rerun renders fine but logs a persistent 123m SNAP-correction storm (staging warp vs authority shadow, journal=0); fix options + bisect note |
 | `_docs/2026-11-04_LAUNCH_AUDIT.md` | Launch re-audit vs `2026-10-08_BETA_AUDIT.md` — most Oct-8 items landed; remaining: one legal item, infra provisioning, live-verification debt, thin moderation |
 | `_docs/2026-11-08_TECH_DEBT_AUDIT.md` | Full-tree debt audit via repo tooling (knip etc.) — every number names its command; warnings are candidates, verify before deleting |
+| `_docs/2026-11-22_TECH_DEBT_AUDIT.md` | **Whole-repo tech-debt audit** — verdict healthy/debt-concentrated: transport matrix (WS+WT+UDP+RTC) is the bug factory, monolith hot files, lint ratchet losing (+182/wk), dual bot armies, dead leaderboard signing, 8/IP join cap vs school NATs; ranked fixes + lean delta (~-3.5k lines) |
 | `_docs/2026-11-01_20261101084019_UNWRAP.md` | UV-unwrap SOTA for bake maps — xatlas/xatlas-three, uvunwrap (Rust→wasm, texels-per-unit density), and the in-repo precedent: `vertexAO.ts` wear-mask atlas already does detached per-tri cells |
 | `_docs/2026-11-08_AGENT_GATE_SOTA.md` | Agent-gate tooling survey — machine-readable verdicts (verdict.json + hint, strict exit codes), affected-test scoping, latency-layered gate stack vs our check.sh/pre-commit/sweep |
 | `_docs/2026-11-08_WEAPON_MODEL_REVIEW.md` | All 27 weapon viewmodels ranked best→worst from gunsheet 4-up sheets — Revolver/Railgun/Chaingun top, Pistol/Mortar/Disc bottom; fast-disc groove+liner fixes, gunlab Implodisc filter, mkWeaponSel `.keys()` bug, rework shortlist |

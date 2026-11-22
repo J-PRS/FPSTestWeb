@@ -1,4 +1,4 @@
-# Architecture — KRIBES
+# Architecture — ANABATIC
 
 High-level map of how the game fits together. This is a **living pointer
 file**, not a full spec — the deep dives live in `_docs/` and the code.

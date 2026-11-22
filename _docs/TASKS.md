@@ -1,7 +1,7 @@
 # Project Development Context
 
 ## Current State
-- **Project:** KRIBES — browser multiplayer FPS: Tribes gameplay, Krunker
+- **Project:** ANABATIC — browser multiplayer FPS: Tribes gameplay, Krunker
   performance/accessibility. Skiing, jetpacks, spinfusor, base assets.
 - **Architecture:** Client (Three.js) + Bun server (WS + WebTransport
   tiers on the dedicated ladder, auto-probed; RTC off auto, raw-UDP for

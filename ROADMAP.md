@@ -1,4 +1,4 @@
-# KRIBES — Living Overhaul Plan (Devin's brain)
+# ANABATIC — Living Overhaul Plan (Devin's brain)
 
 **Standing order:** continue overhauling the project — server and client — toward a
 real game the size of Tribes Ascend / Krunker / Narrow.One. Maximal extensibility,

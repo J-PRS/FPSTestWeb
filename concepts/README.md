@@ -1,6 +1,6 @@
 # Concepts — design philosophy (point-in-time)
 
-These are design-philosophy notes for KRIBES. Most are baseline 2026-09-27 and
+These are design-philosophy notes for Anabatic. Most are baseline 2026-09-27 and
 have not been re-verified against the current code — **treat specifics as
 stale until checked**. The living, current references are:
 

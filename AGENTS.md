@@ -1,8 +1,8 @@
-# KRIBES — Agent Guide
+# ANABATIC — Agent Guide
 
-> **KRIBES is a codename, not the ship name** — dev-conversation
-> shorthand only; the real title is TBD. Don't put it in
-> player-facing copy, packaging, or marketing language.
+> The game is **Anabatic** (anabatic.gg). "KRIBES" was the dev codename —
+> dated `_docs/` entries and the `KRIBES_SIGN_KEY` env var still use it;
+> don't put the codename in new player-facing copy.
 
 Browser multiplayer FPS: **Tribes gameplay, Krunker performance and
 accessibility**. Skiing, jetpacks, spinfusor combat, base assets — in a
@@ -130,6 +130,12 @@ code," a ghost owns it: `node _tools/procs.mjs --kill`.
   presented as **LAN duel** (`lobbyPanel.ts`, `P2P_ENABLED` flag) — on a
   LAN it needs nothing; over WAN it's best-effort by design. Details:
   `_docs/2026-10-26_TRANSPORT_TIERS.md`.
+- **RTC/P2P lanes are PARKED** (2026-11-22): `/rtc`, `/rtcs`,
+  `/rtcconfig`, `/rtc/lobbies` all 404 unless `FPS_RTC=1`. Prod clients
+  never race rtc (dev-gated `?p2p`, `?net=rtc` is a test pin), so the
+  lane was live surface with zero legit traffic. `RtcServer`/`RtcRelay`/
+  `client/src/networking/p2p/` stay in-tree for LAN-duel dev — set
+  `FPS_RTC=1` to restore the whole surface unchanged.
 
 ## Layout
 

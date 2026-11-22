@@ -1,4 +1,4 @@
-# KRIBES
+# ANABATIC
 
 Browser multiplayer FPS: **Tribes gameplay, Krunker performance and
 accessibility.** Skiing, jetpacks, spinfusor combat, base assets — in a
