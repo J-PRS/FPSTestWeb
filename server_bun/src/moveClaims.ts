@@ -4,7 +4,7 @@ import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { pushRewindSample } from './rewind.ts';
-import { wallNow , wallMs} from './wallClock.ts';
+import { wallNow , wallMs, type WallMs } from './wallClock.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { inv } from '../../shared/invariants.ts';
 
@@ -71,63 +71,12 @@ export class MoveClaims {
     player.lastClaimAt = now;
     if (!this.plausible(playerId, player, msg, now)) {return;}
 
-    // Held input rides the volatile frame — the superseding-stream
-    // input path. Two gates: the position seq must be the newest seen
-    // (an unordered older frame must not resurrect a released key),
-    // and the frame's inputSeq must cover the newest edge already
-    // consumed (a frame encoded BEFORE an edge left the client can
-    // otherwise rewind the input that edge just set). Keep the player's
-    // status channel: held frames carry no status bits.
-    if (msg.input !== undefined && msg.seq !== undefined && msg.seq > player.lastSeq
-        && (msg.inputSeq === undefined || msg.inputSeq >= (this.h.inputSeqOf?.(playerId) ?? -1))) {
-      this.h.moveInput?.(playerId, msg.input, player.status & CLIENT_STATUS_MASK);
-      player.skiing = msg.input.ski ? 1 : 0;
-      player.jetting = msg.input.jet ? 1 : 0;
-    }
-
-    // inputSeq (not the frame seq) anchors the probe: it's the count of
-    // inputMove events the client had consumed when it took this snapshot.
-    // msg.ping is the client's own RTT measure riding this frame — the
-    // judge credits it as link-transit staleness (see moveJudge).
-    // Drawn-ghost report: the shooter's rendered position of the remote
-    // under its crosshair. Unknown/self wids drop; stale reports age
-    // out at read time in projContact.
-    if (msg.aim !== undefined) {
-      const aimId = this.h.idOfWid?.(msg.aim.wid);
-      if (aimId !== undefined && aimId !== playerId) {
-        player.aimGhost = { id: aimId, x: msg.aim.x, y: msg.aim.y, z: msg.aim.z, at: now };
-      }
-    }
+    this.carryInput(playerId, player, msg, now);
 
     const simTruth = this.h.moveReport(playerId, msg.position, msg.rotation.yaw, msg.velocity, msg.inputSeq, msg.ping);
 
     if (this.h.moveAuthority()) {
-      // Authority mode: the sim owns position — the report only feeds it
-      // yaw/vel hints and carries ping + liveness. Corrections still flow
-      // on divergence (tighter tolerance/throttle inside the sim).
-      if (simTruth) {
-        this.h.sendToPlayer(playerId, {
-          type: 'correction',
-          seq: msg.seq ?? 0,
-          inputSeq: simTruth.inputSeq,
-          grounded: simTruth.onGround,
-          position: simTruth.pos,
-          velocity: simTruth.vel,
-          rotation: msg.rotation,
-        });
-        // Reseat the plausibility anchor at the corrected position: the
-        // client's next report legitimately snaps to simTruth.pos, and
-        // without this the snap itself reads as a speedhack reject.
-        player.lastPosCheckPos = Object.assign({}, simTruth.pos);
-        this.muteJudges(player, playerId, now);
-      }
-      player.rotation.yaw = msg.rotation.yaw; player.rotation.pitch = msg.rotation.pitch;
-      player.lastSeen = now;
-      if (msg.seq !== undefined && msg.seq > player.lastSeq) {player.lastSeq = msg.seq;}
-      player.hasReceivedPosition = true;
-      this.h.announceIfInWorld(player);
-      if (msg.ping !== undefined) {player.ping = Math.min(Math.max(1, msg.ping), 2000);}
-      pushRewindSample(player, now); // player.position is sim truth
+      this.applyAuthority(playerId, player, msg, simTruth, now);
       return;
     }
 
@@ -143,6 +92,71 @@ export class MoveClaims {
     if (msg.ping !== undefined) {player.ping = Math.min(Math.max(1, msg.ping), 2000);}
     pushRewindSample(player, now);
     // Don't broadcast immediately — batched in tickUpdate
+  }
+
+  /** Held input rides the volatile frame — the superseding-stream
+   *  input path. Two gates: the position seq must be the newest seen
+   *  (an unordered older frame must not resurrect a released key),
+   *  and the frame's inputSeq must cover the newest edge already
+   *  consumed (a frame encoded BEFORE an edge left the client can
+   *  otherwise rewind the input that edge just set). Keep the player's
+   *  status channel: held frames carry no status bits. */
+  private carryInput(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'position' }>, now: WallMs): void {
+    if (msg.input !== undefined && msg.seq !== undefined && msg.seq > player.lastSeq
+        && (msg.inputSeq === undefined || msg.inputSeq >= (this.h.inputSeqOf?.(playerId) ?? -1))) {
+      this.h.moveInput?.(playerId, msg.input, player.status & CLIENT_STATUS_MASK);
+      player.skiing = msg.input.ski ? 1 : 0;
+      player.jetting = msg.input.jet ? 1 : 0;
+    }
+
+    // inputSeq (not the frame seq) anchors the probe: it's the count of
+    // inputMove events the client had consumed when it took this snapshot.
+    // msg.ping is the client's own RTT measure riding this frame — the
+    // judge credits it as link-transit staleness (see moveJudge).
+    if (msg.aim !== undefined) {this.noteGhost(playerId, player, msg.aim, now);}
+  }
+
+  /** Drawn-ghost report: the shooter's rendered position of the remote
+   *  under its crosshair. Unknown/self wids drop; stale reports age
+   *  out at read time in projContact. */
+  private noteGhost(playerId: string, player: PlayerState, aim: NonNullable<Extract<ClientMessage, { type: 'position' }>['aim']>, now: WallMs): void {
+    const aimId = this.h.idOfWid?.(aim.wid);
+    if (aimId === undefined || aimId === playerId) {return;}
+    let g = player.aimGhosts;
+    if (g === undefined) {g = new Map(); player.aimGhosts = g;}
+    g.set(aimId, { x: aim.x, y: aim.y, z: aim.z, at: now });
+    // Reports past the read window credit nothing - prune lazily.
+    if (g.size > 8) {for (const [k, v] of g) {if (now - v.at > 2000) {g.delete(k);}}}
+  }
+
+  /** Authority mode: the sim owns position — the report only feeds it
+   *  yaw/vel hints and carries ping + liveness. Corrections still flow
+   *  on divergence (tighter tolerance/throttle inside the sim). */
+  private applyAuthority(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'position' }>,
+      simTruth: { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null, now: WallMs): void {
+    if (simTruth) {
+      this.h.sendToPlayer(playerId, {
+        type: 'correction',
+        seq: msg.seq ?? 0,
+        inputSeq: simTruth.inputSeq,
+        grounded: simTruth.onGround,
+        position: simTruth.pos,
+        velocity: simTruth.vel,
+        rotation: msg.rotation,
+      });
+      // Reseat the plausibility anchor at the corrected position: the
+      // client's next report legitimately snaps to simTruth.pos, and
+      // without this the snap itself reads as a speedhack reject.
+      player.lastPosCheckPos = Object.assign({}, simTruth.pos);
+      this.muteJudges(player, playerId, now);
+    }
+    player.rotation.yaw = msg.rotation.yaw; player.rotation.pitch = msg.rotation.pitch;
+    player.lastSeen = now;
+    if (msg.seq !== undefined && msg.seq > player.lastSeq) {player.lastSeq = msg.seq;}
+    player.hasReceivedPosition = true;
+    this.h.announceIfInWorld(player);
+    if (msg.ping !== undefined) {player.ping = Math.min(Math.max(1, msg.ping), 2000);}
+    pushRewindSample(player, now); // player.position is sim truth
   }
 
   /** Cheat prevention: position plausibility. Compares CONSECUTIVE reports

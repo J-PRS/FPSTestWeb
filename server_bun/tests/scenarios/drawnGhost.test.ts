@@ -43,15 +43,39 @@ describe('scenario: drawn-ghost aim report', () => {
       position: Object.assign({}, sh), rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
       seq: 1, aim: { wid: 7, x: 0, y: 31, z: 4 },
     });
-    expect(room.players.getPlayer('sh')?.aimGhost?.id).toBe('vic');
-    expect(room.players.getPlayer('sh')?.aimGhost?.z).toBe(4);
+    expect(room.players.getPlayer('sh')?.aimGhosts?.get('vic')?.z).toBe(4);
+  });
+
+  it('a second victim\'s report does not evict the first\'s ghost', () => {
+    const { room, vic } = pair();
+    room.players.addPlayer('vic2');
+    pin(room, 'vic2', { x: 0, y: 31, z: 40 });
+    room.wireIds.set('vic', 7); room.widToId.set(7, 'vic');
+    room.wireIds.set('vic2', 8); room.widToId.set(8, 'vic2');
+    const drawn = { x: vic.x, y: vic.y, z: vic.z + 4 };
+    const hp0 = hp(room, 'vic');
+    // Sweep paints vic, then the crosshair moves to vic2 - the old
+    // single-slot report would have dropped vic's ghost before the
+    // server shell's sweep read it.
+    room.messages.moves.handlePosition('sh', {
+      type: 'position',
+      position: { x: -30, y: 31, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
+      seq: 1, aim: { wid: 7, x: drawn.x, y: drawn.y, z: drawn.z },
+    });
+    room.messages.moves.handlePosition('sh', {
+      type: 'position',
+      position: { x: -30, y: 31, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
+      seq: 2, aim: { wid: 8, x: 0, y: 31, z: 40 },
+    });
+    fireAtDrawn(room, drawn);
+    expect(hp(room, 'vic')).toBeLessThan(hp0);
   });
 
   it('a shell through the drawn spot pays the body the wire never visited', () => {
     const { room, vic } = pair();
     const drawn = { x: vic.x, y: vic.y, z: vic.z + 4 }; // 4m lateral - unmissable vs wire epochs
     const hp0 = hp(room, 'vic');
-    room.players.getPlayer('sh')!.aimGhost = Object.assign({ id: 'vic', at: wallNow() }, drawn);
+    room.players.getPlayer('sh')!.aimGhosts = new Map([['vic', Object.assign({ at: wallNow() }, drawn)]]);
     fireAtDrawn(room, drawn);
     expect(hp(room, 'vic')).toBeLessThan(hp0);
   });
@@ -69,7 +93,7 @@ describe('scenario: drawn-ghost aim report', () => {
     // 6.5m lateral: inside the broad-phase margin (it must reach the
     // aim check) but outside the 6m reachability slack - the gate
     // refuses, so a shell threading the FORGED spot still misses.
-    room.players.getPlayer('sh')!.aimGhost = { id: 'vic', x: vic.x, y: vic.y, z: vic.z + 6.5, at: wallNow() };
+    room.players.getPlayer('sh')!.aimGhosts = new Map([['vic', { x: vic.x, y: vic.y, z: vic.z + 6.5, at: wallNow() }]]);
     fireAtDrawn(room, { x: vic.x, y: vic.y, z: vic.z + 6.5 });
     expect(hp(room, 'vic')).toBe(hp0);
   });
@@ -80,7 +104,7 @@ describe('scenario: drawn-ghost aim report', () => {
     // Drawn 4m lateral of the wire pos, blast detonated there. Radius 3
     // discriminates: out of envelope at every wire epoch, dead center
     // at the rendered spot the shooter named.
-    room.players.getPlayer('sh')!.aimGhost = { id: 'vic', x: vic.x, y: vic.y, z: vic.z + 4, at: wallNow() };
+    room.players.getPlayer('sh')!.aimGhosts = new Map([['vic', { x: vic.x, y: vic.y, z: vic.z + 4, at: wallNow() }]]);
     const stats = Object.assign({}, getWeaponStats(WeaponType.GrenadeLauncher), { aoeRadius: 3 });
     const { blast } = (room.messages.combat as unknown as { blast: { processAOE(id: string, pos: Vec3, ex: unknown, st: unknown, o: unknown): void } });
     blast.processAOE('sh', { x: vic.x, y: vic.y, z: vic.z + 4 }, null, stats, { weapon: WeaponType.GrenadeLauncher, trusted: true });

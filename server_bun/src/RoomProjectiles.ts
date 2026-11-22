@@ -65,6 +65,11 @@ export interface LiveProj {
   cooked?: boolean;
   /** Terrain hits taken - maxBounces ends the shell on the Nth. */
   bounces?: number;
+  /** Exact sim age at the swept contact - the gone edge otherwise stamps
+   *  post-step `p.age`, so the wire contact sits up to a tick of flight
+   *  (~speed x dt) behind where same-age replicas project. Set by the
+   *  contact sweep when the segment fraction is known. */
+  contactAge?: number;
   /** Owner's team at spawn - team-filtered solids (shield gates) let the
    *  shell through when it matches. undefined = teamless/owner gone. */
   ownerTeam?: string;
@@ -336,14 +341,17 @@ export class RoomProjectiles {
     }
   }
 
-  private edgeGone(proj: LiveProj, at: Vec3, age: number, fizzle = false, planted = false): void {
+  private edgeGone(proj: LiveProj, at: Vec3, age: number, fizzle = false, planted = false, hit = false): void {
+    // contactAge beats the stamped arg: callers pass post-step p.age but
+    // a swept contact sits dt*(1-t) earlier on the arc.
+    const ageAt = proj.contactAge ?? age;
     const bin = this.room.connections;
     const n = proj.id.startsWith('sp-') ? Number(proj.id.slice(3)) : Number.NaN;
     if (bin && Number.isFinite(n)) {
-      bin.broadcastBinaryReliable(encodeProjGone({ projId: n, age, position: at, shotId: proj.pull, fizzle, planted }));
+      bin.broadcastBinaryReliable(encodeProjGone({ projId: n, age: ageAt, position: at, shotId: proj.pull, fizzle, planted, hit }));
       return;
     }
-    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age, fizzle: fizzle || undefined, planted: planted || undefined }) as ServerMessage);
+    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age: ageAt, fizzle: fizzle || undefined, planted: planted || undefined, hit: hit || undefined }) as ServerMessage);
   }
 
   /** Planted spear corpses (stats.plants): the terrain/wall contact
@@ -495,14 +503,18 @@ export class RoomProjectiles {
   detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean, crawlerId?: number): void {
     // Riders pop where the host died - collect before deleting, their
     // own detonate() mutates the same map.
-    for (const r of [...this.projs.values()].filter((s): boolean => s.rides === proj.id)) {
-      this.detonate(r, at);
-    }
+    this.riderPop(proj, at);
     this.projs.delete(proj.id);
     // `at` rides the edge: a replica's replay drifts past the real
     // contact by ~a transit of flight; exploding AT the wire point keeps
     // every predicted blast centered where the authority put it.
-    this.edgeGone(proj, at, proj.p.age);
+    // hit = body contact in server-truth space - the replica's stale
+    // capsules put its own contact ~render-lag behind, so trajDiv on
+    // these measures target lag, not arc error. contactAge: the sweep
+    // found `at` mid-step - post-step p.age would tell replicas the
+    // contact is ~a tick of flight further along than it is.
+    this.edgeGone(proj, at, proj.contactAge ?? proj.p.age, false, false,
+      directHitId != null || ballId !== undefined || crawlerId !== undefined);
     // Skillshot ramp: sim shells carry their real flight age - a bot's
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
@@ -512,27 +524,13 @@ export class RoomProjectiles {
     const fly = flyRampMult(perkMods(this.room.players.getPlayer(proj.ownerId)?.perk), rampAge, proj.stats.fireInterval ?? 0.5, proj.stats.burst) * proj.directBonus;
 
     if (directHitId) {this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge, proj.pull);}
-    // A shell that lands on a creature deals its direct line, then the
-    // blast splashes the rest of the swarm - same outcome a player-caused
-    // hit + aoeShot pair produces, minus the claims.
-    if (ballId !== undefined) {
-      const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * fly;
-      const killed = this.room.ballSim?.handleHit(proj.ownerId, ballId, dmg).killed ?? false;
-      weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
-    }
-    if (crawlerId !== undefined) {
-      const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * fly;
-      const killed = this.room.creatureSim?.handleHit(proj.ownerId, crawlerId, dmg).killed ?? false;
-      weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
-    }
+    this.preyHit(proj, rampAge, fly, ballId, crawlerId);
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
     // Rope dart: contact IS the payload - a body connect yanks the victim,
     // anything else yanks the owner. Fuse expiry is a snapped line, not a
     // reel - a mid-air pop dragging the shooter reads as a bug.
     if (proj.weaponType === WeaponType.Hook) {
-      if (directHitId != null || proj.p.age < proj.ttl) {
-        this.room.messages.grapple(proj.ownerId, at, directHitId ?? null);
-      }
+      this.hookPayload(proj, at, directHitId);
       return;
     }
     // Direct-body hits bloom the blast radius 1.5× (Bolt/Disc contract,
@@ -541,60 +539,94 @@ export class RoomProjectiles {
     // the annulus reads as a prediction miss (kb-echo + nugrest snaps).
     const radiusScale = bodyDirect ? directHitAoeBonus(proj.weaponType) : 1;
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null, { shotId: proj.pull, air: proj.p.age, radiusScale });
-    // Cluster carriers (MRV, ClusterBomb): the claim path scatters bomblet
-    // blasts around the burst point - sim shells must pay the same way or
-    // bot-fired cluster weapons ship only the weak carrier pop.
-    if (proj.stats.cluster) {
-      const bomblet = proj.weaponType === WeaponType.MRVLauncher
-        ? WeaponType.MRVBomblet : WeaponType.ClusterBomblet;
-      const bStats = getWeaponStats(bomblet);
-      for (let i = 0; i < proj.stats.cluster.count; i += 1) {
-        const ang = this.room.rng() * Math.PI * 2;
-        const r = this.room.rng() * proj.stats.cluster.radius;
-        const bx = at.x + Math.cos(ang) * r;
-        const bz = at.z + Math.sin(ang) * r;
-        // Bomblets are contact bombs - the blast lands where the rain
-        // lands (ground under the scatter point), not on the carrier's
-        // mid-air burst plane where it out-ranges nothing above it.
-        const bAt = {
-          x: bx,
-          y: Math.max(this.field ? hmHeight(this.field, bx, bz) : at.y,
-            this.room.moveSim?.structureTop(bx, bz) ?? -Infinity),
-          z: bz,
-        };
-        // Credit the carrier - bomblet stats drive the envelope, but
-        // the launcher's weapon row is where the rain's damage belongs.
-        this.room.messages.serverBlast(proj.ownerId, bAt, bomblet, null, { shotId: proj.id, attribWeaponType: proj.weaponType });
-        // serverBlast sweeps players only - the rain must pay creatures
-        // and balls the same way the carrier's own pop does below.
-        if (bStats.aoeRadius > 0) {
-          this.room.ballSim?.splashDamage(proj.ownerId, bAt, bStats.aoeRadius, bStats.aoeDamage);
-          this.room.creatureSim?.splashDamage(proj.ownerId, bAt, bStats.aoeRadius, bStats.aoeDamage);
-        }
-      }
-    }
+    this.clusterRain(proj, at);
     if (proj.stats.aoeRadius > 0) {
       const br = proj.stats.aoeRadius * radiusScale;
       this.room.ballSim?.splashDamage(proj.ownerId, at, br, proj.stats.aoeDamage, ballId);
       this.room.creatureSim?.splashDamage(proj.ownerId, at, br, proj.stats.aoeDamage, crawlerId);
     }
+    this.stickyChain(proj, at);
+  }
 
-    // Sticky chain: a blast cooks every sibling bomb in its radius - the
-    // client already rips the chain visually; aging siblings to fuse lets
-    // the same cascade happen server-side so blasts land when shown.
-    // Age to sib.ttl (not maxLifetime): jitteredTtl may roll past
-    // maxLifetime, and cooking to the base fuse would leave those stuck.
-    if (proj.weaponType === WeaponType.Sticky) {
-      const r2 = proj.stats.aoeRadius * proj.stats.aoeRadius;
-      let cooked = 0;
-      for (const sib of this.projs.values()) {
-        if (sib.weaponType !== WeaponType.Sticky) {continue;}
-        const dx = sib.p.pos.x - at.x, dy = sib.p.pos.y - at.y, dz = sib.p.pos.z - at.z;
-        if (dx * dx + dy * dy + dz * dz <= r2) {
-          sib.p.age = Math.max(sib.p.age, sib.ttl);
-          sib.cooked = true;
-          cooked += 1;
-        }
+  /** Riders pop where the host died - collect before deleting, their
+   *  own detonate() mutates the same map. */
+  private riderPop(proj: LiveProj, at: Vec3): void {
+    for (const r of [...this.projs.values()].filter((s): boolean => s.rides === proj.id)) {
+      this.detonate(r, at);
+    }
+  }
+
+  /** A shell that lands on a creature deals its direct line, then the
+   *  blast splashes the rest of the swarm - same outcome a player-caused
+   *  hit + aoeShot pair produces, minus the claims. */
+  private preyHit(proj: LiveProj, rampAge: number | undefined, fly: number, ballId: number | undefined, crawlerId: number | undefined): void {
+    const dmg = (roomDirectDamage(proj.weaponType, this.room.mods?.instagib === true, rampAge, this.room.mods?.igun === true) || proj.stats.aoeDamage) * fly;
+    if (ballId !== undefined) {
+      const killed = this.room.ballSim?.handleHit(proj.ownerId, ballId, dmg).killed ?? false;
+      weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
+    }
+    if (crawlerId !== undefined) {
+      const killed = this.room.creatureSim?.handleHit(proj.ownerId, crawlerId, dmg).killed ?? false;
+      weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
+    }
+  }
+
+  /** Hook pop: a body connect yanks the victim, anything else yanks the
+   *  owner - but only while the line was still live. */
+  private hookPayload(proj: LiveProj, at: Vec3, directHitId?: string | null): void {
+    if (directHitId != null || proj.p.age < proj.ttl) {
+      this.room.messages.grapple(proj.ownerId, at, directHitId ?? null);
+    }
+  }
+
+  /** Cluster carriers (MRV, ClusterBomb): the claim path scatters bomblet
+   *  blasts around the burst point - sim shells must pay the same way or
+   *  bot-fired cluster weapons ship only the weak carrier pop. */
+  private clusterRain(proj: LiveProj, at: Vec3): void {
+    if (!proj.stats.cluster) {return;}
+    const bomblet = proj.weaponType === WeaponType.MRVLauncher
+      ? WeaponType.MRVBomblet : WeaponType.ClusterBomblet;
+    const bStats = getWeaponStats(bomblet);
+    for (let i = 0; i < proj.stats.cluster.count; i += 1) {
+      const ang = this.room.rng() * Math.PI * 2;
+      const r = this.room.rng() * proj.stats.cluster.radius;
+      const bx = at.x + Math.cos(ang) * r;
+      const bz = at.z + Math.sin(ang) * r;
+      // Bomblets are contact bombs - the blast lands where the rain
+      // lands (ground under the scatter point), not on the carrier's
+      // mid-air burst plane where it out-ranges nothing above it.
+      const bAt = {
+        x: bx,
+        y: Math.max(this.field ? hmHeight(this.field, bx, bz) : at.y,
+          this.room.moveSim?.structureTop(bx, bz) ?? -Infinity),
+        z: bz,
+      };
+      // Credit the carrier - bomblet stats drive the envelope, but
+      // the launcher's weapon row is where the rain's damage belongs.
+      this.room.messages.serverBlast(proj.ownerId, bAt, bomblet, null, { shotId: proj.id, attribWeaponType: proj.weaponType });
+      // serverBlast sweeps players only - the rain must pay creatures
+      // and balls the same way the carrier's own pop does below.
+      if (bStats.aoeRadius > 0) {
+        this.room.ballSim?.splashDamage(proj.ownerId, bAt, bStats.aoeRadius, bStats.aoeDamage);
+        this.room.creatureSim?.splashDamage(proj.ownerId, bAt, bStats.aoeRadius, bStats.aoeDamage);
+      }
+    }
+  }
+
+  /** Sticky chain: a blast cooks every sibling bomb in its radius - the
+   *  client already rips the chain visually; aging siblings to fuse lets
+   *  the same cascade happen server-side so blasts land when shown.
+   *  Age to sib.ttl (not maxLifetime): jitteredTtl may roll past
+   *  maxLifetime, and cooking to the base fuse would leave those stuck. */
+  private stickyChain(proj: LiveProj, at: Vec3): void {
+    if (proj.weaponType !== WeaponType.Sticky) {return;}
+    const r2 = proj.stats.aoeRadius * proj.stats.aoeRadius;
+    for (const sib of this.projs.values()) {
+      if (sib.weaponType !== WeaponType.Sticky) {continue;}
+      const dx = sib.p.pos.x - at.x, dy = sib.p.pos.y - at.y, dz = sib.p.pos.z - at.z;
+      if (dx * dx + dy * dy + dz * dz <= r2) {
+        sib.p.age = Math.max(sib.p.age, sib.ttl);
+        sib.cooked = true;
       }
     }
   }

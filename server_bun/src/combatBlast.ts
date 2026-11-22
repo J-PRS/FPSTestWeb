@@ -327,25 +327,7 @@ export class BlastRunner {
     // The SHOOTER is exempt: their own blast already popped under their
     // feet on their screen - rewinding their ghost ~lagMs behind a fast
     // ski drops it outside the envelope, and self-damage silently dies.
-    let tpos = targetId === ctx.shooterId
-      ? { x: target.position.x, y: target.position.y, z: target.position.z }
-      : this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap, ctx.lagBound);
-    // Drawn-ghost override, same contract as bodySweep: a fresh aim
-    // report naming this target puts the capsule where the shooter's
-    // screen drew it - lateral DR drift lives at no rewind epoch, so a
-    // splash that detonated on the rendered body must not refuse for
-    // being off the wire path. Same reachability gate: within slack of
-    // the rewind window or live pos.
-    if (targetId !== ctx.shooterId) {
-      const g = this.h.playerManager.getPlayer(ctx.shooterId)?.aimGhost;
-      if (g !== undefined && g.id === targetId && wallNow() - g.at < 300) {
-        const spd = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
-        const slack = 6 + spd * 0.75;
-        const dR = Math.hypot(g.x - tpos.x, g.y - tpos.y, g.z - tpos.z);
-        const dL = Math.hypot(g.x - target.position.x, g.y - target.position.y, g.z - target.position.z);
-        if (dR <= slack || dL <= slack) {tpos = { x: g.x, y: g.y, z: g.z };}
-      }
-    }
+    const tpos = this.splashPos(ctx, targetId, target);
     const tdx = tpos.x - ctx.pos.x;
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;
@@ -356,37 +338,9 @@ export class BlastRunner {
       this.refuse('env', ctx, targetId, dist, target.isBot, tpos, target.position);
       return;
     }
+    if (this.splashGated(ctx, targetId, target, tpos, dist)) {return;}
 
-    // Wall occlusion - a blast outside a structure doesn't splash
-    // targets inside it (and vice versa). Blasts can legitimately
-    // sit INSIDE geometry (shell popped at the face), so a contact
-    // at t≈0 is stepped past rather than counted.
-    if (this.h.solids.length > 0 && this.blastBlocked(ctx.pos, tpos)) {
-      this.refuse('wall', ctx, targetId, dist, target.isBot, tpos, target.position);
-      return;
-    }
-
-    // Dome occlusion - the shell that popped AT the field edge splashes
-    // into it anyway without this: a dome is a blast wall, not just a
-    // projectile wall. Victims inside an enemy dome take nothing.
-    if (this.h.deps.shieldBlocked?.(ctx.pos, tpos, ctx.shooterId)) {
-      this.refuse('dome', ctx, targetId, dist, target.isBot, tpos, target.position);
-      return;
-    }
-
-    // Ghost-forensics: the gap between the rewind ghost this hit was
-    // credited on and the victim's live wire truth - a large delta is
-    // the "hit landed where nobody stood" feel, worth naming in the log
-    // AND on the shooter's wire (playerHit.gd → HUD complaint feed).
-    let gd: number | undefined;
-    if (targetId !== ctx.shooterId) {
-      const gdx = tpos.x - target.position.x, gdy = tpos.y - target.position.y, gdz = tpos.z - target.position.z;
-      const g = Math.sqrt(gdx * gdx + gdy * gdy + gdz * gdz);
-      if (g > 1.5) {
-        gd = Number(g.toFixed(1));
-        logger.info('ghost hit', { shooter: ctx.shooterId, victim: targetId, deltaM: gd, wt: ctx.weapon });
-      }
-    }
+    const gd = this.ghostDelta(ctx, targetId, target, tpos);
 
     // Spawn-shielded victim: damage already returns early inside
     // applyDamage, but the shove landed anyway - an "invulnerable" target
@@ -412,6 +366,14 @@ export class BlastRunner {
     // pass a flat figure (the ramp already IS the falloff)
     const damage = directDmg ?? aoeDamage(ctx.baseDamage, dist, ctx.radius, ctx.scales);
 
+    this.splashPay(ctx, targetId, target, { tpos, dist, offset: { x: tdx, y: tdy, z: tdz }, impulseMag, gd, protectedTarget, shoveOnly, damage });
+  }
+
+  /** The owed-payment tail of splashOne: displacement wire echo,
+   *  self-blast blood, friendly gate, damage + concussion payload. */
+  private splashPay(ctx: BlastCtx, targetId: string, target: PlayerState,
+      pay: { tpos: Vec3; dist: number; offset: Vec3; impulseMag: number; gd: number | undefined; protectedTarget: boolean; shoveOnly: boolean; damage: number }): void {
+    const { tpos, dist, offset, impulseMag, gd, protectedTarget, shoveOnly, damage } = pay;
     // Humans self-predict their own displacement - server only shoves
     // the self-target when it's a bot (server velocity truth). The shove
     // runs BEFORE the damage gate: the T1 impulse envelope reaches
@@ -419,7 +381,7 @@ export class BlastRunner {
     // the wire echo - skipping it strands the client's predicted stamp
     // (the kb-echo warn).
     if ((!shoveOnly || target.isBot) && !protectedTarget) {
-      this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, { pos: ctx.pos, pull: ctx.pull });
+      this.shove(targetId, target, offset, impulseMag, { pos: ctx.pos, pull: ctx.pull });
     } else if (protectedTarget && !target.isBot) {
       this.refuse('shield', ctx, targetId, dist, target.isBot, tpos, target.position);
     }
@@ -429,23 +391,7 @@ export class BlastRunner {
     // envelope by design, so the self-splash tax charged every punch.
     // Slam keeps paying: diving into the ground IS a self-blast.
     if (shoveOnly) {
-      // Self-propulsion still pays blood: the cost fades with distance
-      // inside the blast radius - a feet blast lands near SELF_SPLASH_MAX,
-      // a rim graze costs scraps. Continuous, so no cliff-edge price.
-      // Feet blasts pay the full disc-jump price; past 3m the cost
-      // falls off linearly to the rim - a stray shell popping a
-      // few meters out still costs a real chunk, not a third of
-      // the bar (fully quadratic read sterile - humans self-frag
-      // sloppier than ~0.5% of kills).
-      const near = Math.max(0, 1 - Math.max(0, dist - 3) / Math.max(1, ctx.radius - 3));
-      // Perk mods reach this path too - lightfoot's selfDamage:0.5 was
-      // client-only, so bots drawing the perk paid full blood for every
-      // propel while the roster pin (capper=lightfoot) did nothing.
-      const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near * perkMods(target.perk).selfDamage;
-      if (selfDmg > 0) {
-        const result = this.h.playerManager.applyDamage(targetId, selfDmg);
-        this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: Number(dist.toFixed(2)), pos: ctx.pos }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air });
-      }
+      this.selfSplash(ctx, targetId, target, dist, damage);
       return;
     }
 
@@ -460,6 +406,81 @@ export class BlastRunner {
     if (ctx.weapon === WeaponType.Concussion) {
       this.h.deps.emit?.({ type: 'flagDrop', playerId: targetId });
       this.h.deps.drainEnergy?.(targetId, CONC_JET_DRAIN);
+    }
+  }
+
+  /** Where this blast believes the target stands: lag-comp rewind for
+   *  everyone but the shooter, then the drawn-ghost override - a fresh
+   *  aim report naming this target puts the capsule where the shooter's
+   *  screen drew it, same contract as bodySweep. */
+  private splashPos(ctx: BlastCtx, targetId: string, target: PlayerState): Vec3 {
+    let tpos = targetId === ctx.shooterId
+      ? { x: target.position.x, y: target.position.y, z: target.position.z }
+      : this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap, ctx.lagBound);
+    if (targetId !== ctx.shooterId) {
+      const g = this.h.playerManager.getPlayer(ctx.shooterId)?.aimGhosts?.get(targetId);
+      if (g !== undefined && wallNow() - g.at < 300) {
+        const spd = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
+        const slack = 6 + spd * 0.75;
+        const dR = Math.hypot(g.x - tpos.x, g.y - tpos.y, g.z - tpos.z);
+        const dL = Math.hypot(g.x - target.position.x, g.y - target.position.y, g.z - target.position.z);
+        if (dR <= slack || dL <= slack) {tpos = { x: g.x, y: g.y, z: g.z };}
+      }
+    }
+    return tpos;
+  }
+
+  /** Occlusion gates between blast point and target: walls, then the
+   *  dome. true = refused (the refuse warn already went out). */
+  private splashGated(ctx: BlastCtx, targetId: string, target: PlayerState, tpos: Vec3, dist: number): boolean {
+    // Wall occlusion - a blast outside a structure doesn't splash
+    // targets inside it (and vice versa). Blasts can legitimately
+    // sit INSIDE geometry (shell popped at the face), so a contact
+    // at t≈0 is stepped past rather than counted.
+    if (this.h.solids.length > 0 && this.blastBlocked(ctx.pos, tpos)) {
+      this.refuse('wall', ctx, targetId, dist, target.isBot, tpos, target.position);
+      return true;
+    }
+    // Dome occlusion - the shell that popped AT the field edge splashes
+    // into it anyway without this: a dome is a blast wall, not just a
+    // projectile wall. Victims inside an enemy dome take nothing.
+    if (this.h.deps.shieldBlocked?.(ctx.pos, tpos, ctx.shooterId)) {
+      this.refuse('dome', ctx, targetId, dist, target.isBot, tpos, target.position);
+      return true;
+    }
+    return false;
+  }
+
+  /** Ghost-forensics: the gap between the rewind ghost this hit was
+   *  credited on and the victim's live wire truth - a large delta is
+   *  the "hit landed where nobody stood" feel, worth naming in the log
+   *  AND on the shooter's wire (playerHit.gd → HUD complaint feed). */
+  private ghostDelta(ctx: BlastCtx, targetId: string, target: PlayerState, tpos: Vec3): number | undefined {
+    if (targetId === ctx.shooterId) {return undefined;}
+    const g = Math.hypot(tpos.x - target.position.x, tpos.y - target.position.y, tpos.z - target.position.z);
+    if (g <= 1.5) {return undefined;}
+    const gd = Number(g.toFixed(1));
+    logger.info('ghost hit', { shooter: ctx.shooterId, victim: targetId, deltaM: gd, wt: ctx.weapon });
+    return gd;
+  }
+
+  /** Self-propulsion still pays blood: the cost fades with distance
+   *  inside the blast radius - a feet blast lands near SELF_SPLASH_MAX,
+   *  a rim graze costs scraps. Continuous, so no cliff-edge price. */
+  private selfSplash(ctx: BlastCtx, targetId: string, target: PlayerState, dist: number, damage: number): void {
+    // Feet blasts pay the full disc-jump price; past 3m the cost
+    // falls off linearly to the rim - a stray shell popping a
+    // few meters out still costs a real chunk, not a third of
+    // the bar (fully quadratic read sterile - humans self-frag
+    // sloppier than ~0.5% of kills).
+    const near = Math.max(0, 1 - Math.max(0, dist - 3) / Math.max(1, ctx.radius - 3));
+    // Perk mods reach this path too - lightfoot's selfDamage:0.5 was
+    // client-only, so bots drawing the perk paid full blood for every
+    // propel while the roster pin (capper=lightfoot) did nothing.
+    const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near * perkMods(target.perk).selfDamage;
+    if (selfDmg > 0) {
+      const result = this.h.playerManager.applyDamage(targetId, selfDmg);
+      this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: Number(dist.toFixed(2)), pos: ctx.pos }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air });
     }
   }
 
