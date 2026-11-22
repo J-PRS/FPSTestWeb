@@ -72,7 +72,7 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // stepping BallSim fills the field near every player, and lunging
   // balls pop on pinned bots — leaking damage into unrelated scenarios.
   const room = new Room('t', field, mode,
-    resolveMapSpec(Object.assign({ balls: { base: 0, perPlayer: 0, max: 0 } }, spec)), moveAuthority);
+    resolveMapSpec(Object.assign({ balls: { base: 0, perPlayer: 0, max: 0 } }, spec)), { moveAuthority });
   // Taunt draws ride a parallel stream — flavor must never consume the
   // behavior sequence (a shared cooldown ring would otherwise let one
   // room's chatter re-order another room's decision rolls).
@@ -257,7 +257,7 @@ export function replica(room: Room): Replica {
   const fanout = new TickFanout(fanoutMetrics,
     (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => undefined));
   const fanoutSim = { name: 'fanout', tick: () => {
-    room.tickSeq++;
+    room.tickSeq += 1;
     const players = room.players.getAllPlayers();
     fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
   } };

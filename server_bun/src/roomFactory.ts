@@ -33,6 +33,12 @@ export interface RoomFactoryHost {
   forgetRoom(name: string): void;
 }
 
+/** The normalized sim-gate set a joiner asked for (server policy folded). */
+interface RoomGates {
+  unlisted: boolean; noCreatures: boolean; noBalls: boolean;
+  instagib: boolean; gungame: boolean; igun: boolean;
+}
+
 export class RoomFactory {
   constructor(private host: RoomFactoryHost) {}
 
@@ -122,16 +128,7 @@ export class RoomFactory {
    *  its name just remints on the next join. Returns null only when
    *  every live room is occupied - the caller rejects the join. */
   roomFor(name: string, mode = '', map = '', bots?: number, mods: RoomMods = {}): Room | null {
-    // Server policy beats client requests: gates only tighten unless the operator opted in.
-    const unlisted = mods.unlisted === true;
-    const noCreatures = mods.noCreatures === true || !CONFIG.allowCreatures;
-    const noBalls = mods.noBalls === true || !CONFIG.allowBalls;
-    const instagib = mods.instagib === true;
-    // igun implies gungame (roomModsOf already normalized, belt-and-
-    // suspenders for direct callers); instagib and gungame are mutually
-    // exclusive - a railgun-only whitelist can't host an 18-rung ladder.
-    const gungame = !instagib && mods.gungame === true;
-    const igun = gungame && mods.igun === true;
+    const gates = RoomFactory.gateMods(mods);
     let room = this.host.rooms.get(name);
     // A bot-only room's mode is first-joiner residue, not someone's
     // match - a hosted 'ctf' landing in a stale 'nuggets' room would
@@ -146,122 +143,164 @@ export class RoomFactory {
       room = undefined;
     }
     if (!room) {
-      // The cap bounds join-driven room growth only - operator-authored
-      // standing lobbies (duel-1, headhunt-1) are seeded at boot and can
-      // never be recycled, so counting them would fill a low cap with
-      // rooms that reject every user mint.
-      let joinRooms = 0;
-      for (const r of this.host.rooms.values()) {if (!r.standing) {joinRooms += 1;}}
-      if (joinRooms >= CONFIG.maxRooms) {
-        for (const [n, r] of this.host.rooms) {
-          if (r.standing) {continue;} // standing lobbies never recycle
-          if (r.players.getHumanCount() > 0 || r.spectators.size > 0) {continue;}
-          r.dispose();
-          this.host.rooms.delete(n);
-          this.host.forgetRoom(n);
-          logger.warn('Room cap recycled idle room', { room: n });
-          break;
-        }
-        joinRooms = 0;
-        for (const r of this.host.rooms.values()) {if (!r.standing) {joinRooms += 1;}}
-        if (joinRooms >= CONFIG.maxRooms) {
-          logger.warn('Room mint rejected: all rooms live', { wanted: name });
-          return null;
-        }
-      }
-      const { spec, src } = this.host.maps.specFor(name, mode, map, bots);
-      this.host.maps.noteSource(name, src);
-      // Mint + record the room seed - production rooms replay their draw
-      // stream; ambient entropy at mint is fine (it's recorded, not drawn
-      // inside the sim).
-      // deferBots: a spec that needs an async terrain attach seats its
-      // bots pre-field - their spawn pick lifts via groundAt, which reads
-      // 0 until the field lands (buried announces + unbury warps).
-      const needsAttach = Boolean(spec?.terrain || spec?.heightScale || spec?.tileSize);
-      room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority,
-        (Math.random() * 0x1_00_00_00_00) >>> 0, needsAttach);
-      // The ctor already seeded populations (mods default empty) - the
-      // gates apply post-ctor and on later applySpec reloads.
-      // Spec-declared modifiers fold in with the join-spec ones - that's
-      // how a `standing` map mints an igun/gungame room, since its mint
-      // path (standingRooms -> roomFor(name)) carries no join spec.
-      const gg = gungame || spec?.gungame === true || spec?.igun === true;
-      const ig = gg && (igun || spec?.igun === true);
-      room.mods = {};
-      if (unlisted) {room.mods.unlisted = true;}
-      if (noCreatures) {room.mods.noCreatures = true;}
-      if (noBalls) {room.mods.noBalls = true;}
-      if (instagib) {room.mods.instagib = true;}
-      if (gg) {room.mods.gungame = true;}
-      if (ig) {room.mods.igun = true;}
-      if (noCreatures) {room.creatureSim.pops = {};}
-      if (noBalls) {room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
-      room.sessions = this.host.sessions;
-      room.mapSrc = src; // spec source filename - scoreboard map title fallback
-      // `room` is a mutable let - bind a const for the closures or TS
-      // widens them back to Room | undefined.
-      const r = room;
-      // Leaderboard receipt: one signer per room, fed by every bus event.
-      // mint() at matchEnd carries the whole match's outcome chain.
-      r.resultSigner = new ResultSigner(SIGN_SECRET, () => nextMatchId(r.name));
-      r.events.on((e): void => { r.resultSigner?.feed(e); });
-      room.onMatchEnd = (rec): void => this.host.recordEnd(rec);
-      // Judge mode counts divergences instead of correcting - the kick
-      // only fires on repeated teleport-scale gaps honest drift can't
-      // reach (see RoomMoveSim.SEVERE_*).
-      room.moveSim.onCheat = (pid, dist, detail): void => {
-        logger.warn('Movement cheat detected', Object.assign({}, {playerId: pid,room: r.name,dist: Number(dist.toFixed(1))}, detail));
-        // Warn instead of kick - flap/reconnect catch-up reports read as
-        // teleport-scale divergence, and a kick loop punishes honest lag.
-        r.sendToPlayer(pid, { type: 'serverWarn', text: 'SUSPICIOUS BEHAVIOR DETECTED' });
-      };
-      room.onRotate = (): MapSpec | null => this.host.maps.nextRotationSpec(r);
-      room.onTerrain = (s): void => this.attachTerrain(r, s);
-      if (needsAttach && spec) {this.attachTerrain(room, spec);}
-      this.host.rooms.set(name, room);
-      logger.info('Room created', { room: name, mode: room.mode });
-    } else if ((room.mods.noBalls === true) !== noBalls || (room.mods.noCreatures === true) !== noCreatures
-        || (room.mods.instagib === true) !== instagib
-        || (room.mods.gungame === true) !== gungame || (room.mods.igun === true) !== igun) {
-      // Standing rooms are operator-authored - a bare join request
-      // (mods={}) must not wipe spec-declared gates like igun/gungame
-      // that the mint path folded in.
-      if (!room.standing && room.players.getHumanCount() === 0) {
-        // No human contradicts the joiner's gates - a bot-only room just
-        // adopts them instead of warning. Same post-ctor gate writes the
-        // mint path runs, plus culling the populations already alive.
-        room.mods.noBalls = noBalls || undefined;
-        room.mods.noCreatures = noCreatures || undefined;
-        room.mods.instagib = instagib || undefined;
-        room.mods.gungame = gungame || undefined;
-        room.mods.igun = igun || undefined;
-        if (noCreatures) {
-          room.creatureSim.pops = {};
-          room.creatureSim.cullAll();
-        }
-        if (noBalls) {
-          room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
-          room.ballSim.cullAll();
-        }
-        logger.info('Bot-only room adopted joiner sim gates', {
-          room: name, noBalls, noCreatures, instagib, gungame, igun,
-        });
-      } else if (mods.noBalls === true || mods.noCreatures === true || mods.instagib === true
-          || mods.gungame === true || mods.igun === true) {
-        // First joiner defines the sim gates - callers warn their joiner,
-        // but only when they ASKED for gates. A bare join (mods={}) to a
-        // modded standing room declares nothing and just plays its rules -
-        // warning on it spams every /s/ join to igunffa-1.
-        logger.warn('Join sim gates differ from room', {
-          room: name, wantNoBalls: noBalls, wantNoCreatures: noCreatures,
-          wantInstagib: instagib, wantGungame: gungame, wantIgun: igun,
-          roomNoBalls: room.mods.noBalls === true, roomNoCreatures: room.mods.noCreatures === true,
-          roomInstagib: room.mods.instagib === true, roomGungame: room.mods.gungame === true, roomIgun: room.mods.igun === true,
-          standing: room.standing === true,
-        });
-      }
+      const minted = this.mintRoom(name, mode, map, bots, gates);
+      if (!minted) {return null;}
+      room = minted;
     }
+    else if (RoomFactory.gatesDiffer(room, gates)) {this.adoptJoinerGates(name, room, mods, gates);}
     return room;
+  }
+
+  /** Server policy beats client requests: gates only tighten unless the
+   *  operator opted in. igun implies gungame (roomModsOf already
+   *  normalized, belt-and-suspenders for direct callers); instagib and
+   *  gungame are mutually exclusive - a railgun-only whitelist can't
+   *  host an 18-rung ladder. */
+  private static gateMods(mods: RoomMods): RoomGates {
+    const instagib = mods.instagib === true;
+    const gungame = !instagib && mods.gungame === true;
+    return {
+      unlisted: mods.unlisted === true,
+      noCreatures: mods.noCreatures === true || !CONFIG.allowCreatures,
+      noBalls: mods.noBalls === true || !CONFIG.allowBalls,
+      instagib, gungame,
+      igun: gungame && mods.igun === true,
+    };
+  }
+
+  /** Do the live room's sim gates disagree with the joiner's ask? */
+  private static gatesDiffer(room: Room, g: RoomGates): boolean {
+    return (room.mods.noBalls === true) !== g.noBalls || (room.mods.noCreatures === true) !== g.noCreatures
+        || (room.mods.instagib === true) !== g.instagib
+        || (room.mods.gungame === true) !== g.gungame || (room.mods.igun === true) !== g.igun;
+  }
+
+  /** Room-cap enforcement: past the cap, recycle the eldest room with no
+   *  human audience (standing lobbies never recycle). Returns false when
+   *  every live room is occupied - the caller rejects the join. */
+  private makeRoomForMint(name: string): boolean {
+    // The cap bounds join-driven room growth only - operator-authored
+    // standing lobbies (duel-1, headhunt-1) are seeded at boot and can
+    // never be recycled, so counting them would fill a low cap with
+    // rooms that reject every user mint.
+    let joinRooms = 0;
+    for (const r of this.host.rooms.values()) {if (!r.standing) {joinRooms += 1;}}
+    if (joinRooms < CONFIG.maxRooms) {return true;}
+    for (const [n, r] of this.host.rooms) {
+      if (r.standing) {continue;} // standing lobbies never recycle
+      if (r.players.getHumanCount() > 0 || r.spectators.size > 0) {continue;}
+      r.dispose();
+      this.host.rooms.delete(n);
+      this.host.forgetRoom(n);
+      logger.warn('Room cap recycled idle room', { room: n });
+      break;
+    }
+    joinRooms = 0;
+    for (const r of this.host.rooms.values()) {if (!r.standing) {joinRooms += 1;}}
+    if (joinRooms >= CONFIG.maxRooms) {
+      logger.warn('Room mint rejected: all rooms live', { wanted: name });
+      return false;
+    }
+    return true;
+  }
+
+  /** The mint path: spec resolve, Room ctor, gate fold, wiring. */
+  private mintRoom(name: string, mode: string, map: string, bots: number | undefined, gates: RoomGates): Room | null {
+    if (!this.makeRoomForMint(name)) {return null;}
+    const { spec, src } = this.host.maps.specFor(name, mode, map, bots);
+    this.host.maps.noteSource(name, src);
+    // Mint + record the room seed - production rooms replay their draw
+    // stream; ambient entropy at mint is fine (it's recorded, not drawn
+    // inside the sim).
+    // deferBots: a spec that needs an async terrain attach seats its
+    // bots pre-field - their spawn pick lifts via groundAt, which reads
+    // 0 until the field lands (buried announces + unbury warps).
+    const needsAttach = Boolean(spec?.terrain || spec?.heightScale || spec?.tileSize);
+    const room = new Room(name, this.host.field(), mode, spec, { moveAuthority: CONFIG.moveAuthority,
+      seed: Math.trunc(Math.random() * 0x1_00_00_00_00), deferBots: needsAttach });
+    this.applyGates(room, spec, gates);
+    room.sessions = this.host.sessions;
+    room.mapSrc = src; // spec source filename - scoreboard map title fallback
+    // Leaderboard receipt: one signer per room, fed by every bus event.
+    // mint() at matchEnd carries the whole match's outcome chain.
+    room.resultSigner = new ResultSigner(SIGN_SECRET, () => nextMatchId(room.name));
+    room.events.on((e): void => { room.resultSigner?.feed(e); });
+    room.onMatchEnd = (rec): void => this.host.recordEnd(rec);
+    // Judge mode counts divergences instead of correcting - the kick
+    // only fires on repeated teleport-scale gaps honest drift can't
+    // reach (see RoomMoveSim.SEVERE_*).
+    room.moveSim.onCheat = (pid, dist, detail): void => {
+      logger.warn('Movement cheat detected', Object.assign({}, {playerId: pid,room: room.name,dist: Number(dist.toFixed(1))}, detail));
+      // Warn instead of kick - flap/reconnect catch-up reports read as
+      // teleport-scale divergence, and a kick loop punishes honest lag.
+      room.sendToPlayer(pid, { type: 'serverWarn', text: 'SUSPICIOUS BEHAVIOR DETECTED' });
+    };
+    room.onRotate = (): MapSpec | null => this.host.maps.nextRotationSpec(room);
+    room.onTerrain = (s): void => this.attachTerrain(room, s);
+    if (needsAttach && spec) {this.attachTerrain(room, spec);}
+    this.host.rooms.set(name, room);
+    logger.info('Room created', { room: name, mode: room.mode });
+    return room;
+  }
+
+  /** Post-ctor sim-gate fold. The ctor already seeded populations (mods
+   *  default empty) - the gates apply here and on later applySpec
+   *  reloads. Spec-declared modifiers fold in with the join-spec ones -
+   *  that's how a `standing` map mints an igun/gungame room, since its
+   *  mint path (standingRooms -> roomFor(name)) carries no join spec. */
+  private applyGates(room: Room, spec: MapSpec | undefined, gates: RoomGates): void {
+    const gg = gates.gungame || spec?.gungame === true || spec?.igun === true;
+    const ig = gg && (gates.igun || spec?.igun === true);
+    room.mods = {};
+    if (gates.unlisted) {room.mods.unlisted = true;}
+    if (gates.noCreatures) {room.mods.noCreatures = true; room.creatureSim.pops = {};}
+    if (gates.noBalls) {room.mods.noBalls = true; room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
+    if (gates.instagib) {room.mods.instagib = true;}
+    if (gg) {room.mods.gungame = true;}
+    if (ig) {room.mods.igun = true;}
+  }
+
+  /** A live room whose sim gates differ from the joiner's ask: bot-only
+   *  rooms adopt the gates outright; occupied/standing rooms warn. */
+  private adoptJoinerGates(name: string, room: Room, mods: RoomMods, g: RoomGates): void {
+    // Standing rooms are operator-authored - a bare join request
+    // (mods={}) must not wipe spec-declared gates like igun/gungame
+    // that the mint path folded in.
+    if (!room.standing && room.players.getHumanCount() === 0) {
+      // No human contradicts the joiner's gates - a bot-only room just
+      // adopts them instead of warning. Same post-ctor gate writes the
+      // mint path runs, plus culling the populations already alive.
+      room.mods.noBalls = g.noBalls || undefined;
+      room.mods.noCreatures = g.noCreatures || undefined;
+      room.mods.instagib = g.instagib || undefined;
+      room.mods.gungame = g.gungame || undefined;
+      room.mods.igun = g.igun || undefined;
+      if (g.noCreatures) {
+        room.creatureSim.pops = {};
+        room.creatureSim.cullAll();
+      }
+      if (g.noBalls) {
+        room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
+        room.ballSim.cullAll();
+      }
+      logger.info('Bot-only room adopted joiner sim gates', {
+        room: name, noBalls: g.noBalls, noCreatures: g.noCreatures, instagib: g.instagib, gungame: g.gungame, igun: g.igun,
+      });
+      return;
+    }
+    if (mods.noBalls !== true && mods.noCreatures !== true && mods.instagib !== true
+        && mods.gungame !== true && mods.igun !== true) {return;}
+    // First joiner defines the sim gates - callers warn their joiner,
+    // but only when they ASKED for gates. A bare join (mods={}) to a
+    // modded standing room declares nothing and just plays its rules -
+    // warning on it spams every /s/ join to igunffa-1.
+    logger.warn('Join sim gates differ from room', {
+      room: name, wantNoBalls: g.noBalls, wantNoCreatures: g.noCreatures,
+      wantInstagib: g.instagib, wantGungame: g.gungame, wantIgun: g.igun,
+      roomNoBalls: room.mods.noBalls === true, roomNoCreatures: room.mods.noCreatures === true,
+      roomInstagib: room.mods.instagib === true, roomGungame: room.mods.gungame === true, roomIgun: room.mods.igun === true,
+      standing: room.standing === true,
+    });
   }
 
   /** Quick-join: pick the emptiest open room already running `mode`
@@ -271,35 +310,30 @@ export class RoomFactory {
    *  with noBalls afterwards is a no-op (first joiner defines), so a
    *  bare quickRoom would silently ignore the host's toggles. */
   quickRoom(mode: string, map = '', bots?: number, mods: RoomMods = {}, preferHumans = false, mayMint = true): Room | null {
-    const noCreatures = mods.noCreatures === true;
-    const noBalls = mods.noBalls === true;
     const instagib = mods.instagib === true;
     const gungame = !instagib && mods.gungame === true;
-    const igun = gungame && mods.igun === true;
+    // Quick-join gates normalize WITHOUT the CONFIG folds roomFor uses -
+    // an unasked joiner (flags false) must land in whatever room is live.
+    const g: RoomGates = { unlisted: false, noCreatures: mods.noCreatures === true, noBalls: mods.noBalls === true,
+      instagib, gungame, igun: gungame && mods.igun === true };
+    const { best, bestHumans } = this.quickScan(map, mode, g, preferHumans);
+    if (preferHumans && bestHumans < 0) {return this.quickRoom(mode, map, bots, mods, false, mayMint);}
+    if (best) {return best;}
+    // Public deploys deny mints to untrusted traffic - the join falls back
+    // to the caller's no-mint retry or 'Server full' instead of growing
+    // the room set per request param.
+    if (!mayMint) {return null;}
+    return this.mintQuickRoom(mode, map, bots, mods);
+  }
+
+  /** Scan live rooms for the busiest quick-join seat. humans=1 wants a
+   *  live match: the busiest room with humans in it, falling back to the
+   *  plain busiest pick when every room is bots-only. */
+  private quickScan(map: string, mode: string, g: RoomGates, preferHumans: boolean): { best?: Room; bestHumans: number } {
     let best: Room | undefined = undefined;
     let bestHumans = -1;
     for (const room of this.host.rooms.values()) {
-      // Map and mode are independent filters - a peaks-ctf room must not
-      // absorb a peaks-dm quick-join just because the map matches.
-      if (map && this.host.maps.mapNameOf(room.name) !== map) {continue;}
-      if (mode && room.mode !== mode) {continue;}
-      // The sim gates are part of the match a joiner asked for - picking a
-      // balled room for a no-balls joiner silently ignores the toggle
-      // (first joiner defines, so a wrong-gated room can never be fixed).
-      // One-directional: the flags only ever assert OFF, so an unasked
-      // joiner (both false) lands in whatever room is live - standing
-      // lobbies seed gated-off for cost, and exact-match would refuse
-      // every bare join the moment minting is denied.
-      if ((noBalls && room.mods.noBalls !== true) || (noCreatures && room.mods.noCreatures !== true)) {continue;}
-      // Instagib/gun-game are hard room properties, not preferences - a
-      // normal room can never become one (or vice versa) mid-match.
-      if (instagib !== (room.mods.instagib === true)
-          || gungame !== (room.mods.gungame === true) || igun !== (room.mods.igun === true)) {continue;}
-      if (room.playerCount() >= room.maxPlayers) {continue;}
-      if (room.mods.unlisted === true) {continue;}
-      // humans=1 - /quickjoin wants a live match: the busiest room with
-      // humans in it, falling back to the plain emptiest pick when every
-      // room is bots-only.
+      if (!this.quickFits(room, map, mode, g)) {continue;}
       if (preferHumans) {
         const h = room.players.getHumanCount();
         if (h === 0) {continue;}
@@ -311,20 +345,34 @@ export class RoomFactory {
       }
       if (!best || room.playerCount() > best.playerCount()) {best = room;}
     }
-    if (preferHumans && bestHumans < 0) {return this.quickRoom(mode, map, bots, mods, false, mayMint);}
-    if (best) {return best;}
-    // Public deploys deny mints to untrusted traffic - the join falls back
-    // to the caller's no-mint retry or 'Server full' instead of growing
-    // the room set per request param.
-    if (!mayMint) {return null;}
-    // Empty-server join still lands in a REAL match - pick the busiest
-    // room (liveliest, not emptiest); if none exists, mint on the
-    // default map so the joiner never gets a spec-less arena with
-    // maps/null terrain.
-    // Rooms are mode-named, not map-named: the rotation walks maps INSIDE
-    // a room, so 'headhunt-1' reads true after a map swap where 'rimrock-1'
-    // lies (it's headhunt on caldera now). Mode empty → the map name is
-    // the room's identity until a hosted mode claim lands.
+    return { best, bestHumans };
+  }
+
+  /** Candidate filter: map+mode are independent filters (a peaks-ctf
+   *  room must not absorb a peaks-dm quick-join), the sim gates are part
+   *  of the match a joiner asked for (picking a balled room for a
+   *  no-balls joiner silently ignores the toggle - first joiner defines,
+   *  so a wrong-gated room can never be fixed). One-directional: the
+   *  flags only ever assert OFF, so an unasked joiner lands in whatever
+   *  room is live. Instagib/gun-game are hard room properties, not
+   *  preferences - a normal room can never become one mid-match. */
+  private quickFits(room: Room, map: string, mode: string, g: RoomGates): boolean {
+    if (map && this.host.maps.mapNameOf(room.name) !== map) {return false;}
+    if (mode && room.mode !== mode) {return false;}
+    if ((g.noBalls && room.mods.noBalls !== true) || (g.noCreatures && room.mods.noCreatures !== true)) {return false;}
+    if (g.instagib !== (room.mods.instagib === true)
+        || g.gungame !== (room.mods.gungame === true) || g.igun !== (room.mods.igun === true)) {return false;}
+    if (room.playerCount() >= room.maxPlayers) {return false;}
+    return room.mods.unlisted !== true;
+  }
+
+  /** The mint path when no live room fits: mode-named base + worker-
+   *  strided counter. Empty-server join still lands in a REAL match -
+   *  if no room exists, mint on the default map so the joiner never
+   *  gets a spec-less arena with maps/null terrain. Rooms are mode-
+   *  named, not map-named: the rotation walks maps INSIDE a room, so
+   *  'headhunt-1' reads true after a map swap where 'rimrock-1' lies. */
+  private mintQuickRoom(mode: string, map: string, bots: number | undefined, mods: RoomMods): Room | null {
     const mintMap = map || this.host.maps.defaultMap();
     // Bare /join sends no mode - the standing-room default is headhunt;
     // a named mode still wins outright.

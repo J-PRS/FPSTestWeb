@@ -12,7 +12,7 @@
 import { PlayerManager } from './PlayerManager.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
-import { MessageHandler, type RoomInfo } from './MessageHandler.ts';
+import { MessageHandler } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
 import { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
@@ -20,7 +20,7 @@ import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
-import { NOISE_TTL_MS , type V4Last, encodeHit, encodeWidPos, encodeShotEv, WIRE_E_LANDED } from '../../shared/wire.ts';
+import { NOISE_TTL_MS , type V4Last, encodeWidPos, encodeShotEv, WIRE_E_LANDED } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -33,23 +33,28 @@ import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
 import { RoomIntel } from './serverIntel.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
+import { RoomGunGame } from './roomGunGame.ts';
+import { RoomUnbury } from './roomUnbury.ts';
+import { buildRoomInfo } from './roomInfo.ts';
 import type { PlayerState, Vec3, ClientMessage,WebSocketData } from './types.ts';
 import { CLASS_STATS, classCapsule, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
-import { inv, setInvariantSink } from '../../shared/invariants.ts';
+import { setInvariantSink } from '../../shared/invariants.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage, RoomMods } from '../../shared/protocol.ts';
+import type { ResultSigner } from './resultSigner.ts';
+import type { ResultToken } from '../../shared/resultToken.ts';
 import { WORLD_MODEL, verbPayload, eventPayload } from '../../shared/worldModel.ts';
 import { decomposeTokens, POWERUP } from '../../shared/pickups.ts';
 import { botRand, tauntRand } from '../../shared/botRand.ts';
 import { lcg32, type Lcg } from '../../shared/simRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
-import { EventBus } from './roomEvents.ts';
+import { EventBus, type RoomEvent } from './roomEvents.ts';
 import { MODE_MODULES, type ModeModule } from './modeModules.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY, MOVEMENT_CONFIG, type BodyCapsule } from '../../shared/movement.ts';
 import { BELT_MAX, serverSimmed, isInstagibWeapon, WeaponType } from '../../shared/weapons.ts';
-import { gunGameClimax, gunGameAllows, gunGameRoll, igunChassis } from '../../shared/gunGame.ts';
+import { igunChassis } from '../../shared/gunGame.ts';
 import { chatKindFor, vgsCommandFor, radioAimFor } from '../../shared/botTaunts.ts';
 import { perkMods, isPerkId } from '../../shared/perks.ts';
 import { healPool } from './healPool.ts';
@@ -153,7 +158,7 @@ export class Room {
    *  buildRecords. */
   readonly introPlayers = new Map<string, number>();
   /** Wall-clock of the last accepted tickNack  -  room-wide cooldown above. */
-  private lastNackAt = 0;
+  lastNackAt = 0;
 
   /** Stamp a fresh/reclaimed/spectator seat's per-recipient intro window.
    *  Also clears lastSentPositions so every live player emits at least
@@ -229,81 +234,18 @@ export class Room {
     this.health.clear();
   }
 
-  /** Buried-body failsafe: every sim path should pull a body back to the
-   *  surface in one tick, but authored spawns, stale shadows and legacy
-   *  writes have all leaked players under the field. Cheap sweep: feet
-   *  below the terrain gets lifted to the surface and the shadow reseated
-   *  so client and server agree. Counted in room health  -  if the number
-   *  stays nonzero there's a real leak to hunt. */
-  private unburyAcc = 0;
-  private unburyLogN = 0;
+  /** Buried-body failsafe sweep (RoomUnbury): every sim path should pull a
+   *  body back to the surface in one tick, but authored spawns, stale
+   *  shadows and legacy writes have all leaked players under the field.
+   *  Counted in room health  -  if the number stays nonzero there's a
+   *  real leak to hunt. */
   /** Leaderboard receipt minter  -  roomFactory wires one per room onto the
    *  event bus; roomMatch mints the signed token at matchEnd. Optional:
    *  unsigned dev rooms still get the record, just no signature. */
-  resultSigner: import('./resultSigner.ts').ResultSigner | null = null;
-  private unburyTick(dt: number): void {
-    if (!this.field) {return;}
-    this.unburyAcc += dt;
-    if (this.unburyAcc < 0.5) {return;}
-    this.unburyAcc = 0;
-    this.unburySweep();
-  }
-
+  resultSigner: ResultSigner | null = null;
   /** The room's real field landed (attachTerrain)  -  seats picked before
-   *  it resolved kept authored anchor y (groundAt read 0/stale), leaving
-   *  bodies meters under the surface the client will draw. One sweep,
-   *  including seats that never reported: a server-picked spawn under
-   *  the real terrain is our bug to lift, not a claim to honor. */
-  unburySeats(): void {
-    if (!this.field) {return;}
-    this.unburySweep(true);
-  }
-
-  private unburySweep(includeUnreported = false): void {
-    if (!this.field) {return;}
-    for (const p of this.players.getAllPlayers().values()) {
-      this.unburyCheck(p, includeUnreported);
-    }
-  }
-
-  /** One body's ground-law check. Measure with the shadow's own eye when
-   *  one exists - the class capsule and the sim body disagree whenever a
-   *  refit left the sim at the default eye, and the record's view was the
-   *  stale one. Judge each body on the floor it sims on: bot shadows ride
-   *  the chord-augmented surface (what remotes draw), human shadows the
-   *  plain field - a field-grounded human in a gully is legitimately
-   *  under the drawn chord, and popping their claim is a phantom
-   *  correction. Remote-side render lift owns the visual clearance.
-   *  pos.y IS the eye point - "feet" would double-subtract the eye and
-   *  phantom-bury every banded contact (a grounded heavy legally rides
-   *  its eye ~0.5 under the floor in the snap window). Buried means the
-   *  EYE itself is below the surface. */
-  private unburyCheck(p: PlayerState, includeUnreported: boolean): void {
-    const field = this.field!;
-    if (p.isDead || (!p.isBot && !p.hasReceivedPosition && !includeUnreported)) {return;}
-    const eye = this.moveSim.eyeOf(p.id) ?? classCapsule(p.armorClass as ArmorClass).eye;
-    const terrain = p.isBot
-      ? Math.max(hmHeight(field, p.position.x, p.position.z), hmChord(field, p.position.x, p.position.z))
-      : hmHeight(field, p.position.x, p.position.z);
-    // The ground law as an invariant - scoped to sim-owned bodies.
-    // A bot's record mirrors its shadow every tick (botDrive), so a
-    // buried bot record IS a violation. Human records are claims -
-    // a lagged claim under the surface is lag, not a bug.
-    if (p.isBot) {inv('bot-below-ground', !Number.isFinite(terrain) || p.position.y >= terrain - 0.5,
-      { id: p.id, xz: `${p.position.x.toFixed(1)},${p.position.z.toFixed(1)}`, y: Number(p.position.y.toFixed(1)), eye, terrain: Number.isFinite(terrain) ? Number(terrain.toFixed(1)) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });}
-    if (!Number.isFinite(terrain) || p.position.y >= terrain - 0.5) {return;}
-    // First rescues carry the autopsy at debug level - the 'unbury'
-    // health counter and the bot-scoped inv above are the loud signal;
-    // a warn per rescue reads as jank in soak asserts while routine
-    // claim wobble is legitimately rescued.
-    if (((this.unburyLogN += 1) - 1) < 30) {
-      logger.debug(`unbury ${p.id}: pos.y=${p.position.y.toFixed(1)} feet=${(p.position.y - eye).toFixed(1)} terrain=${terrain.toFixed(1)} bot=${p.isBot} ${this.moveSim.unburyDebug(p.id)}`);
-    }
-    p.position.y = terrain + eye;
-    p.velocity.y = Math.max(0, p.velocity.y);
-    this.moveSim.resync(p.id, p.position, p.rotation.yaw);
-    this.healthBump('unbury');
-  }
+   *  it resolved kept authored anchor y; one unbury sweep lifts them. */
+  unburySeats(): void { this.unbury.seats(); }
 
   spec: MapSpec; // mutable  -  admin hot-reload rewrites it live
   // Server-owned match scoreboard  -  only populated in team modes.
@@ -357,6 +299,8 @@ export class Room {
   pickups: RoomPickups | null = null;
   /** Server-owned deployables  -  turrets/mines/stations/drones a `deploy`
    *  claim plants; caps + TTL + teardown live here. */
+  readonly gunGame = new RoomGunGame(this);
+  readonly unbury = new RoomUnbury(this);
   readonly deployables: RoomDeployables;
   /** Server-truth IFF - per-viewer detection contacts (sensor net +
    *  personal LOS, recon perk memory) feeding the 'intel' wire feed. */
@@ -450,120 +394,119 @@ export class Room {
     if (!cosmetic) {return;}
     const wid = this.wireIds.get(playerId);
     if (wid === undefined) {return;} // no binary id: drain's JSON fallback relays instead
-    const key = `${playerId}:${msg.shotId}`;
-    if (this.earlyShots.has(key)) {return;}
-    const now = wallNow();
-    this.earlyShots.set(key, now);
-    for (const [k, t] of this.earlyShots) {if (now - t > Room.EARLY_RELAY_TTL_MS) {this.earlyShots.delete(k);}}
-    if (this.earlyShots.size > 256) {this.earlyShots.delete(this.earlyShots.keys().next().value!);}
+    if (!this.earlyShotMark(playerId, msg.shotId)) {return;}
     // Origin is the live truth, not the drain's rewound claimOrigin -
     // a few ms of staleness on a cosmetic flash beats re-deriving the
     // rewind outside the adjudication path.
     this.connections.broadcastBinaryReliable(encodeShotEv(wid, msg.weaponType, p.position, msg.dir), 'volatile', playerId);
   }
+
+  /** Early-relay dedupe + TTL sweep; false when this shotId already
+   *  flashed (the drain's relay emit skips it or observers double the
+   *  muzzle). */
+  private earlyShotMark(playerId: string, shotId: string): boolean {
+    const key = `${playerId}:${shotId}`;
+    if (this.earlyShots.has(key)) {return false;}
+    const now = wallNow();
+    this.earlyShots.set(key, now);
+    for (const [k, t] of this.earlyShots) {if (now - t > Room.EARLY_RELAY_TTL_MS) {this.earlyShots.delete(k);}}
+    if (this.earlyShots.size > 256) {this.earlyShots.delete(this.earlyShots.keys().next().value!);}
+    return true;
+  }
+
   /** True when the early relay already flashed this shot - the drain's
    *  relay emit must skip it or observers see a double muzzle. */
   earlyRelayed(playerId: string, shotId?: string): boolean {
     return shotId !== undefined && this.earlyShots.has(`${playerId}:${shotId}`);
   }
 
-  /** Ladder position - rung lives on the seat's PlayerState, so a
-   *  grace-period reclaim keeps its climb for free. Absent = rung 0. */
-  gunRungOf(playerId: string): number { return this.players.getPlayer(playerId)?.gunRung ?? 0; }
+  /** Gun-game ladder lives in roomGunGame.ts - these stay as delegates
+   *  so the CombatHandler/botArsenal/roomMatch call sites keep the
+   *  historical `room.*` names. rung lives on the seat's PlayerState, so
+   *  a grace-period reclaim keeps its climb for free. */
+  gunRungOf(playerId: string): number { return this.gunGame.rungOf(playerId); }
+  gunGameAllowsFire(playerId: string, weaponType: number): boolean { return this.gunGame.allowsFire(playerId, weaponType); }
+  gunGameHeld(playerId: string, weaponType: number): void { this.gunGame.held(playerId, weaponType); }
+  gunGameSeat(playerId: string): void { this.gunGame.seat(playerId); }
+  gunGameReset(): void { this.gunGame.reset(); }
+  /** Tests poke this name via cast to fake a climbed rung. */
+  setGunRung(playerId: string, rung: number): void { this.gunGame.setRung(playerId, rung); }
 
-  /** The one weapon gate every gungame fire path consults: the rung's
-   *  ladder weapon plus the Hook grapple (deals no damage - it can't
-   *  farm rungs, and everyone keeps their traverse). */
-  gunGameAllowsFire(playerId: string, weaponType: number): boolean {
-    return gunGameAllows(this.gunRungOf(playerId), weaponType, this.mods.igun === true);
+  /** Kill bookkeeping off the event bus: weapon tally + cause buckets +
+   *  gun-game rungs ride every frag. */
+  private onKillEvent(e: Extract<RoomEvent, { type: 'kill' }>): void {
+    this.scoring.onKill(e.targetId, e.shooterId);
+    const w = e.weapon;
+    if (w !== undefined) {this.killsByWeapon.set(w, (this.killsByWeapon.get(w) ?? 0) + 1);}
+    const cause = w === undefined ? Room.deathCause(e) : `w${w}`;
+    this.deathsByCause.set(cause, (this.deathsByCause.get(cause) ?? 0) + 1);
+    this.gunGame.onKill(e.targetId, e.shooterId);
   }
 
-  /** Bucket pick edge: a gungame fire claim names the member the player
-   *  actually shouldered - roster weapon (remote viewmodel) and the igun
-   *  chassis follow the real pick, not the bucket's first member. */
-  gunGameHeld(playerId: string, weaponType: number): void {
-    const p = this.players.getPlayer(playerId);
-    if (!p || p.weapon === weaponType) {return;}
-    p.weapon = weaponType;
-    this.broadcastWeapon(playerId);
-    this.igunClassSync(playerId);
+  private static deathCause(e: { targetId: string; shooterId: string }): string {
+    if (e.shooterId === 'environment') {return 'env';}
+    return e.shooterId === e.targetId ? 'self' : 'other';
   }
 
-  /** Rung edge → wire + roster weapon. Only the owner needs the number:
-   *  remotes read a player's gun off their own fires (p.weapon rides
-   *  the roster), so the push goes to one socket. */
-  private setGunRung(playerId: string, rung: number): void {
-    const r = Math.max(0, Math.min(gunGameClimax(this.mods.igun === true), Math.floor(rung)));
-    const p = this.players.getPlayer(playerId);
-    if (!p || p.gunRung === r) {return;} // no edge = no redeal - a climax kill must not replay the swap
-    p.gunRung = r;
-    // Bucket roll: the rung deals one member - luck, not a pick. The wire
-    // carries the draw so the client's locked band mirrors the same gun.
-    p.weapon = gunGameRoll(r, this.mods.igun === true, this.rng());
-    this.broadcastWeapon(playerId);
-    this.igunClassSync(playerId);
-    this.sendToPlayer(playerId, { type: 'gunRung', rung: r, wt: p.weapon });
+  /** Event-bus dispatch table: a spoken line is itself an event worth a
+   *  reply - the squad sees it on their own think phases, so an answer
+   *  lands a beat later like real chat. */
+  private readonly eventSinks: { [K in RoomEvent['type']]?: (e: Extract<RoomEvent, { type: K }>) => void } = {
+    kill: (e): void => this.onKillEvent(e),
+    hit: (e): void => { this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); },
+    fire: (e): void => {
+      this.bots.noteHumanFire(e.playerId);
+      const shooter = this.players.getPlayer(e.playerId);
+      if (shooter) {shooter.lastFireSim = simNow();} // decloak-on-fire: senses unmask CLOAK for the reveal window
+    },
+    botSpoke: (e): void => {
+      const team = this.players.getPlayer(e.id)?.team;
+      // A bot who spoke a command chord issued a real call - teammates
+      // get the pin just like a human's VGS. Everything else is a bark.
+      const goal = e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined;
+      this.bots.notice(goal ? 'ack' : 'reply', e.id, team, goal);
+    },
+    chat: (e): void => {
+      const kind = chatKindFor(e.text)
+        ?? (e.vgs ? vgsCommandFor(e.vgs) : null)
+        ?? (this.bots.nameIn(e.text) ? 'mention' : null);
+      const team = this.players.getPlayer(e.id)?.team;
+      if (kind) {this.bots.notice(kind, e.id, team, e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined);}
+      this.noteChatPace(e.id);
+    },
+    // Blast aftermath - each emit once carried a bespoke RoomInfo hook;
+    // the bus fans it out instead. Claimed blasts punt only flags
+    // ('flag'): a client-claimed origin is untrusted, so it must not punt
+    // loose pickups - 'pickup' emits only come from server-owned blast
+    // paths (shells, mines).
+    blast: (e): void => this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales, e.weapon, e.splash),
+    knock: (e): void => {
+      if (e.kind === 'prey') { this.ballSim.knock(e.pos, e.radius, e.force, e.pull); this.creatureSim.knock(e.pos, e.radius, e.force, e.pull); }
+      else {(e.kind === 'pickup' ? this.pickups : this.flags)?.knock(e.pos, e.radius, e.force, e.pull);}
+    },
+    preySplash: (e): void => {
+      this.ballSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
+      this.creatureSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
+    },
+    meleeSweep: (e): void => {
+      this.ballSim.meleeSweep(e.playerId, e.pos, e.dir);
+      this.creatureSim.meleeSweep(e.playerId, e.pos, e.dir);
+    },
+    armor: (e): void => {
+      this.ballSim.armorBlast(e.pos, e.radius, e.amount);
+      this.creatureSim.armorBlast(e.pos, e.radius, e.amount);
+    },
+    impulse: (e): void => this.moveSim.applyImpulse(e.playerId, e.dv, e.fallBoost),
+    flagDrop: (e): void => this.flags?.dropIfCarrier(e.playerId),
+  };
+
+  /** Deploy intent gate: sandboxed modes refuse real deploys outright. */
+  deployGate(pid: string, kind: Parameters<Room['deployables']['handleDeploy']>[1], pos: Parameters<Room['deployables']['handleDeploy']>[2], vel: Parameters<Room['deployables']['handleDeploy']>[3]): string | true {
+    if (this.mods.instagib === true) {return 'instagib';}
+    if (this.mods.gungame === true) {return 'gungame';}
+    return this.deployables.handleDeploy(pid, kind, pos, vel);
   }
 
-  /** Roster `weapon` mid-life twin - remotes swap the hand prop to the
-   *  dealt/picked gun without waiting for the first shot edge. */
-  private broadcastWeapon(playerId: string): void {
-    const wt = this.players.getPlayer(playerId)?.weapon;
-    if (wt !== undefined) {this.broadcast({ type: 'weaponUpdate', playerId, weapon: wt } as ServerMessage);}
-  }
-
-  /** igun chassis edge: the body follows the rung weapon's tier. Humans
-   *  ride applyClaimedClass (the claim arg is dead under igun anyway);
-   *  bots ride the roster's applyClass so its health-delta bookkeeping
-   *  and the `classes` map stay consistent. */
-  private igunClassSync(playerId: string): void {
-    if (this.mods.igun !== true) {return;}
-    const p = this.players.getPlayer(playerId);
-    if (!p) {return;}
-    if (p.isBot) {this.bots.syncIgunClass(playerId);}
-    else {this.applyClaimedClass(playerId, '');}
-  }
-
-  /** Join/reclaim edge: seat the ladder rung - roster weapon + the owner
-   *  push that locks the client's band. Call AFTER the handshake's
-   *  gameState so the client's kit lock exists when the rung lands;
-   *  reclaim re-reads the stored rung so a grace-window return keeps
-   *  its climb. */
-  gunGameSeat(playerId: string): void {
-    if (this.mods.gungame !== true) {return;}
-    const p = this.players.getPlayer(playerId);
-    if (!p) {return;}
-    const r = p.gunRung ?? 0;
-    p.weapon = gunGameRoll(r, this.mods.igun === true, this.rng());
-    this.broadcastWeapon(playerId);
-    this.igunClassSync(playerId);
-    this.sendToPlayer(playerId, { type: 'gunRung', rung: r, wt: p.weapon });
-  }
-
-  /** New match = fresh ladders: every seat back to rung 0 (roster weapon
-   *  + owner push), then respawnAll lands bodies on the new spec. */
-  gunGameReset(): void {
-    if (this.mods.gungame !== true) {return;}
-    for (const p of this.players.getAllPlayers().values()) {
-      p.gunRung = 0;
-      p.weapon = gunGameRoll(0, this.mods.igun === true, this.rng());
-      this.broadcastWeapon(p.id);
-      this.igunClassSync(p.id);
-      this.sendToPlayer(p.id, { type: 'gunRung', rung: 0, wt: p.weapon });
-    }
-  }
-
-  /** Gun-game ladder edges off the shared kill bus: a player frag
-   *  advances the shooter one rung (climax holds - frag count decides
-   *  the match), the victim drops to rung 0. Environment/self kills
-   *  move nobody. Every damage funnel emits 'kill', so shells, beams,
-   *  melee and deployables all feed the ladder. */
-  private gunGameOnKill(targetId: string, shooterId: string): void {
-    if (this.mods.gungame !== true) {return;}
-    if (this.players.getPlayer(targetId)) {this.setGunRung(targetId, 0);}
-    if (shooterId === 'environment' || shooterId === targetId) {return;}
-    if (this.players.getPlayer(shooterId)) {this.setGunRung(shooterId, this.gunRungOf(shooterId) + 1);}
-  }
   /** Spatial memory  -  kills/fights/gems/flags leave decaying scent the
    *  brains read for where-the-action-was. See influenceMap.ts. Sized to
    *  the map's tile span; resized by applySpec when that changes. */
@@ -577,7 +520,7 @@ export class Room {
   readonly moveAuthority: boolean;
   /** Match-results journal hook  -  GameServer writes matches.jsonl and
    *  feeds /matches from it. Fired on every win condition. */
-  onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[]; token?: import('../../shared/resultToken.ts').ResultToken }) => void;
+  onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[]; token?: ResultToken }) => void;
   /** Map-rotation hook  -  GameServer returns the next same-mode spec at
    *  the horn, or null to replay the current map. */
   onRotate?: () => MapSpec | null;
@@ -591,7 +534,7 @@ export class Room {
   /** Push the player's armor-class body into its shadow  -  ground speed,
    *  jet mass, and eye height all ride the same class row so the shadow
    *  sim produces the trajectory the client's prediction computes. */
-  private applyClassScale(playerId: string): void {
+  applyClassScale(playerId: string): void {
     const cls = this.players.getPlayer(playerId)?.armorClass as ArmorClass | undefined;
     const st = CLASS_STATS[cls ?? 'medium'];
     this.moveSim.setSpeedScale(playerId, st?.speedScale ?? 1);
@@ -608,20 +551,21 @@ export class Room {
     // Instagib has no class choice - every claim resolves to light. igun
     // resolves to the rung weapon's own tier (untiered = medium): the
     // chassis rides the ladder, so a reclaim's stale pick can't stick.
-    if (this.mods.instagib === true) {claim = 'light';}
-    else if (this.mods.igun === true) {claim = igunChassis(p?.weapon);}
-    if (claim !== 'light' && claim !== 'medium' && claim !== 'heavy') {return;}
-    if (!p || p.armorClass === claim) {return;}
+    let cls = claim;
+    if (this.mods.instagib === true) {cls = 'light';}
+    else if (this.mods.igun === true) {cls = igunChassis(p?.weapon);}
+    if (cls !== 'light' && cls !== 'medium' && cls !== 'heavy') {return;}
+    if (!p || p.armorClass === cls) {return;}
     const prev = p.armorClass as ArmorClass;
-    p.armorClass = claim;
+    p.armorClass = cls;
     // pendingClass survives: it's the rejoiner's banked pick, still
     // owed at respawn — clearing it here would strand the client
     // shouldering the new tier's kit against the old enforced class.
-    p.maxHealth = CONFIG.playerMaxHealth + perkMods(p.perk).maxHealth + CLASS_STATS[claim].maxHealth;
+    p.maxHealth = CONFIG.playerMaxHealth + perkMods(p.perk).maxHealth + CLASS_STATS[cls].maxHealth;
     // Chassis-up swaps grant the tier's extra pool like the bot roster's
     // delta heal; chassis-down just clamps into the smaller bar.
     p.health = Math.max(0, Math.min(p.maxHealth,
-      p.health + Math.max(0, CLASS_STATS[claim].maxHealth - CLASS_STATS[prev].maxHealth)));
+      p.health + Math.max(0, CLASS_STATS[cls].maxHealth - CLASS_STATS[prev].maxHealth)));
     this.applyClassScale(playerId);
   }
 
@@ -661,7 +605,9 @@ export class Room {
    *  match rooms). */
   readonly createdAt = wallNow();
 
-  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false, seed?: number, deferBots = false) {
+  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec,
+      opts: { moveAuthority?: boolean; seed?: number; deferBots?: boolean } = {}) {
+    const { moveAuthority = false, seed, deferBots = false } = opts;
     if (seed !== undefined) {
       // A minted seed drives this room's draws  -  the spawn layout the
       // ctor below scatters is then part of the replay record.
@@ -679,20 +625,51 @@ export class Room {
     this.spec = spec ?? resolveMapSpec(null);
     this.influence = new InfluenceMap(this.spec.tileSize);
     this.mode = mode || this.spec.mode || '';
-    // Spec-level winAt/timeLimitS overrides ride a derived spec - the
-    // MODES table is shared, so mutating it would leak into every room.
-    const modeBase = MODES[this.mode as ModeId] ?? null;
-    this.modeSpec = modeBase && (this.spec.winAt !== undefined || this.spec.timeLimitS !== undefined || this.spec.ptsPlayerKill !== undefined)
-      ? { ...modeBase, winAt: this.spec.winAt ?? modeBase.winAt, timeLimitS: this.spec.timeLimitS ?? modeBase.timeLimitS, ptsPlayerKill: this.spec.ptsPlayerKill ?? modeBase.ptsPlayerKill }
-      : modeBase;
+    this.modeSpec = Room.deriveModeSpec(this.mode, this.spec);
     this.messages = new MessageHandler(
       this.players,
       this.rateLimiter,
       (msg, exclude): void => this.connections.broadcast(msg, exclude),
       (pid, msg): void => this.connections.sendToPlayer(pid, msg),
-      this.handlerInfo(name),
+      buildRoomInfo(this, name),
     );
     this.moveSim = new RoomMoveSim(field, this.moveAuthority);
+    this.wireMoveSim(name);
+    this.matchClock = new MatchClock(this.matchHost());
+    this.wireHealthTelemetry();
+    this.wireMoveSurface();
+    this.ballSim = new BallSim(
+      this.players,
+      (msg): void => this.connections.broadcast(msg),
+      (data): void => this.connections.broadcastBinaryReliable(data),
+    );
+    this.wireBallConfig(field);
+    this.creatureSim = this.initCreatures(field);
+    this.bots = new ServerBots(this, field);
+    this.wireEvents();
+    // Mode module BEFORE populate  -  spawn pools it mints (conquest's
+    // node-linked rings) must cover the bots' initial seating, not just
+    // their respawns.
+    this.modeModule = this.makeModeModule();
+    this.wireSpawnHooks(deferBots);
+    this.wireModeFeatures();
+    this.deployables = new RoomDeployables(this);
+    this.intel = new RoomIntel(this);
+    this.wireDeploySeed();
+    this.projectiles = new RoomProjectiles(this, field);
+    this.projectiles.attachStructures(this.structs.eff());
+    this.registerSims();
+  }
+
+  /** Spec overrides ride a derived spec - MODES is shared, mutating leaks. */
+  private static deriveModeSpec(mode: string, spec: MapSpec): ModeSpec | null {
+    const modeBase = MODES[mode as ModeId] ?? null;
+    if (!modeBase || (spec.winAt === undefined && spec.timeLimitS === undefined && spec.ptsPlayerKill === undefined)) {return modeBase;}
+    return Object.assign({}, modeBase, { winAt: spec.winAt ?? modeBase.winAt, timeLimitS: spec.timeLimitS ?? modeBase.timeLimitS, ptsPlayerKill: spec.ptsPlayerKill ?? modeBase.ptsPlayerKill });
+  }
+
+  /** moveSim callbacks + forensic capture: journal, demo, body source, sim→funnel hooks. */
+  private wireMoveSim(name: string): void {
     // FPS_JOURNAL=<path.ndjson> records every sim-affecting moveSim call
     // + periodic state hashes  -  the forensic file a desync leaves behind
     // (replayJournal drives a fresh sim with the same stream).
@@ -720,7 +697,6 @@ export class Room {
       }
       return out;
     };
-    this.matchClock = new MatchClock(this.matchHost());
     // Hard-tolerance trip: the client's input watermark outran our consumed
     // seq for ≥3 reports  -  an input edge died in flight (dead-lane drop).
     // Ask it to re-emit its current input; cooldown lives on the shadow.
@@ -764,6 +740,10 @@ export class Room {
       if (!p || p.isDead) {return;}
       this.messages.killZone(pid, p.maxHealth);
     };
+  }
+
+  /** connections.on* room-health telemetry hooks. */
+  private wireHealthTelemetry(): void {
     // Reclaim desync accounting  -  journal wraps and reclaim gaps are the
     // only ways a reconnected client silently loses event history.
     this.connections.onJournalWrap = (n): void => this.healthBump('journalWrap', n);
@@ -784,6 +764,10 @@ export class Room {
       const kb = Math.round(bytes / 1024);
       if (kb > (this.health.get('bufMax') ?? 0)) {this.health.set('bufMax', kb);}
     };
+  }
+
+  /** Move-shadow world hooks: structures, water, kill floor, energy/groundAt delegates. */
+  private wireMoveSurface(): void {
     this.moveSim.attachStructures(this.structs.eff());
     this.moveSim.setWaterLevel(this.spec.water?.swim === false ? undefined : this.spec.water?.level);
     this.moveSim.setKillY(this.spec.killY);
@@ -796,11 +780,22 @@ export class Room {
     // point under a chord bridge (gully apex) would otherwise respawn a
     // body whose wire pos sits under the mesh it renders on.
     this.players.groundAt = (x, z): number => (this.field ? Math.max(hmHeight(this.field, x, z), hmChord(this.field, x, z)) : 0);
-    this.ballSim = new BallSim(
-      this.players,
-      (msg): void => this.connections.broadcast(msg),
-      (data): void => this.connections.broadcastBinaryReliable(data),
-    );
+  }
+
+  /** Deployable solids + spec-seeded base gear (deployFloor lift). */
+  private wireDeploySeed(): void {
+    // Deployables are solid  -  the move shadows push bodies out of gear.
+    this.moveSim.setDynamic(this.deployables.solidCols);
+    if (this.spec.deploys) {
+      // Ride structure floors: a generator seeded inside a genhouse must
+      // stand on its deck (seated high over terrain), not drown in it.
+      // max() keeps authored elevations  -  tower sentries never descend.
+      this.deployables.seedBase(this.spec.deploys.map(e => Object.assign({}, e, {pos: Object.assign({}, e.pos, {y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))})})));
+    }
+  }
+
+  /** ballSim spec wiring: population, killY, colliders, spawns. */
+  private wireBallConfig(field: Heightfield | null): void {
     if (this.mods.noBalls === true) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
     else if (this.spec.balls) {this.ballSim.population = this.spec.balls;}
     this.ballSim.killY = this.spec.killY ?? -Infinity;
@@ -815,75 +810,18 @@ export class Room {
     this.players.spawnRng = (): number => this.rng();
     this.messages.setBallSim(this.ballSim);
     if (field) {this.ballSim.attachField(field);}
-    this.creatureSim = this.initCreatures(field);
-    this.bots = new ServerBots(this, field);
-    // Event subscriptions  -  producers emit through RoomInfo.emit; each
-    // consumer reads only the kinds it cares about. A spoken line is
-    // itself an event worth a reply  -  the squad sees it on their own
-    // think phases, so an answer lands a beat later like real chat.
+  }
+
+  /** Event-bus subscribe: the eventSinks table is the dispatch. */
+  private wireEvents(): void {
     this.events.on((e): void => {
-      switch (e.type) {
-        case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); const w = (e as { weapon?: number }).weapon; if (w !== undefined) {this.killsByWeapon.set(w, (this.killsByWeapon.get(w) ?? 0) + 1);} const cause = w === undefined ? (e.shooterId === 'environment' ? 'env' : e.shooterId === e.targetId ? 'self' : 'other') : `w${w}`; this.deathsByCause.set(cause, (this.deathsByCause.get(cause) ?? 0) + 1); this.gunGameOnKill(e.targetId, e.shooterId); break;
-        }
-        case 'hit': { this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); break;
-        }
-        case 'fire': {
-          this.bots.noteHumanFire(e.playerId);
-          const shooter = this.players.getPlayer(e.playerId);
-          if (shooter) {shooter.lastFireSim = simNow();} // decloak-on-fire: senses unmask CLOAK for the reveal window
-          break;
-        }
-        case 'botSpoke': {
-          const team = this.players.getPlayer(e.id)?.team;
-          // A bot who spoke a command chord issued a real call  -  teammates
-          // get the pin just like a human's VGS. Everything else is a bark.
-          const goal = e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined;
-          this.bots.notice(goal ? 'ack' : 'reply', e.id, team, goal);
-          break;
-        }
-        case 'chat': {
-          const kind = chatKindFor(e.text)
-            ?? (e.vgs ? vgsCommandFor(e.vgs) : null)
-            ?? (this.bots.nameIn(e.text) ? 'mention' : null);
-          const team = this.players.getPlayer(e.id)?.team;
-          if (kind) {this.bots.notice(kind, e.id, team, e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined);}
-          this.noteChatPace(e.id);
-          break;
-        }
-        // Blast aftermath  -  each emit once carried a bespoke RoomInfo
-        // hook; the bus fans it out instead. Claimed blasts punt only
-        // flags ('flag'): a client-claimed origin is untrusted, so it
-        // must not punt loose pickups  -  'pickup' emits only come from
-        // server-owned blast paths (shells, mines).
-        case 'blast': { this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales, e.weapon, e.splash); break;
-        }
-        case 'knock': {
-          if (e.kind === 'prey') { this.ballSim.knock(e.pos, e.radius, e.force, e.pull); this.creatureSim.knock(e.pos, e.radius, e.force, e.pull); }
-          else {(e.kind === 'pickup' ? this.pickups : this.flags)?.knock(e.pos, e.radius, e.force, e.pull);}
-          break;
-        }
-        case 'preySplash': {
-          this.ballSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
-          this.creatureSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
-          break;
-        }
-        case 'meleeSweep': {
-          this.ballSim.meleeSweep(e.playerId, e.pos, e.dir);
-          this.creatureSim.meleeSweep(e.playerId, e.pos, e.dir);
-          break;
-        }
-        case 'armor': {
-          this.ballSim.armorBlast(e.pos, e.radius, e.amount);
-          this.creatureSim.armorBlast(e.pos, e.radius, e.amount);
-          break;
-        }
-        case 'impulse': { this.moveSim.applyImpulse(e.playerId, e.dv, e.fallBoost); break;
-        }
-        case 'flagDrop': { this.flags?.dropIfCarrier(e.playerId); break;
-        }
-              default: { break; }
-}
+      const h = this.eventSinks[e.type] as ((ev: RoomEvent) => void) | undefined;
+      if (h) {h(e);}
     });
+  }
+
+  /** Spawn-seat hooks + bot populate (or defer to the terrain attach). */
+  private wireSpawnHooks(deferBots: boolean): void {
     // Posted roles spawn at home  -  a defender materializing on a
     // front-line sphere 400m out spends the next minute hiking, which
     // reads as wandering on every post/flag metric. Runners keep pure
@@ -901,10 +839,6 @@ export class Room {
       const t = this.bots?.taskGoalFor(id);
       return t ? { pos: t.goal, w: 1.6 } : null;
     };
-    // Mode module BEFORE populate  -  spawn pools it mints (conquest's
-    // node-linked rings) must cover the bots' initial seating, not just
-    // their respawns.
-    this.modeModule = this.makeModeModule();
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side. Factory rooms defer the seat to the terrain
     // attach  -  the pick lifts authored anchors via groundAt, which reads
@@ -914,20 +848,6 @@ export class Room {
       if (deferBots) {this.pendingBots = this.spec.bots;}
       else {this.bots.populate(this.spec.bots);}
     }
-    this.wireModeFeatures();
-    this.deployables = new RoomDeployables(this);
-    this.intel = new RoomIntel(this);
-    // Deployables are solid  -  the move shadows push bodies out of gear.
-    this.moveSim.setDynamic(this.deployables.solidCols);
-    if (this.spec.deploys) {
-      // Ride structure floors: a generator seeded inside a genhouse must
-      // stand on its deck (seated high over terrain), not drown in it.
-      // max() keeps authored elevations  -  tower sentries never descend.
-      this.deployables.seedBase(this.spec.deploys.map(e => Object.assign({}, e, {pos: Object.assign({}, e.pos, {y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))})})));
-    }
-    this.projectiles = new RoomProjectiles(this, field);
-    this.projectiles.attachStructures(this.structs.eff());
-    this.registerSims();
   }
 
   /** Chat lines per speaker inside the spam window  -  a burst of fast
@@ -1131,7 +1051,7 @@ export class Room {
     // modules register)  -  same tick + join-replay funnel as built-ins.
     for (const s of this.modeModule?.sims?.() ?? []) {this.sims.push(s);}
     if (ambient && this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind, vel: p.vel }) as ServerMessage) });}
-    this.sims.push({ name: 'unbury', tick: (dt): void => this.unburyTick(dt) });
+    this.sims.push({ name: 'unbury', tick: (dt): void => this.unbury.tick(dt) });
     // IFF detection sweep - runs in every mode incl. duels: enemy markers
     // gate on it regardless of world content.
     this.sims.push({ name: 'intel', tick: (dt): void => this.intel.tick(dt) });
@@ -1162,7 +1082,7 @@ export class Room {
    *  an actually-issued stamp or it could spoof an RTT (a client sending
    *  `pong{timestamp: now}` unprompted measures rtt≈0  -  the lowball
    *  exploit through the trusted channel). */
-  private lastPingStamp = new Map<string, number>();
+  readonly lastPingStamp = new Map<string, number>();
   private pingTick(): void {
     if ((this.pingCycle += 1) % 10 !== 0) {return;}
     const humans = [...this.players.getAllPlayers().values()].filter((p): boolean => !p.isBot);
@@ -1174,7 +1094,12 @@ export class Room {
       ?? humans[(Math.trunc(this.pingCycle / 10)) % humans.length]!;
     const stamp = wallNow();
     this.lastPingStamp.set(target.id, stamp);
-    this.sendToPlayer(target.id, { type: 'ping', timestamp: stamp });
+    // clk: the client's clock-offset error the fireAt instrument
+    // measured (+ = its serverNow runs behind true). Feeding it back
+    // lets the client converge under asymmetric links where stamp+rtt/2
+    // can't - re-anchored shells bind `bias x speed` short without it.
+    this.sendToPlayer(target.id, { type: 'ping', timestamp: stamp,
+      clk: this.moveSim.uplinkBiasOf(target.id) });
   }
 
   /** Flag tick  -  called from GameServer's room tick. Captures feed the
@@ -1189,7 +1114,8 @@ export class Room {
    *  earliest of terrain face, wall, player capsule, or creature wins
    *  (same math as botBeam.beamContact). A creature contact also picks
    *  the chain fork; payment stays in CombatHandler. */
-  private beamSweep(shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates = false, snapPad?: number, coneCos2?: number): BeamContact | null {
+  // oxlint-disable-next-line max-params -- RoomInfo.beamSweep's signature is interface-mandated
+  beamSweep(shooterId: string, muzzle: Vec3, dir: Vec3, range: number, includeTeammates = false, snapPad?: number, coneCos2?: number): BeamContact | null {
     // One cast for every authority shape  -  Room and P2PHost resolve the
     // same rays through shared beamSweep.ts.
     return beamSweepRay({
@@ -1233,275 +1159,6 @@ export class Room {
       && simNow() - tp.lastFireSim >= SHOOT_REVEAL_S * 1000;
   }
 
-  private handlerInfo(roomName: string): RoomInfo {
-    // Object.assign, not spread: oxc bans rest-spread properties, and
-    // the merged Partial needs the one cast on the way out anyway.
-    return Object.assign(this.infoBase(roomName), this.infoPing(), this.infoWire(), this.infoCombat()) as RoomInfo;
-  }
-
-  private infoBase(roomName: string): Partial<RoomInfo> {
-    return {
-      room: roomName,
-      mode: this.mode,
-      // Live reader, not a snapshot: roomFactory flips these flags on
-      // reused Rooms after this RoomInfo was captured.
-      mods: (): RoomMods => this.mods,
-      // This authority sims every outcome  -  no client claim is legitimate.
-      claimsAccepted: false,
-      scores: this.scores,
-      teams: this.modeSpec?.teams,
-      friendlyFire: CONFIG.friendlyFire,
-      winAt: this.modeSpec?.winAt,
-      ffaScores: (): { [k: string]: number; } => Object.fromEntries(this.scoring.ffaScores),
-      // Registry stores playerId->u16; the wire roster ships the
-      // inverse so receivers resolve a frame's u16 to an identity.
-      wireIds: (): { [x: number]: string; } => {
-        const out: Record<number, string> = {};
-        for (const [pid, id] of this.wireIds) {out[id] = pid;}
-        return out;
-      },
-      idOfWid: (wid): string | undefined => this.widToId.get(wid),
-      simsWorldState: (): ServerMessage[] => this.sims.flatMap((s): ServerMessage[] => s.worldState?.() ?? []),
-      bases: this.spec.bases,
-      structures: this.structs.eff(),
-      arena: this.spec.arena,
-      killY: this.spec.killY,
-      ambient: this.spec.ambient,
-      // Authored spec title wins; the maps/<X>.json source filename is the
-      // fallback  -  set post-ctor by the factory, refreshed by rotation.
-      mapName: (): string | undefined => this.spec.name ?? (this.mapSrc || undefined),
-      // Effective spawn pools, live-read: mode modules re-mint spheres
-      // mid-match (conquest node rings)  -  the spec's authored copy is stale.
-      spawns: () => this.players.spawnPoints,
-      teamSpawns: () => this.players.teamSpawns,
-      terrain: this.spec.terrain,
-      heightScale: this.spec.heightScale,
-      tileSize: this.spec.tileSize,
-      fog: this.spec.fog,
-      water: this.spec.water,
-      terrainTex: this.spec.terrainTex,
-      terrainPreset: this.spec.terrainPreset,
-      sky: this.spec.sky,
-      weather: this.spec.weather,
-      atmosphere: this.spec.atmosphere,
-      interiors: this.spec.interiors,
-      emit: this.events.emit,
-      rng: (): number => this.rng(),
-      flags: () => this.flags?.snapshot() ?? [],
-      pickups: () => this.pickups?.snapshot() ?? [],
-    };
-  }
-
-  /** Ping/nack/reconnect-window closures of the handler table (split
-   *  for the line-count ratchet - the merged literal casts back to
-   *  RoomInfo since Partial spreads cannot prove required fields). */
-  private infoPing(): Partial<RoomInfo> {
-    return {
-      // tickNack: reuse the introSeq full-window  -  every record goes full
-      // for ~1s, which reseeds every client's baselines whether they
-      // nacked or not (records are shared; scoping per-socket isn't
-      // possible without per-socket encodes). 500ms room cooldown so a
-      // nack-storm can't hold the room on fulls permanently.
-      drainedForTicks: (pid): boolean => this.connections.drainedForTicks(pid),
-      // A spectator's gap is scoped to their own intro window  -  spec
-      // count is unbounded, so room-wide fulls per spec nack would be an
-      // amplifier. Player nacks still take nackFulls (their basis
-      // corruption is ambiguous, so everyone reseeds).
-      nackFor: (pid): boolean => {
-        if (!this.spectators.has(pid)) {return false;}
-        // Re-arm cap: a spec nack storm would otherwise hold introPending
-        // true forever  -  every record double-encodes rec.full at 20Hz
-        // permanently. An open window still paying out covers the nack.
-        if (this.tickSeq - (this.introPlayers.get(pid) ?? -100) < 20) {return true;}
-        this.markIntro(pid);
-        return true;
-      },
-      isSpectator: (pid): boolean => this.spectators.has(pid),
-      nackFulls: (): void => {
-        const now = wallNow();
-        if (now - this.lastNackAt < 500) {return;}
-        // A window still paying out covers every client  -  re-stamping
-        // would let a nack every 500ms hold the room on fulls forever.
-        if (this.tickSeq - this.introSeq < 20) {return;}
-        this.lastNackAt = now;
-        this.introSeq = this.tickSeq;
-      },
-      readySpawn: (pid): void => this.releaseReady(pid),
-      admitQueue: (pid, ids): void => { this.admitPending.set(pid, ids); },
-      floodPause: (pid, ms): void => this.connections.floodPause(pid, ms),
-      fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS, dmgMult, variant): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS, dmgMult, variant),
-      fizzleProjectiles: (pid): void => this.projectiles.fizzleOwner(pid),
-      beamSweep: (pid, muzzle, dir, range, includeTeammates, snapPad, coneCos2): BeamContact | null => this.beamSweep(pid, muzzle, dir, range, includeTeammates, snapPad, coneCos2),
-      ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
-      crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),
-      repairTarget: (pid, muz, dir, range): number | null => this.deployables.repairTarget(pid, muz, dir, range),
-      onDeploy: (pid, kind, pos, vel): string | true => this.mods.instagib === true ? 'instagib' : this.mods.gungame === true ? 'gungame' : this.deployables.handleDeploy(pid, kind, pos, vel),
-      onRepair: (pid, targetId): string | true => this.deployables.repair(pid, targetId),
-      deployables: () => this.deployables.snapshot(),
-      influence: this.influence,
-      matchEndsAt: (): number => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
-      moveInput: (pid, i, status, seq, ageMs): boolean => {
-        const ok = this.moveSim.queueInput(pid, {
-          forward: i.forward, right: i.right,
-          jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
-          jetHeld: Boolean(i.jet),
-        }, status, seq, ageMs);
-        return ok;
-      },
-      moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
-      inputSeqOf: (pid): number => this.moveSim.inputSeqOf(pid),
-      transitOf: (pid): number => this.moveSim.transitOf(pid),
-      transitVarOf: (pid): number => this.moveSim.transitVarOf(pid),
-      transitNote: (pid, rtt, stamp): void => {
-        if (this.lastPingStamp.get(pid) !== stamp) {return;}
-        this.moveSim.feedTransit(pid, rtt);
-        // Echo the server-measured RTT back  -  the client's own ping/pong
-        // number includes its event-loop stall, so the pair reads as
-        // "client/server" and splits a busy renderer from a slow wire.
-        this.sendToPlayer(pid, { type: 'srvPing', rtt });
-      },
-      uplinkNote: (pid, fireAt): void => {
-        // (arrival − declared instant) is this claim's uplink transit  - 
-        // bounded so a wildly off clock (or forged stamp) degrades to the
-        // ping/pong channel instead of poisoning the EMA.
-        const uplink = wallNow() - fireAt;
-        if (uplink >= 0 && uplink <= 2000) {this.moveSim.feedUplink(pid, uplink);}
-      },
-    };
-  }
-
-  /** Binary-wire + claim-verb closures of the handler table. */
-  private infoWire(): Partial<RoomInfo> {
-    return {
-      // playerHit on the binary lane: one encodeHit per event rides the
-      // same batch as the tick frame  -  ~20B vs ~160B JSON, the client's
-      // own wireIds map resolves ids back. 'environment' encodes wid 0.
-      wireHit: (e): boolean => {
-        const targetWid = this.wireIds.get(e.targetId);
-        if (targetWid === undefined) {return false;}
-        const shooterWid = e.shooterId === 'environment' ? 0 : this.wireIds.get(e.shooterId);
-        if (shooterWid === undefined) {return false;}
-        if (e.shooterId !== 'environment') {this.noteEngagement(e.shooterId, e.targetId);}
-        this.connections.broadcastBinaryReliable(encodeHit(Object.assign({}, e, { targetWid, shooterWid })), 'volatile'); // combat events journal  -  same 3s staleness window the JSON lane carried
-        return true;
-      },
-      // Generic S→C binary relay plumbing  -  the wireId+pos event family
-      // encodes at the emit site and rides the same batch/journal lanes.
-      widOf: (pid): number | undefined => this.wireIds.get(pid),
-      wireCast: (data, journaled, exclude): void => this.connections.broadcastBinaryReliable(data, journaled, exclude),
-      wireTo: (pid, data, journaled): void => this.connections.sendBinToPlayerReliable(pid, data, journaled),
-      earlyRelayed: (pid, shotId): boolean => this.earlyRelayed(pid, shotId),
-      gunRungOf: (pid): number => this.gunRungOf(pid),
-      gunGameHeld: (pid, wt): void => this.gunGameHeld(pid, wt),
-      // The rabbit dep's presence IS the mode check  -  CombatHandler gates
-      // all PvP damage on the carrier being one side of the pair.
-      rabbitCarrier: this.mode === 'rabbit' ? (): string | null => this.flags?.carrierId() ?? null : undefined,
-      rabbitFlagLive: this.mode === 'rabbit' ? (): boolean => this.flags?.spawned() ?? false : undefined,
-      rabbitBottom: this.mode === 'rabbit' ? (): Set<string> => this.scoring.bottomFeeders() : undefined,
-      drainEnergy: (pid, n): boolean => this.moveSim.drainEnergy(pid, n),
-      // Blast occlusion through enemy domes  -  a shell detonating at the
-      // shield's edge can't splash victims inside it.
-      shieldBlocked: (from, to, shooterId): boolean =>
-        this.deployables.shieldedPoint(to, shooterId, from),
-      // Instant-skill claim: the client already spent the energy locally  - 
-      // mirror the same ante on the shadow or the tank drifts 50 apart.
-      onSkillUse: (pid, skill): true | "gone" => {
-        const p = this.players.getPlayer(pid);
-        if (!p) {return 'gone';}
-        // Identity check: a claim naming a skill the seat never declared
-        // is a forged press  -  declared skills are the only legal ones.
-        // A seat with NO declared skill has nothing legal to press at
-        // all; accepting there would stamp lastSkillUse and open the
-        // authority teleport window without a real beacon.
-        if (p.skill === undefined || (skill !== undefined && skill !== p.skill)) {return 'gone';}
-        // Cooldown floor: client skills all sit at 1s; 850ms of slack
-        // eats jitter, a faster claim is a script.
-        const now = wallNow();
-        if (p.lastSkillUse !== undefined && now - p.lastSkillUse < 850) {return 'gone';}
-        if (!this.moveSim.drainEnergy(pid, ENERGY.skillCost)) {return 'gone';}
-        p.lastSkillUse = now;
-        return true;
-      },
-      onThrowFlag: (pid): void | undefined => this.flags?.throwFor(pid),
-      energyOf: (pid): number | null => this.moveSim.energyOf(pid),
-      groundedOf: (pid): boolean => this.moveSim.simState(pid)?.onGround ?? false,
-      // Wire-invisible cloak predicate — same terms as the tickRecords
-      // hidden flag: masked CLOAK claim, modeled tank alive, shoot-
-      // reveal window closed (lastFireSim is sim-ms domain).
-      cloakHidden: (pid): boolean => this.cloakHiddenOf(pid),
-      moveResync: (pid, pos, yaw, fullEnergy): void => {
-        this.moveSim.resync(pid, pos, yaw, fullEnergy);
-        // Resync re-anchors the shadow  -  also refresh the class speed
-        // scale so a respawn-applied tier swap propagates (moveTrack
-        // only re-reads it at handshake).
-        this.applyClassScale(pid);
-      },
-      moveTrack: (pid, pos, yaw): void => {
-        const p = this.players.getPlayer(pid);
-        this.moveSim.track(pid, pos, yaw, { perk: p?.perk, team: p?.team, bot: p?.isBot, armorClass: p?.armorClass });
-        // Re-seats (room hop) have stale position frames in flight  -  arm
-        // the same grace resync() uses so they can't seed the fresh
-        // shadow at the old seat and flag the real spawn landing a cheat.
-        this.moveSim.markReseated(pid);
-        this.applyClassScale(pid);
-      },
-      moveMute: (pid): void => this.moveSim.markReseated(pid),
-      moveUntrack: (pid): void => {
-        this.moveSim.untrack(pid);
-        this.lastPingStamp.delete(pid);
-      },
-      // A spoken line is itself an event worth a reply  -  the squad sees
-      // it on their own think phases, so an answer (if any) lands a beat
-      // later like real chat, not a scripted call-and-response.
-
-      moveAuthority: (): boolean => this.moveAuthority,
-    };
-  }
-
-  /** Proximity/authority closures of the handler table. */
-  private infoCombat(): Partial<RoomInfo> {
-    return {
-      health: this.health,
-      envRange: (pid): number => {
-        const p = this.players.getPlayer(pid);
-        if (!p) {return Infinity;}
-        // Crawlers count too  -  envDamage legitimately comes from bites,
-        // not just balls; a balls-only check warned on every true pounce.
-        let d = this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z);
-        for (const c of this.creatureSim.crawlers.values()) {
-          if (c.dead) {continue;}
-          const dc = Math.hypot(c.x - p.position.x, c.y - p.position.y, c.z - p.position.z);
-          if (dc < d) {d = dc;}
-        }
-        // Mines/turrets count too  -  an untagged blastAtPlayer claim from a
-        // tripped mine has no creature near, only the hull it stood next to.
-        for (const dep of this.deployables.items.values()) {
-          const dd = Math.hypot(dep.pos.x - p.position.x, dep.pos.y - p.position.y, dep.pos.z - p.position.z);
-          if (dd < d) {d = dd;}
-        }
-        return d;
-      },
-      preyNear: (pos, shooterId): { ball: number; crawler: number; foe: number; } => {
-        let crawler = Infinity;
-        for (const c of this.creatureSim.crawlers.values()) {
-          const d = Math.hypot(c.x - pos.x, c.y - pos.y, c.z - pos.z);
-          if (d < crawler) {crawler = d;}
-        }
-        // Nearest enemy body to the pop  -  a foe eating the shell at 5m
-        // reads as a 'lip' in the autopsy otherwise, masking body
-        // intercepts as terrain clips.
-        const team = shooterId ? this.players.getPlayer(shooterId)?.team : undefined;
-        let foe = Infinity;
-        for (const q of this.players.getAllPlayers().values()) {
-          if (q.id === shooterId || q.isDead || (team && q.team === team)) {continue;}
-          const d = Math.hypot(q.position.x - pos.x, q.position.y - pos.y, q.position.z - pos.z);
-          if (d < foe) {foe = d;}
-        }
-        return { ball: this.ballSim.nearestBallDist(pos.x, pos.y, pos.z), crawler, foe };
-      },
-    };
-  }
-
   /** Built in the constructor  -  field-initializer order would read
    *  mode/modeSpec before they're assigned. */
   private matchHost(): MatchHost {
@@ -1518,7 +1175,7 @@ export class Room {
       getHumanCount: (): number => this.players.getHumanCount(),
       matchPlayers: (): { id: string; team?: string; kills: number; deaths: number; }[] => this.scoring.matchPlayers(),
       broadcast: (msg): void => this.broadcast(msg),
-      get resultSigner(): import('./resultSigner.ts').ResultSigner | null | undefined { return self.resultSigner; },
+      get resultSigner(): ResultSigner | null | undefined { return self.resultSigner; },
       get mapSrc(): string | undefined { return self.mapSrc; },
       endCleanup: (): void => {
         this.flags?.reset();
@@ -1826,11 +1483,12 @@ excess -= 1;
       // A match end inside a still-running room gets its own flush —
       // without it the demo only lands at dispose and "every game"
       // really means "every teardown".
-      if (reason === 'end' && !demoPath && this.demo && process.env.FPS_DEMO) {
-        demoPath = this.demo.flush(process.env.FPS_DEMO, 'end');
+      let demo = demoPath;
+      if (reason === 'end' && !demo && this.demo && process.env.FPS_DEMO) {
+        demo = this.demo.flush(process.env.FPS_DEMO, 'end');
       }
       writeMatchResult(collectServerResult(this, reason, {
-        demo: demoPath,
+        demo,
         skillOf: (id): unknown => this.bots?.skillOf?.(id),
         econOf: (id): unknown => this.moveSim?.econOf?.(id),
         locoOf: (id): unknown => this.bots?.watchdog?.statsOf?.(id),
@@ -1938,7 +1596,7 @@ excess -= 1;
     // star mid-carry shouldn't vanish into the enemy jersey.
     const bots = [...this.players.getAllPlayers().values()]
       .filter((p): boolean => p.team === big && Boolean(p.isBot))
-      .sort((a, b): number => Number(b.isDead) - Number(a.isDead) || (a.kills - a.deaths) - (b.kills - b.deaths));
+      .toSorted((a, b): number => Number(b.isDead) - Number(a.isDead) || (a.kills - a.deaths) - (b.kills - b.deaths));
     const pool = Math.max(1, Math.ceil(bots.length * 0.4));
     for (const p of bots.slice(0, pool)) {
       if (counts[big] - counts[small] < 2) {break;}

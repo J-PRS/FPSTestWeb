@@ -119,7 +119,7 @@ export const CONFIG = {
   // comma-separated — '*' is for dev where the vite server lives on :5400.
   corsOrigin: envStr('FPS_CORS_ORIGIN', '*'),
   // Server-browser identity — what a master list / LAN browser shows.
-  serverName: envStr('FPS_SERVER_NAME', 'kribes server'),
+  serverName: envStr('FPS_SERVER_NAME', 'anabatic server'),
   // Free-text label (e.g. 'eu', 'lan', 'jp-lan') — clients just display it.
   serverRegion: envStr('FPS_SERVER_REGION', ''),
   // WebTransport tier (netcode v2): separate QUIC/HTTP3 UDP listener.
@@ -143,6 +143,13 @@ export const CONFIG = {
   tlsPort: envNum('FPS_TLS_PORT', envNum('FPS_PORT', 8000) + 442),
   tlsCertPath: envStr('FPS_TLS_CERT', ''),
   tlsKeyPath: envStr('FPS_TLS_KEY', ''),
+  // RTC/P2P lanes - PARKED (2026-11-22): /rtc relay, /rtcs server-peer
+  // tier, /rtcconfig, /rtc/lobbies all 404 unless FPS_RTC=1. Off on prod
+  // because prod clients never race rtc (dev-gated ?p2p, ?net=rtc is a
+  // test pin) - the lane was live surface with zero legit traffic.
+  // RtcServer/RtcRelay/p2p/ stay in-tree for LAN-duel dev; FPS_RTC=1
+  // restores the whole surface unchanged.
+  rtcLanes: envStr('FPS_RTC', '0') === '1',
   // WebRTC tier: ICE servers (STUN/TURN) as JSON, e.g.
   // FPS_ICE_SERVERS='[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:turn.example.com","username":"u","credential":"p"}]'
   // Empty = LAN/direct-connect only, which is what dev needs anyway.

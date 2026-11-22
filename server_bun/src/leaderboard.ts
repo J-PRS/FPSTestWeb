@@ -3,7 +3,7 @@
 // Submission = one .demo file. The gates, cheapest first:
 //   1. format     — deserializeDemo throws on anything malformed
 //   2. receipt    — an embedded matchToken whose HMAC verifies under
-//                   KRIBES_SIGN_KEY. This is THE gate: the server only
+//                   ANABATIC_SIGN_KEY. This is THE gate: the server only
 //                   attests matches it witnessed end-to-end, so a
 //                   fabricated run can't mint a token at all.
 //   3. recompute  — stats come from the event stream, never a claim:

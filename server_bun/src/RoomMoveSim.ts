@@ -83,6 +83,11 @@ export class RoomMoveSim {
   journal?: SimJournal;
   /** Completed-tick count — journal events stamp "after N ticks". */
   private journalT = 0;
+  /** Room-lifetime uplink-bias rollup - per-shadow stats die with the
+   *  shadow's untrack, these survive for post-session scrapes. */
+  private roomBiasN = 0;
+  private roomBiasAvg = 0;
+  private roomBiasMax = 0;
   private jev(ev: JournalEvNoT): void {
     this.journal?.push(Object.assign({ t: this.journalT }, ev) as JournalEv);
   }
@@ -93,7 +98,7 @@ export class RoomMoveSim {
   journalHash(): number {
     let h = 0x81_1C_9D_C5;
     const mix = (n: number): void => { h ^= n; h = Math.imul(h, 0x01_00_01_93) >>> 0; };
-    for (const [pid, sh] of [...this.shadows].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    for (const [pid, sh] of [...this.shadows].toSorted(([a], [b]) => (a < b ? -1 : 1))) {
       mix(pid.length); for (let i = 0; i < pid.length; i += 1) {mix(pid.charCodeAt(i));}
       const s = sh.sim.state;
       mix(Math.round(s.pos.x * 100)); mix(Math.round(s.pos.y * 100)); mix(Math.round(s.pos.z * 100));
@@ -432,7 +437,7 @@ this.structEpoch += 1;
     const sh = this.shadows.get(playerId);
     if (!sh) {return true;} // no field → no sim → nothing to order
     if (seq !== undefined && seq <= sh.lastInputSeq) {return false;}
-    if (this.journal) {this.jev({ kind: 'input', pid: playerId, input: { ...input }, status, seq });}
+    if (this.journal) {this.jev({ kind: 'input', pid: playerId, input: Object.assign({}, input), status, seq });}
     if (seq === undefined) {
       if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
       this.applyInput(sh, input, sh.jetWanted && sh.energy > 0);
@@ -453,8 +458,14 @@ this.structEpoch += 1;
       if (sh.seqStates.size > 32) {evictEldest(sh.seqStates);}
     }
 
-    // Rising-edge antes — the client pays the activation cost when the
-    // bit comes up; the sim must mirror it or cloaked jetters desync.
+    this.applyStatusToggles(sh, status);
+    return true;
+  }
+
+  /** Rising-edge antes + ongoing skill drain — the client pays the
+   *  activation cost when the bit comes up; the sim must mirror it or
+   *  cloaked jetters desync. */
+  private applyStatusToggles(sh: Shadow, status: number): void {
     const rising = status & ~sh.lastStatus;
     if (rising & STATUS.CLOAK) {sh.energy = Math.max(0, sh.energy - ENERGY.cloakCost);}
     if (rising & STATUS.SHIELD) {sh.energy = Math.max(0, sh.energy - ENERGY.shieldCost);}
@@ -467,7 +478,107 @@ this.structEpoch += 1;
       (status & STATUS.SHIELD ? ENERGY.shieldDrain : 0) +
       (status & STATUS.MEND ? ENERGY.mendDrain : 0);
     sh.skillSuppressRegen = sh.skillDrainPerSec > 0;
-    return true;
+  }
+
+  /** Claim-driven intra-tick replay of a shadow's pending input edges.
+   *  Stamped edges replay at their real intra-tick times: edge i's input
+   *  governs [est_i, est_{i+1}) and preIn covers [t0, est_0). Estimates
+   *  clamp into the window and stay non-decreasing - a forged or skewed
+   *  stamp degrades to zero-length slices, not time travel. This is the
+   *  claim-driven side of the tick window, so the placement clock is the
+   *  same wall domain the stamps use. Unstamped edges interleave equal
+   *  slices instead (uniform timing), so a press+release pair holds the
+   *  key for ~half the tick and the hop/jet fires instead of collapsing
+   *  into the final state. Returns the worst landing impact seen. */
+  private replayEdges(sh: Shadow, edges: Shadow['pending'], preIn: Partial<MoveInput> | null, dt: number, jetting: boolean): number {
+    let landing = 0;
+    if (edges.every((e): boolean => e.est !== undefined)) {
+      const t1 = wallNow();
+      const t0 = t1 - dt * 1000;
+      // preIn (pre-drain input) governs [t0, est_0) - setInput already
+      // pushed the FINAL edge state live, so without restoring it the
+      // pre-edge span would run future input.
+      this.applyInput(sh, preIn!, jetting);
+      let t = t0, prevEst = t0;
+      for (const e of edges) {
+        const start = Math.min(Math.max(e.est!, prevEst), t1);
+        prevEst = start;
+        if (start > t) {
+          sh.sim.update((start - t) / 1000);
+          landing = Math.max(landing, sh.sim.landingImpact);
+        }
+        this.applyInput(sh, e.input, jetting);
+        t = start;
+      }
+      if (t1 > t) {
+        sh.sim.update((t1 - t) / 1000);
+        landing = Math.max(landing, sh.sim.landingImpact);
+      }
+    } else {
+      const slice = dt / edges.length;
+      for (const e of edges) {
+        this.applyInput(sh, e.input, jetting);
+        sh.sim.update(slice);
+        landing = Math.max(landing, sh.sim.landingImpact);
+      }
+    }
+    return landing;
+  }
+
+  /** Jet economy per tick: thrust only while the modeled tank has fuel,
+   *  drain while burning, recharge only when off jet AND no toggle skill
+   *  is running (client-side rule — all three pause recharge). Returns
+   *  whether the shadow is jetting this tick. */
+  private tickEnergy(sh: Shadow, pid: string, dt: number): boolean {
+    if (sh.jetLockT > 0) {sh.jetLockT -= dt;}
+    const jetting = sh.jetWanted && sh.energy > 0 && sh.jetLockT <= 0;
+    if (jetting) {sh.energy -= ENERGY.jetDrain * sh.jetDrain * dt;}
+    if (sh.skillDrainPerSec > 0) {sh.energy -= sh.skillDrainPerSec * dt;}
+    if (!jetting && !sh.skillSuppressRegen) {
+      sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * dt);
+    }
+    // NaN is sticky (Math.max(0, NaN) = NaN) — a poisoned pool would
+    // ride forever; drain to empty once, then let regen rebuild it.
+    if (!Number.isFinite(sh.energy)) {sh.energy = 0;}
+    sh.energy = Math.max(0, sh.energy);
+    // Pool law: energy lives in [0, cap]. grant/regen both clamp —
+    // an over-cap read here means a write path added without one.
+    inv('energy-bounds', sh.energy <= ENERGY.max * sh.energyMax + 0.01,
+      () => ({ id: pid, e: Number(sh.energy.toFixed(1)), cap: Number((ENERGY.max * sh.energyMax).toFixed(1)) }));
+    if (sh.energy <= 0) {sh.jetLockT = ENERGY.jetLockout;}
+    sh.jetIn.jetHeld = jetting;
+    sh.sim.setInput(sh.jetIn);
+    return jetting;
+  }
+
+  /** Resting-shadow gate for the integrator skip. onGround lies at
+   *  seed/resync (setState writes it true even for a mid-air drop) — the
+   *  gate measures rest against the real ground under it, or a dropped
+   *  body never starts falling. A sunk shadow is NOT resting — pos.y -
+   *  groundY goes negative, which passed the upper bound alone, so a bot
+   *  seeded under terrain (respawn anchor, stale resync) parked forever
+   *  instead of stepping back onto the floor. 2Hz unbury was the only
+   *  rescue — that was the ~1s sink-then-pop cycle, 514 rescues in one
+   *  15-minute soak. Cheap gates first: the heightfield+structureTop
+   *  probe is the expensive term — on a moving roster it ran
+   *  per-shadow-per-tick only to be discarded (hmChord showed up in the
+   *  cpuprofile). */
+  private isResting(sh: Shadow, pid: string, edges: Shadow['pending'] | null,
+      bodiesNear: ((x: number, z: number) => BodyCapsule[]) | undefined): boolean {
+    const s = sh.sim.state, inp = sh.sim.input;
+    return s.onGround
+      && Math.abs(s.vel.x) + Math.abs(s.vel.y) + Math.abs(s.vel.z) < 0.05
+      && !inp.forward && !inp.right && !inp.jumpHeld && !inp.jumpPressed && !inp.skiHeld && !inp.jetHeld
+      && (!edges || edges.every((e): boolean => !e.input.forward && !e.input.right && !e.input.jumpHeld && !e.input.jumpPressed && !e.input.skiHeld && !e.input.jetHeld))
+      && ((): boolean => {
+        const surf = sh.bot && this.botSurface ? this.botSurface : this.surface;
+        const groundY = Math.max(
+          surf ? surf.getHeight(s.pos.x, s.pos.z) : s.pos.y,
+          this.structureTop(s.pos.x, s.pos.z),
+        );
+        return s.pos.y - groundY > -0.5 && s.pos.y - groundY < sh.sim.eyeHeight + 0.5;
+      })()
+      && (!bodiesNear || !bodiesNear(s.pos.x, s.pos.z).some((b): boolean => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
   }
 
   /** Merge an input edge + the server-modeled jet bit into the shadow's
@@ -665,153 +776,75 @@ sh.gapStreak += 1;
       };
     }
     for (const [pid, sh] of this.shadows) {
-      // Phase 0 (per shadow): drain the queued edges through setInput in
-      // seq order — seq-journal anchors, jet gating, and rising-edge
-      // antes all land before the econ pass reads the final jetWanted.
-      const edges = sh.pending.length > 0 ? sh.pending.splice(0, sh.pending.length) : null;
-      // Stamped slicing needs the input state that governed BEFORE the
-      // first edge fired - setInput is about to overwrite it, so capture
-      // it here (the drain must still see edges in seq order for
-      // anchors/gating/antes).
-      const preIn = edges ? { ...sh.sim.input } : null;
-      if (edges) {for (const e of edges) {this.setInput(pid, e.input, e.status, e.seq);}}
-      if (bodies) {
-        // Shared list for every shadow — collideBodies skips selfId, so
-        // rebuilding N-1 copies per tick was pure churn.
-        sh.sim.selfId = pid;
-        sh.sim.bodies = bodies;
-        sh.sim.bodiesNear = bodiesNear;
-      } else {
-        sh.sim.bodiesNear = undefined; // no source this tick — a stale grid is worse than none
-      }
-      // Jet economy: thrust only while the modeled tank has fuel, drain
-      // while burning, recharge only when off jet AND no toggle skill is
-      // running (client-side rule — all three pause recharge).
-      if (sh.jetLockT > 0) {sh.jetLockT -= dt;}
-      const jetting = sh.jetWanted && sh.energy > 0 && sh.jetLockT <= 0;
-      if (jetting) {sh.energy -= ENERGY.jetDrain * sh.jetDrain * dt;}
-      if (sh.skillDrainPerSec > 0) {sh.energy -= sh.skillDrainPerSec * dt;}
-      if (!jetting && !sh.skillSuppressRegen) {
-        sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * dt);
-      }
-      // NaN is sticky (Math.max(0, NaN) = NaN) — a poisoned pool would
-      // ride forever; drain to empty once, then let regen rebuild it.
-      if (!Number.isFinite(sh.energy)) {sh.energy = 0;}
-      sh.energy = Math.max(0, sh.energy);
-      // Pool law: energy lives in [0, cap]. grant/regen both clamp —
-      // an over-cap read here means a write path added without one.
-      inv('energy-bounds', sh.energy <= ENERGY.max * sh.energyMax + 0.01,
-        () => ({ id: pid, e: Number(sh.energy.toFixed(1)), cap: Number((ENERGY.max * sh.energyMax).toFixed(1)) }));
-      if (sh.energy <= 0) {sh.jetLockT = ENERGY.jetLockout;}
-      sh.jetIn.jetHeld = jetting;
-      sh.sim.setInput(sh.jetIn);
-      // Resting shadows skip the integrator: quiet input + ~zero
-      // velocity + grounded means two sub-steps of terrain/solid/body
-      // probes would land exactly where it started. Parked defenders
-      // and AFK humans sit here a third of their ticks.
-      const s = sh.sim.state, inp = sh.sim.input;
-      // onGround lies at seed/resync (setState writes it true even for
-      // a mid-air drop) — the gate measures rest against the real
-      // ground under it, or a dropped body never starts falling.
-      // A sunk shadow is NOT resting — pos.y - groundY goes negative,
-      // which passed the upper bound alone, so a bot seeded under
-      // terrain (respawn anchor, stale resync) parked forever instead
-      // of stepping back onto the floor. 2Hz unbury was the only
-      // rescue — that was the ~1s sink-then-pop cycle, 514 rescues in
-      // one 15-minute soak.
-      // Cheap gates first: the heightfield+structureTop probe is the
-      // expensive term — on a moving roster it ran per-shadow-per-tick
-      // only to be discarded (hmChord showed up in the cpuprofile).
-      const resting = s.onGround
-        && Math.abs(s.vel.x) + Math.abs(s.vel.y) + Math.abs(s.vel.z) < 0.05
-        && !inp.forward && !inp.right && !inp.jumpHeld && !inp.jumpPressed && !inp.skiHeld && !inp.jetHeld
-        && (!edges || edges.every((e): boolean => !e.input.forward && !e.input.right && !e.input.jumpHeld && !e.input.jumpPressed && !e.input.skiHeld && !e.input.jetHeld))
-        && ((): boolean => {
-          const surf = sh.bot && this.botSurface ? this.botSurface : this.surface;
-          const groundY = Math.max(
-            surf ? surf.getHeight(s.pos.x, s.pos.z) : s.pos.y,
-            this.structureTop(s.pos.x, s.pos.z),
-          );
-          return s.pos.y - groundY > -0.5 && s.pos.y - groundY < sh.sim.eyeHeight + 0.5;
-        })()
-        && (!bodiesNear || !bodiesNear(s.pos.x, s.pos.z).some((b): boolean => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
-      if (!resting) {
-        let landing = 0;
-        // MoveSim.update() sub-steps internally at its own 1/60 quantum —
-        // feed it the raw tick delta. Count consumed steps ourselves for
-        // the seq-anchored journal (simTicks is in STEP quanta).
-        if (edges) {
-          if (edges.every((e): boolean => e.est !== undefined)) {
-            // Stamped edges replay at their real intra-tick times: edge
-            // i's input governs [est_i, est_{i+1}) and the sim's
-            // pre-edge state covers [t0, est_0). Estimates clamp into
-            // the window and stay non-decreasing - a forged or skewed
-            // stamp degrades to zero-length slices, not time travel.
-            // This is the claim-driven side of the tick window, so the
-            // placement clock is the same wall domain the stamps use.
-            const t1 = wallNow();
-            const t0 = t1 - dt * 1000;
-            // preIn (pre-drain input) governs [t0, est_0) - setInput
-            // already pushed the FINAL edge state live, so without
-            // restoring it the pre-edge span would run future input.
-            this.applyInput(sh, preIn!, jetting);
-            let t = t0, prevEst = t0;
-            for (const e of edges) {
-              const start = Math.min(Math.max(e.est!, prevEst), t1);
-              prevEst = start;
-              if (start > t) {
-                sh.sim.update((start - t) / 1000);
-                landing = Math.max(landing, sh.sim.landingImpact);
-              }
-              this.applyInput(sh, e.input, jetting);
-              t = start;
-            }
-            if (t1 > t) {
-              sh.sim.update((t1 - t) / 1000);
-              landing = Math.max(landing, sh.sim.landingImpact);
-            }
-          } else {
-            // Interleave: each edge governs an equal slice of the window
-            // (uniform intra-tick timing for unstamped edges), so a
-            // press+release pair holds the key for ~half the tick and
-            // the hop/jet fires instead of collapsing into the final
-            // state.
-            const slice = dt / edges.length;
-            for (const e of edges) {
-              this.applyInput(sh, e.input, jetting);
-              sh.sim.update(slice);
-              landing = Math.max(landing, sh.sim.landingImpact);
-            }
-          }
-        } else {
-          sh.sim.update(dt);
-          landing = Math.max(landing, sh.sim.landingImpact);
-        }
-        // T1 fall damage (floodyberry part 3): -v·n at the contact kill
-        // pays (impact - 25) * 0.005 of the bar — the funnel lives one
-        // layer up so respawn/killfeed ride the same path as any death.
-        if (landing * sh.sim.fallBoost > MOVEMENT_CONFIG.fallDamageMinSpeed) {this.onLanding?.(pid, landing * sh.sim.fallBoost);}
-      }
-      // Kill zone: the deck ran out and the void starts. Checked on the
-      // shadow, not on a claim — the client can't argue its way out of
-      // falling off the map. Outside the resting gate on purpose: a body
-      // parked on a surface below the plane (the plain under a sky arena)
-      // is still out of the arena, and gating it made such a body immortal.
-      if (this.killY !== undefined && s.pos.y < this.killY) {this.onKillZone?.(pid);}
-      sh.acc += dt;
-      const steps = Math.floor(sh.acc / MoveSim.STEP);
-      sh.acc -= steps * MoveSim.STEP;
-      sh.simTicks += steps;
-      // A NaN shadow is invisible on the wire AND keeps consuming
-      // claims — the poison always enters through an ungated lane, so
-      // name the field that broke, don't silence it.
-      inv('sim-pos', Number.isFinite(s.pos.x + s.pos.y + s.pos.z), () => ({ id: pid }));
-      inv('sim-vel', Number.isFinite(s.vel.x + s.vel.y + s.vel.z), () => ({ id: pid }));
+      this.tickShadow(pid, sh, dt, bodies, bodiesNear);
     }
     this.journalT += 1;
     if (this.journal && this.journalT % JOURNAL_HASH_EVERY === 0) {
       this.journal.push({ t: this.journalT, kind: 'hash', h: this.journalHash() });
     }
+  }
+
+  /** One shadow's tick: edge drain → jet economy → integrator (or the
+   *  resting skip) → kill zone + step accounting + NaN invariants. */
+  private tickShadow(pid: string, sh: Shadow, dt: number, bodies: BodyCapsule[] | null,
+      bodiesNear: ((x: number, z: number) => BodyCapsule[]) | undefined): void {
+    // Phase 0 (per shadow): drain the queued edges through setInput in
+    // seq order — seq-journal anchors, jet gating, and rising-edge
+    // antes all land before the econ pass reads the final jetWanted.
+    const edges = sh.pending.length > 0 ? sh.pending.splice(0, sh.pending.length) : null;
+    // Stamped slicing needs the input state that governed BEFORE the
+    // first edge fired - setInput is about to overwrite it, so capture
+    // it here (the drain must still see edges in seq order for
+    // anchors/gating/antes).
+    const preIn = edges ? Object.assign({}, sh.sim.input) : null;
+    if (edges) {for (const e of edges) {this.setInput(pid, e.input, e.status, e.seq);}}
+    if (bodies) {
+      // Shared list for every shadow — collideBodies skips selfId, so
+      // rebuilding N-1 copies per tick was pure churn.
+      sh.sim.selfId = pid;
+      sh.sim.bodies = bodies;
+      sh.sim.bodiesNear = bodiesNear;
+    } else {
+      sh.sim.bodiesNear = undefined; // no source this tick — a stale grid is worse than none
+    }
+    const jetting = this.tickEnergy(sh, pid, dt);
+    // Resting shadows skip the integrator: quiet input + ~zero
+    // velocity + grounded means two sub-steps of terrain/solid/body
+    // probes would land exactly where it started. Parked defenders
+    // and AFK humans sit here a third of their ticks.
+    const s = sh.sim.state;
+    const resting = this.isResting(sh, pid, edges, bodiesNear);
+    if (!resting) {
+      let landing = 0;
+      // MoveSim.update() sub-steps internally at its own 1/60 quantum —
+      // feed it the raw tick delta. Count consumed steps ourselves for
+      // the seq-anchored journal (simTicks is in STEP quanta).
+      if (edges) {
+        landing = this.replayEdges(sh, edges, preIn, dt, jetting);
+      } else {
+        sh.sim.update(dt);
+        landing = Math.max(landing, sh.sim.landingImpact);
+      }
+      // T1 fall damage (floodyberry part 3): -v·n at the contact kill
+      // pays (impact - 25) * 0.005 of the bar — the funnel lives one
+      // layer up so respawn/killfeed ride the same path as any death.
+      if (landing * sh.sim.fallBoost > MOVEMENT_CONFIG.fallDamageMinSpeed) {this.onLanding?.(pid, landing * sh.sim.fallBoost);}
+    }
+    // Kill zone: the deck ran out and the void starts. Checked on the
+    // shadow, not on a claim — the client can't argue its way out of
+    // falling off the map. Outside the resting gate on purpose: a body
+    // parked on a surface below the plane (the plain under a sky arena)
+    // is still out of the arena, and gating it made such a body immortal.
+    if (this.killY !== undefined && s.pos.y < this.killY) {this.onKillZone?.(pid);}
+    sh.acc += dt;
+    const steps = Math.floor(sh.acc / MoveSim.STEP);
+    sh.acc -= steps * MoveSim.STEP;
+    sh.simTicks += steps;
+    // A NaN shadow is invisible on the wire AND keeps consuming
+    // claims — the poison always enters through an ungated lane, so
+    // name the field that broke, don't silence it.
+    inv('sim-pos', Number.isFinite(s.pos.x + s.pos.y + s.pos.z), () => ({ id: pid }));
+    inv('sim-vel', Number.isFinite(s.vel.x + s.vel.y + s.vel.z), () => ({ id: pid }));
   }
 
   /** Server-measured RTT (ping/pong echo) — the unforgeable channel.
@@ -837,12 +870,24 @@ sh.gapStreak += 1;
    *  windows silently depend on. */
   feedUplink(playerId: string, uplinkMs: number): void {
     const sh = this.shadows.get(playerId);
-    if (!sh || !(uplinkMs >= 0)) {return;}
+    const hb = (k: string): void => { if (this.health) {this.health.set(k, (this.health.get(k) ?? 0) + 1);} };
+    if (!sh) {hb('uplink.noshadow'); return;}
+    hb('uplink.seen');
     if (sh.pongTransitEma > 0) {
+      // Negative uplink still counts here: bias = uplink - pong transit
+      // is the client clock's offset error, and a clock running ahead
+      // reads negative. The transit blend below keeps its >= 0 guard.
       const bias = uplinkMs - sh.pongTransitEma;
       sh.uplinkBias += (bias - sh.uplinkBias) * 0.1;
       sh.uplinkBiasN += 1;
-    }
+      // Room-lifetime twin: shadows untrack on disconnect and take
+      // their stats with them; the room accumulator survives so a
+      // scrape after the session still shows what the link did.
+      this.roomBiasN += 1;
+      this.roomBiasAvg += (bias - this.roomBiasAvg) * 0.1;
+      this.roomBiasMax = Math.max(this.roomBiasMax, Math.abs(bias));
+    } else {hb('uplink.nopong');}
+    if (!(uplinkMs >= 0)) {hb('uplink.neg'); return;}
     const tr = Math.min(uplinkMs, TRANSIT_EMA_CAP_MS);
     sh.serverTransitEma = sh.serverTransitEma === 0 ? tr : sh.serverTransitEma * 0.9 + tr * 0.1;
     this.syncTransit(sh);
@@ -882,16 +927,27 @@ sh.gapStreak += 1;
     return this.shadows.get(playerId)?.transitVar ?? 0;
   }
 
-  /** Room rollup of the clock-offset instrument: avg + worst |bias|
-   *  across shadows with enough fireAt samples to mean something. */
-  uplinkBiasStats(): { n: number; avg: number; maxAbs: number } {
+  /** Room rollup of the clock-offset instrument: live = avg + worst
+   *  |bias| across present shadows with enough fireAt samples to mean
+   *  something; life = same across every sample the room ever saw
+   *  (survives disconnects — this is the one to scrape). */
+  uplinkBiasStats(): { n: number; avg: number; maxAbs: number; life: { n: number; avg: number; maxAbs: number } } {
     let n = 0, sum = 0, maxAbs = 0;
     for (const sh of this.shadows.values()) {
       if (sh.uplinkBiasN < 5) {continue;}
       n += 1; sum += sh.uplinkBias;
       maxAbs = Math.max(maxAbs, Math.abs(sh.uplinkBias));
     }
-    return { n, avg: n ? Math.round(sum / n) : 0, maxAbs: Math.round(maxAbs) };
+    return { n, avg: n ? Math.round(sum / n) : 0, maxAbs: Math.round(maxAbs),
+      life: { n: this.roomBiasN, avg: Math.round(this.roomBiasAvg), maxAbs: Math.round(this.roomBiasMax) } };
+  }
+
+  /** Per-player clock-offset error the uplink instrument measured
+   *  (ms, + = client estimate behind true) - fed back on 'ping' so the
+   *  client can correct instead of assuming symmetric transit. */
+  uplinkBiasOf(playerId: string): number | undefined {
+    const sh = this.shadows.get(playerId);
+    return sh !== undefined && sh.uplinkBiasN >= 3 ? sh.uplinkBias : undefined;
   }
 
   /** Both raw channels — the effective estimate is min(client, server
