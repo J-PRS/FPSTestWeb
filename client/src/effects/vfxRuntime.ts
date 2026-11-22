@@ -429,6 +429,16 @@ export class TrailDriver {
   }
   release(): void { drivers.delete(this); }
 
+  /** Declared teleport: the host re-anchored on purpose (wire-echo
+   *  reanchor, rope reel) - clear ribbon samples + resync the jump
+   *  baseline so the next tick reads it as fresh travel, not a
+   *  discontinuity the central guard has to infer. */
+  teleport(): void {
+    for (const r of this.ribbons) {r.clear();}
+    for (const e of this.emitters) {e.teleport();}
+    this.last.copy(this.host.pos);
+  }
+
   /** Late-acquired ribbon joins the managed list - same follow bind and
    *  same worldpos push/jump-clear the ctor ribbons get. */
   add(r: DriveRibbon): void {

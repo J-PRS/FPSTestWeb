@@ -551,6 +551,10 @@ export class Projectile {
     this.computeRendered();
     this.renderOffset.add(Projectile._reanchorOld).sub(this.rendered);
     this.computeRendered();
+    // pos just re-anchored on the wire truth - the offset splices the
+    // MESH, but ribbons sample sim pos: declare the teleport or the
+    // next push reads the splice as a mid-flight jump (trail-jumpcut).
+    this.driver?.teleport();
   }
   private static readonly _reanchorOld = new THREE.Vector3();
   private static readonly _reanchorV = new THREE.Vector3();
