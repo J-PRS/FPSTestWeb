@@ -4,6 +4,9 @@ setlocal
 call :now TOTAL0
 call :now T0
 cd /d "%~dp0client" || exit /b 1
+rem Deploy stamp: clients poll version.txt to auto-reload on a new build
+rem (the surge bats stamped it; CF deploys must too or deployWatch never fires)
+powershell -NoProfile -Command "[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()" > "%~dp0client\public\version.txt"
 call npm run build || exit /b 1
 call :elapsed %T0% BUILD_MS
 call :now T0

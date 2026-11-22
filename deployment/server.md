@@ -47,7 +47,7 @@ One process only. A second start fails with "Is port 8000 in use?".
 | `https://play.jprice.app/wthash` | WT port (443) and cert SHA-256 pin |
 | `wss://play.jprice.app/ws` | game WebSocket |
 | `wss://play.jprice.app/rtc?room=CODE` | RTC relay (WebSocket) |
-| UDP `play.jprice.app:443` | WebTransport (forwarded to the local listener on 9443) |
+| UDP `play.jprice.app:443` | WebTransport (iptables REDIRECT → 9443; persisted by `anabatic-wt-forward.service`, added 2026-11-22 — the forward documented here did not exist before then) |
 
 Plain HTTP on the direct IP exposes traffic and any token sent in a query string. Use
 the HTTPS name for anything shared.

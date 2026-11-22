@@ -271,18 +271,19 @@ for (const e of demo.projectileEvents) {
 }
 
 // Receipt check — a signed matchToken trailer pairs the demo with the
-// server's attested outcome. --key <secret> (or KRIBES_SIGN_KEY env)
-// verifies the HMAC; absent a key we report presence only.
+// server's attested outcome. --key <secret> (or ANABATIC_SIGN_KEY env,
+// KRIBES_SIGN_KEY legacy alias) verifies the HMAC; absent a key we
+// report presence only.
 if (demo.matchToken) {
   const tk = demo.matchToken;
-  const key = process.env.KRIBES_SIGN_KEY ?? null;
+  const key = process.env.ANABATIC_SIGN_KEY ?? process.env.KRIBES_SIGN_KEY ?? null;
   if (key) {
     const { verifyToken } = await import('../shared/resultToken.ts');
     const ok = await verifyToken(tk, key);
     console.log(`  matchToken ${ok ? 'SIG-VALID' : 'SIG-INVALID'} match=${tk.matchId} room=${tk.room} mode=${tk.mode} events=${tk.eventHash} sig=${tk.sig.slice(0, 12)}…`);
     if (!ok) { console.log('VERDICT bad-token — the embedded receipt was forged or the key is wrong'); process.exit(1); }
   } else {
-    console.log(`  matchToken present (set KRIBES_SIGN_KEY to verify the sig) match=${tk.matchId} events=${tk.eventHash}`);
+    console.log(`  matchToken present (set ANABATIC_SIGN_KEY to verify the sig) match=${tk.matchId} events=${tk.eventHash}`);
   }
 }
 console.log(`demo: ${file}`);
