@@ -608,6 +608,11 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
       for (const b of tabBtns) {b.classList.toggle('active', b.dataset.tab === name);}
 
+      // /rtc/lobbies only exists when the server runs FPS_RTC - probing
+      // on panel build 404s every boot against parked hosts. Fetch when
+      // the LAN tab is actually opened instead.
+      if (name === 'LAN') {refreshLobsFn();}
+
     };
 
     // P2P is presented as LAN: ICE host/mDNS candidates work there with
@@ -1148,8 +1153,6 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     };
 
     const refreshLobs = (): void => { refreshLobsFn(); };
-
-    refreshLobs();
 
 
 

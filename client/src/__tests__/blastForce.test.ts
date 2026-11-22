@@ -18,7 +18,7 @@ interface Rig {
   remotes: Map<string, any>;
   balls: Targetable[];
   nuggets: any[];
-  stamps: { x: number; y: number; z: number; t: number }[];
+  stamps: { x: number; y: number; z: number; t: number; self?: boolean }[];
   hooks: { onTargetDestroyed: ReturnType<typeof vi.fn> };
 }
 
@@ -42,7 +42,7 @@ const mkRig = (): Rig => {
   const remotes = new Map<string, any>();
   const balls: Targetable[] = [];
   const nuggets: any[] = [];
-  const stamps: { x: number; y: number; z: number; t: number }[] = [];
+  const stamps: { x: number; y: number; z: number; t: number; self?: boolean }[] = [];
   const hooks = { onTargetDestroyed: vi.fn() };
 
   const deps = {
