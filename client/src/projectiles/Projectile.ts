@@ -554,8 +554,13 @@ export class Projectile {
     // pos just re-anchored on the wire truth - the offset splices the
     // MESH, but ribbons sample sim pos: declare the teleport or the
     // next push reads the splice as a mid-flight jump (trail-jumpcut).
-    this.driver?.teleport();
+    this.noteTeleport();
   }
+
+  /** Caller-driven pos teleport (wire snap, reanchor): clears every
+   *  trail layer's samples so the jump isn't smeared - or warned on.
+   *  Undeclared jumps still trip the driver's own guard. */
+  noteTeleport(): void { this.driver?.teleport(); }
   private static readonly _reanchorOld = new THREE.Vector3();
   private static readonly _reanchorV = new THREE.Vector3();
 

@@ -24,6 +24,9 @@ const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }):
   p.hitPointValid = true; // the blast renders HERE, not a stale sweep point
   p.renderOffset.set(0, 0, 0);
   p.rendered.copy(p.pos);
+  // The wire contact is a declared teleport - clear trail samples so a
+  // diverged replica (bomblets especially) doesn't log trail-jumpcut.
+  p.noteTeleport();
   return preSnap;
 };
 
