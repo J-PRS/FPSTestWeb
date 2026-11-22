@@ -373,6 +373,15 @@ export class Projectile {
       [this.trail],
       this.ribbons,
     );
+    // Owner context on the shared ribbon warn - a jumpcut otherwise
+    // names only the config tag, not WHICH shell/host teleported.
+    for (const r of this.ribbons) {
+      if (r instanceof RibbonTrail) {
+        r.jumpHint = () => ({ pid: this.demoProjectileId || this.shotId || '?',
+          age: Number(this.age.toFixed(2)), rem: this.isRemote ? 1 : 0,
+          pos: `${Math.round(this.pos.x)},${Math.round(this.pos.y)},${Math.round(this.pos.z)}` });
+      }
+    }
   }
 
   /** Impact policy (bounce/fuse/intercept/target record) - projCollide.ts. */

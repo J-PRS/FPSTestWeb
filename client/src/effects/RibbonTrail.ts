@@ -475,7 +475,12 @@ RibbonTrail.nanPushes += 1;
       if (spatial && (this.jumpcuts <= 3 || this.jumpcuts % 64 === 0)) {
         // Throttled - a mis-wired owner can otherwise flood console.error
         // thousands/sec (observed: 9800 msgs in 2s), starving the frame.
-        glitch('trail-jumpcut', { tag: this.tag, gapM: Math.round(d) });
+        // stallMs = time since the previous push: a stalled-then-jumped
+        // ribbon (gated emit, owner starved) looks identical to a live
+        // teleport without it - the two have different owners.
+        glitch('trail-jumpcut', Object.assign({ tag: this.tag, slot: this.slot, gapM: Math.round(d),
+          stallMs: Math.round(performance.now() - prevPushMs),
+          cnt: this.count, stopped: this.stopped ? 1 : 0 }, this.jumpHint?.()));
       }
       this.clear();
     } else if (d < SAMPLE_SPACING) {
