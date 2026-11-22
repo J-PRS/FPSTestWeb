@@ -1163,7 +1163,7 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
         st.veilStable = 0; st.veilLiveFrames = 0; st.veilLive = false;
         dropSessionVeil();
         if (st.veilFroze) {deps.lazyPlayer().unfreezeInput(); st.veilFroze = false;}
-        aimDebugAfterVeil(deps);
+        if (urlParams.has('aimdbg')) {aimDebugAfterVeil(deps);}
       }
     }
   }

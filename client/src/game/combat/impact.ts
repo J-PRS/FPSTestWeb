@@ -503,11 +503,9 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
   // that forgot to stamp ownership.
   if ((p.hitBall || p.hitPlayerId) && !p.shooterId && p.demoProjectileId) {
 
-    const hitWho = p.hitBall ? `ball#${p.hitBall.id}` : (p.hitPlayerId ?? '?');
-
-    deps.logger.info(`[CoolShot] ${p.config.displayName} hit ${hitWho} airtime=${p.hitAge.toFixed(3)}s dist=${p.hitDistance.toFixed(1)} direct=${p.directHit}`);
-
     if (demoManager?.isRecording && p.hitAge > 0.2) {
+      const hitWho = p.hitBall ? `ball#${p.hitBall.id}` : (p.hitPlayerId ?? '?');
+      deps.logger.info(`[CoolShot] ${p.config.displayName} hit ${hitWho} airtime=${p.hitAge.toFixed(3)}s dist=${p.hitDistance.toFixed(1)} direct=${p.directHit}`);
 
       p.coolShotFired = true;
       demoManager.autoClipOnHit(p.hitAge, 0.2, undefined, undefined, undefined, {
