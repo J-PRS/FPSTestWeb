@@ -759,6 +759,17 @@ win.violations += 1;
         dv: { x: -base.x * recoil, y: -base.y * recoil, z: -base.z * recoil }, fallBoost: 3 });
     }
     const ndir = this.bloomAim(playerId, msg, base);
+    // Spawn-shaping forensics: the claim->spawn deltas are the honest-miss
+    // autopsy - a painted replica contact vs the arc the server actually
+    // flew. bloomAim rotating the dir or claimOrigin clamping the point
+    // shifts the whole shell arc; counters give the population, the
+    // throttled sample names a shotId to pair with the client's echo.
+    const warpDeg = Math.acos(Math.min(1, Math.max(-1, base.x * ndir.x + base.y * ndir.y + base.z * ndir.z))) * 57.29577951308232;
+    const ogap = msg.pos ? dhypot3(aim.at.x - msg.pos.x, aim.at.y - msg.pos.y, aim.at.z - msg.pos.z) : 0;
+    if (warpDeg > 0.5 || ogap > 1.5) {
+      this.hb('shot.spawnWarp');
+      this.rejectWarn(`${playerId}:spawnWarp`, `spawn warp: ${playerId} shot=${msg.shotId ?? '?'} dirDeg=${warpDeg.toFixed(2)} originGap=${ogap.toFixed(1)}`);
+    }
     const ownerVel = this.ownerVelOf(player, msg);
     // Back-date the shell's age by the MEASURED uplink transit - the
     // EMA fed by pongs + bounded claim samples, not this claim's stamp

@@ -337,7 +337,14 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   }
 
-  if (mine) {deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());}
+  // Stale-ghost honesty: the painted contact vs the victim's wire pos is
+  // the same staleness the echo logs as aimOff - past ~4m the lag-comp
+  // arc can't reach it (slack floor is ~6m minus contact radius), so the
+  // number would promise damage the server demonstrably won't pay. The
+  // burst/healthbar/log still fire - the hit LOOKED like a hit; only the
+  // damage promise is withheld.
+  const aimStale = targetPlayer ? Math.hypot(hitPos.x - targetPlayer.wirePosition.x, hitPos.y - targetPlayer.wirePosition.y, hitPos.z - targetPlayer.wirePosition.z) : 0;
+  if (mine && aimStale <= 4) {deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());}
 
   if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType, p.hitAge)) {return;} // bot authority: real damage, no claim
 
