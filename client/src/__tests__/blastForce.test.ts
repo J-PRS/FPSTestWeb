@@ -346,6 +346,17 @@ describe('predictLocalShove — remote-blast knockback dedup', (): void => {
     expect(r.stamps).toHaveLength(1); // only the second stamp remains
   });
 
+  it('untracked remote child (bomblet): dedupes an echo but audits like a self-shove', (): void => {
+    const r = mkRig();
+    (r.net as { isConnected?: () => boolean }).isConnected = (): boolean => true;
+    const applied = r.blast.predictLocalShove(new THREE.Vector3(5, 0, 0), 10, 30, 'push', 'BOT-SLATE-02', { untracked: true });
+    expect(applied).toBe(true);
+    expect(r.stamps).toHaveLength(1);
+    // self = expiry stays silent: the server's rng-scatter can't be audited
+    // to this replica's bomblet flight, but a real echo still dedupes.
+    expect(r.stamps[0]!.self).toBe(true);
+  });
+
   it('a dead body never predicts a shove', (): void => {
     const r = mkRig();
     r.player.isDead = true;

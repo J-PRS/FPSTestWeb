@@ -68,7 +68,7 @@ export interface BlastArgs {
 export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
   applyExplosionForce: (a: BlastArgs) => void;
   applyForceToRemotes: (a: BlastArgs) => void;
-  predictLocalShove: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string }) => boolean;
+  predictLocalShove: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string; untracked?: boolean }) => boolean;
   applyForceToPrey: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull') => void;
 } {
 
@@ -211,7 +211,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
    *  (applyExplosionForce) and remote-blast replicas (impact.ts). Returns
    *  true when the player sat inside the envelope - whether this call
    *  applied the impulse or a raced wire echo already spent it. */
-  function predictLocalShove(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string }): boolean {
+  function predictLocalShove(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string; untracked?: boolean }): boolean {
     const player = deps.lazyPlayer();
     // Ledger the blast itself, not just the shove: when the wire
     // knockback arrives, net/players.ts can tell 'the blast rendered but
@@ -321,7 +321,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
     // Offline has no echo lane either - a bot-shooter blast stamped as
     // 'remote' can never be confirmed, so treat it self/silent or the
     // expiry reports a phantom kb-echo.
-    const echoless = shooterId === undefined || shooterId === 'local' || !(kbNm?.isConnected?.() ?? false);
+        // Untracked remote children (cluster bomblets): the server's scatter is
+    // room.rng, not this replica's flight - a predicted shove's echo can't be
+    // audited to a blast the authority never placed here. Still stamp for
+    // center+time dedup, but expire silent like a self-shove.
+    const echoless = meta?.untracked === true || shooterId === undefined || shooterId === 'local' || !(kbNm?.isConnected?.() ?? false);
     const stamp: (typeof stamps)[number] = { x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, self: echoless, f: Math.round(impulse * 10) / 10, m: Number(margin.toFixed(1)), iv: { x: iv.x, y: iv.y, z: iv.z }, pid: meta?.pid, wt: meta?.wt, pop: meta?.pop };
     // Wire fate may already be in hand - a wire-destroyed replica pops
     // inside the destroy handler, AFTER the attach sweep ran, so the
@@ -374,7 +378,8 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
 
     const player = deps.lazyPlayer();
     const dpx = player.pos.distanceTo(pos);
-    if (predictLocalShove(pos, radius, force, forceMode, a.shooterId)) {
+    if (predictLocalShove(pos, radius, force, forceMode, a.shooterId,
+      { untracked: a.shooterId !== undefined && a.shooterId !== 'local' && a.shotId == null })) {
       // Self-AOE damage: a tiny fraction of what an enemy would take at the
       // same distance - rocket jumps should be viable, not lethal. Faint
       // vignette only, no hurt sound (JP: the grunt is too much for this).
