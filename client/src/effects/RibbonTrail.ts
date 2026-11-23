@@ -472,7 +472,12 @@ RibbonTrail.nanPushes += 1;
     if (d >= BREAK_M || performance.now() - prevPushMs > PUSH_GAP_MS) {
       const spatial = d >= BREAK_M;
       this.jumpcuts += spatial ? 1 : 0;
-      if (spatial && (this.jumpcuts <= 3 || this.jumpcuts % 64 === 0)) {
+      // Driver-managed ribbons skip the warn: the driver's dt-scaled
+      // maxStep is the declared jump authority — a catch-up frame
+      // (cell drain after jank) is legal travel to the driver but
+      // exceeds this fixed BREAK_M, and the same class warned forever
+      // without naming an owner. Unmanaged owners keep the canary.
+      if (spatial && !this.followManaged && (this.jumpcuts <= 3 || this.jumpcuts % 64 === 0)) {
         // Throttled - a mis-wired owner can otherwise flood console.error
         // thousands/sec (observed: 9800 msgs in 2s), starving the frame.
         // stallMs = time since the previous push: a stalled-then-jumped
@@ -480,7 +485,9 @@ RibbonTrail.nanPushes += 1;
         // teleport without it - the two have different owners.
         glitch('trail-jumpcut', Object.assign({ tag: this.tag, slot: this.slot, gapM: Math.round(d),
           stallMs: Math.round(performance.now() - prevPushMs),
-          cnt: this.count, stopped: this.stopped ? 1 : 0 }, this.jumpHint?.()));
+          cnt: this.count, stopped: this.stopped ? 1 : 0,
+          from: `${Math.round(this._lx)},${Math.round(this._ly)},${Math.round(this._lz)}`,
+          to: `${Math.round(pos.x + ox)},${Math.round(pos.y + oy)},${Math.round(pos.z + oz)}` }, this.jumpHint?.()));
       }
       this.clear();
     } else if (d < SAMPLE_SPACING) {
@@ -506,7 +513,13 @@ RibbonTrail.nanPushes += 1;
 
   /** Ramp the emitter in over `dur` seconds starting at `from` scale -
    *  the projectile mesh's spawn-grow, applied to the streak. */
-  rampIn(dur: number, from = 0): void { this.rampDur = dur; this.rampFrom = from; }
+  rampIn(dur: number, from = 0): void {
+    this.rampDur = dur; this.rampFrom = from;
+    // Seed the scale now - between spawn and the first update() the
+    // verts would otherwise write at the reset emitScale=1, which is
+    // the one-frame full-width flash ramp exists to prevent.
+    this.emitScale = from;
+  }
 
   /** Stop emitting - ribbon fades out where it is. */
   stop(): void { this.stopped = true; }
@@ -571,7 +584,7 @@ RibbonTrail.nanPushes += 1;
     // the sky. The main ribbon only fades, keeping the body readable.
     if (cam && this.count > 0) {
       const dx = cam.x - this.px[this.head]!, dy = cam.y - this.py[this.head]!, dz = cam.z - this.pz[this.head]!;
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const d = Math.hypot(dx, dy, dz);
       if (this.farCull) {this.emitScale *= Math.max(0, Math.min(1, (150 - d) / 25));}
       else {this.emitScale *= Math.max(0, Math.min(1, (200 - d) / 50));}
     }
