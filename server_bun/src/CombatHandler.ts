@@ -192,6 +192,10 @@ export class CombatHandler {
    *  flew); outside it the intent is simply new. */
   private seenShots = new Map<string, Map<string, number>>();
   private static readonly SHOT_DEDUPE_MS = 10_000; // resync replays ride the whole journal - >5s hidden gaps are normal
+  /** Physics cap on a claimed shot velocity - generous over max
+   *  attainable speed; bounds a forged arc without refusing honest
+   *  skiing speeds. See ownerVelOf. */
+  private static readonly OWNER_VEL_CAP = 140;
   /** Cadence gate (registerMiss uses it): per `${playerId}:${weaponType}`
    *  burst window - start time + claims seen inside it. The client fire
    *  timer is feel; this is the law. A window holds up to `burst` spawn
@@ -888,16 +892,23 @@ win.violations += 1;
     player.bloomAt = now / 1000;
   }
 
-  /** Velocity inherit: the predicted shell draws playerVel*0.5 - using
-   *  the shadow velocity here diverges the echo by uplink-of-accel and
-   *  shows as a mid-air reanchor jink. Adopt the claim's vel verbatim
-   *  within an honest window (accel×lag can't legit exceed ~20m/s);
-   *  a forged vel beyond that clamps to shadow - worst cheat is a
-   *  half-weighted 20m/s nudge, not a free speedline. */
+  /** Shell-owner velocity for inherit: take the CLAIMED vector, not the
+   *  shadow. The shadow lags the newest impulses the client already
+   *  predicted (a painted disc after a knockback), so a shadow-diff gate
+   *  drops honest velocity exactly when it diverges - and bent the arc
+   *  past every rewind check (pd 16-41m body refuses, 2026-11-23). A
+   *  forged vel only bends the arc the victim-side reachability gates
+   *  still police, so the bound is a physics cap, not shadow distance. */
   private ownerVelOf(player: PlayerState, msg: ShotMsg): Vec3 {
-    return msg.vel && finiteVec(msg.vel)
-        && dhypot3(msg.vel.x - player.velocity.x, msg.vel.y - player.velocity.y, msg.vel.z - player.velocity.z) <= 20
-      ? msg.vel : player.velocity;
+    const cv = msg.vel;
+    if (!cv || !finiteVec(cv)) {return player.velocity;}
+    const gap = dhypot3(cv.x - player.velocity.x, cv.y - player.velocity.y, cv.z - player.velocity.z);
+    if (gap > 20) {this.hb('shot.velGap');}
+    const mag = dhypot3(cv.x, cv.y, cv.z);
+    if (mag <= CombatHandler.OWNER_VEL_CAP) {return { x: cv.x, y: cv.y, z: cv.z };}
+    this.hb('shot.velClamp');
+    const s = CombatHandler.OWNER_VEL_CAP / mag;
+    return { x: cv.x * s, y: cv.y * s, z: cv.z * s };
   }
 
   /** shotId → spawn bookkeeping: dedupe record, stale-entry trim,
