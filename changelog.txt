@@ -1,3 +1,4 @@
+2026-11-23 - fix(hud): conn-banner caps at min(56vw,700px) + ellipsis - a long warn/glitch line (nowrap, centered) reached the top-right column and tripped the overlap audit transiently at 1600x900 (774-874px^2). Region stays anchored; the line truncates - full text lives in the Alt+Q log.
 2026-11-23 - ballroom: drop the invisible ballOnly ceiling - open sky; over-the-fence launches leave and leash back instead of a phantom bounce
 2026-11-23 - ballroom: seat each hexagon wall on its own terrain sample (walls were authored y5 flat while the bowl runs 3.4-7.2m - face 2 buried entirely, others slivered); fences follow per-wall tops, cap to y41
 2026-11-23 - ballroom spec: drop the 70m floor slab (bowl terrain is already flat - the slab read as a floating square); leash 36->30 so balls stay inside the 32m wall corners; sync stale local spec with the live pit-bowl layout

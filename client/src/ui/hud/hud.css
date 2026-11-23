@@ -758,6 +758,9 @@ body:has(#hud.cm-open) #healthbar-container {
 #conn-banner {
   display: none; font: 700 15px/1 Rajdhani, sans-serif; letter-spacing: 0.18em;
   padding: 5px 14px; border-radius: 4px; pointer-events: none; white-space: nowrap;
+  /* Long warn/glitch texts must not reach the top-right column - the
+     region stays centered, the line truncates (full text in Alt+Q). */
+  max-width: min(56vw, 700px); overflow: hidden; text-overflow: ellipsis;
 }
 #conn-banner.down {
   color: #ff8080; border: 1px solid rgba(255,107,107,0.55);
