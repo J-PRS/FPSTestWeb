@@ -759,17 +759,7 @@ win.violations += 1;
         dv: { x: -base.x * recoil, y: -base.y * recoil, z: -base.z * recoil }, fallBoost: 3 });
     }
     const ndir = this.bloomAim(playerId, msg, base);
-    // Spawn-shaping forensics: the claim->spawn deltas are the honest-miss
-    // autopsy - a painted replica contact vs the arc the server actually
-    // flew. bloomAim rotating the dir or claimOrigin clamping the point
-    // shifts the whole shell arc; counters give the population, the
-    // throttled sample names a shotId to pair with the client's echo.
-    const warpDeg = Math.acos(Math.min(1, Math.max(-1, base.x * ndir.x + base.y * ndir.y + base.z * ndir.z))) * 57.29577951308232;
-    const ogap = msg.pos ? dhypot3(aim.at.x - msg.pos.x, aim.at.y - msg.pos.y, aim.at.z - msg.pos.z) : 0;
-    if (warpDeg > 0.5 || ogap > 1.5) {
-      this.hb('shot.spawnWarp');
-      this.rejectWarn(`${playerId}:spawnWarp`, `spawn warp: ${playerId} shot=${msg.shotId ?? '?'} dirDeg=${warpDeg.toFixed(2)} originGap=${ogap.toFixed(1)}`);
-    }
+    this.noteSpawnWarp(playerId, msg, aim, base, ndir);
     const ownerVel = this.ownerVelOf(player, msg);
     // Back-date the shell's age by the MEASURED uplink transit - the
     // EMA fed by pongs + bounded claim samples, not this claim's stamp
@@ -777,28 +767,11 @@ win.violations += 1;
     // not buy seconds of shell age). Without a measurement the honest
     // age is arrival-time - transitOf returns 0 in join grace.
     const lagS = (this.deps.transitOf?.(playerId) ?? 0) / 1000;
-    // Chambered shell (stats.loadable): a belt item rammed into the
-    // host weapon claims AS the host but spawns the loaded type -
-    // javelin out of a BoltLauncher at dmgMult direct. Consumed by this
-    // shot only; a weapon the row doesn't declare can't fire it, so
-    // holstering keeps the chamber until swap-back (or unload).
-    let spawnWt = msg.weaponType!;
-    let dmgMult = 1;
-    let variant = 0;
-    const ld = player.loadedShell;
-    if (ld !== undefined) {
-      const lspec = getWeaponStats(ld)?.loadable;
-      if (lspec !== undefined && lspec.into === msg.weaponType) {
-        player.loadedShell = undefined;
-        spawnWt = ld;
-        dmgMult = lspec.dmgMult ?? 1;
-        variant = PROJVAR_LOADED;
-      }
-    }
-    const id = fireProjectile(playerId, spawnWt,
+    const spawn = this.loadedSpawn(player, msg);
+    const id = fireProjectile(playerId, spawn.wt,
       { x: aim.at.x, y: aim.at.y, z: aim.at.z },
       ndir,
-      ownerVel, msg.shotId, lagS, dmgMult, variant);
+      ownerVel, msg.shotId, lagS, spawn.dmgMult, spawn.variant);
     if (id) {
       this.noteShot(playerId, msg.shotId, now);
       this.hb('shot.serverSim');
@@ -812,6 +785,37 @@ win.violations += 1;
     const hs = msg.weaponType === undefined ? undefined : getWeaponStats(msg.weaponType);
     if (hs === undefined || hs.speed > 0) {this.reject(playerId, 'Shot', 'spawn refused', undefined, msg.weaponType, msg.shotId);}
     return 'relay';
+  }
+
+  /** Spawn-shaping forensics: the claim->spawn deltas are the honest-miss
+   *  autopsy - a painted replica contact vs the arc the server actually
+   *  flew. bloomAim rotating the dir or claimOrigin clamping the point
+   *  shifts the whole shell arc; counters give the population, the
+   *  throttled sample names a shotId to pair with the client's echo. */
+  private noteSpawnWarp(playerId: string, msg: ShotMsg, aim: { dir: Vec3; at: Vec3 }, base: Vec3, ndir: Vec3): void {
+    const warpDeg = Math.acos(Math.min(1, Math.max(-1, base.x * ndir.x + base.y * ndir.y + base.z * ndir.z))) * 57.29577951308232;
+    const ogap = msg.pos ? dhypot3(aim.at.x - msg.pos.x, aim.at.y - msg.pos.y, aim.at.z - msg.pos.z) : 0;
+    if (warpDeg > 0.5 || ogap > 1.5) {
+      this.hb('shot.spawnWarp');
+      this.rejectWarn(`${playerId}:spawnWarp`, `spawn warp: ${playerId} shot=${msg.shotId ?? '?'} dirDeg=${warpDeg.toFixed(2)} originGap=${ogap.toFixed(1)}`);
+    }
+  }
+
+  /** Chambered shell (stats.loadable): a belt item rammed into the
+   *  host weapon claims AS the host but spawns the loaded type -
+   *  javelin out of a BoltLauncher at dmgMult direct. Consumed by this
+   *  shot only; a weapon the row doesn't declare can't fire it, so
+   *  holstering keeps the chamber until swap-back (or unload). */
+  private loadedSpawn(player: PlayerState, msg: ShotMsg): { wt: NonNullable<ShotMsg['weaponType']>; dmgMult: number; variant: number } {
+    const ld = player.loadedShell;
+    if (ld !== undefined) {
+      const lspec = getWeaponStats(ld)?.loadable;
+      if (lspec !== undefined && lspec.into === msg.weaponType) {
+        player.loadedShell = undefined;
+        return { wt: ld, dmgMult: lspec.dmgMult ?? 1, variant: PROJVAR_LOADED };
+      }
+    }
+    return { wt: msg.weaponType!, dmgMult: 1, variant: 0 };
   }
 
   /** Cost gates for a simmed intent - belt charges, jet-tank energy,

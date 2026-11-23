@@ -53,6 +53,7 @@ import { urlParams } from '../../core/params.js';
 import { processProjectileExplosion, type CombatCtx, type CombatDeps } from '../combat.js';
 
 import type { Targetable } from '../../entities/balls.js';
+import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import { simRand } from '../../../../shared/simRand.js';
 
 /** Chambered fly-time multiplier on a direct hit - shared by player and
@@ -315,27 +316,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   // the ghost-hit feedback the reject warn complains about.
 
-  if (mine && willClaim) {
-
-    // The sweep that scored this hit ran on the ghost - the buffer pos at
-    // the shooter's view epoch, which is what the server rewinds to.
-    // Validating against the rendered `position` suppresses honest claims
-    // whenever the two diverge (converge/drift episodes, 6-14m observed).
-    // The server's rewind is (victimPing−myPing)/2 shallower than the
-    // view ghost - validate at the adjudicated epoch, not the painted one.
-    const myTransit = (deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2;
-    const claimTarget = targetPlayer ? targetPlayer.ghostPosition(_claimTarget, myTransit) : hitPos;
-    const verdict = hitVerdict(c, p, p.hitPointValid ? p.hitPoint : p.pos, claimTarget, p.hitAge, targetPlayer?.armorClass);
-
-    if (!verdict.ok) {
-
-      deps.logger.info(`[Shot] hit claim suppressed pre-flight: ${verdict.reason}`);
-
-      return;
-
-    }
-
-  }
+  if (!claimAdmitted(c, p, mine, willClaim, targetPlayer, hitPos)) {return;}
 
   // Stale-ghost honesty: the painted contact vs the victim's wire pos is
   // the same staleness the echo logs as aimOff - past ~4m the lag-comp
@@ -346,64 +327,76 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   const aimStale = targetPlayer ? Math.hypot(hitPos.x - targetPlayer.wirePosition.x, hitPos.y - targetPlayer.wirePosition.y, hitPos.z - targetPlayer.wirePosition.z) : 0;
   if (mine && aimStale <= 4) {deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());}
 
+  creditPredicted(c, p, playerId, targetPlayer, hitPos, directDamage);
+
+}
+
+
+
+/** Same gate as the blast: a hit the shared validator calls illegal is
+ *  dead on arrival - predicting its damage (numbers, bars, score) is
+ *  the ghost-hit feedback the reject warn complains about. */
+function claimAdmitted(c: CombatCtx, p: Projectile, mine: boolean, willClaim: unknown, targetPlayer: RemotePlayer | undefined, hitPos: THREE.Vector3): boolean {
+  if (!mine || !willClaim) {return true;}
+  const {deps} = c;
+  // The sweep that scored this hit ran on the ghost - the buffer pos at
+  // the shooter's view epoch, which is what the server rewinds to.
+  // Validating against the rendered `position` suppresses honest claims
+  // whenever the two diverge (converge/drift episodes, 6-14m observed).
+  // The server's rewind is (victimPing−myPing)/2 shallower than the
+  // view ghost - validate at the adjudicated epoch, not the painted one.
+  const myTransit = (deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2;
+  const claimTarget = targetPlayer ? targetPlayer.ghostPosition(_claimTarget, myTransit) : hitPos;
+  const verdict = hitVerdict(c, p, p.hitPointValid ? p.hitPoint : p.pos, claimTarget, p.hitAge, targetPlayer?.armorClass);
+  if (!verdict.ok) {
+    deps.logger.info(`[Shot] hit claim suppressed pre-flight: ${verdict.reason}`);
+    return false;
+  }
+  return true;
+}
+
+/** Payment tail for a credited hit: bot authority applies real damage
+ *  and ends it; my hits get bar prediction, the authority echo stamp,
+ *  and the feedback pass. */
+function creditPredicted(c: CombatCtx, p: Projectile, playerId: string, targetPlayer: RemotePlayer | undefined, hitPos: THREE.Vector3, directDamage: number): void {
+  const {deps} = c;
   if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType, p.hitAge)) {return;} // bot authority: real damage, no claim
-
-  if (!mine) {return;}
-
+  if (p.shooterId) {return;} // another shooter's frag - the claim/feedback split already ran
   deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
-
   // Authority rooms give this hit no claim - stamp it so a server whiff
-
   // (no playerHit echo within ~RTT) counts as a ghost hit in the dump.
-
   // P2P/claim rooms already ledger the outcome through claimSeq instead.
-
   if (deps.lazyNetworkManager()?.authoritySims()) {
-
     expectDamageEcho(playerId, directDamage, p.config.weaponType, p.pullShotId ?? p.shotId, { x: p.pos.x, y: p.pos.y, z: p.pos.z },
       targetPlayer ? { x: targetPlayer.wirePosition.x, y: targetPlayer.wirePosition.y, z: targetPlayer.wirePosition.z } : undefined);
-
   }
+  hitFeedback(c, p, playerId, targetPlayer, hitPos);
+}
 
+/** Predicted feedback tail for a credited hit: embed voice, airborne
+ *  read, score log, and the unbound-ghost warn past the bind grace. */
+function hitFeedback(c: CombatCtx, p: Projectile, playerId: string, targetPlayer: RemotePlayer | undefined, hitPos: THREE.Vector3): void {
+  const {deps} = c;
   // Embed shells (javelin) plant their thunk on terrain but on flesh
   // only the shooter's marker tick played - the skewer itself needs a
   // voice at the victim or a hit reads as silent.
   if (p.config.embeds !== undefined) {sfx.fleshHitAt(hitPos);}
-
   const airborne = targetPlayer
-
     ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
-
     : false;
-
   logHitScore(c, p, 'player', airborne, playerId);
-
-
-
   if (playerId === 'local') {return;}
-
   // A predicted server-simmed shell still unbound past the bind grace is
-
   // a ghost - the authority knows nothing about it and will never pay the
-
   // damage. Under the grace it's a benign race: close-range hits land
-
   // before the projectileCreated echo round-trips, while the server-side
-
   // shell exists and adjudicates its own contact regardless.
-
   if (serverSimmed(p.config.weaponType) && deps.lazyNetworkManager()?.authorityShells() && !p.serverProjectileId && p.age > 0.6) {
-
     deps.logger.warn(`[Shot] ghost shell hit ${playerId}: ${p.config.displayName} never bound to a server shell (shotId=${p.shotId}, age=${p.age.toFixed(2)}s) - hit is prediction-only, no damage`);
-
   }
-
   // Server-simmed shells never claim their hit - predicted feedback
-
   // (damage numbers, bars, hitmarker) already ran above; the authority
-
   // declares the outcome via playerHit/projectileDestroyed.
-
 }
 
 
