@@ -13,19 +13,19 @@
   ],
   "fog": { "mistAnim": false },
   "structures": [
-    { "kind": "wall", "pos": { "x": 342, "y": 5, "z": 666.9 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": 1.047 },
-    { "kind": "wall", "pos": { "x": 318, "y": 5, "z": 680.7 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 } },
-    { "kind": "wall", "pos": { "x": 294, "y": 5, "z": 666.9 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": -1.047 },
-    { "kind": "wall", "pos": { "x": 294, "y": 5, "z": 639.1 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": -2.094 },
-    { "kind": "wall", "pos": { "x": 318, "y": 5, "z": 625.3 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": 3.1416 },
-    { "kind": "wall", "pos": { "x": 342, "y": 5, "z": 639.1 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": 2.094 },
-    { "kind": "hull", "pos": { "x": 342, "y": 8.5, "z": 666.9 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": 1.047, "ballOnly": true },
-    { "kind": "hull", "pos": { "x": 318, "y": 8.5, "z": 680.7 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "ballOnly": true },
-    { "kind": "hull", "pos": { "x": 294, "y": 8.5, "z": 666.9 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": -1.047, "ballOnly": true },
-    { "kind": "hull", "pos": { "x": 294, "y": 8.5, "z": 639.1 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": -2.094, "ballOnly": true },
-    { "kind": "hull", "pos": { "x": 318, "y": 8.5, "z": 625.3 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": 3.1416, "ballOnly": true },
-    { "kind": "hull", "pos": { "x": 342, "y": 8.5, "z": 639.1 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": 2.094, "ballOnly": true },
-    { "kind": "hull", "pos": { "x": 318, "y": 40, "z": 653 }, "size": { "x": 70, "y": 1.5, "z": 70 }, "ballOnly": true }
+    { "kind": "wall", "pos": { "x": 342, "y": 6.0, "z": 666.9 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": 1.047 },
+    { "kind": "wall", "pos": { "x": 318, "y": 8.2, "z": 680.7 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 } },
+    { "kind": "wall", "pos": { "x": 294, "y": 4.8, "z": 666.9 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": -1.047 },
+    { "kind": "wall", "pos": { "x": 294, "y": 5.1, "z": 639.1 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": -2.094 },
+    { "kind": "wall", "pos": { "x": 318, "y": 6.2, "z": 625.3 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": 3.1416 },
+    { "kind": "wall", "pos": { "x": 342, "y": 7.1, "z": 639.1 }, "size": { "x": 33.5, "y": 3.5, "z": 1.5 }, "rotY": 2.094 },
+    { "kind": "hull", "pos": { "x": 342, "y": 21.5, "z": 666.9 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": 1.047, "ballOnly": true },
+    { "kind": "hull", "pos": { "x": 318, "y": 23.7, "z": 680.7 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "ballOnly": true },
+    { "kind": "hull", "pos": { "x": 294, "y": 20.3, "z": 666.9 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": -1.047, "ballOnly": true },
+    { "kind": "hull", "pos": { "x": 294, "y": 20.6, "z": 639.1 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": -2.094, "ballOnly": true },
+    { "kind": "hull", "pos": { "x": 318, "y": 21.7, "z": 625.3 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": 3.1416, "ballOnly": true },
+    { "kind": "hull", "pos": { "x": 342, "y": 22.6, "z": 639.1 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": 2.094, "ballOnly": true },
+    { "kind": "hull", "pos": { "x": 318, "y": 41, "z": 653 }, "size": { "x": 70, "y": 1.5, "z": 70 }, "ballOnly": true }
   ],
-  "_notes": "Ballroom - an open-roof hexagonal gallery in deathball's flat pit bowl (~165x135m flat at x235-400 z585-720): six 33.5m low walls (y5-8.5) in a hexagon ring (R32, ~55m across) the player can vault, plus invisible ballOnly 'hull' fences continuing each wall to y40 and a ballOnly cap slab at y40 - the player sees open sky and can jet out, balls stay sealed. NO floor slab - the bowl terrain is the floor (the old 70m box floated over dips and read as 'square slab'). ballMix forces variant-0 (smallest, r1.2) even hosted; max12 caps the ambient trickle via spec. balls.zone: spawn inside r18, pursuit aims at the room center, leash 30 snaps tunneled balls back inside the 32m corner (fences cover every face). Spawn eye y8 drops ~1m. Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only."
+  "_notes": "Ballroom - an open-roof hexagonal gallery in deathball's flat pit bowl (~165x135m flat at x235-400 z585-720, terrain 3.4-7.2m across the footprint). Six 33.5m walls (3.5m tall, vaultable) in a hexagon ring (R32, ~55m across) - each wall's y is seated on ITS terrain sample (base sunk ~0.75m, seatKits min-sample rule) so no face buries: tops run y6.6-10. Invisible ballOnly 'hull' fences continue each wall to ~y38 and a ballOnly cap slab sits at y41 - the player sees open sky and can jet out, balls stay sealed. NO floor slab - the bowl terrain is the floor. ballMix forces variant-0 (smallest, r1.2) even hosted; max12 caps the ambient trickle via spec. balls.zone: spawn inside r18, pursuit aims at the room center, leash 30 snaps tunneled balls back inside the 32m corner (fences cover every face). Spawn eye y8 drops ~1m. Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only."
 }
