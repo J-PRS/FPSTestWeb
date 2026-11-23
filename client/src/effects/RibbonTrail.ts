@@ -192,6 +192,9 @@ export class RibbonTrail {
   /** Zombie pushes by owner tag - 599 generic counts told us the class,
    *  not which owner outlived its ribbon. */
   static zombieByTag = new Map<string, number>();
+  /** First zombie push per ribbon captures the owner hint (pid/age/rem/
+   *  pos) - a bare tag count can't name WHICH shell outlived its slot. */
+  static zombieHints = new Map<string, Record<string, unknown>>();
   /** follow re-pins refused as discontinuities - orphaned ribbons
    *  stretching to a recycled host pos. Trends 0; the smear canary. */
   static followJumps = 0;
@@ -380,6 +383,7 @@ RibbonTrail.reapedStale += 1;
     this.follow = null;
     this.followManaged = false;
     this.jumpHint = undefined; // pooled ribbons must not leak a prior owner's hint closure
+    this.zombieHinted = false;
     this.claimSlot(scene);
   }
 
@@ -400,6 +404,8 @@ RibbonTrail.reapedStale += 1;
   /** Spatial-jump cuts since acquire - throttles the jumpcut warn so a
    *  mis-wired owner can't flood the console thousands/sec. */
   private jumpcuts = 0;
+  /** Once-per-ribbon zombie hint so a leaked owner can't flood zombieHints. */
+  private zombieHinted = false;
   /** Last COMMITTED position - push() measures travel against this, never
    *  the welded head (follow re-pins px[head], corrupting the distance). */
   private _lx = Number.NaN; private _ly = 0; private _lz = 0;
@@ -414,6 +420,13 @@ RibbonTrail.reapedStale += 1;
     if (!this.slotAlive()) {
       RibbonTrail.zombiePushes += 1;
       RibbonTrail.zombieByTag.set(this.tag, (RibbonTrail.zombieByTag.get(this.tag) ?? 0) + 1);
+      if (!this.zombieHinted) {
+        this.zombieHinted = true;
+        RibbonTrail.zombieHints.set(this.tag, {
+          ...(this.jumpHint?.() ?? {}),
+          inPool: this.inPool, stopped: this.stopped,
+        });
+      }
       return;
     }
     if (this.stopped) {return;}
@@ -801,6 +814,7 @@ registerDiag('ribbons', () => ({
   nanReject: { pushes: RibbonTrail.nanPushes, sides: RibbonTrail.nanSides },
   zombiePushes: RibbonTrail.zombiePushes,
   zombieByTag: Object.fromEntries(RibbonTrail.zombieByTag),
+  zombieHints: Object.fromEntries(RibbonTrail.zombieHints),
   followJumps: RibbonTrail.followJumps,
   smearCuts,
 }));

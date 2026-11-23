@@ -1276,6 +1276,12 @@ this.sendDrops += 1;
       // A dead seat's shot claims can never credit - replaying one only
       // manufactures a 'shooter dead' reject + rollback on the wire.
       if (dead && (e.msg.type === 'shotFired' || e.msg.type === 'aoeShot')) {continue;}
+      // The server's fireAt clamp (now-3s) collapses every older replay
+      // onto one timestamp - a batch of stale shots reads as a same-second
+      // burst and cadence-rejects the whole reclaim (the 4/s rejects on
+      // stall recovery). A shell predicted that long ago resolved locally
+      // anyway; a fresh spawn now would diverge from the arc we painted.
+      if ((e.msg.type === 'shotFired' || e.msg.type === 'aoeShot') && now - e.t >= 2_800) {continue;}
       this.intentReplays += 1;
       this.send(e.msg);
     }

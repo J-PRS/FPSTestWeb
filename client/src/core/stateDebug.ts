@@ -1455,10 +1455,14 @@ hashMismatchCount += 1;
             // The hash snapshot is a tick-interval stale — applying it
             // over an event-driven write (playerHit/yourHealth <1s ago)
             // resurrects the older hp, then the next echo 'drops' it
-            // back and warns. Fresh events win; the heal only patches
-            // drift older than the snapshot window itself.
+            // back and warns. Fresh events win for DOWNWARD patches; an
+            // upward patch is a missed heal/hit echo and the freshness
+            // gate starved it exactly when combat events stream (the
+            // persistent 75-vs-125 desync class).
             const hashHealthFresh = Date.now() - networkManager.lastHealthEventAt < 1000;
-            if (!player.isDead && !hashHealthFresh && Number.isFinite(sp.health) && Math.abs(player.health - sp.health) > 0.5) {player.health = sp.health;}
+            if (!player.isDead && Number.isFinite(sp.health)
+                && (sp.health > player.health + 0.5
+                    || (!hashHealthFresh && player.health - sp.health > 0.5))) {player.health = sp.health;}
             // Position is correction-owned — corrections answer position
             // claims, but a hidden/idle client sends none (still-throttle
             // floor is 4Hz; >10s silent means the channel is dead and no
