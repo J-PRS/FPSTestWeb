@@ -2,9 +2,9 @@
   "name": "Ballroom",
   "terrain": "deathball.bin",
   "balls": {
-    "base": 12,
+    "base": 4,
     "perPlayer": 0,
-    "max": 12,
+    "max": 4,
     "zone": { "x": 318, "y": 15, "z": 653, "r": 18, "leash": 30 }
   },
   "ballMix": [1, 0, 0, 0],
@@ -27,5 +27,5 @@
     { "kind": "hull", "pos": { "x": 318, "y": 29.25, "z": 625.3 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": 3.1416, "ballOnly": true },
     { "kind": "hull", "pos": { "x": 342, "y": 29.25, "z": 639.1 }, "size": { "x": 33.5, "y": 31.5, "z": 1.5 }, "rotY": 2.094, "ballOnly": true }
   ],
-  "_notes": "Ballroom - an open-roof hexagonal gallery on a raised podium in deathball's pit bowl (terrain across the footprint runs 2.7-12.1m, so flat-authored walls buried - the 66x66x4 podium tops at y12.75, above the max sample, and reads as a stage over the bowl, not a floating plate). Six 33.5m walls (3.5m tall, vaultable) grown from the deck with a LEVEL crown at y15.5; invisible ballOnly 'hull' fences continue each wall to ~y45 - open sky, no ceiling; a ball launched over the fences leaves cleanly and the leash snaps it back. ballMix forces variant-0 (smallest, r1.2) even hosted; max12 caps the ambient trickle via spec. balls.zone: spawn inside r18 at deck height, pursuit aims at the room center, leash 30 snaps tunneled balls back inside the 32m corner. Spawn eye y15.5 drops ~1m onto the deck. Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only."
+  "_notes": "Ballroom - an open-roof hexagonal gallery on a raised podium in deathball's pit bowl (terrain across the footprint runs 2.7-12.1m, so flat-authored walls buried - the 66x66x4 podium tops at y12.75, above the max sample, and reads as a stage over the bowl, not a floating plate). Six 33.5m walls (3.5m tall, vaultable) grown from the deck with a LEVEL crown at y15.5; invisible ballOnly 'hull' fences continue each wall to ~y45 - open sky, no ceiling; a ball launched over the fences leaves cleanly and the leash snaps it back. ballMix forces variant-0 (smallest, r1.2) even hosted; max4 caps the ambient trickle via spec. balls.zone: spawn inside r18 at deck height, pursuit aims at the room center, leash 30 snaps tunneled balls back inside the 32m corner. Spawn eye y15.5 drops ~1m onto the deck. Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only."
 }
