@@ -651,7 +651,10 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   if (!classicMode && soloMode && soloSpec && soloSpec.spec.killY === undefined) {
     seatKits(soloSpec.spec.structures, (x, z): number => terrain.getHeight(x, z));
   }
-  if (!classicMode) {bootApplySavedMap(netCtx, soloMode ? (soloSpec?.map ?? null) : savedMap);}
+  // Classic skips the saved-map apply - plain balls run the default
+  // terrain. A classic boot WITH a solo spec (ballroom) still needs its
+  // structures/atmo applied, so let the spec through the gate.
+  if (!classicMode || soloSpec) {bootApplySavedMap(netCtx, soloMode ? (soloSpec?.map ?? null) : savedMap);}
   profiler.markTime('savedMapApplied');
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.info(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);

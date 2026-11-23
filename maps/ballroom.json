@@ -7,7 +7,14 @@
     "max": 28
   },
   "spawns": [
-    { "x": -369, "y": 0, "z": -45, "r": 12 }
+    { "x": 318, "y": 0, "z": 653, "r": 10 }
   ],
-  "_notes": "Ballroom - mobile-friendly solo ball range on the deathball pit: dense fodder balls, stand-and-shoot. Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only. [audit: rel 125m, sd 25.3m]"
+  "structures": [
+    { "kind": "wall", "pos": { "x": 318, "y": 5, "z": 637 }, "size": { "x": 33.5, "y": 20, "z": 1.5 } },
+    { "kind": "wall", "pos": { "x": 318, "y": 5, "z": 669 }, "size": { "x": 33.5, "y": 20, "z": 1.5 } },
+    { "kind": "wall", "pos": { "x": 302, "y": 5, "z": 653 }, "size": { "x": 1.5, "y": 20, "z": 34.5 } },
+    { "kind": "wall", "pos": { "x": 334, "y": 5, "z": 653 }, "size": { "x": 1.5, "y": 20, "z": 34.5 } },
+    { "kind": "box",  "pos": { "x": 318, "y": 15.75, "z": 653 }, "size": { "x": 34.5, "y": 1.5, "z": 34.5 } }
+  ],
+  "_notes": "Ballroom - a literal enclosed room in deathball's real pit (the flat ~165x135m bowl at world x235-400 z585-720, floor ~y1-3): four wall boxes spanning y-5..15 around a ~30x30m interior + a roof slab, so the 28 fodder balls ricochet inside. Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only."
 }
