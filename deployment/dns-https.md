@@ -98,6 +98,13 @@ Auth: JSON body `{"apikey": "...", "secretapikey": "..."}`, or the `X-API-Key` /
 - Security headers are set in the same site block: `Strict-Transport-Security`,
   `X-Content-Type-Options nosniff`, `Referrer-Policy no-referrer`, and `-Server`.
   Previous config saved at `/etc/caddy/Caddyfile.bak` on the box.
+- 2026-11-23: `:8000` is `src/fleet.ts` (matchmaker) — it answers /health,
+  /join, /rooms but has NO /maps route, so spec-terrain fetches 404'd
+  prod-wide until this fix. Live Caddyfile now routes `handle /maps*` →
+  `localhost:8001` (a real worker) ahead of the @api block, same pattern
+  as the existing `/wthash` → :8001 handle. Backup: Caddyfile.bak-1123.
+  Any new API path owned by the workers (not the matchmaker) needs the
+  same per-path handle, not just the @api list.
 - Static client: `~/anabatic-client` (the `client/dist` build). To update the client:
   ```
   cd client && npm run build

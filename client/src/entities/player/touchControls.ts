@@ -26,6 +26,8 @@ export class TouchControls {
   private knob!: HTMLDivElement;
   private lookId = -1;
   private lookX = 0; private lookY = 0;
+  private lookSx = 0; private lookSy = 0; private lookT0 = 0;
+  private lookMoved = false;
 
   constructor(
     private input: PlayerInput,
@@ -56,7 +58,7 @@ export class TouchControls {
     const R = 55; // stick radius px
     const setMove = (dx: number, dy: number): void => {
       const nx = dx / R, ny = dy / R; // -1..1 within the ring
-      const keys = this.input.keys;
+      const {keys} = this.input;
       keys[MOVE_CODES.f()] = ny < -0.35;
       keys[MOVE_CODES.b()] = ny > 0.35;
       keys[MOVE_CODES.l()] = nx < -0.35;
@@ -69,9 +71,12 @@ export class TouchControls {
       const t = e.changedTouches[0]!;
       this.moveId = t.identifier;
       this.moveOx = t.clientX; this.moveOy = t.clientY;
+      // base is a child of zone (offset top:25%) - clientX/Y are viewport
+      // coords, so convert or the stick lands below the thumb.
+      const r = zone.getBoundingClientRect();
       css(this.base, `position:absolute;width:110px;height:110px;border-radius:50%;display:block;` +
         `border:2px solid rgba(140,190,255,0.4);background:rgba(30,50,80,0.18);transform:translate(-50%,-50%);` +
-        `left:${t.clientX}px;top:${t.clientY}px;`);
+        `left:${t.clientX - r.left}px;top:${t.clientY - r.top}px;`);
       setMove(0, 0);
       e.preventDefault();
     }, { passive: false });
@@ -86,7 +91,7 @@ export class TouchControls {
         if (t.identifier === this.moveId) {
           this.moveId = -1;
           this.base.style.display = 'none';
-          const keys = this.input.keys;
+          const {keys} = this.input;
           keys[MOVE_CODES.f()] = keys[MOVE_CODES.b()] = keys[MOVE_CODES.l()] = keys[MOVE_CODES.r()] = false;
         }
       }
@@ -105,6 +110,8 @@ export class TouchControls {
       const t = e.changedTouches[0]!;
       this.lookId = t.identifier;
       this.lookX = t.clientX; this.lookY = t.clientY;
+      this.lookSx = t.clientX; this.lookSy = t.clientY;
+      this.lookT0 = e.timeStamp; this.lookMoved = false;
       e.preventDefault();
     }, { passive: false });
     zone.addEventListener('touchmove', (e): void => {
@@ -116,11 +123,23 @@ export class TouchControls {
         this.h.look((t.clientX - this.lookX) * 2, (t.clientY - this.lookY) * 2);
         }
         this.lookX = t.clientX; this.lookY = t.clientY;
+        // Past the slop radius it's a drag, not a tap-to-fire.
+        if ((t.clientX - this.lookSx) ** 2 + (t.clientY - this.lookSy) ** 2 > 15 * 15) {this.lookMoved = true;}
       }
       e.preventDefault();
     }, { passive: false });
     const end = (e: TouchEvent): void => {
-      for (const t of e.changedTouches) {if (t.identifier === this.lookId) {this.lookId = -1;}}
+      for (const t of e.changedTouches) {
+        if (t.identifier !== this.lookId) {continue;}
+        this.lookId = -1;
+        // A short un-moved touch on the aim half = tap-to-fire: one
+        // Mouse0 pulse through the same flags the FIRE button sets.
+        if (!this.lookMoved && e.timeStamp - this.lookT0 < 300 && !this.input.frozen) {
+          const inp = this.input;
+          inp.keys['Mouse0'] = true; inp.mouseHeld = true; inp.firePending = true; inp.needsRelease = false;
+          setTimeout((): void => { inp.keys['Mouse0'] = false; inp.mouseHeld = false; }, 90);
+        }
+      }
     };
     zone.addEventListener('touchend', end);
     zone.addEventListener('touchcancel', end);

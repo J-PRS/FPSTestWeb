@@ -131,6 +131,8 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-11-16_HSTS_PRELOAD.md` | HSTS preload eval for anabatic.gg — benefit = one first-visit HTTP hop; cost = permanent all-subdomain HTTPS mandate (removal 6-12wks); regret corpus is always includeSubDomains hitting forgotten HTTP hosts; verdict: keep 1y header, skip preload |
 | `_docs/2026-11-20_SEO_AUDIT.md` | SEO audit + plan for anabatic.gg — crawler sees only `<title>Anabatic</title>` + menu skeleton (no meta/OG/robots/sitemap/schema); plan: P0 static files (meta/OG/robots/sitemap/manifest/og.png), P1 crawl-visible copy block in index.html, P2 per-clip OG on /s/ links, P3 portal listings |
 | `_docs/2026-11-20_SEO_COPY_DRAFT.md` | SEO copy deck awaiting JP approval — title options, meta description, OG/Twitter tags, VideoGame JSON-LD, webmanifest, crawl-visible body block, portal blurb+tags; zero-copy items (robots/sitemap/canonical/theme-color/preconnect/noindex) already staged in working tree |
+| `_docs/2026-11-22_TECH_DEBT_AUDIT.md` | Whole-repo tech-debt audit — debt concentrated in the transport matrix (~60% of week-11-15..21 changelog = lane-semantics fixes), whale files sit where parity bugs live, 1152 oxlint warnings losing ratchet, two bot armies, half-alive leaderboard signing, 8/IP join cap; lean delta ~-3.5k lines (kill RTC/P2P + claimLedger + signing + strays) |
+| `_docs/2026-11-23_TECH_DEBT_STATUS.md` | Freshness check on the 11-22 audit — still current; Room split landed (Room.ts 1933→1627L + 5 new room*/bot* files) and proven-IP join-cap fix already in the dirty batch; transport matrix + two bot armies + signing untouched |
 
 ## Agent memory (append-only, one line each)
 

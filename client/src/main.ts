@@ -232,6 +232,14 @@ const challengeReady = serverEndpoints.then(ep => fetchChallenge(ep.httpUrl)).ca
  *  step - module scope because connectPhase consumes it after init's
  *  locals are gone. */
 let soloSpec: { spec: MapSpec; map: MapSnapshot } | null = null;
+// Mobile door: a coarse-pointer boot with no explicit ?mode/?map or
+// room/p2p link opens straight into the Ballroom ball range instead of
+// the persisted mode pick - the arcade door for touch devices.
+const mobileDoor = matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0
+  && !urlParams.has('mode') && !urlParams.has('map')
+  && !urlParams.room && !urlParams.p2p;
+const bootMode = mobileDoor ? 'classic' : urlParams.mode;
+const bootMap = mobileDoor ? 'ballroom' : urlParams.soloMap;
 
 function makeGameLoop(): ReturnType<typeof createGameLoop> {
   return createGameLoop({
@@ -742,7 +750,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
       player.markTeleport();
     }
     if (s.name) {world.mapName = s.name;}
-    else {world.mapName = urlParams.soloMap ?? undefined;}
+    else {world.mapName = bootMap ?? undefined;}
     world.mode = mode ?? s.mode;
     // Deploys - generators/sentries are server-seeded in rooms; offline
     // they spawn as remote items (same visuals + repair/weld paths).
@@ -994,8 +1002,8 @@ async function init(): Promise<void> {
   // Solo-with-a-map: ?map= without a room is the SOLO tab's pick - fetch
   // the spec JSON off the same static /maps route the wire path uses and
   // resolve it client-side (resolveMapSpec is shared/, pure).
-  soloSpec = !onlineBoot && urlParams.soloMap
-    ? await loadSoloSpec(urlParams.soloMap) : null;
+  soloSpec = !onlineBoot && bootMap
+    ? await loadSoloSpec(bootMap) : null;
   const bootSaved = onlineBoot ? await probeBootMap() : null;
   const soloPrimed = soloSpec?.map && (await serverEndpoints).httpUrl
     ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch((): boolean => false)
@@ -1096,7 +1104,7 @@ async function init(): Promise<void> {
   // ?mode=nuggets|ctf|dm - offline-vs-bots modes. Bots live in
   // world.remotePlayers so creatures hunt them and projectiles hit them
   // like real players.
-  const mode = urlParams.mode ?? undefined;
+  const mode = bootMode ?? undefined;
   // ?mode=classic - the original solo ruleset: bouncy balls only, lost balls
   // teleport back instead of raging (enrage was layered on top later)
   const classicMode = mode === 'classic' && !urlParams.room && !urlParams.p2p;
