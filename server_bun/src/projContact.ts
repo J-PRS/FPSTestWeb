@@ -132,7 +132,7 @@ function bodySweep(cx: Sweep): boolean {
    *  gate: the drawn spot must sit within drift slack of the rewind
    *  window (or live pos), so a forged claim can't score bodies the
    *  wire never visited. */
-  function ghostSpot(r: ContactHost, owner: OwnerInfo, ownerId: string, pid: string, target: PlayerState, speed: number): { x: number; y: number; z: number; drawn: boolean; back: number } {
+  function ghostSpot(r: ContactHost, owner: OwnerInfo, ownerId: string, pid: string, target: PlayerState, speed: number): { x: number; y: number; z: number; drawn: boolean; back: number; rep?: { dR: number; dL: number; slack: number } } {
     const back = ghostBack(r, owner, ownerId, pid);
     const tp = rewindPos(target, back, r.field);
     const g = owner?.aimGhosts?.get(pid);
@@ -140,9 +140,29 @@ function bodySweep(cx: Sweep): boolean {
       const slack = 6 + speed * (back + 250) / 1000;
       const dR = dhypot3(g.x - tp.x, g.y - tp.y, g.z - tp.z);
       const dL = dhypot3(g.x - target.position.x, g.y - target.position.y, g.z - target.position.z);
-      if (dR <= slack || dL <= slack) {return { x: g.x, y: g.y, z: g.z, drawn: true, back };}
+      if (dR <= slack || dL <= slack) {return { x: g.x, y: g.y, z: g.z, drawn: true, back, rep: { dR, dL, slack } };}
+      return { x: tp.x, y: tp.y, z: tp.z, drawn: false, back, rep: { dR, dL, slack } };
     }
     return { x: tp.x, y: tp.y, z: tp.z, drawn: false, back };
+  }
+
+  /** Painted-a-hit forensics: the shooter's aim report was fresh, but
+   *  the sweep still refused - rep.dR/dL vs slack says the drawn spot
+   *  lost its reachability gate (stale report, drifted ghost) while
+   *  pd vs reach says the ARC itself never came near (spawn/epoch
+   *  divergence). Throttled per shooter+victim - a bolt hose would
+   *  otherwise log every pellet. */
+  const refuseAt = new Map<string, number>();
+  function bodyRefuse(r: ContactHost, proj: LiveProj, pid: string, pd: number, reach: number, gs: { drawn: boolean; rep?: { dR: number; dL: number; slack: number } }): void {
+    if (!gs.rep) {return;}
+    const key = `${proj.ownerId}:${pid}`;
+    const now = wallNow();
+    if ((refuseAt.get(key) ?? 0) > now - 5000) {return;}
+    refuseAt.set(key, now);
+    r.room.health?.set('shot.bodyRefuse', (r.room.health?.get('shot.bodyRefuse') ?? 0) + 1);
+    logger.warn('body refuse: painted contact rejected', { shooter: proj.ownerId, victim: pid,
+      drawn: gs.drawn ? 1 : 0, dR: Number(gs.rep.dR.toFixed(1)), dL: Number(gs.rep.dL.toFixed(1)),
+      slack: Number(gs.rep.slack.toFixed(1)), pd: Number(pd.toFixed(1)), reach: Number(reach.toFixed(2)), wt: proj.weaponType });
   }
 
   /** One candidate body: rewind/ghost the capsule, test the segment,
@@ -165,7 +185,7 @@ function bodySweep(cx: Sweep): boolean {
     const scale = r.field ? wakeScaleAt(pc.y - cap.half - cap.radius - hmHeight(r.field, tp.x, tp.z)) : 1;
     const treach = stats.bodyRadius + Math.max(0, reach - stats.bodyRadius) * scale;
     // `<=` not `>`: a NaN distance must MISS like the old positive test.
-    if (!(pd <= treach + cap.radius)) {return false;}
+    if (!(pd <= treach + cap.radius)) {bodyRefuse(r, proj, pid, pd, treach + cap.radius, gs); return false;}
     // Pierce: pay the body and keep flying - the skewer only stops
     // for terrain, walls, and domes. The pierced set keeps the same
     // body from re-paying every tick it sits inside the capsule.
