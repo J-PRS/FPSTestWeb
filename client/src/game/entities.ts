@@ -184,7 +184,7 @@ function spawnBall(): void {
 
   if (urlParams.noBallsLocal) {return;} // explicit ?noballs only - the fps-noballs room-creation flag must not starve the local field
 
-  if (f.atCap(balls, BALL_MAX)) {return;}
+  if (f.atCap(balls, ballCap)) {return;}
 
   // Classic mode is plain bouncy balls - no elites, no variants
 
@@ -200,6 +200,10 @@ function spawnBall(): void {
 // this circle instead of the 100-400m ring, so the room's walls contain them.
 let ballZone: { x: number; y: number; z: number; r: number; leash: number } | null = null;
 function setBallZone(zone: { x: number; y: number; z: number; r: number; leash: number } | null): void { ballZone = zone; }
+// Spec-declared solo ball cap (balls.max): rooms smaller than the OG
+// arena cap the ambient trickle tighter than BALL_MAX.
+let ballCap = BALL_MAX;
+function setBallCap(max: number | null): void { ballCap = typeof max === 'number' && max > 0 ? Math.min(max, BALL_MAX) : BALL_MAX; }
 
 function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
 
@@ -407,7 +411,7 @@ function recordBallSnapshots(dt: number): void {
 
 
 
-  return { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes, spawnBallOfVariant, setBallZone };
+  return { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes, spawnBallOfVariant, setBallZone, setBallCap };
 
 }
 
@@ -528,7 +532,7 @@ export function createEntities(deps: EntitiesDeps) {
 
   });
 
-  const { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes, setBallZone } = ballField;
+  const { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes, setBallZone, setBallCap } = ballField;
 
 
 
@@ -723,6 +727,7 @@ nuggetsCollected += 1;
     recordBallKeyframes,
 
     setBallZone,
+    setBallCap,
 
   };
 

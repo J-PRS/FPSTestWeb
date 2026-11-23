@@ -2,9 +2,9 @@
   "name": "Ballroom",
   "terrain": "deathball.bin",
   "balls": {
-    "base": 28,
+    "base": 12,
     "perPlayer": 0,
-    "max": 28,
+    "max": 12,
     "zone": { "x": 318, "y": 6, "z": 653, "r": 18, "leash": 36 }
   },
   "ballMix": [1, 0, 0, 0],
@@ -27,5 +27,5 @@
     { "kind": "hull", "pos": { "x": 318, "y": 40, "z": 653 }, "size": { "x": 70, "y": 1.5, "z": 70 }, "ballOnly": true },
     { "kind": "box",  "pos": { "x": 318, "y": 3.5, "z": 653 }, "size": { "x": 70, "y": 1.5, "z": 70 } }
   ],
-  "_notes": "Ballroom - an open-roof hexagonal gallery in deathball's flat pit bowl (~165x135m flat at x235-400 z585-720): six 33.5m low walls (y5-8.5) in a hexagon ring (R32, ~55m across) the player can vault, plus invisible ballOnly 'hull' fences continuing each wall to y40 and a ballOnly cap slab at y40 - the player sees open sky and can jet out, balls stay sealed. Floor slab tops at y5 (spawn eye y8 drops ~1m in). ballMix forces variant-0 (smallest, r1.2) even hosted. balls.zone: spawn inside r18, pursuit aims at the room center, leash snaps any tunneled ball back inside 36m of center (corner 32m). Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only."
+  "_notes": "Ballroom - an open-roof hexagonal gallery in deathball's flat pit bowl (~165x135m flat at x235-400 z585-720): six 33.5m low walls (y5-8.5) in a hexagon ring (R32, ~55m across) the player can vault, plus invisible ballOnly 'hull' fences continuing each wall to y40 and a ballOnly cap slab at y40 - the player sees open sky and can jet out, balls stay sealed. Floor slab tops at y5 (spawn eye y8 drops ~1m in). ballMix forces variant-0 (smallest, r1.2) even hosted; max12 caps the ambient trickle via spec (was BALL_MAX=32). balls.zone: spawn inside r18, pursuit aims at the room center, leash snaps any tunneled ball back inside 36m of center (corner 32m). Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only."
 }
