@@ -156,7 +156,7 @@ export interface StepWorld {
    *  room's walls don't need to be airtight for balls to stay inside.
    *  `y` is the room's floor level (terrain under the room reads lower).
    *  The caller also points the stall/enrage target at the zone center. */
-  zone?: { x: number; y: number; z: number; r: number; leash: number };
+  zone?: { x: number; y: number; z: number; r: number; leash: number; follow?: boolean };
   /** Seeded roll for the authoritative-only teleport branch — without it
    *  the sim takes Math.random, which scenario seeds can't reproduce. */
   rand?: () => number;
@@ -291,13 +291,19 @@ export function stepBall(
 
   // Spec confinement leash (ballroom): checked every step, before the
   // pursuit machinery - a ball that tunnels a seam snaps back inside
-  // instead of drifting to the 300m player-drift leash.
+  // instead of drifting to the 300m player-drift leash. `follow` zones
+  // anchor on the pursuit target (the player) instead of a fixed point,
+  // and only bite once the ball touches terrain - an airborne ball
+  // riding a long arc is still in play, a grounded straggler comes home.
   const zone = world?.zone;
-  if (zone) {
-    const zdx = b.x - zone.x, zdz = b.z - zone.z;
-    if (zdx * zdx + zdz * zdz > zone.leash * zone.leash) {
-      _zoneT.x = zone.x; _zoneT.y = b.y; _zoneT.z = zone.z;
-      return authoritative ? teleportNearTarget(b, field, _zoneT, world?.rand ?? botRand, zone.r * 0.7, zone.y) : null;
+  if (zone && (!zone.follow || target)) {
+    const zx = zone.follow ? target!.x : zone.x;
+    const zz = zone.follow ? target!.z : zone.z;
+    const zdx = b.x - zx, zdz = b.z - zz;
+    if (zdx * zdx + zdz * zdz > zone.leash * zone.leash
+      && (!zone.follow || b.y <= hmHeight(field, b.x, b.z) + b.radius + 0.75)) {
+      _zoneT.x = zx; _zoneT.y = b.y; _zoneT.z = zz;
+      return authoritative ? teleportNearTarget(b, field, _zoneT, world?.rand ?? botRand, zone.r * 0.7, zone.follow ? -Infinity : zone.y) : null;
     }
   }
 

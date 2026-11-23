@@ -198,8 +198,8 @@ function spawnBall(): void {
 
 // Spec-declared ball spawn bounds (ballroom): ambient spawns confine to
 // this circle instead of the 100-400m ring, so the room's walls contain them.
-let ballZone: { x: number; y: number; z: number; r: number; leash: number } | null = null;
-function setBallZone(zone: { x: number; y: number; z: number; r: number; leash: number } | null): void { ballZone = zone; }
+let ballZone: { x: number; y: number; z: number; r: number; leash: number; follow?: boolean } | null = null;
+function setBallZone(zone: { x: number; y: number; z: number; r: number; leash: number; follow?: boolean } | null): void { ballZone = zone; }
 // Spec-declared solo ball cap (balls.max): rooms smaller than the OG
 // arena cap the ambient trickle tighter than BALL_MAX.
 let ballCap = BALL_MAX;

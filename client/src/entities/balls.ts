@@ -238,7 +238,7 @@ export class Ball {
   netId = 0;
   /** Spec ball confinement (ballroom): set at construction - redirects
    *  the stall/enrage aim to the zone center and feeds stepBall's leash. */
-  zone?: { x: number; y: number; z: number; r: number; leash: number };
+  zone?: { x: number; y: number; z: number; r: number; leash: number; follow?: boolean };
   get netTargetId(): string | null { return this.netS.netTargetId; }
   readonly netS: NetBag = newNetBag();
   private static field: Heightfield | null = null;
@@ -310,7 +310,7 @@ export class Ball {
   constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 | 3 = 0,
     netSpawn?: { id: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; colorIdx: number },
     center?: THREE.Vector3,
-    confine?: { x: number; y: number; z: number; r: number; leash: number }) {
+    confine?: { x: number; y: number; z: number; r: number; leash: number; follow?: boolean }) {
     this.scene = scene;
     this.id = nextTargetId();
     this.variant = variant;
@@ -369,8 +369,13 @@ export class Ball {
       let rx = cx + spawn!.offX, rz = cz + spawn!.offZ;
       // A spec ball zone (ballroom) rescales the same dice offsets into
       // the bounded circle - deterministic, and the room walls do the rest.
-      if (confine) {rx = confine.x + spawn!.offX * (confine.r / 400); rz = confine.z + spawn!.offZ * (confine.r / 400);}
-      const gy = terrain.getHeight(rx, rz);
+      // A follow zone anchors on the player (mobile ballroom): spawns ring
+      // the player, not a fixed point, so the field travels with you.
+      if (confine) {rx = (confine.follow ? cx : confine.x) + spawn!.offX * (confine.r / 400); rz = (confine.follow ? cz : confine.z) + spawn!.offZ * (confine.r / 400);}
+      // Confined rooms (ballroom podium decks above terrain) spawn off the
+      // zone anchor, not the ground - else balls materialize under a raised
+      // floor. Falls back to terrain when the zone sits at grade.
+      const gy = confine ? Math.max(confine.y, terrain.getHeight(rx, rz)) : terrain.getHeight(rx, rz);
       this.zone = confine;
       this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + this.radius + 5, rz);
 
@@ -506,7 +511,7 @@ export class Ball {
     const _pt = BALL_PROF ? performance.now() : 0;
     const {zone} = this;
     let target: { x: number; y: number; z: number } | null = playerPos;
-    if (zone) {_zoneTgt.x = zone.x; _zoneTgt.y = zone.y; _zoneTgt.z = zone.z; target = _zoneTgt;}
+    if (zone && !zone.follow) {_zoneTgt.x = zone.x; _zoneTgt.y = zone.y; _zoneTgt.z = zone.z; target = _zoneTgt;}
     if (this.edgeDriven) {target = null;}
     const ev = stepBall(s, dt, field, target, !this.edgeDriven,
       { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined, zone });
