@@ -125,21 +125,23 @@ function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry 
       // Thrown spear, ~2.8m, tip apex AT the origin (body trailing -Z) -
       // pos is the head, so trail/ribbon emission lines up with the
       // visual point instead of the mid-shaft.
-      const shaft = new THREE.CylinderGeometry(0.07, 0.07, 2.65, 6);
+      // Lance taper: the haft thickens toward the head (0.105 fore,
+      // 0.055 butt) - reads as a thrown lance, not a uniform pilum needle.
+      const shaft = new THREE.CylinderGeometry(0.105, 0.055, 2.65, 6);
       shaft.rotateX(Math.PI / 2); shaft.translate(0, 0, -2.225);
       // Spearhead blade, 0.9m - the embed slides the apex ~0.4m under
       // the surface, so anything shorter reads as a bare shaft: ~0.5m
       // of blade still clears the dirt. Base meets the shaft at -0.9.
-      const tip = new THREE.ConeGeometry(0.085, 0.9, 6);
+      const tip = new THREE.ConeGeometry(0.1, 0.9, 6);
       tip.rotateX(Math.PI / 2); tip.translate(0, 0, -0.45);
-      // Weighted-pilum ball (Trajanic reliefs show a lead/bronze sphere
-      // under the head joint) - also hides the shaft/blade transition.
-      const ball = new THREE.SphereGeometry(0.12, 8, 6);
+      // Socket collar at the head joint - hides the shaft/blade seam
+      // and gives the fore-end its lance bulk.
+      const ball = new THREE.SphereGeometry(0.13, 8, 6);
       ball.translate(0, 0, -0.9);
-      // Same 60° point on the butt - r=0.07 → ~0.12m, apex facing -Z,
+      // Same 60° point on the butt - r=0.055 → ~0.1m, apex facing -Z,
       // base flush on the shaft tail at -3.55.
-      const butt = new THREE.ConeGeometry(0.07, 0.121, 6);
-      butt.rotateX(-Math.PI / 2); butt.translate(0, 0, -3.61);
+      const butt = new THREE.ConeGeometry(0.055, 0.1, 6);
+      butt.rotateX(-Math.PI / 2); butt.translate(0, 0, -3.6);
       geo = mergeGeometries([shaft, tip, ball, butt])!;
       shaft.dispose(); tip.dispose(); ball.dispose(); butt.dispose();
     } else {
