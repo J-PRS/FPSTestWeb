@@ -1,3 +1,5 @@
+2026-11-23 - feat(client): solo boot seeds spec ball base - ballroom drops you into 28 balls, not a trickle
+2026-11-23 - feat(client): radar defaults OFF on coarse pointers (fps-minimap untouched by user) - explicit pick still wins; ballroom.json gains spawns[0] at the deathball pit bottom (-369,-45) so the solo door lands inside the bowl, not on a dune.
 2026-11-23 - fix(ops): prod terrain 404 for spec-terrain rooms - fleet.ts (matchmaker) owns :8000 and has no /maps route while Caddy proxied all API traffic there; Caddyfile now handles /maps* → worker :8001 (validated + reloaded, /maps/rimrock.json verified 200). ballroom.json + deathball.bin scp'd to the box maps dir (static, no restart).
 2026-11-23 - feat(client): mobile door - coarse-pointer devices with no explicit ?mode/?map/room/p2p link boot straight into BALLS on Ballroom (bootMode/bootMap; explicit params and fps-last-room resume still win). Plus site.webmanifest (display: standalone) - installed PWA drops the address bar.
 2026-11-23 - feat(touch): tap the look half to fire - taps under 300ms within 15px slop pulse Mouse0 for 90ms (same flags as the FIRE button); drags still look.

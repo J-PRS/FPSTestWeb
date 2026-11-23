@@ -779,8 +779,10 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
 
   // Initial balls - offline only. In a room the wire owns the ball
   // population; boot-time locals were duplicate spam on the default map.
+  // A spec that declares a ball base (ballroom: 28) owns the opening
+  // density - the gallery needs to feel packed on spawn, not 1/sec.
   if (!networkManager.isConnected()) {
-    for (let i = 0; i < 4; i += 1) {entities.spawnBall();} // OG startingSpawnCount
+    for (let i = 0; i < (soloSpec?.spec.balls?.base ?? 4); i += 1) {entities.spawnBall();} // OG startingSpawnCount
   }
 
   // Auto-start demo recording so cool shots are captured seamlessly -
