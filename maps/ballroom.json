@@ -6,5 +6,8 @@
     "perPlayer": 0,
     "max": 28
   },
+  "spawns": [
+    { "x": -369, "y": 0, "z": -45, "r": 12 }
+  ],
   "_notes": "Ballroom - mobile-friendly solo ball range on the deathball pit: dense fodder balls, stand-and-shoot. Solo entry: OFFLINE > BALLS > BALLROOM, or deep link /?mode=classic&map=ballroom. Classic mode forces variant-0 balls so ballMix is host-only. [audit: rel 125m, sd 25.3m]"
 }

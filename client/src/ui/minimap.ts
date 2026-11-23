@@ -34,7 +34,11 @@ export class Minimap {
   private readonly _map: [number, number] = [0, 0];
 
   constructor(private parent: HTMLElement) {
-    this.mode = Math.min(2, Math.max(0, settings.get('fps-minimap')));
+    // Mobile default: coarse pointers start with the radar off (small
+    // screen, thumb covers the corner); an explicit pick still wins.
+    const mobileDefault = !settings.has('fps-minimap')
+      && matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
+    this.mode = mobileDefault ? 2 : Math.min(2, Math.max(0, settings.get('fps-minimap')));
 
     this.canvas = document.createElement('canvas');
     // Backing store at device pixels — CSS size stays SIZE, draw space
