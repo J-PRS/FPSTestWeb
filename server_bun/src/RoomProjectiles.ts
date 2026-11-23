@@ -221,9 +221,10 @@ export class RoomProjectiles {
   }
 
   /** Structures ride the same lifecycle as the field - spec load and
-   *  admin reload both refresh them. */
+   *  admin reload both refresh them. ballOnly fences (invisible ball
+   *  walls) must not eat shots - same split the client applies. */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
-    this.solids = structureColliders(list);
+    this.solids = structureColliders(list?.filter((s): boolean => !s.ballOnly));
     this.solidIndex = this.solids.length > 0 ? new ColliderIndex(this.solids) : null;
   }
 

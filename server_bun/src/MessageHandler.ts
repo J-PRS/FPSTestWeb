@@ -464,7 +464,7 @@ export class MessageHandler {
    *  ctor and admin hot-reload both come through here. Interior hull
    *  boxes ride the wire list already (eff() merges them). */
   attachStructures(list: RoomInfo['structures']): void {
-    this.combat.solids = structureColliders(list);
+    this.combat.solids = structureColliders(list).filter((c): boolean => !c.ballOnly);
   }
 
   /** Server-bot fire: broadcast the visible bolt, then apply the hitscan

@@ -187,10 +187,13 @@ export class RoomMoveSim {
   get hasField(): boolean { return this.surface !== null; }
 
   /** Map structures layered over the field — solid walls and walkable
-   *  tops for every sim already tracking (the surface object is shared). */
+   *  tops for every sim already tracking (the surface object is shared).
+   *  ballOnly fences exist for balls alone - players/bots walk through
+   *  them, matching the client's solidSpecs split. */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
-    this.solidSpecs = list ?? [];
-    this.solid = (list?.length || this.dyn?.length) ? new SolidWorld(structureColliders(list ?? []), this.dyn) : null;
+    const solids = (list ?? []).filter((s): boolean => !s.ballOnly);
+    this.solidSpecs = solids;
+    this.solid = (solids.length || this.dyn?.length) ? new SolidWorld(structureColliders(solids), this.dyn) : null;
     if (this.surface) {this.surface.solid = this.solid;}
     if (this.botSurface) {this.botSurface.solid = this.solid;}
 this.structEpoch += 1;
