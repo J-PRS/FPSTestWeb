@@ -138,7 +138,10 @@ export class RibbonTrail {
   // scale each update, so samples aren't re-tuned after spawn.
   private rampDur = 0;
   private rampFrom = 1;
-  emitScale = 1; // public - census/diag reads it
+  emitScale = 1; // public - census/diag reads it (ramp x lod product)
+  /** Distance-LOD scale alone - effLife uses this, not emitScale, so the
+   *  spawn ramp can't starve the first samples of life. */
+  private lodScale = 1;
   private vOffset: number; // offset along the ribbon's in-plane "up" (⊥ side)
   private billboard: boolean; // width axis faces the camera each frame
   // Live emitter anchor: the head sample is one tick old by the time it
@@ -373,6 +376,7 @@ RibbonTrail.reapedStale += 1;
     this.rampDur = 0;
     this.rampFrom = 1;
     this.emitScale = 1;
+    this.lodScale = 1;
     this.follow = null;
     this.followManaged = false;
     this.jumpHint = undefined; // pooled ribbons must not leak a prior owner's hint closure
@@ -578,16 +582,23 @@ RibbonTrail.nanPushes += 1;
     this.batch.debugTick(RibbonTrail.debugFrame);
     const cam = camPos ?? sharedCamPos ?? undefined;
     this.time += dt;
-    this.emitScale = this.rampDur > 0 ? Math.min(1, this.rampFrom + (1 - this.rampFrom) * (this.time / this.rampDur)) : 1;
+    // Two independent scales: ramp scales WIDTH only (a spawn-grow);
+    // lod scales life+width (the distance cull). Sharing one field let
+    // the ramp collapse effLife to ~2% — every sample pushed during the
+    // ramp faded black inside a frame and liveFrom skipped it forever,
+    // leaving a dead leading segment that made the trail pop in mid-air.
+    const ramp = this.rampDur > 0 ? Math.min(1, this.rampFrom + (1 - this.rampFrom) * (this.time / this.rampDur)) : 1;
+    this.lodScale = 1;
     // Distance LOD: aux ribbons (thin accent lanes next to the main
     // streak) cull hard past 150m - they rasterize as thin lines across
     // the sky. The main ribbon only fades, keeping the body readable.
     if (cam && this.count > 0) {
       const dx = cam.x - this.px[this.head]!, dy = cam.y - this.py[this.head]!, dz = cam.z - this.pz[this.head]!;
       const d = Math.hypot(dx, dy, dz);
-      if (this.farCull) {this.emitScale *= Math.max(0, Math.min(1, (150 - d) / 25));}
-      else {this.emitScale *= Math.max(0, Math.min(1, (200 - d) / 50));}
+      if (this.farCull) {this.lodScale = Math.max(0, Math.min(1, (150 - d) / 25));}
+      else {this.lodScale = Math.max(0, Math.min(1, (200 - d) / 50));}
     }
+    this.emitScale = ramp * this.lodScale;
     if (this.follow && this.count > 0 && this.followGap()) {return;}
     if (!this.slotAlive() || this.count < 2) {return;}
     const { camMoved, rebillboard } = this.cameraState(cam);
@@ -659,7 +670,7 @@ RibbonTrail.nanPushes += 1;
 
   private rewriteSamples(base: number, pos: Float32Array, freshFrom: number, rebillboard?: THREE.Vector3): boolean {
     let dirty = false;
-    const effLife = this.life * Math.max(this.emitScale, 0.02);
+    const effLife = this.life * Math.max(this.lodScale, 0.02);
     for (let i = this.liveFrom; i < this.count; i += 1) {
       // oldest -> newest
       const s = (this.head - this.count + 1 + i + MAX_SAMPLES) % MAX_SAMPLES;

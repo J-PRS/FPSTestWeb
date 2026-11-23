@@ -313,7 +313,11 @@ export function buildProjectileMeshes(
         RibbonTrail.acquire(scene, { color: coreColor, width: width * 0.35, life: life * 0.8, vOffset: -width * 0.07, billboard: true, tag }),
       ];
     }
-    if (config.ribbonRampIn) {for (const r of ribbons) {r.rampIn(config.ribbonRampIn);}}
+    // Unset ribbonRampIn falls back to the mesh's own spawn-grow window:
+    // the streak and the shell ramp in together instead of the trail
+    // flashing full width from the first frame. Explicit 0 opts out.
+    const ramp = config.ribbonRampIn ?? (config.meshRampIn === false ? 0 : (config.meshRampInDuration ?? RAMP_IN_DUR));
+    if (ramp > 0) {for (const r of ribbons) {r.rampIn(ramp);}}
   }
   return { mesh, glowMesh, ribbons };
 }
