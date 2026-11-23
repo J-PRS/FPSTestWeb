@@ -93,7 +93,31 @@ describe('nugget nugrest - hidden-tab stalls are designed divergence', (): void 
 
     n.serverTumble(0.05, terrain); // normal tick, no gap
     expect(n.throttleBurst).toBe(false);
+    n.settled = true; // rest-vs-rest: the only honest comparison
     n.serverRest({ x: 20, y: 0, z: 0 }); // real mirror-math bug class
     expect(err.mock.calls.length + warn.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it('rest edge landing mid-tumble snaps to truth without a parity miss', (): void => {
+    const err = vi.spyOn(console, 'error').mockImplementation((): void => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation((): void => undefined);
+    const n = Object.create(Nugget.prototype) as any;
+    n.pos = new THREE.Vector3(0, 10, 0); // still flying - 20m of travel left
+    n.prevPos = new THREE.Vector3(0, 10, 0);
+    n.vel = new THREE.Vector3(8, 0, 0);
+    n.tumbleAcc = 0;
+    n.settled = false;
+    n.throttleBurst = false;
+    n.lastTickMs = 0;
+    n.collected = false;
+    n.dead = false;
+
+    n.serverRest({ x: 20, y: 0, z: 0 });
+    // Mid-flight pos vs the rest edge is the tumble's own travel - not a
+    // divergence the mirror math could own. The snap still converges.
+    expect(err).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(n.settled).toBe(true);
+    expect(n.pos.x).toBe(20);
   });
 });

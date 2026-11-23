@@ -69,7 +69,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
   applyExplosionForce: (a: BlastArgs) => void;
   applyForceToRemotes: (a: BlastArgs) => void;
   predictLocalShove: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string; untracked?: boolean }) => boolean;
-  applyForceToPrey: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull') => void;
+  applyForceToPrey: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', wireTrue?: boolean) => void;
 } {
 
   // Nuggets are light pickups - blast throws them at a boosted force so
@@ -451,7 +451,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
    *  whenever a bot blast salted a swarm. Players aren't here: the wire
    *  knockback echo + predictLocalShove own them. Damage stays server-
    *  declared (aoeDamage 0 → feedback skipped, kill edges confirm). */
-  function applyForceToPrey(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull'): void {
+  function applyForceToPrey(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', wireTrue = false): void {
     if (!Number.isFinite(pos.x + pos.y + pos.z + radius + force)) {return;}
     const kbForce = force * KNOCKBACK_SCALE;
     // No BLAST_IMPULSE_MAX here - the server's prey knock is the flat,
@@ -462,7 +462,13 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
     const applyTo = (t: Forceable, f: number): void =>
       forceMode === 'push' ? t.applyKnockback(pos, f) : t.applyPull(pos, f);
     applyForceToBalls({ pos, radius, force: kbForce, forceMode, forceMultiplier: 1, aoeDamage: 0, directHitTargetId: null }, applyTo, false);
-    applyForceToNuggets(pos, radius, kbForce, forceMode);
+    // Nuggets only on a wire-true center: a remote replica pops at its
+    // painted contact, which can sit tens of meters off the authority's
+    // detonation (offM≤84m in dumps) — a phantom-center knock rests the
+    // gem where the server never moved it, a silent desync the rest edge
+    // then snaps as nugrest. The server's own pickup-knock re-anchor
+    // (pos+vel edge → relaunch) converges the tumble one transit later.
+    if (wireTrue) {applyForceToNuggets(pos, radius, kbForce, forceMode);}
   }
 
   return { applyExplosionForce, applyForceToRemotes, predictLocalShove, applyForceToPrey };

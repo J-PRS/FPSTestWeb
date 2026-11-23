@@ -91,8 +91,19 @@ describe('applyForceToPrey — remote-blast knock mirrors server prey knock', ()
   it('nuggets take aoeImpulse falloff × 0.4 — same as server pickup knock', (): void => {
     const nug = { dead: false, collected: false, pos: new THREE.Vector3(15, 0, 0), imp: new THREE.Vector3() };
     const { applyForceToPrey } = rig([], [nug]);
-    applyForceToPrey(blast, 30, 40, 'push');
+    applyForceToPrey(blast, 30, 40, 'push', true); // wire-true center
     const expected = aoeImpulse(40 * KNOCKBACK_SCALE, 15, 30) * 0.4;
     expect(nug.imp.x).toBeCloseTo(expected, 4);
+  });
+
+  it('nuggets are NOT knocked on a painted (unverified) center', (): void => {
+    const nug = { dead: false, collected: false, pos: new THREE.Vector3(15, 0, 0), imp: new THREE.Vector3() };
+    const { applyForceToPrey } = rig([], [nug]);
+    // A remote replica's painted contact can sit tens of meters off the
+    // wire detonation - the phantom knock would rest the gem where the
+    // server never moved it. The wire re-anchor edge owns the truth.
+    applyForceToPrey(blast, 30, 40, 'push');
+    expect(nug.imp.x).toBe(0);
+    expect(nug.imp.z).toBe(0);
   });
 });

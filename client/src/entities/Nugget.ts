@@ -379,7 +379,11 @@ export class Nugget {
    *  not a teleport: only snap when the local tumble diverged for real. */
   serverRest(p: { x: number; y: number; z: number }): void {
     if (this.collected || this.dead || !Number.isFinite(p.x + p.y + p.z)) {return;}
-    parityStamp('nugrest');
+    // The edge can land mid-tumble now (touchLive stopped dropping it) -
+    // in-flight pos vs the server's rest is travel, not divergence.
+    // Rest-vs-rest is the only honest comparison for the parity row.
+    const wasRest = this.settled;
+    if (wasRest) {parityStamp('nugrest');}
     const dx = this.pos.x - p.x, dy = this.pos.y - p.y, dz = this.pos.z - p.z;
     const dSq = dx * dx + dy * dy + dz * dz;
     if (dSq < 0.5 * 0.5) {return;}
@@ -391,7 +395,7 @@ export class Nugget {
     // Throttle class: a frozen tab steps no tumble cells while the
     // server's real-time tumble ran to rest - the leftover backlog is
     // the signature (the snap itself is the designed correction).
-    if (dSq > 7 * 7 && !this.throttleBurst) {parityMiss('nugrest', { dM: Math.round((dSq) ** 0.5 * 10) / 10 });}
+    if (wasRest && dSq > 7 * 7 && !this.throttleBurst) {parityMiss('nugrest', { dM: Math.round((dSq) ** 0.5 * 10) / 10 });}
     this.throttleBurst = false;
     this.pos.set(p.x, p.y, p.z);
     this.vel.set(0, 0, 0);

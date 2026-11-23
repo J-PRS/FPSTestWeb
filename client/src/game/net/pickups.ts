@@ -170,10 +170,13 @@ export function wirePickups(ctx: NetCtx): void {
     }
     // A blast-knock rest spot - the server's truth lands where the
     // tumble ended; converge the replica there. Launch/knock edges
-    // carry vel and restart the shared tumble; a settled token takes
-    // the server's rest; an in-flight replay is left alone.
+    // carry vel and restart the shared tumble; a no-vel edge is the
+    // server's settled rest and snaps even an in-flight replica.
     if (vel && (vel.x || vel.y || vel.z)) {live.nugget.relaunch(pos, vel);}
-    else if (live.nugget.atRest) {live.nugget.serverRest(pos);}
+    // A no-vel edge means the server already settled it - snap even
+    // mid-tumble (the client's flight is the stale truth). Dropping it
+    // while tumbling left phantom-knocked gems desynced for good.
+    else {live.nugget.serverRest(pos);}
     return true;
   };
   const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem', val = 1, vel?: { x: number; y: number; z: number }): void => {

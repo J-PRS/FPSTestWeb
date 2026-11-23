@@ -962,7 +962,7 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
       // visible rubberband per remote blast near a swarm).
 
-      c.applyForceToPrey(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode);
+      c.applyForceToPrey(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, wireAt !== undefined);
 
     }
 
