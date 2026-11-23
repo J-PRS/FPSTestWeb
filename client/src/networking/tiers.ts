@@ -375,6 +375,10 @@ export class TieredTransport implements GameTransport {
     // Sends queued during a superseded attempt belong to that generation —
     // flushing them into the new probe could replay a stale join.
     this.pending.length = 0;
+    // Per-generation connect marker - 0 until THIS attempt's onConnect.
+    // Without the reset a lane that dies mid-handshake keeps an old stamp
+    // and dodges the flap bench forever (the 15s join-timeout loop).
+    this.connectedAt = 0;
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     // A previous inner can still be alive here (its teardown raced the
     // new attempt) — orphaning its socket is exactly the session leak
@@ -397,7 +401,8 @@ export class TieredTransport implements GameTransport {
         // than not having it — mark the miss so the re-probe skips it and
         // the session lands on WS instead of connect/disconnect looping.
         const flapTier = this.inner?.tier;
-        if ((flapTier === 'rtc' || flapTier === 'wt') && !rejected && Date.now() - this.connectedAt < 10_000) {
+        if ((flapTier === 'rtc' || flapTier === 'wt') && !rejected &&
+            (this.connectedAt === 0 || Date.now() - this.connectedAt < 10_000)) {
           missUntil[flapTier] = Date.now() + MISS_CACHE_MS;
           logger.warn(`${flapTier} session flapped — tier benched for 30s`, { code, reason });
         }

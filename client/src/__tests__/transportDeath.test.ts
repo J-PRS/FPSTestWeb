@@ -122,6 +122,25 @@ describe('WebTransport lane-death contract', (): void => {
     expect(t.connected()).toBe(false);
   });
 
+  it('a hung post-ready stream setup declares dead (the join-timeout loop)', async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      const { wt, closeResolve: _cr, closeReject: _cj } = fakeWt();
+      // Stream negotiation never resolves - the session sits open
+      // server-side while the parked join never flushes. Previously the
+      // lane waited out the server's 15s join timeout, and the tier was
+      // never benched (connectedAt=0), looping forever at ~16s.
+      wt.createBidirectionalStream = () => new Promise((): void => undefined);
+      const config = makeConfig();
+      const t = new WebTransportGameTransport(config, wt as unknown as WebTransport);
+      t.connect();
+      await vi.advanceTimersByTimeAsync(8100);
+      expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'wt setup stall');
+      expect(wt.close).toHaveBeenCalled();
+      expect(config.onConnect).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('a well-formed line still parses and dispatches (no regression)', async (): Promise<void> => {
     const { config, stream } = await connectWt();
     stream.ctrl.enqueue(new TextEncoder().encode('{"type":"matchNotice","text":"hi"}\n'));

@@ -42,6 +42,14 @@ export class WebTransportGameTransport implements GameTransport {
     const {wt} = this;
     wt.ready.then(async (): Promise<void> => {
       this.open = true;
+      // Post-ready setup can stall (stream negotiation hangs with the
+      // session open server-side - the join then never flushes and the
+      // server kills it at its 15s join timeout, observed ~16s cadence).
+      // Die early so the flap bench parks WT and the retry lands on WS.
+      const setupWatch = setTimeout((): void => {
+        if (!this.writer) { this.declareDead('wt setup stall'); this.wt.close(); }
+      }, 8000);
+      try {
       // Reliable JSON lane: one bidi stream, newline-delimited frames.
       const stream = await wt.createBidirectionalStream();
       this.stream = stream;
@@ -58,7 +66,9 @@ export class WebTransportGameTransport implements GameTransport {
       for (const d of this.preOpen) {this.flushDatagram(d);}
       this.preOpen.length = 0;
       this.config.onConnect?.();
-    return; }).catch((error): void => {
+      return;
+      } finally { clearTimeout(setupWatch); }
+    }).catch((error): void => {
       logger.warn(`wt connect failed mid-setup: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`);
       this.config.onError?.(error instanceof Error ? error : new Error(String(error)));
       this.config.onDisconnect?.(1006, 'webtransport failed');

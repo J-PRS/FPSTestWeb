@@ -1,3 +1,4 @@
+2026-11-23 - fix(net): WT stranded-join loop - a session that died before onConnect kept connectedAt=0 and dodged the flap bench, re-probing WT every ~16s while the server sat at join-timeout; per-gen connectedAt reset + connectedAt===0 counts as a flap + 8s setup-stall watchdog on post-ready stream negotiation (declareDead -> bench -> WS fallback)
 2026-11-23 - fix(net): hash-heal freshness gate starved upward patches during combat (persistent health desync); reclaim replay now drops shotFired intents >=2.8s (server fireAt clamp clustered them into cadence rejects); RibbonTrail zombie counter captures owner hint per ribbon
 2026-11-23 - net trust-boundary audit + architecture report (C7 logged); ballroom follow-leash e2e probe (_followsoak)
 2026-11-23 - ballroom v2: scrap the hexagon room - rimrock field, balls spawn around the player and a grounded ball past 150m teleports back (zone.follow leash, airborne rides its arc); 4 smallest balls
