@@ -92,8 +92,10 @@ export const urlParams = {
   /** Game mode - URL wins (shareable room links carry ?mode=), then the
    *  persisted menu pick ('' | nuggets | ctf | dm | tdm | duel | classic). */
   get mode(): string | null { return live().get('mode') || settings.get('fps-mode') || null; },
-  /** classic = solo bounce-and-shoot: balls only, no rage, no roster */
-  get isClassic(): boolean { return settings.get('fps-mode') === 'classic'; },
+  /** classic = solo bounce-and-shoot: balls only, no rage, no roster.
+   *  URL must win like `mode` does - a ?mode=classic deep link (or the
+   *  mobile ballroom door) must not depend on a persisted menu pick. */
+  get isClassic(): boolean { return urlParams.mode === 'classic'; },
   /** All-random creature spawns - no scripted beats, everything rolls from t=0 */
   get randomSpawns(): boolean { return settings.get('fps-spawns') === 1; },
   /** Dev overlays / verbose combat logging - menu toggle OR ?debug (the
