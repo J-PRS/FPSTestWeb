@@ -284,6 +284,26 @@ ew Ball(...).
   typical map cells.
 - **Rollback**: both halves are local-render only; wire untouched.
 
+### C7 — Derive, don't arbitrate: the claim-free spawn frame
+- **Status**: PROPOSED 2026-11-23 — full audit in
+  `_docs/2026-11-23_NET_TRUST_BOUNDARY_AUDIT.md`. Evidence: prod
+  `body refuse`/`aoe-refuse` forensics — painted hits refused 16-41m out
+  when the per-field `ownerVel` gate silently swapped claim velocity for
+  a stale shadow (gate removed in `edea3619`, but the *pattern* — every
+  spawn field carrying its own asymmetric gate — is what keeps blooming
+  honest-play refusals).
+- **The upheaval**: `shotFired` becomes a pure intent (`fireAt`,
+  `weaponType`, `shotId`); the server rewinds the shooter's OWN shadow
+  to fireAt and derives origin/dir/ownerVel — the same "inputs up, truth
+  down" model movement already uses. Nothing left to forge or desync
+  against.
+- **What dies**: `claimOrigin`, per-field spawn gates, `spawnWarp`
+  forensics, the 3m clamp path. **What stays**: clamped-claim path as
+  the declared fallback for rewind-thin shooters (reconnect, tab-resume).
+- **Falsifier**: rewind-thin shooters get worse spawn frames than
+  clamped claims — pilot keeps the claim fields sent-but-ignored behind
+  a history-thickness check.
+
 ## Open hunt areas (unscored leads) — addendum 2026-11-13
 - Remote-presentation lane count keeps growing: interp / DR simStep /
   edge-replay MoveSim (C4 pilot) / floorToGround floors now all own a
