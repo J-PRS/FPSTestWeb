@@ -1,3 +1,4 @@
+2026-11-23 - feat(map): ballroom v2 - open-roof hexagon: low 3.5m walls + invisible ballOnly hull fences to y40 + sky cap; StructureSpec.ballOnly flag (balls collide, players/shots/bots pass), balls.zone gains {y,leash} (stepBall leash snaps escaped balls back; pursuit aims at zone center, not the player); spawn pushout fixed (floor top 5.0, spawn y8). Verified: player dead-center, 32 balls max 22m from center for 40s.
 2026-11-23 - fix(client): classic solo specs apply map snapshot - ballroom walls/roof build; spec moved to real pit (318,653)
 2026-11-23 - feat(client): solo boot seeds spec ball base - ballroom drops you into 28 balls, not a trickle
 2026-11-23 - feat(client): radar defaults OFF on coarse pointers (fps-minimap untouched by user) - explicit pick still wins; ballroom.json gains spawns[0] at the deathball pit bottom (-369,-45) so the solo door lands inside the bowl, not on a dune.

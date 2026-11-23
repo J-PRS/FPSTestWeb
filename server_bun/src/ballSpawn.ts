@@ -6,6 +6,7 @@
  * same aim point.
  */
 import { type SimBall, type SimVec, type BallVariant, makeSimBall } from '../../shared/ballSim.ts';
+import type { BallPopulation } from '../../shared/mapSpec.ts';
 import { WORLD_MODEL } from '../../shared/worldModel.ts';
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import { STATUS, shootRevealed } from '../../shared/status.ts';
@@ -60,6 +61,9 @@ export function nearestPlayer(b: SimBall, alive: { id: string; pos: SimVec }[]):
 export interface SpawnHost {
   field: Heightfield | null;
   rng: () => number;
+  /** Map spec ball population - `zone` confines spawns to a bounded
+   *  circle (ballroom) instead of the 60-120m ring around a player. */
+  population?: BallPopulation;
   simTime: number;
   broadcast: (msg: ServerMessage) => void;
   players: PlayerManager;
@@ -91,8 +95,16 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
   const field = h.field!;
   // oxlint-disable-next-line init-declarations -- both branches assign
   let x!: number, z!: number;
+  const zone = h.population?.zone;
   if (posOverride) {
     ({x} = posOverride); ({z} = posOverride);
+  } else if (zone) {
+    // Spec-confined room (ballroom): uniform pick inside the zone radius -
+    // the invisible ball fences + the stepBall leash keep it there.
+    const za = h.rng() * Math.PI * 2;
+    const zd = h.rng() * zone.r;
+    x = zone.x + Math.cos(za) * zd;
+    z = zone.z + Math.sin(za) * zd;
   } else {
     const cx = near ? near.x : 0;
     const cz = near ? near.z : 0;
@@ -145,7 +157,7 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
     { x, y, z },
     { x: Math.cos(ang) * spd, y: -2, z: Math.sin(ang) * spd },
   );
-  b.targetId = nearestPlayer(b, alivePlayers(h.players))?.id ?? null;
+  b.targetId = zone ? null : nearestPlayer(b, alivePlayers(h.players))?.id ?? null;
   h.snapTarget(b);
   h.retargetAcc.set(b.id, -RETARGET_INTERVAL * ((b.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
   h.resyncAcc.set(b.id, -RESYNC_INTERVAL * ((b.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
@@ -170,7 +182,14 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
  *  snapshot, the wire carries it — both sides integrate the same input.
  *  (If the predictor aimed at the LIVE local player pos while the server
  *  aimed at its last-received pos, arcs diverged ~100m per segment.) */
-export function snapTarget(players: PlayerManager, b: SimBall): void {
+export function snapTarget(players: PlayerManager, b: SimBall, zone?: { x: number; y: number; z: number }): void {
+  // Spec-confined room (ballroom): pursuit aims at the zone center, not a
+  // player - a roaming player can't drag balls out of the room.
+  if (zone) {
+    b.tx = zone.x; b.ty = zone.y; b.tz = zone.z;
+    b.tgtValid = true;
+    return;
+  }
   const p = b.targetId ? players.getPlayer(b.targetId) : null;
   if (p && !p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {
     b.tx = p.position.x; b.ty = p.position.y; b.tz = p.position.z;

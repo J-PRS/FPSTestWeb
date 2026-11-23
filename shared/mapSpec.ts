@@ -20,6 +20,15 @@ export interface BallPopulation {
   perPlayer: number;
   /** hard ceiling */
   max: number;
+  /** Optional ball confinement region (solo spawn + leash, both sims):
+   *  ambient balls spawn inside `r` meters of (x,z) instead of the default
+   *  100-400m ring, and a ball that ever drifts past `leash` meters is
+   *  teleported back inside - the room's walls do not need to be airtight.
+   *  `leash` must exceed the room's real extent or balls pop mid-room;
+   *  absent = `r`. `y` = the room's floor level for leash respawns
+   *  (terrain under the room is lower - balls would land under the slab).
+   *  Ballroom uses it so gallery balls can't escape. */
+  zone?: { x: number; y: number; z: number; r: number; leash: number };
 }
 
 /** Ambient particle kinds a map may dial - mirrors the client's AmbientKind. */
@@ -239,6 +248,11 @@ export interface StructureSpec {
   size: Vec3like;
   /** Y-rotation in radians (ramps/boxes), default 0. */
   rotY?: number;
+  /** true = the collider exists only for balls (Ball.colliders); players,
+   *  projectiles and bot pathing pass straight through. Pair with
+   *  kind:'hull' for an invisible ball fence (ballroom's upper walls +
+   *  open-sky cap) so the player can jet out while balls stay sealed. */
+  ballOnly?: boolean;
   /** Team tint - 'alpha'|'bravo' bases color differently, else neutral. */
   team?: TeamId;
 }
@@ -412,6 +426,7 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
       rotY: typeof o.rotY === 'number' && Number.isFinite(o.rotY) ? o.rotY : undefined,
       scale: ok && sc !== undefined ? Number(sc) : undefined,
       team: o.team === 'alpha' || o.team === 'bravo' ? o.team : undefined,
+      ballOnly: o.ballOnly === true ? true : undefined,
     });
     // Cap is a sanity bound, not a budget: T2 interior hull batches run
     // in the hundreds (each .dif decomposes into dozens of convex boxes).
@@ -693,6 +708,19 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     max: clampInt(src.balls?.max, 0, 200, d.max, 'balls.max'),
   };
   if (balls.max < balls.base) {balls.max = balls.base;}
+  const zone = (src.balls as { zone?: unknown } | undefined)?.zone as { x?: unknown; y?: unknown; z?: unknown; r?: unknown; leash?: unknown } | undefined;
+  if (zone && Number.isFinite(zone.x) && Number.isFinite(zone.z) && typeof zone.r === 'number' && Number.isFinite(zone.r) && zone.r > 0) {
+    const leash = typeof zone.leash === 'number' && Number.isFinite(zone.leash) && zone.leash > 0 ? zone.leash : zone.r;
+    balls.zone = {
+      x: zone.x as number,
+      y: typeof zone.y === 'number' && Number.isFinite(zone.y) ? zone.y : 0,
+      z: zone.z as number,
+      r: Math.min(400, zone.r),
+      leash: Math.min(800, leash),
+    };
+  } else if (zone !== undefined) {
+    specWarn('balls.zone: malformed value dropped');
+  }
 
   const spec: MapSpec = {
     name: parseName((src as { name?: unknown }).name),

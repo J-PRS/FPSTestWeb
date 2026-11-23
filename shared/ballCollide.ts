@@ -29,6 +29,9 @@ export interface StructureCollider {
   /** Team-gated shield pane: bodies/segments from this team pass
    *  through (gate shields). Undefined = solid for everyone. */
   passTeam?: string;
+  /** Spec ballOnly fence - collides with balls only; players, shots and
+   *  bots pass (ballroom's invisible upper walls + open-sky cap). */
+  ballOnly?: boolean;
 }
 
 // Kit pieces collide as their authored hull set (local-space boxes,
@@ -78,6 +81,7 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
       hx: s.size.x / 2, hy: s.size.y / 2, hz: s.size.z / 2,
       cos, sin,
       passTeam: s.kind === 'shield' ? s.team : undefined,
+      ballOnly: s.ballOnly,
     });
   }
   return out;

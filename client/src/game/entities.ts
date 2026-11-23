@@ -196,11 +196,16 @@ function spawnBall(): void {
 
 // Shared spawn path - director events need to spawn specific variants
 
+// Spec-declared ball spawn bounds (ballroom): ambient spawns confine to
+// this circle instead of the 100-400m ring, so the room's walls contain them.
+let ballZone: { x: number; y: number; z: number; r: number; leash: number } | null = null;
+function setBallZone(zone: { x: number; y: number; z: number; r: number; leash: number } | null): void { ballZone = zone; }
+
 function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
 
   const dm = deps.lazyDemoManager();
 
-  const ball = new Ball(scene, deps.lazyTerrain(), variant, undefined, deps.lazyPlayer().pos);
+  const ball = new Ball(scene, deps.lazyTerrain(), variant, undefined, deps.lazyPlayer().pos, ballZone ?? undefined);
 
   balls.push(ball);
 
@@ -402,7 +407,7 @@ function recordBallSnapshots(dt: number): void {
 
 
 
-  return { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes, spawnBallOfVariant };
+  return { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes, spawnBallOfVariant, setBallZone };
 
 }
 
@@ -523,7 +528,7 @@ export function createEntities(deps: EntitiesDeps) {
 
   });
 
-  const { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes } = ballField;
+  const { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes, setBallZone } = ballField;
 
 
 
@@ -716,6 +721,8 @@ nuggetsCollected += 1;
     updateNuggets,
 
     recordBallKeyframes,
+
+    setBallZone,
 
   };
 

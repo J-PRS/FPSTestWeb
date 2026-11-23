@@ -785,6 +785,9 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // A spec that declares a ball base (ballroom: 28) owns the opening
   // density - the gallery needs to feel packed on spawn, not 1/sec.
   if (!networkManager.isConnected()) {
+    // A spec ball zone (ballroom's room) confines every ambient spawn to
+    // the bounded circle - plain maps leave the 100-400m ring alone.
+    entities.setBallZone(soloSpec?.spec.balls?.zone ?? null);
     for (let i = 0; i < (soloSpec?.spec.balls?.base ?? 4); i += 1) {entities.spawnBall();} // OG startingSpawnCount
   }
 

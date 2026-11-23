@@ -151,6 +151,12 @@ export type SegmentKind = 'bounce' | 'lunge' | 'enrage' | 'stall' | 'teleport' |
 export interface StepWorld {
   colliders?: readonly StructureCollider[];
   colliderIndex?: { queryPoint(x: number, z: number, pad: number, out: StructureCollider[]): void };
+  /** Spec ball confinement (ballPopulation.zone): a ball further than
+   *  `leash` meters in XZ from (x,z) is teleported back inside `r` - the
+   *  room's walls don't need to be airtight for balls to stay inside.
+   *  `y` is the room's floor level (terrain under the room reads lower).
+   *  The caller also points the stall/enrage target at the zone center. */
+  zone?: { x: number; y: number; z: number; r: number; leash: number };
   /** Seeded roll for the authoritative-only teleport branch — without it
    *  the sim takes Math.random, which scenario seeds can't reproduce. */
   rand?: () => number;
@@ -283,6 +289,18 @@ export function stepBall(
   b.y += b.vy * dt;
   b.z += b.vz * dt;
 
+  // Spec confinement leash (ballroom): checked every step, before the
+  // pursuit machinery - a ball that tunnels a seam snaps back inside
+  // instead of drifting to the 300m player-drift leash.
+  const zone = world?.zone;
+  if (zone) {
+    const zdx = b.x - zone.x, zdz = b.z - zone.z;
+    if (zdx * zdx + zdz * zdz > zone.leash * zone.leash) {
+      _zoneT.x = zone.x; _zoneT.y = b.y; _zoneT.z = zone.z;
+      return authoritative ? teleportNearTarget(b, field, _zoneT, world?.rand ?? botRand, zone.r * 0.7, zone.y) : null;
+    }
+  }
+
   const enrage = enragePull(b, dt, field, target, authoritative, world?.rand);
   if (enrage !== undefined) {return enrage;}
 
@@ -304,14 +322,19 @@ export function stepBall(
   return groundContact(b, dt, field, target, authoritative, world?.rand);
 }
 
-function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand: () => number): SegmentKind {
+const _zoneT: SimVec = { x: 0, y: 0, z: 0 }; // scratch - zone-leash target
+
+/** `maxDist` bounds the ring - the confinement leash lands balls inside
+ *  the zone instead of the default 130-185m player leash. */
+function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand: () => number, maxDist = BALL_TELE_MAX, floorY = -Infinity): SegmentKind {
   b.gt = 0;
   b.px = b.x; b.py = b.y; b.pz = b.z; b.pset = true;
   const ang = rand() * Math.PI * 2;
-  const dist = BALL_TELE_MIN + rand() * (BALL_TELE_MAX - BALL_TELE_MIN);
+  const hi = Math.min(BALL_TELE_MAX, Math.max(0, maxDist));
+  const dist = hi <= BALL_TELE_MIN ? rand() * hi : BALL_TELE_MIN + rand() * (hi - BALL_TELE_MIN);
   b.x = target.x + dcos(ang) * dist;
   b.z = target.z + dsin(ang) * dist;
-  b.y = hmHeight(field, b.x, b.z) + b.radius + BALL_TELE_MARGIN;
+  b.y = Math.max(hmHeight(field, b.x, b.z), floorY) + b.radius + BALL_TELE_MARGIN;
   // Preserve speed, redirect mostly UP with random horizontal tilt — same
   // policy as ballRage.teleportNearPlayer. A flat skimmer re-arriving flat
   // just keeps skimming; the leash exists to put it back in the air.

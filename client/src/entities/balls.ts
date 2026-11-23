@@ -33,6 +33,7 @@ const ballProf = { calls: 0, net: 0, render: 0, rage: 0, shadow: 0, inst: 0, tra
 
 const BALL_GRAVITY   = GRAVITY;
 const _enrageTint = new THREE.Color(1, 0.12, 0.08);
+const _zoneTgt = { x: 0, y: 0, z: 0 }; // scratch - spec-zone pursuit target
 
 // One shared geometry for every ball - radius baked in, per-ball scale lives
 // in the instance matrix.
@@ -235,6 +236,9 @@ export class Ball {
    *  the local player, not the recorded one (phantom fly-aways). */
   edgeDriven = false;
   netId = 0;
+  /** Spec ball confinement (ballroom): set at construction - redirects
+   *  the stall/enrage aim to the zone center and feeds stepBall's leash. */
+  zone?: { x: number; y: number; z: number; r: number; leash: number };
   get netTargetId(): string | null { return this.netS.netTargetId; }
   readonly netS: NetBag = newNetBag();
   private static field: Heightfield | null = null;
@@ -305,7 +309,8 @@ export class Ball {
 
   constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 | 3 = 0,
     netSpawn?: { id: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; colorIdx: number },
-    center?: THREE.Vector3) {
+    center?: THREE.Vector3,
+    confine?: { x: number; y: number; z: number; r: number; leash: number }) {
     this.scene = scene;
     this.id = nextTargetId();
     this.variant = variant;
@@ -361,8 +366,12 @@ export class Ball {
       // a two-die triangular horizontal scatter (peak 0, tail ±32), the
       // whole impulse scaled by 1/scale so big variants launch slower.
       const cx = center?.x ?? 0, cz = center?.z ?? 0;
-      const rx = cx + spawn!.offX, rz = cz + spawn!.offZ;
+      let rx = cx + spawn!.offX, rz = cz + spawn!.offZ;
+      // A spec ball zone (ballroom) rescales the same dice offsets into
+      // the bounded circle - deterministic, and the room walls do the rest.
+      if (confine) {rx = confine.x + spawn!.offX * (confine.r / 400); rz = confine.z + spawn!.offZ * (confine.r / 400);}
       const gy = terrain.getHeight(rx, rz);
+      this.zone = confine;
       this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + this.radius + 5, rz);
 
       this.vel = new THREE.Vector3(spawn!.vel.x, spawn!.vel.y, spawn!.vel.z);
@@ -491,9 +500,14 @@ export class Ball {
       return;
     }
     // The committed target is the live player - offline has no link lag.
+    // A spec zone (ballroom) redirects the stall/enrage aim at the room
+    // center so pursuit never drags a ball out of the walls, and feeds
+    // the sim's confinement leash.
     const _pt = BALL_PROF ? performance.now() : 0;
-    const ev = stepBall(s, dt, field, this.edgeDriven ? null : playerPos, !this.edgeDriven,
-      { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
+    const {zone} = this;
+    if (zone) {_zoneTgt.x = zone.x; _zoneTgt.y = zone.y; _zoneTgt.z = zone.z;}
+    const ev = stepBall(s, dt, field, this.edgeDriven ? null : (zone ? _zoneTgt : playerPos), !this.edgeDriven,
+      { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined, zone });
     if (BALL_PROF) {ballProf.sim += performance.now() - _pt;}
     this.pos.set(s.x, s.y, s.z);
     this.vel.set(s.vx, s.vy, s.vz);

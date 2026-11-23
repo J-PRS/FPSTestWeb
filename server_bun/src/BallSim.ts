@@ -168,7 +168,7 @@ export class BallSim {
   }
 
   snapTarget(b: SimBall): void { // public — ballSpawn host interface
-    snapTargetInto(this.players, b);
+    snapTargetInto(this.players, b, this.population.zone);
   }
 
   targetSnap(b: SimBall): SimVec | null { // public — ballSpawn host interface
@@ -362,7 +362,9 @@ export class BallSim {
       const ra = (this.retargetAcc.get(b.id) ?? 0) + TICK_DT;
       if (ra >= RETARGET_INTERVAL) {
         this.retargetAcc.set(b.id, 0);
-        const t = nearestPlayer(b, alive);
+        // Zone-confined rooms (ballroom) aim at the zone center via
+        // snapTarget - no player target to re-evaluate.
+        const t = this.population.zone ? null : nearestPlayer(b, alive);
         if ((t?.id ?? null) !== b.targetId) {
           b.targetId = t?.id ?? null;
           this.segment(b, 'bounce');
@@ -375,7 +377,7 @@ export class BallSim {
       // Pull/lunge aim comes from the snapshot last emitted on a segment —
       // predictors replay the identical input, not the live player pos.
       _snap.x = b.tx; _snap.y = b.ty; _snap.z = b.tz;
-      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, { colliders: this.colliders, colliderIndex: this.colliderIndex ?? undefined, rand: this.rng });
+      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, { colliders: this.colliders, colliderIndex: this.colliderIndex ?? undefined, rand: this.rng, zone: this.population.zone });
       if (kind) {
         this.segment(b, kind);
       } else {

@@ -111,14 +111,18 @@ export function applyStructureSpecs(list: readonly StructureSpec[] | undefined, 
   if (movement) {move = movement;}
   const eff = [...specList, ...extraList].filter((s): boolean => s.kind !== 'shield' || !s.team || !gridDown.has(s.team));
   const cols = structureColliders(eff);
-  live = cols.length > 0 ? new SolidWorld(cols) : null;
+  // ballOnly fences (invisible ball walls/caps) exist for balls alone -
+  // players, shots, bots and floor-probes keep the real solids.
+  const solidSpecs = eff.filter((s): boolean => !s.ballOnly);
+  const solidCols = cols.filter((c): boolean => !c.ballOnly);
+  live = solidCols.length > 0 ? new SolidWorld(solidCols) : null;
   setStructureTopAt(live ? structureTopAt : undefined);
   Ball.colliders = cols;
   Ball.colliderIndex = cols.length > 0 ? new ColliderIndex(cols) : null;
-  Projectile.solidColliders = cols;
-  Projectile.solidIndex = Ball.colliderIndex;
-  move?.setStructures(eff);
-  setBotStructureSpecs(eff);
+  Projectile.solidColliders = solidCols;
+  Projectile.solidIndex = solidCols.length > 0 ? new ColliderIndex(solidCols) : null;
+  move?.setStructures(solidSpecs);
+  setBotStructureSpecs(solidSpecs);
 }
 
 /** Mode-geometry colliders - offline mode bridges feed hull specs here
