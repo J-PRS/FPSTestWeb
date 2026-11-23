@@ -505,8 +505,10 @@ export class Ball {
     // the sim's confinement leash.
     const _pt = BALL_PROF ? performance.now() : 0;
     const {zone} = this;
-    if (zone) {_zoneTgt.x = zone.x; _zoneTgt.y = zone.y; _zoneTgt.z = zone.z;}
-    const ev = stepBall(s, dt, field, this.edgeDriven ? null : (zone ? _zoneTgt : playerPos), !this.edgeDriven,
+    let target: { x: number; y: number; z: number } | null = playerPos;
+    if (zone) {_zoneTgt.x = zone.x; _zoneTgt.y = zone.y; _zoneTgt.z = zone.z; target = _zoneTgt;}
+    if (this.edgeDriven) {target = null;}
+    const ev = stepBall(s, dt, field, target, !this.edgeDriven,
       { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined, zone });
     if (BALL_PROF) {ballProf.sim += performance.now() - _pt;}
     this.pos.set(s.x, s.y, s.z);
