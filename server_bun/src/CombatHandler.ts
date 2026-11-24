@@ -474,12 +474,14 @@ w.n += 1;
   private spawnFrame(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined): { at: Vec3; vel: Vec3 | undefined } {
     const uplinkMs = this.uplinkMsOf(playerId, msg);
     const frame = rewindFrame(player, uplinkMs);
-    if (frame && dir) {
-      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+    if (frame) {
+      this.hb('shot.frameDerive');
       // The claim's pos was the muzzle point (eye + dir*MUZZLE_LEAD) -
       // apply the same lead to the derived eye or the server's arc
-      // starts a meter behind the shell the client painted.
-      this.hb('shot.frameDerive');
+      // starts a meter behind the shell the client painted. No dir =
+      // eye it is - a derived eye still beats the gated claim.
+      if (!dir) {return { at: frame.at, vel: frame.vel };}
+      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       return { at: { x: frame.at.x + (dir.x / l) * MUZZLE_LEAD, y: frame.at.y + (dir.y / l) * MUZZLE_LEAD, z: frame.at.z + (dir.z / l) * MUZZLE_LEAD }, vel: frame.vel };
     }
     if (msg.pos !== undefined) {this.hb('shot.frameThin');}

@@ -3727,3 +3727,14 @@ transit estimate outright (forged lowball ping could not shrink a
 forger's lead), pongs must echo an issued stamp (unprompted pong{now}
 spoofed rtt=0), undeclared remote teleports snap instead of smearing
 across the interp window, and unmeasured joiners jump the ping queue.
+
+## 2.238 spawnFrame discarded a derived frame for want of dir (fresh-code audit)
+
+C7's spawnFrame gated the derived path on `frame && dir`: when the
+shadow journal reached the fire instant but the shot carried no
+sanitized dir, the function threw away the server's own derived frame
+and fell to claimOrigin - the weaker gated claim that accepts a pos
+within its 3m rewind clamp. The dir is only needed for the muzzle-lead
+offset (~1m), not for trusting the frame. Now a reached journal always
+derives: dir present = eye + lead, dir absent = eye. server_bun tsc
+clean; `bun test -t shot` 48 pass / 0 fail.
