@@ -119,3 +119,17 @@ Complexity refactors, top offenders (oxlint eslint/complexity, provenance `npx -
 - diagDump.ts roster loops → pushRosterRows (dd40e70d)
 
 All pure extractions - comments moved with code, no behavior change. Gates per commit: tsc clean, targeted vitest green (ball 33, blast 29, stateDebugHealFuzz 10, proj 3, full 792 on main.ts).
+
+## 2026-11-24 structural burn-down (cont. 3)
+
+- blastForce.ts `applyForceToRemotes` 36 -> thin loop + `splashRemote` (3aa90fc4)
+- botKill.ts `killChatter` 40 -> 20 via `victimChatter` (3889cd7f)
+- bots/index.ts `ctxFor` 40 -> ~15 via `applyObjective`; `fillSenses` -> `fillHeadhuntEconomy` (18a5af5c)
+- flagRun.ts `update` 42 -> dispatcher via `collectTouchers`/`tickFlag`/`updateFlagMarkers` (13c17699)
+- gameLoop.ts `hudTick` 41 -> below limit via gateHudHold/tickProbes/tickSelfShadow/tickHudState/tickViewModelAndBars (1f9f1fe5)
+- PlayerModel.ts `mergeAtlasParts` 42 -> 27 via `bakeAtlasGeometry` (29b9ceea)
+- visAudit.ts traverse callback 37 -> 20 via scanLines/scanTrailSlots/scanSkeleton/scanInstances (89c96282)
+- mapStructures.ts `buildStructures` 36 -> per-kind builders (68e634ea)
+- botFire.ts `resolveShot` 36 -> 19 via `pickShotWeapon` (44e85719)
+
+All pure extractions; gates: tsc clean, targeted vitest green, full 792-suite green on the gameLoop split.
