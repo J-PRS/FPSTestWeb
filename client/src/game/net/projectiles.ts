@@ -5,7 +5,9 @@ import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { BOLT_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
-import { WeaponType, getWeaponStats, LANCE_RANGE, BELT_MAX } from '../../../../shared/weapons.js';
+import { WeaponType, getWeaponStats, LANCE_RANGE, BELT_MAX, jitter01, coneDir } from '../../../../shared/weapons.js';
+import { idSeed } from '../../../../shared/weaponTable.js';
+import { solveBloomSeq, bloomSyncStats } from '../combat/bloomSync.js';
 import { GRAVITY } from '../../../../shared/movement.js';
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
@@ -366,6 +368,40 @@ function reanchorToEcho(deps: NetDeps, nm: NetCtx['nm'], lp: Projectile, a: Crea
   }
 }
 
+/** Bloom counters skew when a fire claim drops: the client already paid
+ *  its seq on the pull but the server never ticked, so every later cone
+ *  draws a different jitter until the next reclaim reseat. The echo's
+ *  velocity IS the server's drawn dir — solve which seed produced it,
+ *  adopt the authority's counter, and the prediction re-locks. Only runs
+ *  when the predicted dir actually diverged from the echoed one. */
+function bloomBindResync(deps: NetDeps, nm: NetCtx['nm'], lp: Projectile, a: CreateArgs): void {
+  const draw = lp.bloomDraw;
+  if (!draw || !a.velocity) {return;}
+  // Echo vel = ndir*speed + ownerVel*inherit — strip the inherit and
+  // normalize to recover the server's drawn dir. ownerVel comes off the
+  // same rewind the client predicted, so vel0 is the right subtraction.
+  const inh = lp.config.inherit ?? 0.5;
+  const sdx = a.velocity.x - draw.vel0.x * inh, sdy = a.velocity.y - draw.vel0.y * inh, sdz = a.velocity.z - draw.vel0.z * inh;
+  const sl = Math.hypot(sdx, sdy, sdz);
+  if (sl < 1e-6) {return;}
+  const serverDir = { x: sdx / sl, y: sdy / sl, z: sdz / sl };
+  const [u1c, u2c] = jitter01(idSeed(nm().getLocalPlayerId()) ^ draw.seq);
+  const pred = coneDir(draw.base, u1c * Math.PI * 2, Math.sqrt(u2c) * draw.radius);
+  const cosd = pred.x * serverDir.x + pred.y * serverDir.y + pred.z * serverDir.z;
+  if (cosd > 0.99999) {return;} // matched — counters agree, nothing to heal
+  bloomSyncStats.probes += 1;
+  const solved = solveBloomSeq({
+    playerId: nm().getLocalPlayerId(),
+    weaponType: lp.config.weaponType as WeaponType,
+    baseDir: draw.base, serverDir, guessSeq: draw.seq,
+  });
+  if (!solved) { bloomSyncStats.misses += 1; return; }
+  bloomSyncStats.resyncs += 1;
+  const pl = deps.lazyPlayer();
+  pl.bloomSeq = solved.seq + 1;
+  pl.bloom = solved.bloom;
+}
+
 /** Bind a server id echo to the local shell that spawned it - the spawn
  *  claim's shotId nonce comes back verbatim, so the link is exact (no
  *  FIFO, no position inference, immune to rejected/dropped claims). */
@@ -390,6 +426,10 @@ function linkOwnProjectile(deps: NetDeps, nm: NetCtx['nm'], a: CreateArgs): void
   localProjectile.serverProjectileId = projectileId;
   localProjectile.boundAtAge = localProjectile.age;
   registry.byId.set(projectileId, localProjectile);
+  // The echo proves the claim landed - the intent ledger stops resending
+  // it, and a skewed bloom counter self-heals off the echoed dir.
+  nm().noteShotEcho(shotId);
+  bloomBindResync(deps, nm, localProjectile, a);
   reanchorToEcho(deps, nm, localProjectile, a);
   // Burst pellet binding is one-shot - the slot frees once linked.
   if (localProjectile.fanSlot) {

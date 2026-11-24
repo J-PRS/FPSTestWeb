@@ -440,8 +440,14 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
     // shotId seed. player.bloom drives both the jitter radius here and
     // the HUD arms; it grows after the shot lands, like the server's.
     const pl = deps.lazyPlayer();
-    spawnProjectile(deps, def.config, { origin: e.origin, dir: e.dir, playerVel: e.playerVel,
-      bloomRadius: def.bloom.base + pl.bloom, bloomSeq: pl.bloomSeq }); pl.bloomSeq += 1;
+    const drawRadius = def.bloom.base + pl.bloom;
+    const p = spawnProjectile(deps, def.config, { origin: e.origin, dir: e.dir, playerVel: e.playerVel,
+      bloomRadius: drawRadius, bloomSeq: pl.bloomSeq });
+    // Keep the draw on the shell - the spawn echo carries the server's
+    // drawn dir, and the bind solver recovers the seq it used when the
+    // counters skew (a dropped claim).
+    if (p) {p.bloomDraw = { seq: pl.bloomSeq, base: e.dir.clone(), radius: drawRadius, vel0: e.playerVel.clone() };}
+    pl.bloomSeq += 1;
     pl.bloom = Math.min(def.bloom.max, (pl.bloom + def.bloom.rate) * def.bloom.exp);
     pl.bloomDecay = def.bloom.decay; // residue drains at the growing weapon's rate (swap-safe)
     return;

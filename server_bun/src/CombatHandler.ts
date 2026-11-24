@@ -203,7 +203,7 @@ export class CombatHandler {
    *  claims (fan weapons fire all pellets in one pull); hits don't need
    *  gating - the ledger already caps them at one per registered
    *  projectile. */
-  fireWindows = new Map<string, { start: number; count: number; lastTs?: number; arr: number[]; violations: number }>();
+  fireWindows = new Map<string, { start: number; count: number; lastTs?: number; arr: { t: number; id?: string }[]; violations: number }>();
   /** Heal-beam tick law - per `shooter|patient` pair last-tick stamp,
    *  the same rate shape the repair beam enforces. */
   healTicks = new Map<string, number>();
@@ -764,16 +764,19 @@ w.n += 1;
     const interval = msg.weaponType === undefined ? undefined : WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType];
     if (interval !== undefined) {
       const key = `${playerId}:${msg.weaponType}`;
-      const win = this.fireWindows.get(key) ?? { start: now, count: 0, lastTs: undefined, arr: [] as number[], violations: 0 };
+      const win = this.fireWindows.get(key) ?? { start: now, count: 0, lastTs: undefined, arr: [] as { t: number; id?: string }[], violations: 0 };
       this.fireWindows.set(key, win);
       const t = typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)
         ? Math.min(Math.max(msg.fireAt, now - 3000), now)
         : now;
-      win.arr = win.arr.filter((v): boolean => t - v < 1000 && v <= t);
-      win.arr.push(t);
+      win.arr = win.arr.filter((v): boolean => t - v.t < 1000 && v.t <= t);
+      win.arr.push({ t, id: msg.shotId });
       if (win.arr.length >= Math.ceil(1000 / (interval * 850)) + 2) {
 win.violations += 1;
-        this.reject(playerId, 'Shot', `fire rate (cadence: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
+        // Name the colliding claims in the reject - a dup-minted pull and a
+        // genuinely-fast trigger read identically without the shotIds.
+        const ids = win.arr.slice(-6).map((v): string => v.id ?? '?').join(',');
+        this.reject(playerId, 'Shot', `fire rate (cadence: ${win.arr.length}/s ids=${ids})`, undefined, msg.weaponType, msg.shotId);
         return false;
       }
     }

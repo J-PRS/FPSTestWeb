@@ -805,18 +805,34 @@ this.sendDrops += 1;
     sweepDamageEchoes(now, Math.min(Math.max(0, this.msSinceLiveRx() - 100), 2000));
     // shotFired carries no claimSeq - its dedupe is shotId - so the claim
     // ledger can't resend it. A datagram-dropped fire intent leaves the
-    // predicted shell unborn (parity 'srvAt:none') with only reconnect
-    // replay to recover it; one in-session resend past ~2×RTT closes that
-    // hole. Server seenShots makes the retry free when the original landed.
+    // predicted shell unborn (parity 'srvAt:none') AND permanently skews
+    // bloomSeq - the claim the server never saw never ticks its counter.
+    // Bounded retries past ~2×RTT close that hole: every resend is free
+    // server-side (seenShots dedupe), and the spawn echo acks the entry
+    // (noteShotEcho) so retries stop the moment a shell lands.
     if (this.isConnected()) {
       const resendMs = Math.min(Math.max((this.telemetry.ping || 60) * 2, 150), 450);
       for (const e of this.claimIntents) {
-        if (e.resent || now - e.t < resendMs || now - e.t >= NetworkManager.FIRE_REPLAY_MS) {continue;}
+        if (e.acked || now - e.t >= NetworkManager.FIRE_REPLAY_MS) {continue;}
         if ((e.msg as { shotId?: string }).shotId === undefined) {continue;}
+        if ((e.resends ?? 0) >= NetworkManager.FIRE_RESEND_MAX) {continue;}
+        if (now - (e.lastResend ?? e.t) < resendMs) {continue;}
+        e.lastResend = now;
+        e.resends = (e.resends ?? 0) + 1;
         e.resent = true;
         this.intentResends += 1;
         this.send(e.msg);
       }
+    }
+  }
+
+  /** A spawn echo bound one of our shotIds - the claim landed, so the
+   *  ledger stops resending it (the entry stays journaled for the
+   *  reclaim window but replays skip acked entries too). */
+  noteShotEcho(shotId: string | undefined): void {
+    if (shotId === undefined) {return;}
+    for (const e of this.claimIntents) {
+      if ((e.msg as { shotId?: string }).shotId === shotId) {e.acked = true;}
     }
   }
 
@@ -1247,7 +1263,7 @@ this.sendDrops += 1;
    *  locally). Bounded - a dead lane never earns an unbounded intent
    *  backlog either. Replays are safe because the server dedupes by
    *  shotId (shots) or (type,claimSeq) (stamped claims). */
-  private claimIntents: { msg: ClientMessage; t: number; room?: string; resent?: boolean }[] = [];
+  private claimIntents: { msg: ClientMessage; t: number; room?: string; resent?: boolean; acked?: boolean; resends?: number; lastResend?: number }[] = [];
   /** Room the last gameState seated us in - journal entries fire under it. */
   private netRoom: string | undefined;
   /** Replay window must cover the real reclaim path: socket-death
@@ -1259,6 +1275,9 @@ this.sendDrops += 1;
    *  lane. A lost claim never earns a server bloomSeq tick, which
    *  skewed the seeded cone draws for the rest of the gap. */
   private static readonly FIRE_JOURNAL_CAP = 160;
+  /** Per-entry resend cap inside a session: covers loss bursts without
+   *  an unbounded retry storm; the reclaim replay still backs it up. */
+  private static readonly FIRE_RESEND_MAX = 6;
 
   /** Called by wireIn's gameState handler - the seat is (re)established.
    *  Resends fire intents the dead lane may have lost; entries from a
@@ -1272,6 +1291,9 @@ this.sendDrops += 1;
     this.claimIntents = [];
     const now = performance.now();
     for (const e of entries) {
+      // Echo-acked claims already spawned - a replay is deduped anyway,
+      // skipping just saves the wire.
+      if (e.acked) {continue;}
       if (e.room !== room || now - e.t >= NetworkManager.FIRE_REPLAY_MS) {continue;}
       // A dead seat's shot claims can never credit - replaying one only
       // manufactures a 'shooter dead' reject + rollback on the wire.

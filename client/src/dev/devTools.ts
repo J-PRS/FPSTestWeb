@@ -74,6 +74,7 @@ export async function wireDebugTools(c: DevToolsCtx): Promise<void> {
     teamBots: c.teamBots,
     chatSink: (await import('../game/chat.js')).chatSink,
     parity: (await import('../game/parity.js')).parityProbes,
+    bloomSync: (await import('../game/combat/bloomSync.js')).bloomSyncStats,
   };
   // .rec captures (gauntlet --record / pvptest record.ts) replay through
   // the live dispatch as gameplay: __playRec('/hunt.rec', 1.5)

@@ -148,6 +148,11 @@ export class Projectile {
    *  reject and damage echo actually rides (fanSlot dies on bind, this
    *  must outlive it). Null on single shells: shotId IS the pull id. */
   pullShotId: string | null = null;
+  /** Predicted bloom draw (counter, raw aim, cone radius, launch vel) -
+   *  the echo's dir lets the bind solver recover which seed the server
+   *  actually drew, so a dropped claim's counter skew self-heals on the
+   *  next bound shell instead of waiting for a reclaim reseat. */
+  bloomDraw: { seq: number; base: THREE.Vector3; radius: number; vel0: THREE.Vector3 } | null = null;
   /** Whose shell this is - kill attribution for local-authority shots
    *  (offline GameBots; null = the local player). */
   shooterId: string | null = null;

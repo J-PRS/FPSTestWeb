@@ -36,6 +36,8 @@ export interface TestHandle {
   teamBots: TeamBots | null;
   /** parity.ts counters - fates/echoes census for soak verdicts. */
   parity: { fatesSeen: number; echoesStamped: number; echoesConfirmed: number; destroysSeen: number; msgSeen: Record<string, number> };
+  /** bloomSync.ts counters - seed-resync probes/resyncs/misses. */
+  bloomSync: { probes: number; resyncs: number; misses: number };
 }
 
 declare global {
