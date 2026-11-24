@@ -113,6 +113,61 @@ export interface NetStatics {
  *  cells/stepMs/maxAt split the two apart. */
 export const netProf = { on: false, calls: 0, cells: 0, stepMs: 0, applyN: 0, applyMs: 0, max: 0, maxAt: '' };
 
+/** Grid-locked cell drain: the stamped sim clock owns the replay - a
+ *  burst backlog pays down over a few frames (leaping pos 6-20m in one
+ *  frame is the follow-jump stream) and a full bank earns the dt-scaled
+ *  drain so low fps can't starve simT behind the stamped clock.
+ *  Clock-estimate stalls never freeze the sim, but the lead is capped
+ *  at 1s past the estimate: past that a parked ball reads better than
+ *  a guaranteed-wrong one (resumed traffic warped enraged balls 50-190m). */
+function drainNetCells(st: NetStatics, bag: NetBag, s: NonNullable<NetBag['sim']>, tgt: SimVec | null, dt: number, simNow: number): number {
+  let cellsLeft = bag.netAcc >= 0.5 ? Math.max(2, Math.ceil(dt / 0.05)) : 2;
+  let cellsStepped = 0;
+  const field = st.field();
+  if (field) {
+    while (cellsLeft > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= simNow) {
+      cellsLeft -= 1;
+      cellsStepped += 1;
+      bag.netAcc -= 0.05;
+      bag.simT += 0.05;
+      stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
+    }
+  }
+  if (bag.netAcc >= 0.5 && field) {
+    const leadCap = simNow === Infinity ? Infinity : simNow + 1;
+    // Pace a stalled-clock burst at ~2x real-time: one-frame drains leap
+    // the ball speed x 0.5s; the backlog still clears over a few frames.
+    let burst = Math.max(4, Math.ceil(dt / 0.05) * 2);
+    while (burst > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= leadCap) {
+      burst -= 1;
+      cellsStepped += 1;
+      bag.netAcc -= 0.05;
+      bag.simT += 0.05;
+      stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
+    }
+  }
+  return cellsStepped;
+}
+
+/** ball-step fold: a rebuild leap >5m past the speed-scaled budget gets
+ *  folded into renderOffset (fast slide, ~0.2s decay) so the catch-up
+ *  doesn't cut the rendered ball. Gaps within the cells-stepped budget
+ *  are burst pacing, not divergence - and a jump <300ms after a segment
+ *  is that segment's own correction, owned by seg-div. */
+function foldStepGap(bag: NetBag, host: NetHost, s: NonNullable<NetBag['sim']>, cellsStepped: number): void {
+  const dx = host.pos.x - bag.px!, dy = host.pos.y - bag.py!, dz = host.pos.z - bag.pz!;
+  const gap2 = dx * dx + dy * dy + dz * dz;
+  const spdBudget = Math.hypot(s.vx, s.vy, s.vz) * 0.05 * Math.max(1, cellsStepped) + 5;
+  if (gap2 <= 25) {return;}
+  bag.foldExplained = gap2 <= spdBudget * spdBudget;
+  const segAgeMs = performance.now() - (bag.lastSegWallMs ?? -1e9);
+  if (gap2 > spdBudget * spdBudget && (bag.segsSeen ?? 0) > 3 && segAgeMs > 300) {
+    glitch('ball-step', { gapM: Math.round(Math.sqrt(gap2)), acc: Math.round(bag.netAcc * 1000) });
+  }
+  _rpos.sub(host.pos);
+  host.renderOffset.add(_rpos);
+}
+
 export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number): void {
   const _t0 = netProf.on ? performance.now() : 0;
   const s = bag.sim!;
@@ -134,83 +189,21 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   // Only a FULL bank earns the dt-scaled drain: burst pacing intact,
   // starvation impossible, and a 250ms stall frame still pays down over
   // the next frames instead of leaping.
-  let cellsLeft = bag.netAcc >= 0.5 ? Math.max(2, Math.ceil(dt / 0.05)) : 2;
-  // Cells consumed this frame — the step gate below budgets ONE tick of
-  // travel, but a burst drain legitimately moves speed×0.05 per cell, so
-  // the budget scales by what was actually paid down.
-  let cellsStepped = 0;
   // The committed target rides tp snapshots: enrage pull needs it, and an
   // inert ball's stall-breaker launches at it — predicting it client-side
   // mirrors the authority instead of waiting two seconds for the event.
   const tgt = s.tgtValid ? (_tgt.x = s.tx, _tgt.y = s.ty, _tgt.z = s.tz, _tgt) : null;
-  const field = st.field();
-  if (field) {
-    while (cellsLeft > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= simNow) {
-      cellsLeft -= 1;
-      cellsStepped += 1;
-      bag.netAcc -= 0.05;
-      bag.simT += 0.05;
-      stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
-    }
-  }
-  if (bag.netAcc >= 0.5 && field) {
-    // Clock-estimate stalls must never freeze the sim — but a stale
-    // estimate must not let prediction sprint ahead of authority
-    // unboundedly either: once simT leads simNow the gate never
-    // re-engages, so each 0.5s of silence banked another 0.5s of
-    // blind flight, and resuming traffic warped enraged balls back
-    // 50-190m. Cap the lead at 1s past the estimate; past that a
-    // parked ball reads better than a guaranteed-wrong one.
-    const leadCap = simNow === Infinity ? Infinity : simNow + 1;
-    // The bank is capped at 0.5s so a stalled-clock burst is finite — but
-    // draining it in ONE frame leaps the ball speed×0.5s (the acc=50
-    // ball-step/follow-jump stream under low fps). Pace at ~2x real-time:
-    // the backlog clears over a few frames, the fold stays small, and a
-    // frozen clock still converges — just smoothly.
-    let burst = Math.max(4, Math.ceil(dt / 0.05) * 2);
-    while (burst > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= leadCap) {
-      burst -= 1;
-      cellsStepped += 1;
-      bag.netAcc -= 0.05;
-      bag.simT += 0.05;
-      stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
-    }
-  }
+  // Cells consumed this frame — the step gate below budgets ONE tick of
+  // travel, but a burst drain legitimately moves speed×0.05 per cell, so
+  // the budget scales by what was actually paid down.
+  const cellsStepped = drainNetCells(st, bag, s, tgt, dt, simNow);
   // Sub-cell render: the sim rests on grid points; host.pos carries the
   // unconsumed fraction ballistically so motion doesn't quantize at 20Hz.
   const rem = Math.min(bag.netAcc, 0.05); // sub-cell fraction only — a banked backlog must not extrapolate pos ahead of the cells still paying it down
   _rpos.copy(host.pos).add(host.renderOffset); // rendered point before this rebuild
   host.pos.set(s.x + s.vx * rem, s.y + s.vy * rem + 0.5 * BALL_GRAVITY * rem * rem, s.z + s.vz * rem);
   if (bag.px !== undefined && bag.py !== undefined && bag.pz !== undefined) {
-    const dx = host.pos.x - bag.px, dy = host.pos.y - bag.py, dz = host.pos.z - bag.pz;
-    const gap2 = dx * dx + dy * dy + dz * dz;
-    // Speed-scaled floor: a ball past ~100 m/s legitimately moves >5m
-    // between 20Hz rebuilds — counting that as a step was ~90% noise.
-    // Only fire when the leap outruns what the tick budget explains.
-    const spdBudget = Math.hypot(s.vx, s.vy, s.vz) * 0.05 * Math.max(1, cellsStepped) + 5;
-    if (gap2 > 25) {
-      // Burst-drain folds (gap within the cells-stepped speed budget)
-      // are pacing catch-up, not divergence — same class render-blend
-      // is allowed to skip.
-      bag.foldExplained = gap2 <= spdBudget * spdBudget;
-      // Speed-scaled floor: a ball past ~100 m/s legitimately moves >5m
-      // between 20Hz rebuilds — counting that as a step was ~90% noise.
-      // Only fire when the leap outruns what the tick budget explains.
-      // A fold within ~300ms wall of a segment IS that segment's own
-      // correction (join/roster heal or seg-div's divergence — both
-      // owned there); a jump with no fresh authority behind it is the
-      // anomaly this warn exists for.
-      const segAgeMs = performance.now() - (bag.lastSegWallMs ?? -1e9);
-      if (gap2 > spdBudget * spdBudget && (bag.segsSeen ?? 0) > 3 && segAgeMs > 300) {
-        glitch('ball-step', { gapM: Math.round(Math.sqrt(gap2)), acc: Math.round(bag.netAcc * 1000) });
-      }
-      // The step is honest truth — but it leaps the rendered ball past
-      // every follower budget. Fold it into renderOffset so the catch-up
-      // reads as a fast slide (offset decays ~0.2s) instead of a cut;
-      // normal per-frame motion stays under the 5m floor untouched.
-      _rpos.sub(host.pos);
-      host.renderOffset.add(_rpos);
-    }
+    foldStepGap(bag, host, s, cellsStepped);
   }
   bag.px = host.pos.x; bag.py = host.pos.y; bag.pz = host.pos.z;
   host.vel.set(s.vx, s.vy + BALL_GRAVITY * rem, s.vz);
@@ -286,6 +279,44 @@ function blendSegCorrection(host: NetHost, s: SimBall, seg: NetSeg): void {
  *  (≈half RTT) because the event is already stale when it arrives —
  *  without this every bounce visibly rewinds the ball before re-flying.
  *  The >20m trail-cut already handles teleport discontinuities. */
+/** seg-div probe: legT0 === -1 = never seeded (first-segment snap is the
+ *  roster heal, not predictor drift - there is no prediction to diverge
+ *  from yet). segsSeen > 10 (~1s of traffic) extends the grace past the
+ *  first heartbeats: the replay cursor lands mid-flight from a roster
+ *  spawn and measured 'divergence' is the cursor catching up, not drift.
+ *  spanMs < 0 = the stamp is BEHIND the local sim cursor - pd then
+ *  measures speed x (simT-t) of pure flight lag between two different
+ *  instants (a 150 m/s ball 150ms ahead reads 22m), not divergence.
+ *  Only a stamp newer than the cursor can show replay error.
+ *  A segment landing within ~1 segment-latency of a predicted shove is
+ *  measuring predicted-impulse-vs-server-impulse - different impulse
+ *  origins by design, the snap self-heals. Not replay drift. */
+function probeSegDivergence(bag: NetBag, s: NonNullable<NetBag['sim']>, seg: NetSeg, pd: number, spanMs: number): void {
+  const predImpulse = bag.lastPredImpulseMs !== undefined && performance.now() - bag.lastPredImpulseMs < 800;
+  if (pd > 20 && !seg.hard && spanMs >= 0 && spanMs <= 4000 && bag.legT0 !== -1 && (bag.segsSeen ?? 0) > 10 && !predImpulse) {
+    glitch('seg-div', { m: Math.round(pd), spanMs: Math.round(spanMs), enr: seg.enraged ? 1 : 0 });
+  }
+}
+
+/** The stamped segment's state payload: anchor pos/vel, wire timers
+ *  (never reset locally - that would restart the server's 20s enrage
+ *  countdown on every heartbeat and the client ball would outlive
+ *  enrages the authority already teleported out of), and the aim
+ *  snapshot (the server pulled toward THIS point, so we do too). */
+function applySegState(s: NonNullable<NetBag['sim']>, bag: NetBag, seg: NetSeg): void {
+  s.x = seg.px; s.y = seg.py; s.z = seg.pz;
+  s.vx = seg.vx; s.vy = seg.vy; s.vz = seg.vz;
+  s.gt = 0; // stamped arc — the cached terrain-probe schedule is stale
+  s.enraged = seg.enraged;
+  s.enrageTimer = seg.timers?.et ?? 0;
+  s.slowTimer = seg.timers?.slowT ?? 0;
+  s.dampNextBounce = seg.timers?.damp ?? false;
+  if (seg.tp) { s.tx = seg.tp.x; s.ty = seg.tp.y; s.tz = seg.tp.z; s.tgtValid = true; }
+  else {s.tgtValid = false;}
+  bag.netTargetId = seg.targetId;
+  bag.netEnraged = seg.enraged;
+}
+
 export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg): void {
   const _t0 = netProf.on ? performance.now() : 0;
   const s = bag.sim;
@@ -310,41 +341,8 @@ export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg
   const spanMs = simT !== undefined && bag.simT < simT ? (simT - bag.simT) * 1000 : -1;
   bag.segsSeen = (bag.segsSeen ?? 0) + 1;
   bag.lastSegWallMs = performance.now();
-  // legT0 === -1 = never seeded: a first-segment snap is the roster heal,
-  // not predictor drift — there is no prediction to diverge from yet.
-  // segsSeen > 3 extends that grace past the FIRST heartbeats: the seed
-  // leg plus its first ~2 stamped corrections are still join convergence
-  // (the predictor ran ~1s from a stale seed — 20-30m is the heal, not
-  // drift). Steady-state heartbeat divergence survives the gate.
-  // spanMs < 0 = the stamp is BEHIND the local sim cursor — pd then
-  // measures speed×(simT−t) of pure flight lag between two different
-  // instants (a 150 m/s ball 150ms ahead reads 22m), not divergence.
-  // Only a stamp newer than the cursor can show replay error.
-  // A segment landing within ~1 segment-latency of a predicted shove is
-  // measuring predicted-impulse-vs-server-impulse — different impulse
-  // origins by design, the snap self-heals. Not replay drift.
-  const predImpulse = bag.lastPredImpulseMs !== undefined && performance.now() - bag.lastPredImpulseMs < 800;
-  // segsSeen>10 (~1s of traffic) — the first ~10 segments are still join
-  // convergence: the replay cursor lands mid-flight from a roster spawn
-  // and measured 'divergence' is the cursor catching up, not drift.
-  if (pd > 20 && !seg.hard && spanMs >= 0 && spanMs <= 4000 && bag.legT0 !== -1 && (bag.segsSeen ?? 0) > 10 && !predImpulse) {
-    glitch('seg-div', { m: Math.round(pd), spanMs: Math.round(spanMs), enr: seg.enraged ? 1 : 0 });
-  }
-  s.x = seg.px; s.y = seg.py; s.z = seg.pz;
-  s.vx = seg.vx; s.vy = seg.vy; s.vz = seg.vz;
-  s.gt = 0; // stamped arc — the cached terrain-probe schedule is stale
-  s.enraged = seg.enraged;
-  // The timers ride the wire — resetting them here would restart the
-  // server's 20s enrage countdown on every heartbeat and the client ball
-  // would outlive enrages the authority already teleported out of.
-  s.enrageTimer = seg.timers?.et ?? 0;
-  s.slowTimer = seg.timers?.slowT ?? 0;
-  s.dampNextBounce = seg.timers?.damp ?? false;
-  // Aim snapshot — the server pulled toward THIS point, so we do too.
-  if (seg.tp) { s.tx = seg.tp.x; s.ty = seg.tp.y; s.tz = seg.tp.z; s.tgtValid = true; }
-  else {s.tgtValid = false;}
-  bag.netTargetId = seg.targetId;
-  bag.netEnraged = seg.enraged;
+  probeSegDivergence(bag, s, seg, pd, spanMs);
+  applySegState(s, bag, seg);
   // Step the event's lead age NOW, not banked for later: banking it in
   // netAcc drained 2 cells/frame, so a ~0.5s-late stamp made the ball
   // sprint 6x for ~5 frames — the per-heartbeat follow-jump stream.
