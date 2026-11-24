@@ -204,6 +204,8 @@ export class RoomProjectiles {
     this.attachField(field);
   }
 
+  get hasField(): boolean {return this.field != null;}
+
   /** Map rotation / admin reload can swap the terrain under a live
    *  room - shells must sweep the field players actually stand on. */
   attachField(field: Heightfield | null): void {
@@ -589,9 +591,12 @@ export class RoomProjectiles {
   }
 
   /** Hook pop: a body connect yanks the victim, anything else yanks the
-   *  owner - but only while the line was still live. */
+   *  owner - but only while the line was still live AND the anchor is a
+   *  real contact. Fuse expiry is a snapped line, and the FLOOR_Y kill
+   *  plane is a lost dart: anchoring 200m under the world yanks the
+   *  shooter down at the void, not at anything they aimed at. */
   private hookPayload(proj: LiveProj, at: Vec3, directHitId?: string | null): void {
-    if (directHitId != null || proj.p.age < proj.ttl) {
+    if (directHitId != null || (proj.p.age < proj.ttl && at.y > FLOOR_Y + 1)) {
       this.room.messages.grapple(proj.ownerId, at, directHitId ?? null);
     }
   }

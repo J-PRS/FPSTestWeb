@@ -109,6 +109,13 @@ export class GameServer {
           // Rooms that already exist (players joined before the load
           // finished) get the field attached now.
           for (const room of this.rooms.values()) {
+            // Spec-terrain rooms are owned by attachTerrain end to end -
+            // attaching the DEFAULT field here (projectiles did it
+            // unconditionally!) splits the room's ground truth across two
+            // heightmaps whenever the loads resolve in the wrong order:
+            // projectiles collide with one terrain, movement and the
+            // unbury invariant judge another (bot-below-ground class).
+            if (room.spec.terrain) {continue;}
             if (!room.ballSim.hasField) { room.field = this.field; room.ballSim.attachField(this.field); }
             // The creature sim rides the same field - it sits dead
             // without it (step() early-returns on !field).
@@ -118,7 +125,7 @@ export class GameServer {
             // no reconcile, no transit channel, no corrections for anyone
             // who joined before the heightmap read resolved.
             if (!room.moveSim.hasField) {room.moveSim.attachField(this.field, (pid) => room.players.getPlayer(pid)?.position);}
-            room.projectiles.attachField(this.field);
+            if (!room.projectiles.hasField) {room.projectiles.attachField(this.field);}
           }
         return; })
         .catch((error): void => logger.warn('BallSim disabled - heightmap load failed', { err: String(error) }));
