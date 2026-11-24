@@ -918,57 +918,7 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
   // (GL shells explode on their 2.5s fuse on every observing client.)
 
-  if (p.isRemote) {
-
-    spawnVisualOnly(c, p);
-    // Hook replicas: observers see the rope snap; impulses arrive on the wire.
-    if (p.config.hook) {hookConnect(c, p);}
-
-    // Bomblets are visual-only anyway - remote viewers still need the
-
-    // rain, or an airburst reads as a midair pop with no payload.
-
-    if (p.config.cluster) {spawnClusterBomblets(c, p);}
-
-    // The replica is visual-only for DAMAGE (server declares it), but the
-
-    // blast still physically shoves the local player - predict the shove
-
-    // here so its knockback echo dedupes on the stamp instead of landing
-
-    // raw and late. Without this every enemy blast felt like a grab.
-
-    if (!p.config.noExplosion && p.config.aoeRadius > 0) {
-
-      // The wire's detonation point beats the painted contact when the
-      // destroy already landed - a self-popped replica drifts meters off
-      // the server's true blast, and the stamp/echo center has to live
-      // where the authority judged it or the shove registers against a
-      // phantom center (the kb-echo miss class).
-      const wireAt = p.serverProjectileId ? projWireAt.get(p.serverProjectileId)?.at : undefined;
-      const blastPos = wireAt ? (_kbWirePos ??= new THREE.Vector3()).set(wireAt.x, wireAt.y, wireAt.z) : (p.hitPointValid ? p.hitPoint : p.pos);
-
-      const bloom = p.directHit ? directHitAoeBonus(p.config.weaponType) : 1;
-
-      // Remote hook whiffs yank nobody - the generic pull is for real
-      // blasts; the rope's reel only exists on a wire grapple.
-      if (!p.config.hook) {c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined, { pid: p.serverProjectileId ?? undefined, wt: p.config.weaponType, pop: p.popClass });}
-
-      // Replayed prey sims (balls/nuggets) get the same predicted shove --
-
-      // the authority knocks them on the blast tick, so without this they
-
-      // flew ballistic until the next segment re-anchored them (~0.5s of
-
-      // visible rubberband per remote blast near a swarm).
-
-      c.applyForceToPrey(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, wireAt !== undefined);
-
-    }
-
-    return;
-
-  }
+  if (p.isRemote) {handleRemoteImpact(c, p); return;}
 
 
 
@@ -1023,6 +973,40 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
   }
 
+}
+
+
+
+/** Remote-shell impact: visuals + predicted shove only, never claims.
+ *  The replica is visual-only for DAMAGE (server declares it), but the
+ *  blast still physically shoves the local player - predict the shove
+ *  here so its knockback echo dedupes on the stamp instead of landing
+ *  raw and late. Without this every enemy blast felt like a grab. */
+function handleRemoteImpact(c: CombatCtx, p: Projectile): void {
+  spawnVisualOnly(c, p);
+  // Hook replicas: observers see the rope snap; impulses arrive on the wire.
+  if (p.config.hook) {hookConnect(c, p);}
+  // Bomblets are visual-only anyway - remote viewers still need the
+  // rain, or an airburst reads as a midair pop with no payload.
+  if (p.config.cluster) {spawnClusterBomblets(c, p);}
+  if (!p.config.noExplosion && p.config.aoeRadius > 0) {
+    // The wire's detonation point beats the painted contact when the
+    // destroy already landed - a self-popped replica drifts meters off
+    // the server's true blast, and the stamp/echo center has to live
+    // where the authority judged it or the shove registers against a
+    // phantom center (the kb-echo miss class).
+    const wireAt = p.serverProjectileId ? projWireAt.get(p.serverProjectileId)?.at : undefined;
+    const blastPos = wireAt ? (_kbWirePos ??= new THREE.Vector3()).set(wireAt.x, wireAt.y, wireAt.z) : (p.hitPointValid ? p.hitPoint : p.pos);
+    const bloom = p.directHit ? directHitAoeBonus(p.config.weaponType) : 1;
+    // Remote hook whiffs yank nobody - the generic pull is for real
+    // blasts; the rope's reel only exists on a wire grapple.
+    if (!p.config.hook) {c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined, { pid: p.serverProjectileId ?? undefined, wt: p.config.weaponType, pop: p.popClass });}
+    // Replayed prey sims (balls/nuggets) get the same predicted shove --
+    // the authority knocks them on the blast tick, so without this they
+    // flew ballistic until the next segment re-anchored them (~0.5s of
+    // visible rubberband per remote blast near a swarm).
+    c.applyForceToPrey(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, wireAt !== undefined);
+  }
 }
 
 
