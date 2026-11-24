@@ -512,6 +512,17 @@ else if (m === 'error') {lvl = LogLevel.ERROR;}
     }
   });
 
+  // Tap the FPS counter = Alt+Q for touch: the state dump ships to
+  // client-log as WARN lines, no devtools needed on a phone.
+  document.addEventListener('pointerdown', (e): void => {
+    if (!(e.target instanceof Element) || !e.target.closest('#hud-fps')) {return;}
+    const dump = (window as { __gameDump?: () => string[] }).__gameDump?.() ?? [];
+    const srv = (window as { __serverStamp?: { url?: string } }).__serverStamp;
+    Logger.warn(`DIAGDUMP server=${srv?.url ?? '?'} rows=${dump.length}`);
+    for (const line of dump) {Logger.warn(`DIAGDUMP|${line}`);}
+    toast(`Diag shipped (${dump.length} rows)`);
+  });
+
   console.log('Client logging initialized. Call exportClientLogs() to download logs, Alt+Q to copy.');
 }
 
