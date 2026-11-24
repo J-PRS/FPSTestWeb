@@ -557,6 +557,26 @@ bn += 1;
     // the goal picker's distance falloff decides whether the hike is
     // worth it. Elsewhere a short scan is opportunism, not an objective.
     ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, this.mode === 'nuggets' || this.mode === 'headhunt' ? 500 : 60);
+    this.applyObjective(ctx, bot, info);
+    ctx.moveSkill = bot.skill?.movement;
+    ctx.thrift = bot.skill?.thrift;
+    ctx.airLove = bot.skill?.airLove;
+    ctx.speedScale = CLASS_STATS[bot.armorClass as ArmorClass].speedScale;
+    ctx.skill = bot.skillId;
+    ctx.beltItem = bot.loadout?.belt;
+    ctx.pickupVal = ctx.nugget?.val;
+    this.fillSenses(ctx, bot, others);
+    return ctx;
+  }
+
+  /** Objective fields of the ctx: flag-mode info merged with the rabbit
+   *  goal, runner commitment, and the REAL flag position the shared
+   *  brain's altitude vetoes measure (a carrier reads its own stand, an
+   *  infiltrator the live enemy flag - a fake anchor fired vetoes on
+   *  nothing). */
+  private applyObjective(ctx: Parameters<GameBot['think']>[1], bot: GameBot, info:
+    { pos: THREE.Vector3; infiltrating?: boolean; running?: boolean; flagsHome?: boolean; posted?: number; kout?: boolean;
+      thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3 } | null } | null): void {
     const rabbitGoal = this.rabbit?.goalFor(bot.playerId, (id): THREE.Vector3 | null => this.posOf(id)) ?? null;
     ctx.objective = info?.pos ?? rabbitGoal;
     ctx.infiltrating = info?.infiltrating ?? false;
@@ -571,23 +591,10 @@ bn += 1;
     ctx.thief = info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null;
     ctx.flagsHome = info?.flagsHome ?? false;
     ctx.kout = info?.kout ?? false;
-    // The objective flag's REAL position: the shared brain's altitude
-    // vetoes measure this, not the (possibly offset) aim point. A
-    // carrier reads its own stand; an infiltrator reads the live enemy
-    // flag. Without it "over the flag" vetoes fired on a fake anchor.
     const flagTeam = this.ctf && bot.team
       ? (info?.running ? bot.team : info?.infiltrating ? (bot.team === 'alpha' ? 'bravo' : 'alpha') : bot.team)
       : null;
     ctx.flagPos = flagTeam ? this.ctf!.flagPos(flagTeam, false) ?? null : null;
-    ctx.moveSkill = bot.skill?.movement;
-    ctx.thrift = bot.skill?.thrift;
-    ctx.airLove = bot.skill?.airLove;
-    ctx.speedScale = CLASS_STATS[bot.armorClass as ArmorClass].speedScale;
-    ctx.skill = bot.skillId;
-    ctx.beltItem = bot.loadout?.belt;
-    ctx.pickupVal = ctx.nugget?.val;
-    this.fillSenses(ctx, bot, others);
-    return ctx;
   }
 
   /** Sense fields that don't depend on the objective info — wildlife,
@@ -612,17 +619,21 @@ bn += 1;
       const deficit = (this.scores[other] - this.scores[bot.team]) / winAt;
       const leaderFrac = Math.min(1, Math.max(this.scores.alpha, this.scores.bravo) / winAt);
       ctx.desperate = Math.max(0, deficit) * leaderFrac * 2;
-      if (this.mode === 'headhunt') {
-        let rich: THREE.Vector3 | null = null, richHeld = 14, spill: THREE.Vector3 | null = null;
-        for (const b of this.bots) {
-          if (b === bot || b.team !== bot.team || b.botHp <= 0) {continue;}
-          if (b.heldTokens > richHeld) {rich = b.position; richHeld = b.heldTokens;}
-          else if (!spill && b.heldTokens >= 5 && b.botHp < b.botMaxHp * 0.35) {spill = b.position;}
-        }
-        ctx.convoy = rich;
-        ctx.spillSoon = spill;
-      }
+      if (this.mode === 'headhunt') {this.fillHeadhuntEconomy(ctx, bot);}
     }
+  }
+
+  /** Headhunt hoard intel: richest ally worth escorting (convoy) and a
+   *  rich ally visibly dying whose corpse vultures will camp (spillSoon). */
+  private fillHeadhuntEconomy(ctx: Parameters<GameBot['think']>[1], bot: GameBot): void {
+    let rich: THREE.Vector3 | null = null, richHeld = 14, spill: THREE.Vector3 | null = null;
+    for (const b of this.bots) {
+      if (b === bot || b.team !== bot.team || b.botHp <= 0) {continue;}
+      if (b.heldTokens > richHeld) {rich = b.position; richHeld = b.heldTokens;}
+      else if (!spill && b.heldTokens >= 5 && b.botHp < b.botMaxHp * 0.35) {spill = b.position;}
+    }
+    ctx.convoy = rich;
+    ctx.spillSoon = spill;
   }
 
   /** Flag/killFeed-worthy room event → chatter sense. The CTF bridge
