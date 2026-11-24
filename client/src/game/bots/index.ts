@@ -13,6 +13,7 @@ import type { Targetable } from '../../entities/balls.js';
 import type { GameContext } from '../context.js';
 import { MODES, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../../shared/teams.js';
 import type { Terrain } from '../../world/terrain.js';
+import { sampleHeight } from '../../world/heightmap.js';
 import { CtfBridge } from './botCtf.js';
 import { RabbitBridge } from './botRabbit.js';
 import { FlagRunBridge } from '../flagRun.js';
@@ -167,7 +168,8 @@ export class TeamBots {
       botKilled: (k, b, weapon): void => botKilledF(this, k, b, weapon),
       hurtLocal: (d, fp, src, m, att): void => hurtLocal(this, d, fp, att, { src, melee: m }),
     });
-    this.wd = new BotWatchdog(deps.logger, (): boolean => this.over !== null);
+    this.wd = new BotWatchdog(deps.logger, (): boolean => this.over !== null,
+      (x, z) => sampleHeight(x, z));
     const {ffa} = this.spec;
     this.teamOf.set('local', ffa ? 'local' : playerTeam);
     if (ffa) {this.ffaScores.set('local', 0);}

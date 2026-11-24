@@ -5,9 +5,11 @@ import * as THREE from 'three';
 import { BotWatchdog } from '../game/bots/botWatchdog.js';
 import type { GameBot } from '../game/bots/botBrain.js';
 
-const mkBot = (id: string, pos: THREE.Vector3, modelPos = pos): { playerId: string; position: THREE.Vector3; isDead: boolean; model: GameBot["model"]; } => ({
+const mkBot = (id: string, pos: THREE.Vector3, modelPos = pos): { playerId: string; position: THREE.Vector3; velocity: THREE.Vector3; lastDest: THREE.Vector3; isDead: boolean; model: GameBot["model"]; } => ({
   playerId: id,
   position: pos,
+  velocity: new THREE.Vector3(),
+  lastDest: new THREE.Vector3(100, 0, 100),
   isDead: false,
   model: { getModelPosition: (out: THREE.Vector3): boolean => { out.copy(modelPos); return true; } } as unknown as GameBot['model'],
 });
@@ -65,6 +67,25 @@ describe('BotWatchdog', (): void => {
     const b = mkBot('b1', new THREE.Vector3());
     stepN(wd, [b], 17);
     expect(log.warn).not.toHaveBeenCalled();
+  });
+
+
+  it('unstick ladder: impulse x2 then teleport step, re-armed by travel', (): void => {
+    const log = { warn: vi.fn(), info: vi.fn() };
+    const wd = new BotWatchdog(log, (): boolean => false, (): number => 5);
+    const p = new THREE.Vector3(0, 0, 0);
+    const b = mkBot('b1', p);
+    stepN(wd, [b], 17); // window 1 closes: impulse
+    expect(Math.hypot(b.velocity.x, b.velocity.z)).toBeCloseTo(8, 1);
+    expect(b.velocity.y).toBeCloseTo(6, 1);
+    b.velocity.set(0, 0, 0);
+    stepN(wd, [b], 13); // window 2 closes: still impulse
+    expect(b.velocity.y).toBeCloseTo(6, 1);
+    b.velocity.set(0, 0, 0);
+    stepN(wd, [b], 13); // window 3 closes: teleport toward lastDest
+    const dist = Math.hypot(p.x - 0, p.z - 0);
+    expect(dist).toBeGreaterThan(9); // stepped ~14m toward (100,100)
+    expect(p.y).toBeCloseTo(5.5, 1); // ground snap + 0.5 via injected groundAt
   });
 
   it('render stall: logic moves, model frozen → one warn, then recover', (): void => {

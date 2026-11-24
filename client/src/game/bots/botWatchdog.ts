@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { GameBot } from './botBrain.js';
 
-type WatchBot = Pick<GameBot, 'playerId' | 'position' | 'isDead' | 'model'>;
+type WatchBot = Pick<GameBot, 'playerId' | 'position' | 'velocity' | 'lastDest' | 'isDead' | 'model'>;
 type WatchLog = { warn(m: string): void; info(m: string): void };
 
 const WD_DT = 4;        // seconds between logic/render diff samples
@@ -20,6 +20,10 @@ export class BotWatchdog {
   constructor(
     private log: WatchLog,
     private matchOver: () => boolean,
+    /** Ground height for teleport snaps - offline bots own their own
+     *  position outright (no server authority), so wedged recovery is
+     *  a local write, unlike the server-side resync primitive. */
+    private groundAt?: (x: number, z: number) => number,
   ) {}
 
   private t = 0;
@@ -32,6 +36,7 @@ export class BotWatchdog {
   // longer window: pacing in a 3m circle cancels out, real travel doesn't.
   private readonly anchor = new Map<string, { p: THREE.Vector3; t: number }>();
   private readonly stuck = new Set<string>();
+  private readonly stuckWindows = new Map<string, number>();
   private idleWindows = 0;
 
   /** Jersey swap — samples migrate so the same body keeps its
@@ -49,6 +54,9 @@ export class BotWatchdog {
     for (const s of [this.stalled, this.stuck] as const) {
       if (s.delete(oldId)) {s.add(newId);}
     }
+    const w = this.stuckWindows.get(oldId);
+    this.stuckWindows.delete(oldId);
+    if (w !== undefined) {this.stuckWindows.set(newId, w);}
   }
 
   step(dt: number, bots: Iterable<WatchBot>): void {
@@ -104,12 +112,34 @@ alive += 1;
         this.stuck.add(bot.playerId);
         this.log.warn(`bot ${bot.playerId} stuck — only ${disp.toFixed(1)}m net travel in ${WD_STUCK_T}s (wedged or brain loop?)`);
       }
+      this.recover(bot);
       return 'stuck';
     }
     if (this.stuck.delete(bot.playerId)) {
+      this.stuckWindows.delete(bot.playerId);
       this.log.info(`bot ${bot.playerId} unstuck — ${disp.toFixed(1)}m net travel`);
     }
     return 'ok';
+  }
+
+  /** Unstick escalation, mirrors the server watchdog's ladder: impulse
+   *  pops for the first two windows, then a 14m teleport step toward
+   *  the goal once terrain-lock is proven - impulses lose to pocket
+   *  geometry, and a wedged bot that never recovers is the dead-match
+   *  look in offline play. */
+  private recover(bot: WatchBot): void {
+    const n = (this.stuckWindows.get(bot.playerId) ?? 0) + 1;
+    this.stuckWindows.set(bot.playerId, n);
+    if (n <= 2) {
+      const ang = (bot.playerId.length * 2654435761 % 628) / 100;
+      bot.velocity.x += Math.cos(ang) * 8; bot.velocity.y += 6; bot.velocity.z += Math.sin(ang) * 8;
+      return;
+    }
+    const dx = bot.lastDest.x - bot.position.x, dz = bot.lastDest.z - bot.position.z;
+    const dl = Math.hypot(dx, dz) || 1;
+    const nx = bot.position.x + (dx / dl) * 14, nz = bot.position.z + (dz / dl) * 14;
+    bot.position.set(nx, this.groundAt ? this.groundAt(nx, nz) + 0.5 : bot.position.y, nz);
+    this.log.info(`bot ${bot.playerId} unstick teleport after ${n - 1} failed boosts`);
   }
 
   /** Render-side leg — model position vs its own last sample. Feet sit
