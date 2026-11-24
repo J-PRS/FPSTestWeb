@@ -20,7 +20,7 @@ import { Ball } from '../../entities/balls.js';
 
 import type { NetCtx } from './ctx.js';
 
-import { loadHeightfieldBin, setHeightScale, setWorldScale, setTerrainBumps, type TerrainBump } from '../../world/heightmap.js';
+import { loadHeightfieldBin, setHeightScale, setWorldScale, setTerrainBumps, sampleHeight, type TerrainBump } from '../../world/heightmap.js';
 
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, FOG_COLOR, FOG_START, FOG_END } from '../../core/config.js';
 
@@ -203,8 +203,9 @@ function glRendererString(): string {
     if (!gl) {return 'no-gl';}
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const r = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'masked');
+    const caps = ` vti=${gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS)} tex=${gl.getParameter(gl.MAX_TEXTURE_SIZE)}`;
     gl.getExtension('WEBGL_lose_context')?.loseContext();
-    return r;
+    return r + caps;
   } catch { return 'err'; }
 }
 
@@ -422,6 +423,15 @@ async function terrainSwapTask(req: TerrainSwapReq): Promise<void> {
     // only telemetry a mobile "terrain invisible" report produces.
     const st = deps.lazyTerrain().levelStats;
     deps.logger.warn(`terrain applied ${file ?? BOOT_HEIGHTMAP} preset=${deps.lazyTerrain().preset} levels=${st.levels} vis=${st.visible} win=${window.innerWidth}x${window.innerHeight} dpr=${window.devicePixelRatio} gl=${glRendererString()}`);
+    // Second frame's read - camera/field positions settle after the
+    // apply; a player under the drawn surface explains a sky-only view.
+    setTimeout((): void => {
+      try {
+        const p = deps.lazyPlayer().pos;
+        const terr = deps.lazyTerrain();
+        deps.logger.warn(`terrain pos p=(${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)}) h=${sampleHeight(p.x, p.z).toFixed(1)} rh=${terr.getRenderedHeight(p.x, p.z).toFixed(1)}`);
+      } catch { /* diag must never break the game */ }
+    }, 3000);
 
   } catch (error) {
 
