@@ -269,38 +269,27 @@ function catchRiders(list: Projectile[]): void {
 
 
 
-export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
-  const {deps} = c;
-  c.lg.tickBeam(dt); // beam fades ~80ms after the last tick
-  pruneShots(c);
-
-  const remotePlayerPositions = _remotePlayerPositions;
-  remotePlayerPositions.clear();
-  const remotePlayerClasses = _remotePlayerClasses;
-  remotePlayerClasses.clear();
-  // Server rewind = shooterTransit + lag − targetTransit: sweep ghosts
-  // must sit (victimPing−myPing)/2 off the view epoch or fast victims
-  // get painted where the authority never judged them.
+/** Per-frame sweep epochs, filled into the module maps in place.
+ *  Player ghosts: the server adjudicates against the victim's wire-fresh
+ *  pos - sweeping the rendered body (~150ms interp-stale) ghosts hits on
+ *  fast movers (the replica pops on the stale visual = dmg-echo's offM
+ *  class). Server rewind = shooterTransit + lag - targetTransit, so the
+ *  ghost sits (victimPing-myPing)/2 off the view epoch.
+ *  Creature ghosts: server creatureSweep rewinds ball/crawler positions
+ *  by shooterTransit + renderLag (full lag - no 0.7 player advantage) -
+ *  the authority judges them ~0.1-0.2s behind the replay-live replica.
+ *  Net-driven targets only: offline balls are local sims. */
+function primeGhostEpochs(deps: CombatCtx['deps'], remotePlayerPositions: Map<string, THREE.Vector3>, remotePlayerClasses: Map<string, string>): void {
   const nmPing = deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0;
   const myTransitMs = nmPing / 2;
   let maxRenderDelayMs = 0;
   deps.world.remotePlayers.forEach((rp, playerId): void => {
     if (rp.isDead) {return;}
-    // Server adjudicates this shell against the victim's wire-fresh pos -
-    // sweeping the rendered body (~150ms interp-stale) ghosts hits on
-    // fast movers (the replica pops on the stale visual, server shell
-    // sails past the real body = dmg-echo's offM class). Project wire
-    // pos forward by wire age - the same epoch the authority sees.
     remotePlayerPositions.set(playerId,
       rp.ghostPosition?.(_projVecs.get(playerId) ?? _projVecs.set(playerId, new THREE.Vector3()).get(playerId)!, myTransitMs) ?? rp.position);
     if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}
     if (rp.renderDelayMs > maxRenderDelayMs) {maxRenderDelayMs = rp.renderDelayMs;}
   });
-
-  // Creature ghosts: server creatureSweep rewinds ball/crawler positions
-  // by shooterTransit + renderLag (full lag - no 0.7 player advantage), so
-  // the authority judges them ~0.1-0.2s behind where the replay-live
-  // replica sits. Net-driven targets only - offline balls are local sims.
   const creatureLag = Math.min(0.5, (deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2000 + maxRenderDelayMs / 1000);
   for (const k of ballGhostPos.keys()) {if (!deps.targets.includes(k) || k.dead) {ballGhostPos.delete(k);}}
   if (creatureLag > 0) {
@@ -310,6 +299,45 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
         .copy(ball.pos).addScaledVector(ball.vel, -creatureLag);
     }
   } else {ballGhostPos.clear();}
+}
+
+/** Spear reclaim (plants): walking over your own planted corpse scoops
+ *  it. Offline the client is the authority - it pays the local belt and
+ *  scoops bot spears too (bots track no charge; the harvest is their
+ *  whole reclaim). Online the spearCollect edge pays - the local harvest
+ *  is just the no-latency shrink. Pays on the harvest edge only:
+ *  embedded stays true through the flash/fade, so gating on reach alone
+ *  re-paid + re-chimed every frame of the shrink (the "5x pickup sound"
+ *  bug). Same bounding-sphere + seg-seg math as the server sweep. */
+function trySpearHarvest(deps: CombatCtx['deps'], p: Projectile): void {
+  const offline = !deps.lazyNetworkManager()?.authoritySims();
+  const pl = p.shooterId == null ? deps.lazyPlayer() : null;
+  let ownerPos = pl?.pos;
+  if (!ownerPos && offline && p.shooterId != null) {ownerPos = deps.world.remotePlayers.get(p.shooterId)?.position;}
+  if (!ownerPos) {return;}
+  const d = p.glue.embedDir;
+  const bx = ownerPos.x - (p.pos.x - d.x * 1.65), by = ownerPos.y - (p.pos.y - d.y * 1.65), bz = ownerPos.z - (p.pos.z - d.z * 1.65);
+  if (bx * bx + by * by + bz * bz < 21
+  && segSegDistSq(ownerPos.x, ownerPos.y, ownerPos.z,
+      ownerPos.x, ownerPos.y - 1.8, ownerPos.z,
+      p.pos.x, p.pos.y, p.pos.z,
+      p.pos.x - d.x * 3.3, p.pos.y - d.y * 3.3, p.pos.z - d.z * 3.3) < 1
+  && p.glue.harvest() && pl && offline) {
+    pl.beltCharges = Math.min(BELT_MAX, pl.beltCharges + 1);
+    sfx.powerup('gem');
+  }
+}
+
+export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
+  const {deps} = c;
+  c.lg.tickBeam(dt); // beam fades ~80ms after the last tick
+  pruneShots(c);
+
+  const remotePlayerPositions = _remotePlayerPositions;
+  remotePlayerPositions.clear();
+  const remotePlayerClasses = _remotePlayerClasses;
+  remotePlayerClasses.clear();
+  primeGhostEpochs(deps, remotePlayerPositions, remotePlayerClasses);
 
   // Live turret shells + shield domes - collected once per frame, swept
   // inside each projectile's own collision pass (no tunneling).
@@ -358,34 +386,7 @@ export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
     // belt and scoops bot spears too (bots track no charge; the harvest
     // is their whole reclaim). Online the spearCollect edge pays - the
     // local harvest is just the no-latency shrink.
-    if (p.glue.embedded) {
-      const offline = !deps.lazyNetworkManager()?.authoritySims();
-      const pl = p.shooterId == null ? deps.lazyPlayer() : null;
-      const ownerPos = pl ? pl.pos
-        : offline ? deps.world.remotePlayers.get(p.shooterId!)?.position
-        : undefined;
-      if (ownerPos) {
-        // Bounding-sphere early-out (shaft midpoint, half-len + reach +
-        // capsule ≈ 4.6m) before the seg-seg solve - same math as server.
-        const d = p.glue.embedDir;
-        const bx = ownerPos.x - (p.pos.x - d.x * 1.65), by = ownerPos.y - (p.pos.y - d.y * 1.65), bz = ownerPos.z - (p.pos.z - d.z * 1.65);
-        if (bx * bx + by * by + bz * bz < 21
-        // Capsule (eye→feet) vs the planted shaft (tip→butt): brushing
-        // the tail counts - same segSeg math as the server sweep.
-        && segSegDistSq(ownerPos.x, ownerPos.y, ownerPos.z,
-            ownerPos.x, ownerPos.y - 1.8, ownerPos.z,
-            p.pos.x, p.pos.y, p.pos.z,
-            p.pos.x - d.x * 3.3, p.pos.y - d.y * 3.3, p.pos.z - d.z * 3.3) < 1) {
-          // Pay on the harvest edge only - embedded stays true through
-          // the flash/fade, so gating on reach alone re-paid + re-chimed
-          // every frame of the shrink (the "5x pickup sound" bug).
-          if (p.glue.harvest() && pl && offline) {
-            pl.beltCharges = Math.min(BELT_MAX, pl.beltCharges + 1);
-            sfx.powerup('gem');
-          }
-        }
-      }
-    }
+    if (p.glue.embedded) {trySpearHarvest(deps, p);}
 
     if (p.config.hook) {tickHookRope(deps, p, remotePlayerPositions);}
 
