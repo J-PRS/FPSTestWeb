@@ -15,6 +15,7 @@ import { longestGaps } from '../effects/RibbonTrail.js';
 import { topChains, topSpans } from '../effects/trailBatch.js';
 import { depGaps } from '../effects/vfxRuntime.js';
 import { WeaponType } from '../../../shared/weapons.js';
+import type { RemotePlayerState } from '../networking/NetworkManager.js';
 import type { StateDebugContext } from './stateDebug.js';
 
 // Rolling battle log - every kill the wire reported, newest last.
@@ -184,6 +185,25 @@ function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
 
 
 
+/** Roster rows: every wire-known id (with render/terrain divergence)
+ *  then rendered-but-not-wired locals (bots, dummies, stale ghosts).
+ *  terrD = wire feet vs the drawn surface - negative past ~-0.5m means
+ *  the wire holds the body under the visible ground (the render lift
+ *  in remoteAnim covers the rest). */
+function pushRosterRows(lines: string[], ctx: StateDebugContext, wire: Map<string, RemotePlayerState>): void {
+  for (const [id, ps] of wire) {
+    const rp = ctx.remotePlayers.get(id);
+    const renderD = rp ? Math.hypot(rp.position.x - ps.position.x, rp.position.y - ps.position.y, rp.position.z - ps.position.z) : -1;
+    const terrD = rp?.terrain ? (ps.position.y - rp.eyeOff) - rp.terrain.getRenderedHeight(ps.position.x, ps.position.z) : Number.NaN;
+    lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m at=${fmt(rp.position)} terrΔ=${Number.isFinite(terrD) ? `${terrD.toFixed(1)}m` : '?'} sim=${rp.isSimulating}${rp.isDead ? ` scale=${rp.scale.toFixed(2)}${rp.staleHidden ? ' STALE' : ''}${rp.frustumHidden ? ' FRUSTUM' : ''}` : ''}` : ' NOT-RENDERED'}`);
+  }
+  for (const [id, rp] of ctx.remotePlayers) {
+    if (wire.has(id)) {continue;}
+    const {team} = (rp as { team?: string });
+    lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}${rp.isDead ? ` scale=${rp.scale.toFixed(2)}${rp.staleHidden ? ' STALE' : ''}` : ''}`);
+  }
+}
+
 export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   const nm = ctx.networkManager;
   const p = ctx.getPlayer();
@@ -223,22 +243,7 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   const idiag = intelDiag();
   lines.push(`intel: age=${idiag.ageMs < 0 ? 'never' : `${(idiag.ageMs / 1000).toFixed(1)}s`} contacts=${idiag.contacts}`);
   lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
-  for (const [id, ps] of wire) {
-    const rp = ctx.remotePlayers.get(id);
-    const renderD = rp ? Math.hypot(rp.position.x - ps.position.x, rp.position.y - ps.position.y, rp.position.z - ps.position.z) : -1;
-    // terrΔ = wire feet vs the drawn terrain surface - negative past
-    // ~-0.5m means the wire is holding the body under the visible ground
-    // (server-side dip; the render lift in remoteAnim covers the rest).
-    const terrD = rp?.terrain ? (ps.position.y - rp.eyeOff) - rp.terrain.getRenderedHeight(ps.position.x, ps.position.z) : Number.NaN;
-    lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m at=${fmt(rp.position)} terrΔ=${Number.isFinite(terrD) ? `${terrD.toFixed(1)}m` : '?'} sim=${rp.isSimulating}${rp.isDead ? ` scale=${rp.scale.toFixed(2)}${rp.staleHidden ? ' STALE' : ''}${rp.frustumHidden ? ' FRUSTUM' : ''}` : ''}` : ' NOT-RENDERED'}`);
-  }
-  // Rendered but absent from the wire roster - local bots, dummies,
-  // stale ghosts the roster never told us about.
-  for (const [id, rp] of ctx.remotePlayers) {
-    if (wire.has(id)) {continue;}
-    const {team} = (rp as { team?: string });
-    lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}${rp.isDead ? ` scale=${rp.scale.toFixed(2)}${rp.staleHidden ? ' STALE' : ''}` : ''}`);
-  }
+  pushRosterRows(lines, ctx, wire);
   if (verbose) {pushBots(lines, ctx);}
   lines.push(
     `projectiles: ${ctx.projectiles.length} live`,
