@@ -16,6 +16,13 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
     // A discharged beam still respects terrain — the sweep sets hitPoint
     // so update() pops the slug at contact, not at the range cap.
     if (h.rayFired) {sweepTerrain(h, terrain);}
+    if (hitTerrain(h, terrain)) {return true;}
+    return popOnBody(h, terrain, remotePlayers, playerClasses);
+  }
+
+/** Every terrain-contact gate: bounce budget, armed fuse, contact-fused,
+ *  stick, embed. Returns true when the shell exploded this frame. */
+function hitTerrain(h: Projectile, terrain: Terrain): boolean {
     if (h.canBounce && sweepTerrain(h, terrain) && !h.collide.bounceOffTerrain(terrain)) {
       h.popClass = 'bounce';
       h.explode(); // bounce budget/graze exhausted — die like a local shard
@@ -45,25 +52,28 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
       h.explode();
       return true;
     }
-    // Cosmetic body pop — same gates as the live shell's own sweep
-    // (unarmed fuse-bombs + MRV carriers phase through bodies by design;
-    // stickies wait for the wire glue edge). The explode() is visual-only:
-    // no aoeShot, no claims — damage stays a server edge like before.
-    if (h.bodiesLive && !h.config.passThroughTargets && !h.config.sticks) {
-      const lp = h.sweepLocal?.();
-      if (lp && h.shooterId !== 'local' && sweepPlayer(h, lp, 'local', h.localClass?.(), terrain)) {
-        h.popClass = 'body-local';
-        h.explode();
-        return true;
-      }
-      if (remotePlayers) {
-        for (const [playerId, playerPos] of remotePlayers) {
-          if (playerId === h.shooterId) {continue;}
-          if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId), terrain)) {
-            h.popClass = 'body-remote';
-            h.explode();
-            return true;
-          }
+    return false;
+  }
+
+/** Cosmetic body pop — same gates as the live shell's own sweep
+ *  (unarmed fuse-bombs + MRV carriers phase through bodies by design;
+ *  stickies wait for the wire glue edge). The explode() is visual-only:
+ *  no aoeShot, no claims — damage stays a server edge like before. */
+function popOnBody(h: Projectile, terrain: Terrain, remotePlayers?: Map<string, THREE.Vector3>, playerClasses?: Map<string, string>): boolean {
+    if (!h.bodiesLive || h.config.passThroughTargets || h.config.sticks) {return false;}
+    const lp = h.sweepLocal?.();
+    if (lp && h.shooterId !== 'local' && sweepPlayer(h, lp, 'local', h.localClass?.(), terrain)) {
+      h.popClass = 'body-local';
+      h.explode();
+      return true;
+    }
+    if (remotePlayers) {
+      for (const [playerId, playerPos] of remotePlayers) {
+        if (playerId === h.shooterId) {continue;}
+        if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId), terrain)) {
+          h.popClass = 'body-remote';
+          h.explode();
+          return true;
         }
       }
     }
