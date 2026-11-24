@@ -8,6 +8,7 @@ import * as vm from './vmGhost.js';
 import { kickF } from './vmKick.js';
 import { VmEnvelopes } from './vmEnvelopes.js';
 import { VmBaked } from './vmBaked.js';
+import { GAME_ASPECT } from '../core/renderer.js';
 // Timing constants live with the envelopes - re-export so Player/fire.ts
 // keep importing them from the file they already know.
 export { THROW_RELEASE, THROW_TOTAL, SIDEARM_DRAW_TIME, SWING_CONTACT_T, SWING_STRIKE_T } from './vmEnvelopes.js';
@@ -143,7 +144,7 @@ export class ViewModel {
 
     // Bottom-right, mostly centered - Quake guns sit low and fat
     this.group.scale.setScalar(0.8);
-    this.group.position.copy(REST_POS);
+    this.group.position.set(this.restX(), REST_POS.y, REST_POS.z);
     this.group.rotation.y = 0.05;
     this.group.rotation.x = this.baseRotX;
 
@@ -280,6 +281,17 @@ export class ViewModel {
   readonly poseDeltaPos = new THREE.Vector3();
   poseDeltaRotX = 0;
   poseDeltaRotZ = 0;
+
+  /** Horizontal rest offset scaled by the visible crop - the world
+   *  renders a canonical 16:9 frame and the window center-crops it
+   *  (GAME_ASPECT), so a portrait window only shows the middle ~26% of
+   *  the frame horizontally: the gun's fixed camera-space x leaves the
+   *  view entirely. Scaling x by the visible fraction keeps the same
+   *  screen position; wide windows (>=16:9) are untouched. */
+  private restX(): number {
+    const winAspect = window.innerWidth / window.innerHeight;
+    return REST_POS.x * Math.min(1, winAspect / GAME_ASPECT);
+  }
 
   private discAmmo: THREE.Object3D | null = null;
   private discT = -1; // <0 idle; >=0 ms since the shot ejected the chambered disc
@@ -471,7 +483,7 @@ export class ViewModel {
     const totalDip = Math.max(dip, switchDip);
 
     const target = this.tmpDir.set(
-      REST_POS.x + moveX + bobX + fallX + this.kickX * this.kickAmount + punch * PUNCH_X,
+      this.restX() + moveX + bobX + fallX + this.kickX * this.kickAmount + punch * PUNCH_X,
       REST_POS.y + moveY + bobY + fallY + kickY + dip * THROW_DIP_Y + switchDip * SWITCH_DIP_Y + punch * PUNCH_Y + thrust * THRUST_Y,
       REST_POS.z + fallZ + kickZ + dip * THROW_DIP_Z + punch * PUNCH_Z + thrust * THRUST_Z
     );
@@ -491,7 +503,8 @@ export class ViewModel {
       + this.kickRoll * this.kickAmount;
     // Post-write truth: lerped position and instant rotations resolve to
     // the group's actual transform - that delta IS the pose.
-    this.poseDeltaPos.copy(this.group.position).sub(REST_POS);
+    this.poseDeltaPos.copy(this.group.position);
+    this.poseDeltaPos.x -= this.restX(); this.poseDeltaPos.y -= REST_POS.y; this.poseDeltaPos.z -= REST_POS.z;
     this.poseDeltaRotX = this.group.rotation.x - this.baseRotX;
     this.poseDeltaRotZ = this.group.rotation.z - this.baseRotZ;
 
