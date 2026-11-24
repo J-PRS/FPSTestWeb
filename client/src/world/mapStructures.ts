@@ -213,29 +213,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   if (terrain) {
     for (const m of [hullMat, trimMat, deckMat, darkMat]) {applyTerrainBlend(m, terrain.heightU);}
   }
-  if (built) {
-    scene.remove(built);
-    // Every material in `built` comes from this file's per-build `mats`
-    // (shared kit mats live in structures.ts, not here) - disposing the
-    // handful per rebuild is safe; double-dispose is a no-op.
-    built.traverse((o): void => {
-      if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
-        o.geometry.dispose();
-        // Kit pieces share the kit's module-level palette materials -
-        // disposing them here poisons every later map/gunlab build.
-        let shared = false;
-        for (let p: THREE.Object3D | null = o; p; p = p.parent) {
-          if (p.userData.kitPiece) {shared = true; break;}
-        }
-        if (!shared) {
-          const m = o.material;
-          if (Array.isArray(m)) {m.forEach((x) => x.dispose());}
-          else {m.dispose();}
-        }
-      }
-    });
-    built = null;
-  }
+  disposeBuilt(scene);
   shieldPanes.length = 0;
   if (list.length === 0) {return;}
   built = new THREE.Group();
@@ -256,16 +234,64 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   // per frame for pixels that never move.
   const byMat = new Map<keyof typeof mats, THREE.BufferGeometry[]>();
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
-  // 'stand'/'hull' specs are collision-only - the flag dais mesh and
-  // ported interiors are their visuals; drawing the generic box would
-  // double-render over them. 'kit' pieces take the real builder path.
-  //
-  // Kit visuals bake into per-material merged meshes - the builders all
-  // draw from the shared kit palette, so a 160-piece bastion layout was
-  // ~300 draws (color + shadow passes) before this. Buckets key on
-  // material + attribute layout + 512m cell (the interiors pattern) so
-  // opposite bases still frustum-cull each other. The empty piece Groups
-  // stay: userData.hulls is read off them by collider tooling.
+  bakeKitPieces(list, built);
+  addShieldPanes(list, built);
+  bakeGenericPieces(list, byMat, { unit, cyl, _m, _p, _q, _e, _s });
+  for (const [key, geos] of byMat) {
+    const merged = mergeGeometries(geos, false);
+    if (!merged) {continue;}
+    const mesh = new THREE.Mesh(merged, mats[key]);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    mesh.matrixWorldAutoUpdate = false;
+    mesh.updateMatrixWorld(true);
+    built.add(mesh);
+    for (const g of geos) {g.dispose();}
+  }
+  built.updateMatrixWorld(true);
+  scene.add(built);
+  // Template geometries only exist to stamp clones - the merged result
+  // was already added; the templates themselves aren't in the scene.
+  unit.dispose();
+  cyl.dispose();
+  buildColliderGizmos(list, scene);
+}
+
+/** Tear down the previous build group. Every material in `built` comes
+ *  from this file's per-build `mats` (shared kit mats live in
+ *  structures.ts, not here) - disposing the handful per rebuild is safe;
+ *  double-dispose is a no-op. Kit pieces share the kit's module-level
+ *  palette materials - disposing them poisons every later map/gunlab
+ *  build, so they're skipped by the userData.kitPiece ancestor flag. */
+function disposeBuilt(scene: THREE.Scene): void {
+  if (!built) {return;}
+  scene.remove(built);
+  built.traverse((o): void => {
+    if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
+      o.geometry.dispose();
+      let shared = false;
+      for (let p: THREE.Object3D | null = o; p; p = p.parent) {
+        if (p.userData.kitPiece) {shared = true; break;}
+      }
+      if (!shared) {
+        const m = o.material;
+        if (Array.isArray(m)) {m.forEach((x) => x.dispose());}
+        else {m.dispose();}
+      }
+    }
+  });
+  built = null;
+}
+
+/** 'kit' pieces take the real builder path. Kit visuals bake into
+ *  per-material merged meshes - the builders all draw from the shared
+ *  kit palette, so a 160-piece bastion layout was ~300 draws (color +
+ *  shadow passes) before this. Buckets key on material + attribute
+ *  layout + 512m cell (the interiors pattern) so opposite bases still
+ *  frustum-cull each other. The empty piece Groups stay: userData.hulls
+ *  is read off them by collider tooling. */
+function bakeKitPieces(list: StructureSpec[], group: THREE.Group): void {
   const kitBuckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[]; cast: boolean }>();
   // Per-piece material clones (teamGlow Basic, per-builder Lambert
   // variants) carry unique uuids - same params, different identity →
@@ -305,7 +331,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
       consumed.push(m);
     });
     for (const m of consumed) { m.removeFromParent(); m.geometry.dispose(); }
-    built.add(piece);
+    group.add(piece);
   }
   for (const { mat, geos, cast } of kitBuckets.values()) {
     const merged = mergeGeometries(geos, false);
@@ -316,11 +342,14 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     mesh.castShadow = cast;
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
-    built.add(mesh);
+    group.add(mesh);
   }
-  // 'shield' panes - team-gated energy fields. Translucent so allies read
-  // the gate they can pass and enemies read the wall they can't; the
-  // collider carries passTeam so the server resolves who gets through.
+}
+
+/** 'shield' panes - team-gated energy fields. Translucent so allies read
+ *  the gate they can pass and enemies read the wall they can't; the
+ *  collider carries passTeam so the server resolves who gets through. */
+function addShieldPanes(list: StructureSpec[], group: THREE.Group): void {
   for (const s of list) {
     if (s.kind !== 'shield') {continue;}
     const color = s.team ? TEAM_COLORS[s.team] : 0x59_F2_FF;
@@ -342,8 +371,17 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     pane.add(edges);
     pane.updateMatrixWorld(true);
     shieldPanes.push({ team: s.team, mesh: pane });
-    built.add(pane);
+    group.add(pane);
   }
+}
+
+/** Box/cyl/root pieces stamped into per-material buckets. 'stand'/'hull'
+ *  specs are collision-only - the flag dais mesh and ported interiors
+ *  are their visuals; drawing the generic box would double-render. */
+function bakeGenericPieces(list: StructureSpec[], byMat: Map<string, THREE.BufferGeometry[]>, t: {
+  unit: THREE.BufferGeometry; cyl: THREE.BufferGeometry;
+  _m: THREE.Matrix4; _p: THREE.Vector3; _q: THREE.Quaternion; _e: THREE.Euler; _s: THREE.Vector3;
+}): void {
   for (const s of list.filter((st): boolean => st.kind !== 'stand' && st.kind !== 'hull' && st.kind !== 'kit' && st.kind !== 'shield')) {
     const key = s.kind === 'root' ? 'root' : (s.team ?? 'neutral');
     // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
@@ -353,42 +391,23 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
       // local X axis, apex ~size.x above base, tube radius size.y.
       // size.z tilts the ring off-axis so arches read gnarled, not ideal.
       g = new THREE.TorusGeometry(s.size.x, s.size.y, 7, 18, Math.PI);
-      _p.set(s.pos.x, s.pos.y, s.pos.z);
-      _e.set(0, s.rotY ?? 0, 0);
-      _q.setFromEuler(_e);
-      _s.set(1, 1, s.size.z);
-      _m.compose(_p, _q, _s);
-      g.applyMatrix4(_m);
+      t._p.set(s.pos.x, s.pos.y, s.pos.z);
+      t._e.set(0, s.rotY ?? 0, 0);
+      t._q.setFromEuler(t._e);
+      t._s.set(1, 1, s.size.z);
+      t._m.compose(t._p, t._q, t._s);
+      g.applyMatrix4(t._m);
     } else {
-      _p.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
-      _e.set(0, s.rotY ?? 0, 0);
-      if (s.kind === 'ramp') {_e.x = -Math.PI / 7;}
-      _q.setFromEuler(_e);
-      _s.set(s.size.x, s.size.y, s.size.z);
-      _m.compose(_p, _q, _s);
-      g = (s.kind === 'pillar' ? cyl : unit).clone().applyMatrix4(_m);
+      t._p.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
+      t._e.set(0, s.rotY ?? 0, 0);
+      if (s.kind === 'ramp') {t._e.x = -Math.PI / 7;}
+      t._q.setFromEuler(t._e);
+      t._s.set(s.size.x, s.size.y, s.size.z);
+      t._m.compose(t._p, t._q, t._s);
+      g = (s.kind === 'pillar' ? t.cyl : t.unit).clone().applyMatrix4(t._m);
     }
     (byMat.get(key) ?? byMat.set(key, []).get(key)!).push(g);
   }
-  for (const [key, geos] of byMat) {
-    const merged = mergeGeometries(geos, false);
-    if (!merged) {continue;}
-    const mesh = new THREE.Mesh(merged, mats[key]);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.matrixAutoUpdate = false;
-    mesh.matrixWorldAutoUpdate = false;
-    mesh.updateMatrixWorld(true);
-    built.add(mesh);
-    for (const g of geos) {g.dispose();}
-  }
-  built.updateMatrixWorld(true);
-  scene.add(built);
-  // Template geometries only exist to stamp clones - the merged result
-  // was already added; the templates themselves aren't in the scene.
-  unit.dispose();
-  cyl.dispose();
-  buildColliderGizmos(list, scene);
 }
 
 /** Spawn-sphere overlay (F1 debug): one wireframe dome per anchor, resting
