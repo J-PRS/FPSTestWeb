@@ -177,6 +177,12 @@ still *decides* rather than predicts.
 - **Pilot**: fold the two *most recently diverging* lanes (deploy + ball)
   onto a shared `checkLane` driver inside stateDebug only — proves the
   table shape without touching the wire, then expand.
+- **PILOT LANDED 2026-11-24**: deploy + ball lanes folded onto
+  `runHashLane` in `stateDebug.ts` — each lane now declares
+  `{kind, extract, perKey, warnWhy, transientWhy}`; hash →
+  mismatch-gated `kindFieldDiffs` → detail → `laneCheck` runs once.
+  Creature lane stays hand-written (its diff-heal is extra duty, not a
+  compare); flag/pickup are next (they're already thin — no fields).
 
 ### C2 — Full lockstep / GGPO input-only netcode
 - **Status**: REJECTED — trades working authority-by-construction for a
@@ -291,8 +297,13 @@ ew Ball(...).
   path, claim vel bounded to VEL_FRAME_SLACK=45 else shadow wins.
   Fallback = gated claimOrigin for thin journals. Measurability:
   `shot.frameDerive`/`shot.frameThin`/`shot.frameVelBound` heartbeat
-  counters. dir stays a sanitized claim this step (journal doesn't
-  archive aim). claimOrigin/ownerVelOf moved to claimLedger.ts.
+  counters. claimOrigin/ownerVelOf moved to claimLedger.ts.
+  **dir = declared claim field** (REVIEW 2026-11-24): aim is unbounded
+  between moveReport samples — a 180° flick inside the journal gap is
+  honest play, so a derived dir would punish exactly the shots it must
+  accept, and any angular bound loose enough for flicks catches nothing.
+  The claim is the only carrier of fire-instant aim; derivation
+  rejected, not deferred.
 - **Prior**: PROPOSED 2026-11-23 — full audit in
   `_docs/2026-11-23_NET_TRUST_BOUNDARY_AUDIT.md`. Evidence: prod
   `body refuse`/`aoe-refuse` forensics — painted hits refused 16-41m out

@@ -14,7 +14,7 @@ import type * as THREE from 'three';
 
 import { computeStateHash, replicaHash } from '../../../shared/stateHash.js';
 
-import { WORLD_MODEL, kindFieldDiffs } from '../../../shared/worldModel.js';
+import { WORLD_MODEL, kindFieldDiffs, type WorldKindDecl } from '../../../shared/worldModel.js';
 
 import { Ball } from '../entities/balls.js';
 
@@ -210,6 +210,78 @@ lane.streak += 1;
   }
 
   return persistent;
+
+}
+
+
+
+/** The per-lane shape a fidelity check declares (C4 pilot): local-map
+
+ *  extraction stays per-kind — everything else (hash → mismatch-gated
+
+ *  field diff → detail → laneCheck) runs through this one driver, so a
+
+ *  compare/report fix lands on every lane instead of re-blooming per
+
+ *  copy. Lanes with extra duties (creature's diff-heal) stay hand-
+
+ *  written until their extra folds into the declaration. */
+
+function runHashLane(lane: ReplicaLane, logger: ChildLogger, tick: number, serverHash: string, serverFields: readonly (readonly unknown[])[] | undefined, spec: {
+
+  name: string;
+
+  kind: WorldKindDecl;
+
+  /** Local roster for the replica hash; null = lane has no source (skip). */
+
+  extract: () => Map<number, Record<string, unknown>> | null;
+
+  perKey?: boolean;
+
+  warnWhy: string;
+
+  transientWhy: string;
+
+}): boolean {
+
+  const local = spec.extract();
+
+  if (!local) {return false;}
+
+  const localHash = replicaHash(spec.kind, local);
+
+  let detail = `ids=[${[...local.keys()].join(',')}]`;
+
+  let diffKeys: Set<string> | null = null;
+
+  if (localHash !== serverHash && serverFields) {
+
+    // The hash alone can't say WHAT diverged — diff the server's per-id
+
+    // fields so the warn names the entry: a server-only id is a missed
+
+    // spawn edge, a client-only id a missed gone edge, a field diff an
+
+    // asymmetry. Generated from the kind declaration, so emit and diff
+
+    // can't drift apart.
+
+    const d = kindFieldDiffs(spec.kind, local, serverFields);
+
+    diffKeys = d.keys;
+
+    if (d.diffs.length > 0) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
+
+  }
+
+  return laneCheck(lane, logger, {
+
+    name: spec.name, tick, serverHash, localHash, detail, diffKeys,
+
+    perKey: spec.perKey, warnWhy: spec.warnWhy, transientWhy: spec.transientWhy,
+
+  });
 
 }
 
@@ -1006,60 +1078,41 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   }
 
   function checkDeployLane(tick: number, serverHash: string, serverFields: [number, string, string, string][] | undefined): boolean {
-    if (!ctx.netDeployables) {return false;}
+    return runHashLane(deployLane, logger, tick, serverHash, serverFields, {
 
-      const local = new Map<number, { kind: string; owner: string; team: string }>();
+      name: 'DEPLOY',
 
-      for (const [id, d] of ctx.netDeployables()) {
+      kind: WORLD_MODEL.deploy!,
 
-        // Hash inputs must mirror the server's semantics exactly — it
+      extract: (): Map<number, Record<string, unknown>> | null => {
 
-        // feeds raw fields with '' for missing, never fabricated values:
+        if (!ctx.netDeployables) {return null;}
 
-        // a teamless base asset hashed localTeam client-side vs ''
+        const local = new Map<number, Record<string, unknown>>();
 
-        // server-side is a permanent false desync (the soak's ids=[2]).
+        for (const [id, d] of ctx.netDeployables()) {
 
-        if (!d.dead) {local.set(id, { kind: d.kind, owner: d.owner ?? '', team: d.team ?? '' });}
+          // Hash inputs must mirror the server's semantics exactly — it
 
-      }
+          // feeds raw fields with '' for missing, never fabricated values:
 
-      // The hash alone can't say WHAT diverged — diff the server's
+          // a teamless base asset hashed localTeam client-side vs ''
 
-      // per-id roster so the warn names the entry: a server-only id is
+          // server-side is a permanent false desync (the soak's ids=[2]).
 
-      // a missed spawn edge, a client-only id a missed deployGone, and
+          if (!d.dead) {local.set(id, { kind: d.kind, owner: d.owner ?? '', team: d.team ?? '' });}
 
-      // a field diff is a kind/owner/team asymmetry. Generated from the
+        }
 
-      // deploy declaration so emit and diff can't drift apart.
+        return local;
 
-      let detail = `ids=[${[...local.keys()].join(',')}]`;
+      },
 
-      if (serverFields) {
+      warnWhy: 'a deploySpawn/deployGone edge never landed',
 
-        const d = kindFieldDiffs(WORLD_MODEL.deploy!, local, serverFields);
+      transientWhy: 'spawn/gone edge in flight',
 
-        if (d.diffs.length > 0) {detail += ` diffs={${d.diffs.slice(0, 6).join(', ')}}`;}
-
-      }
-
-      return laneCheck(deployLane, logger, {
-
-        name: 'DEPLOY', tick,
-
-        serverHash: serverHash,
-
-        localHash: replicaHash(WORLD_MODEL.deploy!, local),
-
-        detail,
-
-        warnWhy: 'a deploySpawn/deployGone edge never landed',
-
-        transientWhy: 'spawn/gone edge in flight',
-
-      });
-
+    });
 
   }
 
@@ -1169,65 +1222,39 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   }
 
   function checkBallLane(tick: number, serverHash: string, serverFields: [number, number, boolean, string | null][] | undefined): boolean {
+    return runHashLane(ballLane, logger, tick, serverHash, serverFields, {
 
-      const localBalls = new Map<number, { variant: number; enraged: boolean; targetId: string | null }>();
+      name: 'BALL',
 
-      for (const b of Ball.live) {
+      kind: WORLD_MODEL.ball!,
 
-        // Committed wire regime (last applied segment), NOT live replay
+      extract: (): Map<number, Record<string, unknown>> => {
 
-        // state — b.enraged is re-derived by our own integrator each tick
+        const localBalls = new Map<number, Record<string, unknown>>();
 
-        // and can never match the authority's derivation tick-for-tick.
+        for (const b of Ball.live) {
 
-        if (b.netDriven && !b.dead && b.netId) {localBalls.set(b.netId, { variant: b.variant, enraged: b.netS.netEnraged, targetId: b.netS.netTargetId });}
+          // Committed wire regime (last applied segment), NOT live replay
 
-      }
+          // state — b.enraged is re-derived by our own integrator each tick
 
-      const localBallHash = replicaHash(WORLD_MODEL.ball!, localBalls);
+          // and can never match the authority's derivation tick-for-tick.
 
-      // Membership alone isn't the signal here — enraged/targetId churn
+          if (b.netDriven && !b.dead && b.netId) {localBalls.set(b.netId, { variant: b.variant, enraged: b.netS.netEnraged, targetId: b.netS.netTargetId });}
 
-      // mismatches the hash on identical rosters, so diff the server's
+        }
 
-      // per-id fields like the creature/deploy lanes do. Generated from
+        return localBalls;
 
-      // the ball declaration, so emit and diff can't drift apart.
+      },
 
-      let detail = `ids=[${[...localBalls.keys()].join(',')}]`;
+      perKey: true,
 
-      let diffKeys: Set<string> | null = null;
+      warnWhy: 'stranded or stale replica',
 
-      if (localBallHash !== serverHash && serverFields) {
+      transientWhy: 'lifecycle edge or derived-flag boundary in flight',
 
-        const d = kindFieldDiffs(WORLD_MODEL.ball!, localBalls, serverFields);
-
-        diffKeys = d.keys;
-
-        if (d.diffs.length > 0) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
-
-      }
-
-      return laneCheck(ballLane, logger, {
-
-        name: 'BALL', tick,
-
-        serverHash: serverHash,
-
-        localHash: localBallHash,
-
-        detail,
-
-        diffKeys,
-
-        perKey: true,
-
-        warnWhy: 'stranded or stale replica',
-
-        transientWhy: 'lifecycle edge or derived-flag boundary in flight',
-
-      });
-
+    });
 
   }
 
