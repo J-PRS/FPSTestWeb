@@ -108,32 +108,9 @@ export class BotFire {
     const cp = Math.cos(bot.rotation.pitch);
     const fx = Math.sin(bot.rotation.yaw) * cp, fy = -Math.sin(bot.rotation.pitch), fz = Math.cos(bot.rotation.yaw) * cp;
     if ((fx * dx + fy * dy + fz * dz) / dist < SETTLE_COS) {return;}
-    // Gun game: the ladder owns the pick outright - same rung the server
-    // gate would admit, not whatever the loadout drifted to.
-    // Airborne hunt target: ballistic path, splash can't help - the
-    // shared pHitFactor prices fast flat guns up and lobs down, same
-    // physics-driven pick the server arsenal makes.
-    const tVel = this.targetVel(bot.huntTargetId);
-    const airborne = Math.abs(tVel?.y ?? 0) > 4;
-    const picked0 = insta ? WeaponType.Railgun
-      : gg ? gunGameWeapon(gunRungOf(w, bot.playerId), w.igun === true)
-      : pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
-        bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) * pHitFactor(t, dist, airborne) : undefined, bot.skill?.courage);
-    // Deploy artillery only draws feet-down - same fallback the server's
-    // arsenal picks: airborne body + groundedOnly pick = next legal slot,
-    // not a dry pull that never fires.
-    const picked = getWeaponStats(picked0).groundedOnly && !bot.grounded
-      ? ([lo.far, lo.mid, lo.near, lo.side].find((c): boolean => !getWeaponStats(c).groundedOnly && classCanFire(bot.armorClass, c)) ?? picked0)
-      : picked0;
-    // Kit locks have no melee - knife range still shoots the held gun.
-    const melee = !insta && !gg && (picked === WeaponType.Melee || dist <= MELEE_RANGE);
-    // Same class gate the server holds players to - a pick the body can't
-    // legally shoulder falls back to the first legal slot, never fires.
-    // Gun game bypasses it outright: the ladder crosses armor tiers, so
-    // the rung weapon is legal on any chassis (server shotAdmit agrees).
-    const wt = gg || melee || classCanFire(bot.armorClass, picked) ? picked
-      : ([lo.side, lo.near, lo.mid, lo.far].find((c): boolean => classCanFire(bot.armorClass, c)) ?? -1);
-    if (!melee && wt < 0) {return;}
+    const pick = this.pickShotWeapon(bot, lo, w, insta, gg, dx, dz, dist);
+    if (!pick) {return;}
+    const { wt, melee } = pick;
     if (!this.canFire(bot, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}
     // Mirror the pick to the hand prop - offline bots never ride the wire
     // path that reveals a remote's weapon, so they held the generic gun
@@ -158,6 +135,38 @@ export class BotFire {
     const recoil = getWeaponStats(wt).recoilImpulse ?? 0;
     if (recoil > 0) {bot.vel.addScaledVector(_shotDir.set(fx, fy, fz), -recoil);}
     this.spawnShells(bot, wt, cfg, fx, fy, fz);
+  }
+
+  /** Which gun the bot actually fires: instagib pins the railgun, gun
+   *  game hands the ladder's rung (same gate the server admits, not the
+   *  drifted loadout), else the physics-priced pick - airborne hunt
+   *  targets price flat guns up via pHitFactor like the server arsenal.
+   *  Grounded-only deploys and the class-can-fire gate fall back to the
+   *  next legal slot, never a dry pull. Returns null when no legal gun. */
+  private pickShotWeapon(bot: GameBot, lo: NonNullable<GameBot['loadout']>, w: ReturnType<FireHost['world']>,
+    insta: boolean, gg: boolean, dx: number, dz: number, dist: number): { wt: number; melee: boolean } | null {
+    const tVel = this.targetVel(bot.huntTargetId);
+    const airborne = Math.abs(tVel?.y ?? 0) > 4;
+    const picked0 = insta ? WeaponType.Railgun
+      : gg ? gunGameWeapon(gunRungOf(w, bot.playerId), w.igun === true)
+      : pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
+        bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) * pHitFactor(t, dist, airborne) : undefined, bot.skill?.courage);
+    // Deploy artillery only draws feet-down - same fallback the server's
+    // arsenal picks: airborne body + groundedOnly pick = next legal slot,
+    // not a dry pull that never fires.
+    const picked = getWeaponStats(picked0).groundedOnly && !bot.grounded
+      ? ([lo.far, lo.mid, lo.near, lo.side].find((c): boolean => !getWeaponStats(c).groundedOnly && classCanFire(bot.armorClass, c)) ?? picked0)
+      : picked0;
+    // Kit locks have no melee - knife range still shoots the held gun.
+    const melee = !insta && !gg && (picked === WeaponType.Melee || dist <= MELEE_RANGE);
+    // Same class gate the server holds players to - a pick the body can't
+    // legally shoulder falls back to the first legal slot, never fires.
+    // Gun game bypasses it outright: the ladder crosses armor tiers, so
+    // the rung weapon is legal on any chassis (server shotAdmit agrees).
+    const wt = gg || melee || classCanFire(bot.armorClass, picked) ? picked
+      : ([lo.side, lo.near, lo.mid, lo.far].find((c): boolean => classCanFire(bot.armorClass, c)) ?? -1);
+    if (!melee && wt < 0) {return null;}
+    return { wt, melee };
   }
 
   /** The brain's volley cadence is weapon-blind - a 0.45s burst pick of
