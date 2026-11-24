@@ -151,9 +151,17 @@ export function claimOrigin(player: PlayerState, uplinkMs: number, pos: Vec3 | u
   if (pos && finiteVec(pos)) {
     const bound = rewindNearest(player, uplinkMs + 150, 150, pos);
     const gap = dhypot3(bound.x - pos.x, bound.y - pos.y, bound.z - pos.z);
-    // A real muzzle sits within ~muzzle-lead + a step of some recorded
-    // body sample in the window - a bigger gap is a teleported claim.
-    if (gap <= 3) {return { x: pos.x, y: pos.y, z: pos.z };}
+    // A real muzzle sits within reach of some recorded body sample in
+    // the window - but reach is speed-scaled, not a fixed 3m: at ski
+    // speed an honest mover covers 3m in 100ms of uplink, so the fixed
+    // clamp refused exactly the fast post-respawn shots (bigSoak flake:
+    // thin-journal spawns clamped with originGap ~3). The velocity of
+    // the newest journal sample is server-measured, so the scaled
+    // window stays unforgeable; 3m remains the floor for slow bodies.
+    const last = player.history[player.history.length - 1];
+    const speed = last ? dhypot3(last.vx, last.vy, last.vz) : 0;
+    const accept = Math.max(3, 1 + (speed * (uplinkMs + 150)) / 1000);
+    if (gap <= accept) {return { x: pos.x, y: pos.y, z: pos.z };}
   }
   return at;
 }
