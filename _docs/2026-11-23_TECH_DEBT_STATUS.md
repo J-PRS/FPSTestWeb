@@ -106,3 +106,16 @@ What remains is REAL structure, not lint:
 
 Ledger items still ranked: transport matrix (~3.5k delta),
 botTuning funnel (two armies), leaderboard sign-or-delete (JP call).
+
+## 2026-11-24 structural burn-down (cont. 2)
+
+Complexity refactors, top offenders (oxlint eslint/complexity, provenance `npx -y oxlint client/src`):
+- ballNet.ts `applySeg` 37→20, `tickNet` 34→<15 (94adfbde): probeSegDivergence/applySegState/drainNetCells/foldStepGap
+- blastForce.ts `predictLocalShove` 70→45 (2781d78b): shadowEvalPos/consumeKbEcho/settleShoveStamps
+- main.ts `connectPhase` 85→47, `init` 79→46 (3789087a): pinServerEntry/applySoloSpec/normalizeBootUrl/primeBootTerrain
+- stateDebug.ts `onStateHash` 73→33 (bee5488a): five per-lane check helpers
+- Player.ts `update` 50→38 (2e4c5bad): updateObservingCam (killcam/spectate/observer chain)
+- combat/projectiles.ts `updateProjectiles` 53→23 (d769c561): primeGhostEpochs/trySpearHarvest
+- diagDump.ts roster loops → pushRosterRows (dd40e70d)
+
+All pure extractions - comments moved with code, no behavior change. Gates per commit: tsc clean, targeted vitest green (ball 33, blast 29, stateDebugHealFuzz 10, proj 3, full 792 on main.ts).
