@@ -160,7 +160,7 @@ function hitVerdict(c: CombatCtx, p: Projectile, hitPos: { x: number; y: number;
 
 
 
-function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, intensity?: number, dx = 0, dz = 0): void {
+function splatAt(c: CombatCtx, x: number, z: number, opts: { r: number; hex: number; intensity?: number; dx?: number; dz?: number }): void {
 
   const {deps} = c;
 
@@ -172,6 +172,8 @@ function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, int
 
   // splash, not a round dot. Slow drops stay roundish pools.
 
+  const dx = opts.dx ?? 0, dz = opts.dz ?? 0;
+
   const sp = Math.hypot(dx, dz);
 
   const ux = sp > 0.01 ? dx / sp : 0, uz = sp > 0.01 ? dz / sp : 0;
@@ -180,7 +182,7 @@ function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, int
 
   deps.world.splats.push(new SplatDecal(
 
-    deps.lazyScene(), deps.lazyTerrain(), _splatPos, r, hex, intensity, ux, uz, stretch,
+    deps.lazyScene(), deps.lazyTerrain(), _splatPos, { radius: opts.r, hex: opts.hex, intensity: opts.intensity, dx: ux, dz: uz, stretch },
 
   ));
 
@@ -216,7 +218,7 @@ function ichorSpray(c: CombatCtx, ball: Targetable, dir: THREE.Vector3, scale: n
 
     { impulseDir: dir, kind: 'goo', paintBudget: 4,
 
-      onDropletLand: (x, z, r, dx, dz): void => splatAt(c, x, z, r * (4 + Math.random() * 2.5), hex, 0.5, dx, dz) },
+      onDropletLand: (x, z, r, dx, dz): void => splatAt(c, x, z, { r: r * (4 + Math.random() * 2.5), hex, intensity: 0.5, dx, dz }) },
 
   ));
 
@@ -228,7 +230,7 @@ function ichorSpray(c: CombatCtx, ball: Targetable, dir: THREE.Vector3, scale: n
 
 function ichorSplat(c: CombatCtx, ball: Targetable, radius: number): void {
 
-  splatAt(c, ball.pos.x, ball.pos.z, radius, ball.ichor!);
+  splatAt(c, ball.pos.x, ball.pos.z, { r: radius, hex: ball.ichor! });
 
 }
 

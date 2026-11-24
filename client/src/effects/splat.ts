@@ -16,7 +16,8 @@ const _c = new THREE.Color();
  * splatStain in terrainShaders.ts) — this class only owns the lifetime:
  * radius grows in like a wet splash, then the tint darkens as it dries.
  * Longer-lived than ScorchDecal: a stain dries slowly rather than
- * cooling off. dx/dz/stretch smear the stain along a landing direction.
+ * cooling off. opts.dx/dz/stretch smear the stain along a landing
+ * direction (absent = round pool).
  */
 export class SplatDecal {
   dead = false;
@@ -28,14 +29,14 @@ export class SplatDecal {
   private baseR = 0; private baseG = 0; private baseB = 0;
   private dryMul = 1;
 
-  constructor(_scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, radius: number, hex: number, intensity = PEAK_INTENSITY, dx = 0, dz = 0, stretch = 0) {
+  constructor(_scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, opts: { radius: number; hex: number; intensity?: number; dx?: number; dz?: number; stretch?: number }) {
     if (typeof document !== 'undefined' && document.hidden) { this.dead = true; return; }
     this.terrain = terrain;
-    this.peak = intensity;
-    this.fullR = radius;
-    _c.setHex(hex);
+    this.peak = opts.intensity ?? PEAK_INTENSITY;
+    this.fullR = opts.radius;
+    _c.setHex(opts.hex);
     this.baseR = _c.r; this.baseG = _c.g; this.baseB = _c.b;
-    this.entry = terrain.addSplat(pos.x, pos.z, 0.001, _c.r, _c.g, _c.b, dx, dz, stretch);
+    this.entry = terrain.addSplat(pos.x, pos.z, 0.001, [_c.r, _c.g, _c.b], { dx: opts.dx, dz: opts.dz, stretch: opts.stretch });
     if (!this.entry) { this.dead = true; return; } // headless/stub terrain
     this.entry.intensity = this.peak;
   }

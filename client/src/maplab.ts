@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { hmParseBin, hmHeight, hmNormal, hmSurface, HM_HEIGHT_SCALE } from '../../shared/heightfield.js';
 import { MoveSim } from '../../shared/movement.js';
-import { terrainFrag } from './world/terrainShaders.js';
+import { terrainFrag, SCORCH_N, SPLAT_N, FIELD_N } from './world/terrainShaders.js';
 import { hillshadeImage } from './world/hillshade.js';
 import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, rockPass, playaPass, dunesPass, terracePass, cliffPass, fanPass, floodPass, sinkPass, sharpenPass, foldPass, platesPass, canyonPass, snowPass, lakePass, pitPass, sandPass, slumpPass, ruggedPass, contrastPass, stretchPass, breachPass, scramblePass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
 
@@ -55,7 +55,7 @@ const mat = new THREE.ShaderMaterial({
   vertexShader: LAB_VERT,
   fragmentShader: terrainFrag,
   lights: true,
-  defines: { TERRAIN_PRESET: state.preset },
+  defines: { TERRAIN_PRESET: state.preset , SCORCH_N, SPLAT_N, FIELD_N },
   uniforms: Object.assign({}, THREE.UniformsLib.lights, {
     hscale: { value: HM_HEIGHT_SCALE },
     sunDir: { value: new THREE.Vector3(-0.5, 1, 0.35).normalize() },

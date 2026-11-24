@@ -4,6 +4,34 @@
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 import { TERRAIN_PRESET_GLSL } from './terrainPresets.js';
 
+// Decal uniform pools, tiered by the device's real fragment-uniform cap.
+// The full shader pushes ~330 uniform vectors (216 in these pools alone);
+// a capped mobile GPU (MAX_FRAGMENT_UNIFORM_VECTORS = 256, common on
+// Adreno-class parts) links it, then invalidates the program at draw -
+// terrain silently renders nothing. Slot arrays are count-gated anyway
+// (scorchCount/splatCount/fieldCount), so shrinking pools only loses
+// decal slots, never behavior. EVERY material compiling terrainFrag must
+// bake these into defines.
+const DECAL_TIERS = [
+  { cap: 384, scorch: 16, splat: 24, field: 32 },
+  { cap: 224, scorch: 8, splat: 10, field: 14 },
+  { cap: 0, scorch: 4, splat: 4, field: 8 },
+];
+const decalTier = ((): { cap: number; scorch: number; splat: number; field: number } => {
+  try {
+    if (typeof document === 'undefined') {return DECAL_TIERS[0]!;}
+    const c = document.createElement('canvas');
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null;
+    const cap = gl ? (gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) as number) : 0;
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    for (const t of DECAL_TIERS) {if (cap >= t.cap) {return t;}}
+    return DECAL_TIERS[DECAL_TIERS.length - 1]!;
+  } catch { return DECAL_TIERS[0]!; }
+})();
+export const SCORCH_N = decalTier.scorch;
+export const SPLAT_N = decalTier.splat;
+export const FIELD_N = decalTier.field;
+
 export const terrainVert = /* glsl */`
   uniform sampler2D heightMap;
   uniform float hmWorldScale;
@@ -376,21 +404,21 @@ export const terrainFrag = /* glsl */`
     return 1.0 - smoothstep(0.5, 1.0, pixWl * 2.0 / max(wl, 1e-4));
   }
 
-  uniform vec4 scorchData[16]; // x, z, radius, intensity (w<=0 = unused slot)
-  uniform float scorchEmber[16]; // per-slot ember rim glow (0 = none)
-  uniform float scorchY[16];     // decal center height - sphere projection
+  uniform vec4 scorchData[SCORCH_N]; // x, z, radius, intensity (w<=0 = unused slot)
+  uniform float scorchEmber[SCORCH_N]; // per-slot ember rim glow (0 = none)
+  uniform float scorchY[SCORCH_N];     // decal center height - sphere projection
   // Creature ichor stains - the tinted cousin of scorch: hit/death splats
   // paint the ground colored instead of charring it black.
-  uniform vec4 splatData[24];  // x, z, radius, intensity
-  uniform vec3 splatTint[24];  // per-slot ichor color
-  uniform vec3 splatDir[24];   // unit smear dir xz + stretch (z=0: round pool)
+  uniform vec4 splatData[SPLAT_N];  // x, z, radius, intensity
+  uniform vec3 splatTint[SPLAT_N];  // per-slot ichor color
+  uniform vec3 splatDir[SPLAT_N];   // unit smear dir xz + stretch (z=0: round pool)
   // Deployable field rings (recharge pad envelope): same projected-decal
   // trick as scorch - drawn INTO the terrain fragment, so it conforms to
   // the displaced surface exactly. A draped mesh can't: the clipmap is a
   // 5m chord approximation and any denser decal drowns under its bumps.
-  uniform vec4 fieldRing[32]; // x, z, ±radius, intensity (w<=0 = unused)
-  uniform vec3 fieldTint[32]; // per-slot color
-  uniform float fieldY[32];   // dome-center Y for shell-contact slots
+  uniform vec4 fieldRing[FIELD_N]; // x, z, ±radius, intensity (w<=0 = unused)
+  uniform vec3 fieldTint[FIELD_N]; // per-slot color
+  uniform float fieldY[FIELD_N];   // dome-center Y for shell-contact slots
   // Dynamic loop bounds: constant-bound loops over uniform arrays get
   // fully unrolled by the ANGLE→D3D backend - 72 iterations of decal
   // math blew the fragment shader to 72KB and ~40s of sync compile per

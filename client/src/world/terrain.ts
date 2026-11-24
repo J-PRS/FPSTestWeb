@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { getHeightmapData, getHeightfield, getWorldScale, getHeightScale, sampleHeight, sampleNormal, sampleHeightVisual, sampleHeightLod, CDLOD_NODE_DIVS } from './heightmap.js';
 import { registerDiag } from '../core/fxDiag.js';
-import { terrainVert, terrainFrag } from './terrainShaders.js';
+import { terrainVert, terrainFrag, SCORCH_N, SPLAT_N, FIELD_N } from './terrainShaders.js';
 import { mkTerrainOccluder } from './terrainWire.js';
 import { urlParams } from '../core/params.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
@@ -14,6 +14,9 @@ export { getHeightfield } from './heightmap.js';
 
 const HSCALE = TERRAIN_HEIGHT_SCALE;
 const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
+
+// Decal pool sizes (SCORCH_N/SPLAT_N/FIELD_N) are tiered by the device's
+// fragment-uniform cap in terrainShaders.ts - imported above.
 
 // One-hot Vector4 heightmap channel selector (k outside 0..3 = zeros).
 // THREE.Vector4() defaults w=1 - must zero it or every selector adds
@@ -172,24 +175,24 @@ export class Terrain {
   private gridGeo: THREE.BufferGeometry;
   // Shader-projected scorch decals: x, z, radius, intensity (16 slots)
   private scorchList: { x: number; z: number; r: number; y: number; intensity: number; ember: number }[] = [];
-  private scorchArr = new Float32Array(16 * 4);
-  private scorchEmberArr = new Float32Array(16);
-  private scorchYArr = new Float32Array(16);
+  private scorchArr = new Float32Array(SCORCH_N * 4);
+  private scorchEmberArr = new Float32Array(SCORCH_N);
+  private scorchYArr = new Float32Array(SCORCH_N);
   // Projected ichor stains - tinted cousin of scorch: creature hits and
   // deaths drop colored ground stains that linger far longer than char.
   private splatList: Splat[] = [];
-  private splatArr = new Float32Array(24 * 4);
-  private splatTintArr = new Float32Array(24 * 3);
-  private splatDirArr = new Float32Array(24 * 3);
+  private splatArr = new Float32Array(SPLAT_N * 4);
+  private splatTintArr = new Float32Array(SPLAT_N * 3);
+  private splatDirArr = new Float32Array(SPLAT_N * 3);
   // Projected deployable field rings (recharge pad envelope) - shader
   // decal slots like scorch; a mesh ring can't survive the clipmap's
   // 5m chord approximation.
   private fieldRingList: FieldRing[] = [];
   // 32 slots - 8 deployables was the old headroom; a conquest lattice
   // alone wants 25 (5×5 node rings as real terrain decals).
-  private fieldRingArr = new Float32Array(32 * 4);
-  private fieldYArr = new Float32Array(32);
-  private fieldTintArr = new Float32Array(32 * 3);
+  private fieldRingArr = new Float32Array(FIELD_N * 4);
+  private fieldYArr = new Float32Array(FIELD_N);
+  private fieldTintArr = new Float32Array(FIELD_N * 3);
 
   /** Direction toward the sun, normalized - the blob-shadow slivers
    *  project along it, so it must track setSunDirection too. */
@@ -279,7 +282,7 @@ export class Terrain {
         polygonOffsetUnits: -(CLIPMAP_LEVELS.length - 1 - i),
         // TERRAIN_PRESET picks the palette at COMPILE time - a runtime
         // uniform meant every program compiled all six preset branches.
-        defines: { TERRAIN_PRESET: 1 },
+        defines: { TERRAIN_PRESET: 1, SCORCH_N, SPLAT_N, FIELD_N },
         uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },heightSel:      { value: oneHot4(i) },parentSel:      { value: oneHot4(i + 1) },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },morphRange:      { value: new THREE.Vector2(1e9, 1e9) },morphSides:      { value: new THREE.Vector4(1, 1, 1, 1) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },fogDir:          { value: this.fogDirOn ? 1 : 0 },fogRamp:         { value: this.fogRampVecs },fogRampN:        { value: this.fogRampN },fogVolC:         { value: this.fogVolCVecs },fogVolD:        { value: this.fogVolDArr },fogVolN:         { value: this.fogVolN },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },scorchY:         { value: this.scorchYArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },mistTime:       { value: 0 },mistAnim:       { value: this.mistAnimOn ? 1 : 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
       });
 
@@ -727,7 +730,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   // and `ember` the caller animates; pass it back to removeScorch when done.
   addScorch(x: number, z: number, r: number, y = 0): { x: number; z: number; r: number; y: number; intensity: number; ember: number; } {
     const entry = { x, z, r, y, intensity: 0.5, ember: 0 };
-    if (this.scorchList.length >= 16) {this.scorchList.shift();}
+    if (this.scorchList.length >= SCORCH_N) {this.scorchList.shift();}
     this.scorchList.push(entry);
     return entry;
   }
@@ -737,12 +740,13 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     if (i !== -1) {this.scorchList.splice(i, 1);}
   }
 
-  // Projected ichor stain - same handle contract as addScorch. 24 slots,
-  // FIFO evict: in a sustained fight the oldest dried stains vanish first.
-  // dx/dz/stretch smear the stain along a landing direction (0 = round pool).
-  addSplat(x: number, z: number, r: number, cr: number, cg: number, cb: number, dx = 0, dz = 0, stretch = 0): Splat {
-    const entry: Splat = { x, z, r, intensity: 0, cr, cg, cb, dx, dz, stretch };
-    if (this.splatList.length >= 24) {this.splatList.shift();}
+  // Projected ichor stain - same handle contract as addScorch. Slot pool is
+  // SPLAT_N, FIFO evict: in a sustained fight the oldest dried stains
+  // vanish first. smear.dx/dz/stretch smear the stain along a landing
+  // direction (absent = round pool).
+  addSplat(x: number, z: number, r: number, tint: readonly [number, number, number], smear: { dx?: number; dz?: number; stretch?: number } = {}): Splat {
+    const entry: Splat = { x, z, r, intensity: 0, cr: tint[0], cg: tint[1], cb: tint[2], dx: smear.dx ?? 0, dz: smear.dz ?? 0, stretch: smear.stretch ?? 0 };
+    if (this.splatList.length >= SPLAT_N) {this.splatList.shift();}
     this.splatList.push(entry);
     return entry;
   }
@@ -757,7 +761,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   addFieldRing(x: number, z: number, r: number, tint: readonly [number, number, number], domeY?: number): FieldRing {
     const entry: FieldRing = { x, z, r, intensity: 0.5, tint };
     if (domeY !== undefined) {entry.domeY = domeY;}
-    if (this.fieldRingList.length >= 32) {this.fieldRingList.shift();}
+    if (this.fieldRingList.length >= FIELD_N) {this.fieldRingList.shift();}
     this.fieldRingList.push(entry);
     return entry;
   }

@@ -6,7 +6,7 @@
 // spec.water surfaces are not drawn — the thumb shows the procedural sky.
 import * as THREE from 'three';
 import { hmParseBin, hmHeight, HM_HEIGHT_SCALE, HM_WORLD_SCALE, type Heightfield } from '../../../shared/heightfield.js';
-import { terrainFrag } from '../world/terrainShaders.js';
+import { terrainFrag, SCORCH_N, SPLAT_N, FIELD_N } from '../world/terrainShaders.js';
 import { AtmosphericSky } from '../world/atmosphericSky.js';
 import { hillshadeImage } from '../world/hillshade.js';
 
@@ -61,7 +61,7 @@ function buildRig(canvas: HTMLCanvasElement): Rig {
     vertexShader: LAB_VERT,
     fragmentShader: terrainFrag,
     lights: true,
-    defines: { TERRAIN_PRESET: 1 },
+    defines: { TERRAIN_PRESET: 1 , SCORCH_N, SPLAT_N, FIELD_N },
     uniforms: Object.assign({}, THREE.UniformsLib.lights, {
       hscale: { value: HM_HEIGHT_SCALE },
       sunDir: { value: new THREE.Vector3(0, 1, 0) },
