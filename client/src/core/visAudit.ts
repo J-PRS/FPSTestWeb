@@ -35,6 +35,67 @@ export interface VisAuditResult {
 const tagOf = (o: THREE.Object3D): string =>
   (o.userData?.probe?.kind as string) || (o.userData?.dbg?.kind as string) || (o.userData?.kind as string) || o.name || o.type;
 
+interface SpanProbe { maxEdge: number; nan: number; at: number[] }
+type VertCheck = (a: number, b: number) => void;
+
+/** Real segment pairs — the only honest measure for lines. */
+function scanLines(geo: THREE.BufferGeometry, arr: ArrayLike<number>, check: VertCheck): void {
+  const idx = geo.index ? geo.index.array : null;
+  const nseg = idx ? idx.length / 2 : arr.length / 6;
+  const step = Math.max(1, Math.floor(nseg / 2000));
+  for (let s = 0; s < nseg; s += step) {
+    check(idx ? idx[s * 2] : s * 2, idx ? idx[s * 2 + 1] : s * 2 + 1);
+  }
+}
+
+/** Ribbon slots: only consecutive-sample edges within a quad matter. */
+function scanTrailSlots(geo: THREE.BufferGeometry, arr: ArrayLike<number>, check: VertCheck): void {
+  const nslot = Math.floor(arr.length / 3 / SLOT_VERTS);
+  const dr = geo.drawRange ? geo.drawRange.count : Infinity;
+  const usedSlots = Math.min(nslot, Math.floor(dr / ((SLOT_VERTS / 2 - 1) * 6)) + 1);
+  for (let s = 0; s < usedSlots; s += 1) {
+    const base = s * SLOT_VERTS;
+    for (let i = 0; i < SLOT_VERTS / 2 - 1; i += 1) {check(base + i * 2, base + i * 2 + 2);}
+  }
+}
+
+/** Geometry is authored at bind pose — a stretched rig hides in the
+ *  BONES' world positions, so measure skeleton spread, not verts.
+ *  The 60m edge limit that catches trail teleports catches an
+ *  exploded skeleton identically. matrixWorld.elements[12..14] — no
+ *  Vector3 needed (THREE is a type-only import in this file). */
+function scanSkeleton(o: THREE.Object3D, p: SpanProbe): boolean {
+  const skel = (o as unknown as { skeleton?: { bones: { updateWorldMatrix(a: boolean, b: boolean): void; matrixWorld: { elements: ArrayLike<number> } }[] } }).skeleton;
+  if (!skel || skel.bones.length < 2) {return false;}
+  const step = Math.max(1, Math.floor(skel.bones.length / 64));
+  const px = (i: number): ArrayLike<number> => { skel.bones[i].updateWorldMatrix(true, false); return skel.bones[i].matrixWorld.elements; };
+  for (let i = 0; i < skel.bones.length; i += step) {
+    const ea = px(i);
+    for (let j = i + step; j < skel.bones.length; j += step) {
+      const eb = px(j);
+      const dx = ea[12] - eb[12], dy = ea[13] - eb[13], dz = ea[14] - eb[14];
+      const e = dx * dx + dy * dy + dz * dz;
+      if (!Number.isFinite(e)) {p.nan += 1; continue; }
+      if (e > p.maxEdge) { p.maxEdge = e; p.at = [Math.trunc(ea[12]), Math.trunc(ea[13]), Math.trunc(ea[14])]; }
+    }
+  }
+  return true;
+}
+
+/** Giant or off-field instances — matrix rows give scale+position. */
+function scanInstances(anyO: { count?: number; instanceMatrix?: { array: ArrayLike<number> } }, p: SpanProbe): void {
+  const im = anyO.instanceMatrix!.array;
+  for (let i = 0; i < (anyO.count ?? 0); i += 1) {
+    const b = i * 16;
+    const sx = Math.hypot(im[b], im[b + 1], im[b + 2]);
+    if (!Number.isFinite(sx)) {p.nan += 1; continue; }
+    if (sx * sx > LIM2) {
+      p.maxEdge = Math.max(p.maxEdge, sx * sx);
+      p.at = [Math.trunc(im[b + 12]), Math.trunc(im[b + 13]), Math.trunc(im[b + 14])];
+    }
+  }
+}
+
 export function auditScene(scene: THREE.Scene): VisAuditResult {
   const out: VisAuditResult = { scanned: 0, offenders: [], limit: SEG_LIMIT };
 
@@ -48,74 +109,31 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
     const mX = (v: number): number => m[0] * arr[v * 3] + m[4] * arr[v * 3 + 1] + m[8] * arr[v * 3 + 2] + m[12];
     const mY = (v: number): number => m[1] * arr[v * 3] + m[5] * arr[v * 3 + 1] + m[9] * arr[v * 3 + 2] + m[13];
     const mZ = (v: number): number => m[2] * arr[v * 3] + m[6] * arr[v * 3 + 1] + m[10] * arr[v * 3 + 2] + m[14];
-    let maxEdge = 0, nan = 0;
-    let at = [0, 0, 0];
+    const p: SpanProbe = { maxEdge: 0, nan: 0, at: [0, 0, 0] };
     const check = (a: number, b: number): void => {
       const dx = mX(a) - mX(b), dy = mY(a) - mY(b), dz = mZ(a) - mZ(b);
       const e = dx * dx + dy * dy + dz * dz;
-      if (!Number.isFinite(e)) {nan += 1; return; }
-      if (e > maxEdge) { maxEdge = e; at = [Math.trunc(mX(a)), Math.trunc(mY(a)), Math.trunc(mZ(a))]; }
+      if (!Number.isFinite(e)) {p.nan += 1; return; }
+      if (e > p.maxEdge) { p.maxEdge = e; p.at = [Math.trunc(mX(a)), Math.trunc(mY(a)), Math.trunc(mZ(a))]; }
     };
 
     const anyO = o as unknown as { isLine?: boolean; isLineSegments?: boolean; isInstancedMesh?: boolean; count?: number; instanceMatrix?: { array: ArrayLike<number> } };
+    let scanned = true;
     if (anyO.isLine || anyO.isLineSegments) {
-      // Real segment pairs — the only honest measure for lines.
-out.scanned += 1;
-      const idx = geo.index ? geo.index.array : null;
-      const nseg = idx ? idx.length / 2 : arr.length / 6;
-      const step = Math.max(1, Math.floor(nseg / 2000));
-      for (let s = 0; s < nseg; s += step) {
-        check(idx ? idx[s * 2] : s * 2, idx ? idx[s * 2 + 1] : s * 2 + 1);
-      }
+      scanLines(geo, arr, check);
     } else if (o.userData?.probe?.kind === 'trailBatch') {
-      // Ribbon slots: only consecutive-sample edges within a quad matter.
-out.scanned += 1;
-      const nslot = Math.floor(arr.length / 3 / SLOT_VERTS);
-      const dr = geo.drawRange ? geo.drawRange.count : Infinity;
-      const usedSlots = Math.min(nslot, Math.floor(dr / ((SLOT_VERTS / 2 - 1) * 6)) + 1);
-      for (let s = 0; s < usedSlots; s += 1) {
-        const base = s * SLOT_VERTS;
-        for (let i = 0; i < SLOT_VERTS / 2 - 1; i += 1) {check(base + i * 2, base + i * 2 + 2);}
-      }
+      scanTrailSlots(geo, arr, check);
     } else if ((anyO as { isSkinnedMesh?: boolean }).isSkinnedMesh) {
-      // Geometry is authored at bind pose — a stretched rig hides in the
-      // BONES' world positions, so measure skeleton spread, not verts.
-      // The 60m edge limit that catches trail teleports catches an
-      // exploded skeleton identically.
-      const skel = (o as unknown as { skeleton?: { bones: { updateWorldMatrix(a: boolean, b: boolean): void; matrixWorld: { elements: ArrayLike<number> } }[] } }).skeleton;
-      if (!skel || skel.bones.length < 2) {return;}
-out.scanned += 1;
-      // matrixWorld.elements[12..14] — no Vector3 needed (THREE is a
-      // type-only import in this file).
-      const step = Math.max(1, Math.floor(skel.bones.length / 64));
-      const px = (i: number): ArrayLike<number> => { skel.bones[i].updateWorldMatrix(true, false); return skel.bones[i].matrixWorld.elements; };
-      for (let i = 0; i < skel.bones.length; i += step) {
-        const ea = px(i);
-        for (let j = i + step; j < skel.bones.length; j += step) {
-          const eb = px(j);
-          const dx = ea[12] - eb[12], dy = ea[13] - eb[13], dz = ea[14] - eb[14];
-          const e = dx * dx + dy * dy + dz * dz;
-          if (!Number.isFinite(e)) {nan += 1; continue; }
-          if (e > maxEdge) { maxEdge = e; at = [Math.trunc(ea[12]), Math.trunc(ea[13]), Math.trunc(ea[14])]; }
-        }
-      }
+      scanned = scanSkeleton(o, p);
     } else if (anyO.isInstancedMesh && anyO.instanceMatrix && anyO.count != null) {
-      // Giant or off-field instances — matrix rows give scale+position.
-out.scanned += 1;
-      const im = anyO.instanceMatrix.array;
-      for (let i = 0; i < (anyO.count ?? 0); i += 1) {
-        const b = i * 16;
-        const sx = Math.hypot(im[b], im[b + 1], im[b + 2]);
-        if (!Number.isFinite(sx)) {nan += 1; continue; }
-        if (sx * sx > LIM2) {
-          maxEdge = Math.max(maxEdge, sx * sx);
-          at = [Math.trunc(im[b + 12]), Math.trunc(im[b + 13]), Math.trunc(im[b + 14])];
-        }
-      }
+      scanInstances(anyO, p);
     } else {
       return; // terrain/sky/sprites legitimately span the world
     }
+    if (!scanned) {return;}
+    out.scanned += 1;
 
+    const { maxEdge, nan, at } = p;
     if ((maxEdge > LIM2 || nan) && out.offenders.length < MAX_OFFENDERS) {
       out.offenders.push({
         tag: tagOf(o), type: o.type, edge: Number(Math.sqrt(maxEdge).toFixed(0)),
