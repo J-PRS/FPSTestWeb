@@ -305,6 +305,18 @@ export class ServerBots {
       const ang = ((idSeed(id) % 628) / 100);
       this.room.moveSim.applyImpulse(id, { x: Math.cos(ang) * 8, y: 6, z: Math.sin(ang) * 8 });
     }
+    if (this.watchdog.unstickTeleport) {
+      this.watchdog.unstickTeleport = false;
+      // Terrain-locked: impulses failed twice. Step 14m toward the goal
+      // with a ground snap - the blink skill's resync primitive. A bot
+      // that re-wedges continuously still burns one teleport per 90s,
+      // cheap against a match that reads dead.
+      const d = { x: brain.lastDest.x - p.position.x, z: brain.lastDest.z - p.position.z };
+      const dl = Math.hypot(d.x, d.z) || 1;
+      const nx = p.position.x + (d.x / dl) * 14, nz = p.position.z + (d.z / dl) * 14;
+      this.room.moveSim.resync(id, { x: nx, y: (this.field ? hmHeight(this.field, nx, nz) : p.position.y) + 0.5, z: nz }, Math.atan2(d.x, d.z));
+      logger.info('Bot unstick teleport', { bot: id, to: { x: Number(nx.toFixed(1)), z: Number(nz.toFixed(1)) } });
+    }
   }
 
   checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void { // public - botDrive host hook

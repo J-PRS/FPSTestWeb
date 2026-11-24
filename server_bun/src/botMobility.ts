@@ -17,7 +17,7 @@ const SHEEP_JETPCT = 0.05;
 const SHEEP_SPEED = 6;
 const SHEEP_COVER_M = 40;
 
-interface StuckState { x: number; z: number; since: number; warned: boolean; boostAt: number }
+interface StuckState { x: number; z: number; since: number; warned: boolean; boostAt: number; boosts: number }
 interface SheepState { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number; wasSheep?: boolean; sheepStreak?: number }
 
 /** One tick of mobility evidence for checkSheep. */
@@ -42,6 +42,9 @@ export class MobilityWatchdog {
   /** Set when the watchdog fires - the serverBots call site owns moveSim,
    *  so it consumes this and applies the unstick impulse itself. */
   unstickPending = false;
+  /** Set when a bot exhausted impulse unsticks - caller teleports it
+   *  toward its goal instead (terrain-locked pocket geometry). */
+  unstickTeleport = false;
   private sheep = new Map<string, SheepState>();
 
   constructor(private roomName: string) {}
@@ -74,12 +77,12 @@ export class MobilityWatchdog {
   checkStuck(id: string, pos: Vec3, brain: BotBrain, carryingFlag: boolean, now: number): void {
     const w = this.stuck.get(id);
     if (!w) {
-      this.stuck.set(id, { x: pos.x, z: pos.z, since: now, warned: false, boostAt: 0 });
+      this.stuck.set(id, { x: pos.x, z: pos.z, since: now, warned: false, boostAt: 0, boosts: 0 });
       return;
     }
     const dx = pos.x - w.x, dz = pos.z - w.z;
     if (dx * dx + dz * dz >= STUCK_DIST * STUCK_DIST) {
-      w.x = pos.x; w.z = pos.z; w.since = now; w.warned = false;
+      w.x = pos.x; w.z = pos.z; w.since = now; w.warned = false; w.boosts = 0;
       return;
     }
     if (!carryingFlag && brain.holding) { w.since = now; return; }
@@ -114,7 +117,13 @@ export class MobilityWatchdog {
     // initial warn already named the stall.
     if (w.warned && now - w.boostAt > 30_000) {
       w.boostAt = now;
-      this.unstickPending = true;
+      w.boosts += 1;
+      // Impulses lose to pocket geometry (wedged on a lip, boxed in) -
+      // a bot still parked after two boosts isn't popping out, it's
+      // terrain-locked. Escalate to a teleport step toward its goal,
+      // same resync primitive the blink skill uses.
+      if (w.boosts >= 3) {this.unstickTeleport = true;}
+      else {this.unstickPending = true;}
     }
   }
 
