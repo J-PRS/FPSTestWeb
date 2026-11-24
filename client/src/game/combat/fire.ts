@@ -131,9 +131,29 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // needsServerTracking keeps governing the damage-claim path; the nonce
   // costs a map entry, pruned on death.
   const shotId = nextShotId(deps.world.projectileRegistry);
-  // Bloom weapons: the CLAIM ships the raw aim dir - the server seeds
-  // the cone itself off this shotId. The predicted shell draws the same
-  // jitter so prediction lands inside the server's scatter, not its own.
+  const { spawnDir, cfg2, bonus } = launchKinematics(deps, config, e);
+  fadeChambered(deps, config.weaponType);
+  const p = new Projectile(deps.lazyScene(), _spawnOrigin, spawnDir, e.playerVel, cfg2);
+  p.directBonus = bonus;
+  deps.world.projectiles.push(p);
+  p.shooterTeam = deps.world.localTeam ?? null;
+  p.shotId = shotId;
+  deps.world.projectileRegistry.byShotId.set(p.shotId, p);
+  wireProjectileHooks(deps, p, config, e, cfg2);
+  sendSpawnClaim(deps, p, config, e, cfg2, { quiet, claimType });
+  return p;
+}
+
+/** Bloom jitter + momentum-cap: derives the spawn dir and the config
+ *  the shell actually flies with. Bloom weapons: the CLAIM ships the
+ *  raw aim dir - the server seeds the cone itself off this shotId. The
+ *  predicted shell draws the same jitter so prediction lands inside
+ *  the server's scatter, not its own. Momentum perk: cap the launch
+ *  speed, pay the excess back as a direct-hit bonus stamped on the
+ *  shell (orig/cap, capped at 1.5x). cfg2 drives BOTH the local sim
+ *  and the wire claim - the server's arc replay must see the capped
+ *  flight or it diverges. */
+function launchKinematics(deps: CombatDeps, config: ProjectileConfig, e: FireArgs): { spawnDir: THREE.Vector3; cfg2: ProjectileConfig; bonus: number } {
   let spawnDir = e.dir;
   if (e.bloomRadius !== undefined) {
     // Counter-seeded cone - the server draws idSeed(playerId) ^ seq; the
@@ -142,10 +162,6 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     const jd = coneDir(e.dir, u1 * Math.PI * 2, Math.sqrt(u2) * e.bloomRadius);
     spawnDir = _flakDir.set(jd.x, jd.y, jd.z).clone();
   }
-  // Momentum perk: cap the launch speed, pay the excess back as a
-  // direct-hit bonus stamped on the shell (orig/cap, capped at 1.5x).
-  // cfg2 drives BOTH the local sim and the wire claim below - the
-  // server's arc replay must see the capped flight or it diverges.
   const cap = deps.lazyPlayer().mods.projSpeedCap;
   // maxLifetime scales by the same cut ratio so the capped shell keeps
   // its original flight RANGE (slower = longer alive, not shorter reach).
@@ -153,15 +169,15 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     ? Object.assign({}, config, { speed: cap, maxLifetime: (config.maxLifetime ?? 12) * (config.speed / cap) })
     : config;
   const bonus = cap > 0 && config.speed > cap ? Math.min(1.5, config.speed / cap) : 1;
-  fadeChambered(deps, config.weaponType);
-  const p = new Projectile(deps.lazyScene(), _spawnOrigin, spawnDir, e.playerVel, cfg2);
-  p.directBonus = bonus;
-  deps.world.projectiles.push(p);
-  p.shooterTeam = deps.world.localTeam ?? null;
-  p.shotId = shotId;
-  deps.world.projectileRegistry.byShotId.set(p.shotId, p);
+  return { spawnDir, cfg2, bonus };
+}
 
-  // Record projectile fired event for demo
+/** Record + FX hooks: demo recording of the fired event (and the bounce
+ *  callback the recorder needs), plus the ray-burst discharge visuals
+ *  (remote railgun: beam flash along the slug's velocity line +
+ *  capacitor zap at the discharge point - the damage is the normal
+ *  explosion claim at the resolved endpoint, this is pure FX). */
+function wireProjectileHooks(deps: CombatDeps, p: Projectile, config: ProjectileConfig, e: FireArgs, cfg2: ProjectileConfig): void {
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording) {
     const velocity = e.dir.clone().normalize().multiplyScalar(cfg2.speed).addScaledVector(e.playerVel, config.inherit ?? 0.5);
@@ -174,10 +190,6 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
       if (p.demoProjectileId) {demoManager.recordProjectileBounce(p.demoProjectileId, pos, vel, normal);}
     };
   }
-
-  // Ray-burst discharge (remote railgun): beam flash along the slug's
-  // velocity line + capacitor zap at the discharge point. The damage is
-  // the normal explosion claim at the resolved endpoint — this is pure FX.
   if (config.rayBurst) {
     const beamColor = config.glowColor;
     p.onRayBurst = (from, to): void => {
@@ -185,13 +197,25 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
       sfx.at(from, 'shot_energy', 0.9, 1.3);
     };
   }
+}
 
-  // Send shot to server with projectile position/velocity so remote clients
-  // see the shot (all weapons, weaponType selects their visual config).
-  // The claim MUST carry the same inherited-velocity flight the
-  // Projectile sim runs — omitting playerVel*0.5 makes the server's
-  // arcBlockedAt replay a slower, undeflected arc that clips walls the
-  // real shell cleared ("flight blocked" rejects on honest hits).
+/** Send shot to server so remote clients see it (weaponType selects
+ *  their visual config). The claim MUST carry the same
+ *  inherited-velocity flight the Projectile sim runs — omitting
+ *  playerVel*0.5 makes the server's arcBlockedAt replay a slower,
+ *  undeflected arc that clips walls the real shell cleared ("flight
+ *  blocked" rejects on honest hits). Simmed weapons go claimless: the
+ *  intent is all we send — the server spawns its own authoritative
+ *  shell and echoes shotId on projectileCreated, which
+ *  linkOwnProjectile binds to this predicted shell. Contact and blast
+ *  outcomes arrive as broadcasts. quiet = one pellet of a burst fan:
+ *  the pull sends ONE intent and the server fans the whole spread
+ *  itself, echoing a pellet index. Non-simmed shells (bomblets,
+ *  cookoff scatter) are prediction-only — the server's own
+ *  carrier/body sim owns every authoritative spawn, so nothing claims
+ *  a spawn over the wire anymore. */
+function sendSpawnClaim(deps: CombatDeps, p: Projectile, config: ProjectileConfig, e: FireArgs, cfg2: ProjectileConfig, claim: { quiet: boolean; claimType?: number }): void {
+  const { quiet, claimType } = claim;
   const velocity = e.dir.clone().normalize().multiplyScalar(cfg2.speed).addScaledVector(e.playerVel, 0.5);
   // NetProbe: claimed-vs-flown drift - must stay ~0 or the server's
   // arc replay diverges (the 'flight blocked' phantom-reject class).
@@ -200,31 +224,18 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // jitter off shotId, so |claimVel - p.vel| measures the cone angle,
   // not a bug (chaingun spray read as a 24 m/s "drift" storm).
   if (e.bloomRadius === undefined) {spawnDrift(velocity.distanceTo(p.vel));}
-  if (serverSimmed(claimType ?? config.weaponType)) {
-    // Claimless path: the intent is all we send — the server spawns its
-    // own authoritative shell and echoes shotId on projectileCreated,
-    // which linkOwnProjectile binds to this predicted shell. Contact
-    // and blast outcomes arrive as broadcasts; nothing is claimed here.
-    // quiet = one pellet of a burst fan: the pull sends ONE intent and
-    // the server fans the whole spread itself, echoing a pellet index.
-    if (!quiet) {
-      deps.lazyNetworkManager().sendShotFired({
-        weaponType: claimType ?? config.weaponType,
-        dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
-        pos: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
-        // The claim carries our live velocity so the server spawns with
-        // the SAME inherited flight — the echo then matches prediction
-        // and reanchorTo converges to ~zero instead of a mid-air jink.
-        vel: { x: e.playerVel.x, y: e.playerVel.y, z: e.playerVel.z },
-        shotId: p.shotId ?? undefined,
-      });
-    }
-    return p;
+  if (serverSimmed(claimType ?? config.weaponType) && !quiet) {
+    deps.lazyNetworkManager().sendShotFired({
+      weaponType: claimType ?? config.weaponType,
+      dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
+      pos: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
+      // The claim carries our live velocity so the server spawns with
+      // the SAME inherited flight — the echo then matches prediction
+      // and reanchorTo converges to ~zero instead of a mid-air jink.
+      vel: { x: e.playerVel.x, y: e.playerVel.y, z: e.playerVel.z },
+      shotId: p.shotId ?? undefined,
+    });
   }
-  // Non-simmed shells (bomblets, cookoff scatter) are prediction-only —
-  // the server's own carrier/body sim owns every authoritative spawn,
-  // so nothing claims a spawn over the wire anymore.
-  return p;
 }
 
 // Belt items release mid-throw-anim; compute fresh aim at release time
