@@ -881,11 +881,6 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   // of a match profile through getObjectByProperty).
   if (!drained && st.warmN <= 600 && (st.warmN % 30 !== 0 || !deps.sceneSetup.scene.getObjectByName('__t2interiors'))) {return;}
   st.warmed = true;
-  pendingHeavy.n += 1;
-  Promise.resolve(deps.rendererSetup.warmup()).finally((): void => {
-    pendingHeavy.n -= 1;
-    performance.mark('load:shaderWarmDone');
-  }).catch((): void => {});
   // Pre-clone each armor-class rig so a mid-match join grabs one off
   // the shelf instead of paying SkeletonUtils.clone on the live frame.
   // Depth 4/variant - a 15-bot churn exhausts 2 before the macrotask
@@ -893,8 +888,16 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   for (const v of ['scout', 'brawler', 'brute'] as const) {warmRig(v, 4);}
   // One underground blast fills the burst-spec freelists, so the first
   // real explosion restarts pooled systems instead of paying cold
-  // ParticleSystem builds mid-fight. 500m down it never renders.
+  // ParticleSystem builds mid-fight. 500m down it never renders - but
+  // its materials must exist BEFORE the compile pass below, or the
+  // first real fight compiles them lazily mid-frame (the post-veil
+  // 400ms+ hitches bootmarks attributes to uniform introspection).
   deps.world.explosions.push(new Explosion(deps.sceneSetup.scene, _prewarmPos, false, 0, deps.lazyTerrain(), 1));
+  pendingHeavy.n += 1;
+  Promise.resolve(deps.rendererSetup.warmup()).finally((): void => {
+    pendingHeavy.n -= 1;
+    performance.mark('load:shaderWarmDone');
+  }).catch((): void => {});
 }
 
 const _prewarmPos = new THREE.Vector3(0, -500, 0);
