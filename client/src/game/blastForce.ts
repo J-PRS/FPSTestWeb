@@ -11,6 +11,7 @@ import { getWeaponStats } from '../../../shared/weapons.js';
 import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
+import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import * as sfx from '../core/sfx.js';
 import { parityMiss, parityStamp, expectDamageEcho, kbEchoHorizon, kbStampDeadline, projWireAt } from './parity.js';
 import { ballGhostPos } from '../projectiles/sweep.js';
@@ -146,64 +147,67 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
   // ~1 RTT before the victim's real trajectory streams back - RemotePlayer
   // runs it as dead reckoning and clears stale pre-hit snapshots so there's
   // no snap-back when interpolation resumes.
-  function applyForceToRemotes(a: BlastArgs): void {
+  /** Predicted splash for one remote: envelope + occlusion at the GHOST
+   *  epoch (the server judges wirePosition rewound ~0.7·renderDelay, not
+   *  the ~150ms interp-stale rendered body - live-vs-ghost eval was the
+   *  orphan/dmg-echo driver), then feedback, numbers, echo stamp. */
+  function splashRemote(playerId: string, rp: RemotePlayer, a: BlastArgs, scales: ReturnType<typeof getWeaponStats>['aoeScales']): void {
     const { pos, radius, force, aoeDamage, directHitTargetId, shooterId, weaponType } = a;
-    const scales = weaponType === undefined ? undefined : getWeaponStats(weaponType).aoeScales;
+    if (rp.isDead) {return;}
+    _ghost ??= rp.position.clone();
+    // The authority's rewind is shallower by the victim's own transit:
+    // epoch = view + (victimPing − shooterPing)/2 - pass the shooter's
+    // transit so a fat-pipe victim is judged where the server sees them.
+    const nmPing = deps.lazyNetworkManager()?.serverPingMs ?? deps.lazyNetworkManager()?.getPing?.() ?? 0;
+    const shooterTransit = shooterId === undefined || shooterId === 'local'
+      ? nmPing / 2
+      : (deps.world.remotePlayers.get(shooterId)?.wirePingMs ?? nmPing) / 2;
+    const vpos = rp.ghostPosition?.(_ghost, shooterTransit) ?? rp.position;
+    // Match server damage exactly: 1 - dist/radius inside radius, 0 outside -
+    // knockback uses the same envelope (aoeImpulseT1), so nothing predicts
+    // damage or shove the server never applies.
+    const dist = vpos.distanceTo(pos);
+    const impulse = Math.min(aoeImpulseT1At(force, pos, vpos, radius, rp.armorClass) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
+    if (impulse <= 0) {return;}
+    if (occluded(pos, vpos)) {return;}
+    // Remote knockback prediction disabled: a wrong guess slung the
+    // body to a position the wire never produced (sling-then-warp).
+    // Wire position updates carry the real shove ~1 tick out; damage
+    // prediction below is unaffected. Re-enable via
+    // rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull', vpos)
+    // once predicted-vs-wire parity is validated live.
+    if (playerId === directHitTargetId) {return;}
+    // Hitmarker is personal feedback - a bot's blast (shooterId set)
+    // clipping a remote isn't my frag to celebrate.
+    if (!a.shooterId) {deps.lazyHud().showHitMarker();}
+    const aoeDmg = aoeDamageOf(aoeDamage, dist, radius, scales);
+    // Friendly splash deals nothing in team rooms (the server's rule) -
+    // the number/predicted dip must not lie ahead of it, so this check
+    // precedes ALL feedback, not just the echo stamp it used to gate.
+    const victimTeam = deps.lazyNetworkManager()?.getPlayers?.().get(playerId)?.team;
+    const friendly = victimTeam !== undefined && victimTeam === deps.world.localTeam;
+    // Splash on a player/bot shows a number too - direct hits had one
+    // (impact.ts) but blast feedback stopped at the hitmarker, so the
+    // common "rocket at their feet" read as dealing nothing.
+    if (!a.shooterId && !friendly && aoeDmg >= 1) {
+      deps.lazyDamageNumbers().spawn(rp.position, aoeDmg, splashColor(weaponType), deps.lazyCamera());
+    }
+    if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType, a.air)) {return;} // local authority resolved it
+    if (!friendly) {deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);}
+    // My blast predicted splash the server may whiff - stamp it like the
+    // direct-hit path does or a silent splash miss reads as clean damage.
+    // The server skips friendly damage in team rooms, so a stamped
+    // teammate would be a false ghost - only stamp plausible victims.
+    if (!a.shooterId && !friendly && aoeDmg >= 1 && deps.lazyNetworkManager()?.authoritySims?.()) {
+      expectDamageEcho(playerId, aoeDmg, weaponType, a.shotId, { x: pos.x, y: pos.y, z: pos.z },
+        { x: vpos.x, y: vpos.y, z: vpos.z });
+    }
+  }
+
+  function applyForceToRemotes(a: BlastArgs): void {
+    const scales = a.weaponType === undefined ? undefined : getWeaponStats(a.weaponType).aoeScales;
     for (const [playerId, rp] of deps.world.remotePlayers) {
-      if (rp.isDead) {continue;}
-      // Envelope math at the GHOST epoch - the server judges the victim
-      // at wirePosition rewound ~0.7·renderDelay (ghostBack), not at the
-      // rendered body (~150ms interp-stale). Evaluating the envelope at
-      // rendered pos was the orphan/dmg-echo driver: predicted inside on
-      // the stale visual while the wire truth was outside, or vice versa.
-      _ghost ??= rp.position.clone();
-      // The authority's rewind is shallower by the victim's own transit:
-      // epoch = view + (victimPing − shooterPing)/2 - pass the shooter's
-      // transit so a fat-pipe victim is judged where the server sees them.
-      const nmPing = deps.lazyNetworkManager()?.serverPingMs ?? deps.lazyNetworkManager()?.getPing?.() ?? 0;
-      const shooterTransit = shooterId === undefined || shooterId === 'local'
-        ? nmPing / 2
-        : (deps.world.remotePlayers.get(shooterId)?.wirePingMs ?? nmPing) / 2;
-      const vpos = rp.ghostPosition?.(_ghost, shooterTransit) ?? rp.position;
-      // Match server damage exactly: 1 - dist/radius inside radius, 0 outside -
-      // knockback uses the same envelope (aoeImpulseT1), so nothing predicts
-      // damage or shove the server never applies.
-      const dist = vpos.distanceTo(pos);
-      const impulse = Math.min(aoeImpulseT1At(force, pos, vpos, radius, rp.armorClass) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
-      if (impulse <= 0) {continue;}
-      if (occluded(pos, vpos)) {continue;}
-      // Remote knockback prediction disabled: a wrong guess slung the
-      // body to a position the wire never produced (sling-then-warp).
-      // Wire position updates carry the real shove ~1 tick out; damage
-      // prediction below is unaffected. Re-enable via
-      // rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull', vpos)
-      // once predicted-vs-wire parity is validated live.
-      if (playerId === directHitTargetId) {continue;}
-      // Hitmarker is personal feedback - a bot's blast (shooterId set)
-      // clipping a remote isn't my frag to celebrate.
-      if (!a.shooterId) {deps.lazyHud().showHitMarker();}
-      const aoeDmg = aoeDamageOf(aoeDamage, dist, radius, scales);
-      // Friendly splash deals nothing in team rooms (the server's rule) -
-      // the number/predicted dip must not lie ahead of it, so this check
-      // precedes ALL feedback, not just the echo stamp it used to gate.
-      const victimTeam = deps.lazyNetworkManager()?.getPlayers?.().get(playerId)?.team;
-      const friendly = victimTeam !== undefined && victimTeam === deps.world.localTeam;
-      // Splash on a player/bot shows a number too - direct hits had one
-      // (impact.ts) but blast feedback stopped at the hitmarker, so the
-      // common "rocket at their feet" read as dealing nothing.
-      if (!a.shooterId && !friendly && aoeDmg >= 1) {
-        deps.lazyDamageNumbers().spawn(rp.position, aoeDmg, splashColor(weaponType), deps.lazyCamera());
-      }
-      if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType, a.air)) {continue;} // local authority resolved it
-      if (!friendly) {deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);}
-      // My blast predicted splash the server may whiff - stamp it like the
-      // direct-hit path does or a silent splash miss reads as clean damage.
-      // The server skips friendly damage in team rooms, so a stamped
-      // teammate would be a false ghost - only stamp plausible victims.
-      if (!a.shooterId && !friendly && aoeDmg >= 1 && deps.lazyNetworkManager()?.authoritySims?.()) {
-        expectDamageEcho(playerId, aoeDmg, weaponType, a.shotId, { x: pos.x, y: pos.y, z: pos.z },
-          { x: vpos.x, y: vpos.y, z: vpos.z });
-      }
+      splashRemote(playerId, rp, a, scales);
     }
   }
 
