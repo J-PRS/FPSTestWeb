@@ -44,6 +44,23 @@ export function buildSkillsCtx(p: Player, terrain: Terrain, scene: THREE.Scene):
   };
 }
 
+/** p.input undefined in a live look handler means the PlayerInput ctor
+ *  threw after binding its listeners (half-built instance, assignment
+ *  never ran) - or a transient mixed build. The old shape threw per
+ *  mousemove, 200+ identical console errors that buried the cause; one
+ *  WARN ships the state that explains it instead. */
+let inputMissWarned = false;
+function inputSens(p: Player): number | undefined {
+  if (p.input) {return p.input.sensitivity;}
+  if (!inputMissWarned) {
+    inputMissWarned = true;
+    console.warn('[WARN] look handler with no player input - input ctor half-built?', {
+      hasMovement: Boolean(p.movement), hasModel: Boolean(p.model), dead: p.isDead,
+    });
+  }
+  return undefined;
+}
+
 export function buildInputCtx(p: Player): PlayerInputHandlers {
   return {
     isSpectating: (): boolean => p.status.spectating,
@@ -71,13 +88,17 @@ export function buildInputCtx(p: Player): PlayerInputHandlers {
     selectSlot: (i): void => p.armory.selectSlot(i),
     cycleWeapon: (step): void => p.armory.cycleWeapon(step),
     look: (dx, dy): void => {
-      p.yaw -= dx * 0.002 * p.input.sensitivity;
-      p.pitch += dy * 0.002 * p.input.sensitivity * (p.input.invertY ? 1 : -1);
+      const sens = inputSens(p);
+      if (sens === undefined) {return;}
+      p.yaw -= dx * 0.002 * sens;
+      p.pitch += dy * 0.002 * sens * (p.input.invertY ? 1 : -1);
       p.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, p.pitch));
     },
     orbitLook: (dx, dy): void => {
-      p.orbit.yaw -= dx * 0.002 * p.input.sensitivity;
-      p.orbit.pitch += dy * 0.002 * p.input.sensitivity * (p.input.invertY ? 1 : -1);
+      const sens = inputSens(p);
+      if (sens === undefined) {return;}
+      p.orbit.yaw -= dx * 0.002 * sens;
+      p.orbit.pitch += dy * 0.002 * sens * (p.input.invertY ? 1 : -1);
       p.orbit.pitch = Math.max(-1.4, Math.min(1.4, p.orbit.pitch));
     },
   };

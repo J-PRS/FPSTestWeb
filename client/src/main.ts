@@ -1406,11 +1406,15 @@ if (import.meta.env.PROD && (window.location.hostname === 'localhost' || window.
   });
   // Alt-tab away = "I'm done editing for now": if the badge would show
   // stale files, rebuild in the background so the bundle is fresh on
-  // return. Blur alone costs nothing when nothing changed.
+  // return. Blur alone costs nothing when nothing changed. The 15s
+  // quiet gate keeps an editor's mid-batch writes out of the bundle -
+  // building while files land one at a time captures a half-written
+  // tree and the next reload boots a broken mix (the dead-input
+  // sensitivity-crash session). Still-hot files skip; the next blur retries.
   addEventListener('blur', (): void => {
     fetch('/dev/stale')
       .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d && d.count > 0) {rebuild();} })
+      .then((d) => { if (d && d.count > 0 && Date.now() - (d.newest ?? 0) > 15_000) {rebuild();} })
       .catch((): void => { /* no stale probe - do nothing */ });
   });
   let lastCount = 0;

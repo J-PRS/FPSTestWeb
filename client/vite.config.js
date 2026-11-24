@@ -230,19 +230,27 @@ export default defineConfig(({ mode }) => ({
         try { walk(join(root, 'client/dist')); } catch { /* no dist */ }
         return newest;
       };
-      const staleFiles = (acc = []) => {
+      // Scan result carries `newest` (mtime of the youngest stale file):
+      // the blur auto-rebuild gates on it - rebuilding while an editor is
+      // mid-batch captures a half-written tree and ships a broken bundle.
+      const scanStale = () => {
         const stamp = buildStamp();
+        const files = [];
+        let newest = 0;
         for (const dir of [join(root, 'client/src'), join(root, 'shared')]) {
           const walk = (d) => {
             for (const f of readdirSync(d, { withFileTypes: true })) {
               const p = join(d, f.name);
               if (f.isDirectory()) {walk(p);}
-              else if (statSync(p).mtimeMs > stamp) {acc.push(p.replace(root, '').replace(/\\/g, '/'));}
+              else {
+                const mt = statSync(p).mtimeMs;
+                if (mt > stamp) {files.push(p.replace(root, '').replace(/\\/g, '/')); newest = Math.max(newest, mt);}
+              }
             }
           };
           try { walk(dir); } catch { /* dir missing */ }
         }
-        return acc;
+        return { count: files.length, files, built: stamp, newest };
       };
       let rebuilding = false;
       server.middlewares.use('/dev/rebuild', (req, res) => {
@@ -257,7 +265,7 @@ export default defineConfig(({ mode }) => ({
       });
       let cache = { at: 0, body: '{}' };
       server.middlewares.use('/dev/stale', (_req, res) => {
-        if (Date.now() - cache.at > 2000) {const files = staleFiles(); cache = { at: Date.now(), body: JSON.stringify({ count: files.length, files, built: buildStamp()}) };}
+        if (Date.now() - cache.at > 2000) {cache = { at: Date.now(), body: JSON.stringify(scanStale()) };}
         res.setHeader('content-type', 'application/json');
         res.end(cache.body);
       });
@@ -275,8 +283,7 @@ export default defineConfig(({ mode }) => ({
       const poke = () => {
         clearTimeout(t);
         t = setTimeout(() => {
-          const files = staleFiles();
-          cache = { at: Date.now(), body: JSON.stringify({ count: files.length, files, built: buildStamp()}) };
+          cache = { at: Date.now(), body: JSON.stringify(scanStale()) };
           for (const res of sse) {res.write(`data: ${cache.body}\n\n`);}
         }, 250);
       };

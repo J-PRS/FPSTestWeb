@@ -302,6 +302,13 @@ lastFoldCount += 1;
 
   export function initShipping(httpUrl: string): void {
     shipUrl = `${httpUrl.replace(/\/$/, '')}/client-log`;
+    // An http:// ship target on an https: page is guaranteed-dead mixed
+    // content (tailscale-funnel dev) - same-origin is the only path left,
+    // and the tunnels proxy the API. Worst case a static host 404s, which
+    // is exactly as dead as the block but without the console spam.
+    if (window.location.protocol === 'https:' && shipUrl.startsWith('http:')) {
+      shipUrl = `${window.location.origin}/client-log`;
+    }
     setInterval((): void => flushShipping(), 5000);
     document.addEventListener('visibilitychange', (): void => {
       if (document.visibilityState === 'hidden') {flushShipping(true);}
@@ -340,6 +347,12 @@ lastFoldCount += 1;
     } else {
       if (host && !host.includes('.')) {host = `${host}.trycloudflare.com`;}
       url = host ? `https://${host}/client-log` : `http://${window.location.hostname || 'localhost'}:8000/client-log`;
+    }
+    // Same mixed-content guard as initShipping: a beacon to http:// from
+    // an https: page never leaves the browser, and the retry-per-error
+    // loop spams the console with the block instead of the crash.
+    if (window.location.protocol === 'https:' && url.startsWith('http:')) {
+      url = `${window.location.origin}/client-log`;
     }
     const body = `${shipQueue.splice(0, shipQueue.length).join('\n')  }\n`;
     try {
