@@ -207,6 +207,77 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
     }
   }
 
+  /** The point the server judges this blast at: our movement SHADOW -
+   *  pos ~uplink-transit ago, not the live render pos. Evaluating the
+   *  envelope there stops rim hits flipping on the live-vs-shadow gap
+   *  (the kb-echo class). Server rewind = shooterTransit + shooterViewLag
+   *  - myTransit: the shooter's viewLag alone undershoots the ghost by
+   *  (shooterPing - myPing)/2 - a fat-pipe shooter's server judges me
+   *  ~90ms deeper than their rendered epoch (the f:30 pop:wire refuses).
+   *  Bot shooters have no render pipeline - their rewind short-circuits
+   *  to the victim's live wire pos (~uplink behind live), so the
+   *  human-shooter model mispredicts rim blasts by ~vel*80ms (BOT rows).
+   *  +75ms on the transit fallback covers the input interval + tick
+   *  quantization the shadow sits behind even at LAN ping. */
+  function shadowEvalPos(player: ReturnType<CombatDeps['lazyPlayer']>, shooterId: string | undefined, nmPing: number): THREE.Vector3 {
+    const shooterRp = shooterId ? deps.world.remotePlayers.get(shooterId) : undefined;
+    const shooterLagMs = shooterRp?.rewindLocalMs(nmPing) ?? 0;
+    const lagSec = shooterId !== undefined && isBotId(shooterId) ? nmPing / 2000
+      : Math.min(0.35, Math.max(0, shooterLagMs > 0 ? shooterLagMs / 1000 : nmPing / 2000 + 0.075));
+    return lagSec > 0 && player.vel ? (_rewound ??= player.pos.clone()).copy(player.pos).addScaledVector(player.vel, -lagSec) : player.pos;
+  }
+
+  /** Reverse dedup: a wire `knockback` echo can beat its blast's replica
+   *  explode (handlers run on arrival, the predicted shove waits for the
+   *  next projectile tick). A recorded raw echo at this center means the
+   *  shove already landed - consume it, don't re-apply. Same center+time
+   *  identity rule as the stamp consume; force only disambiguates
+   *  multiple same-spot echoes - a hard veto double-shoves. 18m +
+   *  falloff-impulse match: replica centers diverge from the server's
+   *  detonation by trajDiv's p95 (~25m tail), and recentKb carries the
+   *  wire's APPLIED impulse, not the raw blast force. */
+  function consumeKbEcho(pos: THREE.Vector3, impulse: number, horizon: number, now: number): boolean {
+    const rkb = deps.world.recentKb;
+    const dupCands: number[] = [];
+    for (let k = 0; k < rkb.length; k += 1) {
+      const s = rkb[k]!;
+      if (now - s.t < horizon && Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 18) {dupCands.push(k);}
+    }
+    const dup = dupCands.length === 0 ? -1
+      : dupCands.reduce((a, b): number => Math.abs((rkb[a]!.f ?? impulse) - impulse) <= Math.abs((rkb[b]!.f ?? impulse) - impulse) ? a : b);
+    if (dup === -1) {return false;}
+    rkb.splice(dup, 1);
+    return true;
+  }
+
+  /** Settle older stamps: a predicted shove the server never echoed back
+   *  (~700ms past the consume window) was rejected server-side - loud
+   *  parity miss, not a silent expiry. The recorded impulse reverses out
+   *  so a phantom shove can't displace the body and poison later evals.
+   *  pid without wireAt = the replica popped where the server shell
+   *  never detonated (replica lifecycle, not a refusal) - 'kb-pop-div'. */
+  function settleShoveStamps(stamps: CombatDeps['world']['selfBlastStamps'], player: ReturnType<CombatDeps['lazyPlayer']>, now: number, horizon: number): void {
+    for (let i = stamps.length - 1; i >= 0; i -= 1) {
+      if (now > kbStampDeadline(stamps[i]!, horizon)) {
+        if (!stamps[i]!.self) {
+          const s = stamps[i]!;
+          // Refused verdict - undo the predicted impulse before the next
+          // eval reads the drifted body.
+          if (s.iv && player.vel) {player.vel.x -= s.iv.x; player.vel.y -= s.iv.y; player.vel.z -= s.iv.z;}
+          const wa = s.wireAt;
+          const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
+          parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
+            s.pop ? { pop: s.pop } : {},
+            s.m === undefined ? {} : { m: s.m },
+            s.wt === undefined ? {} : { wt: s.wt },
+            wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
+        }
+        stamps.splice(i, 1);
+      }
+    }
+    if (stamps.length > 8) {stamps.shift();}
+  }
+
   /** Predicted shove for the LOCAL body - shared by authored blasts
    *  (applyExplosionForce) and remote-blast replicas (impact.ts). Returns
    *  true when the player sat inside the envelope - whether this call
@@ -240,15 +311,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
     // shooter's viewLag alone undershoots the ghost by (shooterPing −
     // myPing)/2 - a fat-pipe shooter's server judges me ~90ms deeper
     // than their rendered epoch, the f:30 pop:wire refuse class.
-    const shooterRp = shooterId ? deps.world.remotePlayers.get(shooterId) : undefined;
-    const shooterLagMs = shooterRp?.rewindLocalMs(nmPing) ?? 0;
-    // Bot shooters have no render pipeline - rewindTarget short-
-    // circuits to the victim's live wire pos (the move shadow, ~uplink
-    // behind live), so rewinding by the human-shooter viewLag model
-    // mispredicts every rim blast by ~vel*80ms (the BOT-* kb-echo rows).
-    const lagSec = shooterId !== undefined && isBotId(shooterId) ? nmPing / 2000
-      : Math.min(0.35, Math.max(0, shooterLagMs > 0 ? shooterLagMs / 1000 : nmPing / 2000 + 0.075));
-    const evalPos = lagSec > 0 && player.vel ? (_rewound ??= player.pos.clone()).copy(player.pos).addScaledVector(player.vel, -lagSec) : player.pos;
+    const evalPos = shadowEvalPos(player, shooterId, nmPing);
     const dpx = evalPos.distanceTo(pos);
     // Knockback reach = damage reach: the blast ends at aoeRadius, same
     // bound the server applies and the ?debug gizmo draws.
@@ -273,30 +336,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
     // replica explode (handlers run on arrival, the predicted shove waits
     // for the next projectile tick). A recorded raw echo at this center
     // means the shove already landed - consume it, don't re-apply.
-    const rkb = deps.world.recentKb;
-    // Same 700ms horizon as the stamp lifecycle - under drain-burst lag
-    // the replica's explode can trail the echo's wire arrival past 400ms,
-    // and a stale window double-shoves + strands a false kb-echo stamp.
-    // Same 18m + force match as the stamp consume in players.ts - replica
-    // blast centers diverge from the server's detonation by trajDiv's p95
-    // (~25m tail), so 8m missed real echoes and re-applied their shoves.
-    // recentKb carries the wire's APPLIED impulse - compare against the
-    // same falloff-scaled impulse we would apply, not the raw blast force.
+    const kbNm = deps.lazyNetworkManager?.();
     // Horizon extends while the wire starves - a stalled echo isn't a
     // refusal (a 1.4s inbound gap delays every echo past a flat 700ms).
-    const kbNm = deps.lazyNetworkManager?.();
     const horizon = kbEchoHorizon(kbNm?.serverPingMs ?? kbNm?.getPing?.() ?? 0, kbNm?.msSinceLiveRx?.() ?? 0);
-    const dupCands: number[] = [];
-    for (let k = 0; k < rkb.length; k += 1) {
-      const s = rkb[k]!;
-      if (now - s.t < horizon && Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 18) {dupCands.push(k);}
-    }
-    // Same identity rule as the stamp consume: center+time wins; the
-    // wire's applied impulse vs our predicted falloff only disambiguates
-    // multiple same-spot echoes - a hard veto double-shoves.
-    const dup = dupCands.length === 0 ? -1
-      : dupCands.reduce((a, b): number => Math.abs((rkb[a]!.f ?? impulse) - impulse) <= Math.abs((rkb[b]!.f ?? impulse) - impulse) ? a : b);
-    if (dup !== -1) {rkb.splice(dup, 1); return true;}
+    if (consumeKbEcho(pos, impulse, horizon, now)) {return true;}
     // Record the applied delta - a refused verdict (stamp expiry with no
     // echo) reverses exactly this, so a phantom shove can't displace the
     // body and poison every later envelope eval.
@@ -336,33 +380,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
     // Offline has no echo lane — stamping 'kb-echo' just reports the
     // self-shove as a parity miss at expiry; same reason `self` is set.
     if (kbNm?.isConnected?.() ?? false) {parityStamp('kb-echo');}
-    // Settle older stamps: a predicted self-shove the server never echoed
-    // back (~700ms past the consume window) was rejected server-side -
-    // loud parity miss, not a silent expiry.
-    for (let i = stamps.length - 1; i >= 0; i -= 1) {
-      if (now > kbStampDeadline(stamps[i]!, horizon)) {
-        if (!stamps[i]!.self) {
-          const s = stamps[i]!;
-          // Refused verdict - undo the predicted impulse before the next
-          // eval reads the drifted body.
-          if (s.iv && player.vel) {player.vel.x -= s.iv.x; player.vel.y -= s.iv.y; player.vel.z -= s.iv.z;}
-          // wireAt known → the server's blast point is the verdict's
-          // center - an unechoed stamp there is a real adjudication miss.
-          // pid without wireAt → the replica popped where the server
-          // shell never detonated (painted traj/body divergence) - the
-          // echo can't exist, that's replica lifecycle, not a refusal.
-          const wa = s.wireAt;
-          const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
-          parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
-            s.pop ? { pop: s.pop } : {},
-            s.m === undefined ? {} : { m: s.m },
-            s.wt === undefined ? {} : { wt: s.wt },
-            wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
-        }
-        stamps.splice(i, 1);
-      }
-    }
-    if (stamps.length > 8) {stamps.shift();}
+    settleShoveStamps(stamps, player, now, horizon);
     return true;
   }
 
