@@ -503,16 +503,46 @@ w.n += 1;
       this.hb('shot.frameStale');
       return { at: { x: msg.pos.x, y: msg.pos.y, z: msg.pos.z }, vel: undefined };
     }
-    const frame = rewindFrame(player, uplinkMs);
+    // The shadow trails the shooter's live position by ~one uplink
+    // transit - it simulates only inputs already arrived, while the
+    // client predicted ahead. Rewinding the full claim age therefore
+    // reads the shadow transit-ms EARLIER than the true fire instant:
+    // at ski speed every 100ms of transit is meters of false warp
+    // (bigSoak: originGap 1.5-7.9m, dirDeg clean). Shift the rewind
+    // forward by the measured transit so shadow(t+transit) approximates
+    // client-truth(t); floor at 0 = newest sample. Anti-cheat posture
+    // unchanged - still journal-derived, never claim pos.
+    const rewindMs = Math.max(uplinkMs - (this.deps.transitOf?.(playerId) ?? 0), 0);
+    const frame = rewindFrame(player, rewindMs);
     if (frame) {
       this.hb('shot.frameDerive');
       // The claim's pos was the muzzle point (eye + dir*MUZZLE_LEAD) -
       // apply the same lead to the derived eye or the server's arc
       // starts a meter behind the shell the client painted. No dir =
       // eye it is - a derived eye still beats the gated claim.
-      if (!dir) {return { at: frame.at, vel: frame.vel };}
-      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-      return { at: { x: frame.at.x + (dir.x / l) * MUZZLE_LEAD, y: frame.at.y + (dir.y / l) * MUZZLE_LEAD, z: frame.at.z + (dir.z / l) * MUZZLE_LEAD }, vel: frame.vel };
+      const eye = !dir ? frame.at : ((): Vec3 => {
+        const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+        return { x: frame.at.x + (dir.x / l) * MUZZLE_LEAD, y: frame.at.y + (dir.y / l) * MUZZLE_LEAD, z: frame.at.z + (dir.z / l) * MUZZLE_LEAD };
+      })();
+      // The shadow trails client truth by transit + report cadence +
+      // tick quantization - more than the EMA sees (bigSoak: 1.5-8m
+      // residual after transit-shifted rewind). A claim inside the
+      // physics-plausible window of the derived frame is the shooter's
+      // own painted muzzle: spawning there is exact visual parity AND
+      // still journal-bounded - outside the window the claim is a
+      // teleport/stall and the derived frame takes the spawn whole.
+      if (msg.pos && finiteVec(msg.pos)) {
+        const speed = dhypot3(frame.vel.x, frame.vel.y, frame.vel.z);
+        const winMs = (this.deps.transitOf?.(playerId) ?? 0) + 2 * (this.deps.transitVarOf?.(playerId) ?? 0) + 150;
+        const bound = 1 + (speed * winMs) / 1000;
+        const gap = dhypot3(msg.pos.x - eye.x, msg.pos.y - eye.y, msg.pos.z - eye.z);
+        if (gap <= bound) {
+          this.hb('shot.frameClaimWin');
+          return { at: { x: msg.pos.x, y: msg.pos.y, z: msg.pos.z }, vel: frame.vel };
+        }
+        this.hb('shot.frameClaimOut');
+      }
+      return { at: eye, vel: frame.vel };
     }
     if (msg.pos !== undefined) {this.hb('shot.frameThin');}
     return { at: claimOrigin(player, uplinkMs, msg.pos), vel: undefined };
@@ -849,7 +879,13 @@ win.violations += 1;
   private noteSpawnWarp(playerId: string, msg: ShotMsg, aim: { dir: Vec3; at: Vec3 }, base: Vec3, ndir: Vec3): void {
     const warpDeg = Math.acos(Math.min(1, Math.max(-1, base.x * ndir.x + base.y * ndir.y + base.z * ndir.z))) * 57.29577951308232;
     const ogap = msg.pos ? dhypot3(aim.at.x - msg.pos.x, aim.at.y - msg.pos.y, aim.at.z - msg.pos.z) : 0;
-    if (warpDeg > 0.5 || ogap > 1.5) {
+    // Bloom rotation is SHARED - the client prediction draws the same
+    // seeded coneDir (fire.ts), so a jitter inside this shot's cone
+    // radius is parity-perfect by design, not warp. Warp is rotation
+    // BEYOND the cone (or any rotation on a bloomless weapon) - that's
+    // a client/server seed or radius desync.
+    const coneDeg = (this.bloomPre.get(msg)?.radius ?? 0) * 57.29577951308232;
+    if (warpDeg - coneDeg > 0.5 || ogap > 1.5) {
       this.hb('shot.spawnWarp');
       this.rejectWarn(`${playerId}:spawnWarp`, `spawn warp: ${playerId} shot=${msg.shotId ?? '?'} dirDeg=${warpDeg.toFixed(2)} originGap=${ogap.toFixed(1)}`);
     }
