@@ -90,7 +90,14 @@ describe('wire conformance fuzz', () => {
               if (f === 0) { p.position = { x: (rng() - 0.5) * 800, y: (rng() - 0.5) * 200, z: (rng() - 0.5) * 800 }; room.moveSim.resync(p.id, p.position, 0); }
               else if (f === 1) {p.velocity = { x: (rng() - 0.5) * 60, y: (rng() - 0.5) * 40, z: (rng() - 0.5) * 60 };}
               else if (f === 2) { p.rotation = { yaw: rng() * Math.PI * 2, pitch: (rng() - 0.5) * 2 }; }
-              else if (f === 3) {p.health = Math.floor(rng() * p.maxHealth);}
+              else if (f === 3) {
+                p.health = Math.floor(rng() * p.maxHealth);
+                // The damage funnel is atomic: hp0 exists only on a
+                // corpse. A raw health write that lands 0 must model
+                // the kill edge or wire-row-coherent fires on a state
+                // no wire path can produce.
+                if (p.health === 0) { p.isDead = true; p.pendingRespawn = true; }
+              }
               else if (f === 4) {p.isDead = !p.isDead;}
               else if (f === 5) {p.status = Math.floor(rng() * 16);}
               else { p.skiing = rng() < 0.5 ? 1 : 0; p.jetting = rng() < 0.5 ? 1 : 0; }

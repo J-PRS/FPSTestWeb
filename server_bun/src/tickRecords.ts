@@ -393,7 +393,7 @@ this.metrics.recordsSuppressed += 1;
     // write pairs are atomic. (No upper bound: seeded/superbot pools
     // legitimately sit over class max.)
     inv('wire-row-coherent', p.isDead || p.health > 0,
-      () => ({ id: playerId, hp: p.health, dead: p.isDead, bot: p.isBot, awaiting: p.awaitingReady != null, pendingRespawn: p.pendingRespawn, streak: p.streak, deaths: p.deaths }));
+      () => ({ id: playerId, hp: p.health, maxHp: p.maxHealth, cls: p.armorClass, perk: p.perk, dead: p.isDead, bot: p.isBot, awaiting: p.awaitingReady != null, pendingRespawn: p.pendingRespawn, streak: p.streak, deaths: p.deaths, kills: p.kills }));
     // Cross-field law: a dead row carries no channels and no held keys --
     // death strips all three at the kill edge, so a corpse claiming
     // cloak/jet/ski means a write path re-armed them post-mortem.

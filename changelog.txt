@@ -1,3 +1,4 @@
+2026-11-25 - test: wireFuzz health-write fault injection now models the atomic kill edge (hp0 => corpse); hp0-alive coherence scare was test-side, funnel verified atomic
 2026-11-25 - wire: unbury rescue of bots declared as teleport past 6m lift (second dbgwire-jump source closed)
 2026-11-25 - wire: bot blink/warp/unstick teleports now declared on the wire (were silent 14m jumps - the dbgwire-jump GLITCH population)
 2026-11-25 - boot: prewarm explosion + rig clones created before the compile pass (effect materials now inside the warm coverage)
