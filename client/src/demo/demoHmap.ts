@@ -95,7 +95,7 @@ export function upsampleGrid(src: Uint8Array, srcN: number, dstN: number): Uint8
 // Cap raised after the rimrock audit: rough maps select >6000 samples at
 // bound 3 (≈16% of the 192² lattice) — 12000 covers a third of the
 // lattice at ~60KB, still trivial next to the clip's frame data.
-export function hmapCorrections(field: Heightfield, hm: DemoHeightmap, boundU8 = 3, cap = 12000): DemoHeightmap['corr'] {
+export function hmapCorrections(field: Heightfield, hm: DemoHeightmap, boundU8 = 3, cap = 12_000): DemoHeightmap['corr'] {
   const dst = HMAP_CORR_GRID;
   const up = upsampleGrid(hm.data, hm.gridN, dst);
   const gain = 125 * (hm.heightScale ?? 1);

@@ -61,7 +61,7 @@ export function sampleRemoteGhosts(remotes: Iterable<RemotePlayer>): void {
 
 function pct(vals: number[], f: number): number {
   if (vals.length === 0) {return 0;}
-  const s = vals.slice().sort((a, b) => a - b);
+  const s = vals.slice().toSorted((a, b) => a - b);
   return Math.round(s[Math.min(s.length - 1, Math.floor(s.length * f))]! * 100) / 100;
 }
 
@@ -69,7 +69,7 @@ registerDiag('ghosts', () => {
   const rw = rows.map((r) => r.rw);
   const wg = rows.map((r) => r.wg);
   const rg = rows.map((r) => r.rg);
-  const worst = rows.slice().sort((a, b) => b.rg - a.rg).slice(0, 5)
+  const worst = rows.slice().toSorted((a, b) => b.rg - a.rg).slice(0, 5)
     .map((r) => `${r.id.slice(0, 12)} rg=${r.rg.toFixed(1)} rgY=${r.rgY.toFixed(1)} rw=${r.rw.toFixed(1)} wg=${r.wg.toFixed(1)} @${Math.round(r.spd)}m/s ${r.sim ? 'SIM' : ''}${r.conv ? 'CONV' : ''}${r.cap ? 'CAP' : ''} sil=${Math.round(r.silence)}ms`);
   return {
     ghosts: {

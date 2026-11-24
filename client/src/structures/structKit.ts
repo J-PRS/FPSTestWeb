@@ -25,7 +25,7 @@ export const trimMat  = applyStructSurface(
   { panel: 0,   mottle: 0.08, grime: 0.25, dust: 0.3 });
 export const deckMat  = applyStructSurface(
   new THREE.MeshStandardMaterial({ color: 0x6D_70_78, roughness: 0.85, metalness: 0.25 }),
-  { panel: 2.2, mottle: 0.13, grime: 0.30, dust: 0.5 });
+  { panel: 2.2, mottle: 0.13, grime: 0.3, dust: 0.5 });
 export const glowCyan = new THREE.MeshBasicMaterial({ color: 0x59_F2_FF });
 export const glowAmber = new THREE.MeshBasicMaterial({ color: 0xFF_B0_40 });
 export const darkMat  = applyStructSurface(

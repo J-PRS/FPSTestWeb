@@ -1281,7 +1281,7 @@ this.sendDrops += 1;
       // burst and cadence-rejects the whole reclaim (the 4/s rejects on
       // stall recovery). A shell predicted that long ago resolved locally
       // anyway; a fresh spawn now would diverge from the arc we painted.
-      if ((e.msg.type === 'shotFired' || e.msg.type === 'aoeShot') && now - e.t >= 2_800) {continue;}
+      if ((e.msg.type === 'shotFired' || e.msg.type === 'aoeShot') && now - e.t >= 2800) {continue;}
       this.intentReplays += 1;
       this.send(e.msg);
     }

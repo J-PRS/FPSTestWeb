@@ -46,11 +46,11 @@ const randInputs = (seed: number, n: number): MoveInput[] => {
 
 describe('MoveSim deterministic replay', (): void => {
   it('two sims on the same input stream produce identical state', (): void => {
-    const inputs = randInputs(0x5EED, 1200);
+    const inputs = randInputs(0x5E_ED, 1200);
     const clientSim = new MoveSim(surf, spawn());
     const serverSim = new MoveSim(surf, spawn());
-    const rng1 = lcg32(0xCAFE);
-    const rng2 = lcg32(0xCAFE);
+    const rng1 = lcg32(0xCA_FE);
+    const rng2 = lcg32(0xCA_FE);
     for (const inp of inputs) {
       Object.assign(clientSim.input, inp);
       Object.assign(serverSim.input, inp);
@@ -68,7 +68,7 @@ describe('MoveSim deterministic replay', (): void => {
   });
 
   it('snapshot + restore mid-run: the restored sim continues identically', (): void => {
-    const inputs = randInputs(0xD1FF, 900);
+    const inputs = randInputs(0xD1_FF, 900);
     // The uninterrupted reference run.
     const ref = new MoveSim(surf, spawn());
     drive(ref, lcg32(0x77), inputs);
@@ -105,7 +105,7 @@ describe('MoveSim deterministic replay', (): void => {
 
   it('energy and position stay inside physical bounds under random inputs', (): void => {
     const sim = new MoveSim(surf, spawn());
-    drive(sim, lcg32(0xBEEF), randInputs(0x1EAF, 2400));
+    drive(sim, lcg32(0xBE_EF), randInputs(0x1E_AF, 2400));
     const { pos, vel } = sim.state;
     expect(Number.isFinite(pos.x + pos.y + pos.z)).toBe(true);
     expect(Number.isFinite(vel.x + vel.y + vel.z)).toBe(true);

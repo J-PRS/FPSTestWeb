@@ -168,7 +168,7 @@ export class SpeedLines {
     // (subtle presence), only genuinely fast flight goes dramatic -
     // "ramped but not annoying" = the drama belongs to real speed.
     const linear = Math.min(Math.max((speed - MIN_SPEED) / (FULL_SPEED - MIN_SPEED), 0), 1);
-    const target = Math.pow(linear, 1.5);
+    const target = linear ** 1.5;
     this.intensity += (target - this.intensity) * Math.min((target > this.intensity ? 10 : 5) * dt, 1);
 
     // Burst flare - spikes effective intensity past 1 briefly, decays fast
@@ -188,7 +188,7 @@ export class SpeedLines {
       s.mesh.position.addScaledVector(s.drift, dt);
       // Peak opacity also scales with intensity - dim whisper at
       // cruise, a real rush at cap. Never a solid line.
-      s.mat.opacity = effective * t * (0.20 + this.intensity * 0.28);
+      s.mat.opacity = effective * t * (0.2 + this.intensity * 0.28);
     }
 
     if (effective <= 0.01) {return;}

@@ -26,7 +26,7 @@ const ctx = (projectiles: any[]): CombatCtx => ({
 
 describe('bomblet scatter - uniform sphere law', (): void => {
   it('directions cover the sphere uniformly and kicks stay in the 6-18 band', (): void => {
-    simRngSeed(0xB00B);
+    simRngSeed(0xB0_0B);
     const projectiles: any[] = [];
     const carrierVel = new THREE.Vector3(20, -5, 10);
     spawnClusterBomblets(ctx(projectiles), carrier(carrierVel));

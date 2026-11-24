@@ -423,7 +423,7 @@ RibbonTrail.reapedStale += 1;
       if (!this.zombieHinted) {
         this.zombieHinted = true;
         RibbonTrail.zombieHints.set(this.tag, {
-          ...(this.jumpHint?.() ?? {}),
+          ...this.jumpHint?.(),
           inPool: this.inPool, stopped: this.stopped,
         });
       }

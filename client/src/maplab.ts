@@ -455,10 +455,10 @@ addEventListener('keydown', (e: KeyboardEvent): void => {
   if (!e.altKey || e.code !== 'KeyQ') {return;}
   e.preventDefault();
   const info = renderer.info.render;
-  const text = PROF.map((r): string =>
+  const text = `${PROF.map((r): string =>
     `[${r.tag}] total ${r.total.toFixed(1)}ms\n` +
     r.stages.map(([n, ms]): string => `  ${ms.toFixed(1).padStart(8)}ms  ${n}`).join('\n'),
-  ).join('\n') + `\nrenderer: ${info.calls} calls · ${info.triangles} tris · ${posAttr.count} verts · field ${field?.size ?? '?'}²`;
+  ).join('\n')  }\nrenderer: ${info.calls} calls · ${info.triangles} tris · ${posAttr.count} verts · field ${field?.size ?? '?'}²`;
   // oxlint-disable-next-line no-console -- the dump IS the feature
   console.log(text);
   navigator.clipboard?.writeText(text).catch((): void => {});
@@ -639,7 +639,7 @@ let skiT = 0;
 function skiScore(dt: number): void {
   skiT += dt;
   if (skiT < 4 || balls.length === 0) {return;}
-  const vs = balls.map((b) => Math.hypot(b.state.vel.x, b.state.vel.y, b.state.vel.z)).sort((a, b) => a - b);
+  const vs = balls.map((b) => Math.hypot(b.state.vel.x, b.state.vel.y, b.state.vel.z)).toSorted((a, b) => a - b);
   const mean = vs.reduce((a, b) => a + b, 0) / vs.length;
   const p90 = vs[Math.floor(vs.length * 0.9)]!;
   const fast = vs.filter((v) => v >= 45).length / vs.length;
@@ -681,7 +681,7 @@ function updateBallHud(): void {
   dispMean /= n;
   const distMean = ballDist.reduce((a, b) => a + b, 0) / Math.max(1, ballDist.length);
   const tort = distMean / Math.max(1, dispMean); // 1 = straight routes; high = circling bowls
-  const peaks = ballPeak.slice(0, n).sort((a, b) => a - b);
+  const peaks = ballPeak.slice(0, n).toSorted((a, b) => a - b);
   drawBallTrails();
   ballHud.textContent =
     `balls ${  n 

@@ -580,7 +580,7 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
       expect(k.ballPos, `ball ${k.id} not spawned`).not.toBeNull();
       expect(k.hadMesh, `ball ${k.id} had no mesh at kill`).toBe(true);
     }
-    const dists = kills.map((k): number => k.dist).sort((a, b): number => a - b);
+    const dists = kills.map((k): number => k.dist).toSorted((a, b): number => a - b);
     console.log(`kill dists=[${dists.map((d): string => d.toFixed(1)).join(', ')}]`);
     // Phantom signature: the ctor's ambient ring spot put bodies 200-400m
     // off the recorded track for EVERY ball - max <250 asserts that class

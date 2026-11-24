@@ -182,7 +182,7 @@ const rowsFor = (f: Filter): [number, WeaponStats][] => {
 const TIER_COLORS = ['#ff6b6b', '#ffa94d', '#ffe066', '#8fd08f', '#6db3f2', '#b197fc'];
 const heatFor = (col: Col, rows: [number, WeaponStats][]): Map<number, string> => {
   const vals = rows.map(([wt, s]): [number, number] => [wt, col.val ? col.val(wt, s) : Number(col.get(wt, s))]);
-  const sorted = vals.map(([, v]): number => v).sort((a, b): number => a - b);
+  const sorted = vals.map(([, v]): number => v).toSorted((a, b): number => a - b);
   const map = new Map<number, string>();
   for (const [wt, v] of vals) {
     // rank = share of values strictly below; ties share the best tier.
@@ -215,7 +215,7 @@ function render(): void {
   const out = document.querySelector('#out')!;
   const head = cols.map((c): string =>
     `<th class="${c.cls ?? ''}${c.key === sortKey ? ' sorted' : ''}" data-k="${c.key}">${c.label}${c.key === sortKey ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('');
-  const body = [...visible].sort(cmp).map(([wt, s]): string =>
+  const body = [...visible].toSorted(cmp).map(([wt, s]): string =>
     `<tr${s.sidearm ? ' class="side"' : ''}>${cols.map((c): string => {
       const v = c.get(wt, s);
       const color = heat.get(c.key)?.get(wt);
@@ -270,7 +270,7 @@ document.addEventListener('keydown', (e): void => {
     if (typeof va === 'number' && typeof vb === 'number') {return (va - vb) * sortDir;}
     return String(va).localeCompare(String(vb)) * sortDir;
   };
-  const rows = [...visible].sort(cmp);
+  const rows = [...visible].toSorted(cmp);
   const widths = cols.map((c): number => Math.max(c.label.length, ...rows.map(([wt, s]): number => text(wt, s, c).length)));
   const line = (cells: string[]): string => cells.map((t, i): string => cols[i]!.cls === 'l' ? t.padEnd(widths[i]!) : t.padStart(widths[i]!)).join('  ').trimEnd();
   const out = [

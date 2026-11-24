@@ -450,7 +450,7 @@ clipGen += 1;
   // Dev-time window: prefer clips from the last 24h — stale demos from
   // older builds break playback. Under 20 fresh ones, fall back to the
   // 20 most recent overall so the feed isn't empty.
-  const all = [...dm.getCoolShots()].sort((a, b): number => b.timestamp - a.timestamp);
+  const all = [...dm.getCoolShots()].toSorted((a, b): number => b.timestamp - a.timestamp);
   const cutoff = Date.now() - 86_400_000;
   const fresh = all.filter((e): boolean => e.timestamp > cutoff);
   entries = fresh.length >= 20 ? fresh : all.slice(0, 20);

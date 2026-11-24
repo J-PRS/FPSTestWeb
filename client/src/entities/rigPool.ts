@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mkGltfLoader, loadGltfCached } from '../gltfLoad.js';
 import { RIG_MANIFEST } from './playerClips.js';

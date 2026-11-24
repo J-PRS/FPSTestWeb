@@ -253,7 +253,7 @@ describe('netHarness - corpse-window echoes', (): void => {
   });
 
   it('correction carrying a non-finite authority vector is dropped, pos untouched', (): void => {
-    feed(h.nm, { type: 'correction', seq: 1, position: { x: NaN, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
+    feed(h.nm, { type: 'correction', seq: 1, position: { x: Number.NaN, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
     expect(h.player.pos.x).toBe(0);
   });
 

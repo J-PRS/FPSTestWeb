@@ -70,7 +70,7 @@ export function gpuPassDrain(): void {
 export function gpuPassReport(): { pass: string; avgMs: number; maxMs: number; n: number }[] {
   return [...stats.entries()]
     .map(([pass, s]) => ({ pass, avgMs: s.sumMs / s.n, maxMs: s.maxMs, n: s.n }))
-    .sort((a, b) => b.avgMs - a.avgMs);
+    .toSorted((a, b) => b.avgMs - a.avgMs);
 }
 
 export function gpuPassLog(): void {

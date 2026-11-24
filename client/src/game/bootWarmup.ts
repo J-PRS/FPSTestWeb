@@ -80,7 +80,7 @@ export class BootWarmup {
    *  the first OBSERVE_SECONDS after release - the anomalies a too-early
    *  veil drop would have hidden. */
   private report(): void {
-    const sorted = [...this.p50Samples].sort((a, b) => a - b);
+    const sorted = [...this.p50Samples].toSorted((a, b) => a - b);
     const p = (q: number): number => (sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] ?? 0) * 1000;
     const top = this.hitches.toSorted((a, b) => b.dt - a.dt).slice(0, 5)
       .map((h) => `${(h.dt * 1000).toFixed(0)}ms@${h.at.toFixed(1)}s`).join(' ');

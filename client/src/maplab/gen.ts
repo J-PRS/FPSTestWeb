@@ -296,7 +296,7 @@ export function drainage(h: Float32Array, N: number): Drainage {
   }
   // Accumulate upstream→downstream: process cells by descending filled
   // height - a cell always resolves before its receiver.
-  const order = [...Array(N * N).keys()].sort((a, b) => f[b]! - f[a]!);
+  const order = [...Array(N * N).keys()].toSorted((a, b) => f[b]! - f[a]!);
   for (const i of order) { const r = rec[i]; if (r >= 0) { acc[r] = acc[r]! + acc[i]!; } }
   return { acc, rec };
 }

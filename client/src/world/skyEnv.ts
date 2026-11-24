@@ -26,7 +26,7 @@ export function bakeSkyEnv(scene: THREE.Scene, atmoKey: string): void {
   const renderer = getRenderer();
   const skyMesh = scene.getObjectByName('__sky') as THREE.Mesh | undefined;
   if (!renderer || !skyMesh) {return;}
-  const fog = scene.fog;
+  const {fog} = scene;
   const key = `${atmoKey}|${fog instanceof THREE.Fog ? fog.color.getHexString() : ''}`;
   if (key === lastKey) {return;}
   lastKey = key;
