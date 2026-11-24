@@ -32,7 +32,21 @@ export function rotateLogs(): void {
       if (/\.(log|jsonl)$/.test(f)) {rotateLog(join(LOGS_DIR, f));}
     }
     rotateLog(join(import.meta.dir, '..', 'logs', 'server.log'));
+    archiveOldLogs();
   } catch { /* same */ }
+}
+
+/** OLD/ accumulates a rotated file per boot + per log-ship; past ~5k
+ *  loose files NTFS dir walks crawl (30k files once made `ls` hang for
+ *  minutes). Pack them into a dated tarball detached - --remove-files
+ *  unlinks each entry after it's safely in the archive. */
+const OLD_FILE_CAP = 5000;
+function archiveOldLogs(): void {
+  const oldDir = join(LOGS_DIR, 'OLD');
+  if (readdirSync(oldDir).length < OLD_FILE_CAP) {return;}
+  const name = `OLD_logs_${logStamp(new Date())}.tar.gz`;
+  Bun.spawn(['tar', '-czf', join(LOGS_DIR, name), '--remove-files', '-C', LOGS_DIR, 'OLD'], { stdout: 'ignore', stderr: 'ignore' });
+  logger.warn(`logs/OLD over ${OLD_FILE_CAP} files - archiving to ${name}`);
 }
 
 export { rotateLogIfBig } from './logRotate.ts';
