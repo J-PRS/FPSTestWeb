@@ -412,7 +412,9 @@ function rebuildVisual(): void {
           const z = ((Math.round(gz + dz) % hmSize) + hmSize) % hmSize;
           const p = (z * hmSize + x) * 4;
           const nv = Math.min(255, v[p]! + lift);
-          v[p] = v[p + 1] = v[p + 2] = nv;
+          v[p] = nv;
+          v[p + 1] = nv;
+          v[p + 2] = nv;
         }
       }
     }

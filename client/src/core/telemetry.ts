@@ -1,3 +1,5 @@
+import { registerDiag } from './fxDiag.js';
+
 // Deep telemetry — the flight recorder. The counter canaries say THAT a
 // class fired; the journal says WHAT the wire carried when it did. Heavy
 // for a shipped build (rings alloc + per-message work), so it only arms
@@ -68,7 +70,6 @@ export function armTelemetry(): void {
 
 // Alt+Q / __trailDump tail — rings bounded in the section, the full
 // journal is __telemetry.dump() only.
-import { registerDiag } from './fxDiag.js';
 registerDiag('telemetry', () => telemetry.enabled ? {
   telemetry: {
     wireIn: telemetry.wireIn.length, wireOut: telemetry.wireOut.length,

@@ -11,7 +11,6 @@ import { chatSink } from '../chat.js';
 import { settings } from '../../core/settings.js';
 import { ATLAS_BLACK } from '../../entities/PlayerModel.js';
 
-const _gibBlack = new THREE.Color(0x11_11_11); // same convention as playerKill - colored = alive marker
 import { noteKill } from '../../core/stateDebug.js';
 import { GameBot } from './botBrain.js';
 import type { TeamBots } from './index.js';
@@ -19,6 +18,7 @@ import { simRand } from '../../../../shared/simRand.js';
 import { gunGameOnKill, gunRungOf } from '../gunGame.js';
 import { igunChassis } from '../../../../shared/gunGame.js';
 
+const _gibBlack = new THREE.Color(0x11_11_11); // same convention as playerKill - colored = alive marker
 const _stealPos = new THREE.Vector3();
 const sayTimers = new Set<ReturnType<typeof setTimeout>>();
 

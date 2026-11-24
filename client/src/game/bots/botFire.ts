@@ -13,8 +13,6 @@ import { BOT_LOADOUTS, pickBotWeaponSafe } from '../../../../shared/botLoadouts.
 import { aimSkillFor } from '../../../../shared/botSkill.js';
 import { pHitFactor } from '../../../../shared/botHitChance.js';
 
-/** cos(20°): settle cone a pull waits inside - see botArsenal SETTLE_COS. */
-const SETTLE_COS = Math.cos(0.35);
 import { getProjectileConfig } from '../../projectiles/index.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { SLOT_DEFS } from '../../weapons.js';
@@ -30,6 +28,9 @@ import { classCanFire, type ArmorClass } from '../../../../shared/botClasses.js'
 import { gunGameWeapon } from '../../../../shared/gunGame.js';
 import { gunRungOf } from '../gunGame.js';
 import { simRand } from '../../../../shared/simRand.js';
+
+/** cos(20°): settle cone a pull waits inside - see botArsenal SETTLE_COS. */
+const SETTLE_COS = Math.cos(0.35);
 
 const _shotDir = new THREE.Vector3();
 const _shotMuzzle = new THREE.Vector3();

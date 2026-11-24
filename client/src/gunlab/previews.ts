@@ -287,7 +287,9 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
     {
       const nz = new Uint8Array(24 * 3);
       for (let i = 0; i < 24; i += 1) {const v = i < 12 ? 120 : 255; nz.set([v, v, v], i * 3);}
-      for (let i = 0; i < 60; i += 1) {const j = Math.floor(Math.random() * 24) * 3; nz[j] = nz[j + 1] = nz[j + 2] = 140 + (Math.random() * 115);}
+      for (let i = 0; i < 60; i += 1) {const j = Math.floor(Math.random() * 24) * 3; nz[j] = 140 + (Math.random() * 115);
+      nz[j + 1] = nz[j];
+      nz[j + 2] = nz[j];}
       mkBall(new THREE.MeshToonMaterial({ color: 0xFF_C0_40, gradientMap: ramp([...nz]) }), false, 34.5, 'halftone');
     }
     // Ink - pale fill, BLACK hull: the comic-ink outline instead of glow.

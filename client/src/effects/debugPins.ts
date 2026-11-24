@@ -300,7 +300,7 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
     const RP: number[] = []; const RS: number[] = []; const RW: number[] = []; const RB: number[] = [];
     const emitRun = (mult: number): void => {
       const n = RW.length;
-      if (n < 2 || q + (n - 1) * 18 > quadPos.length) {RP.length = RS.length = RW.length = RB.length = 0; return;}
+      if (n < 2 || q + (n - 1) * 18 > quadPos.length) {RP.length = 0; RS.length = 0; RW.length = 0; RB.length = 0; return;}
       for (let i = 0; i < n; i += 1) {
         // Averaged travel dir at this joint.
         let dx = 0, dy = 0, dz = 0;
@@ -327,7 +327,10 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
         qput(ax, ay, az, b0); qput(bx, by, bz, b0); qput(cx, cy, cz, b1);
         qput(ax, ay, az, b0); qput(cx, cy, cz, b1); qput(ex, ey, ez, b1);
       }
-      RP.length = RS.length = RW.length = RB.length = 0;
+      RP.length = 0;
+      RS.length = 0;
+      RW.length = 0;
+      RB.length = 0;
     };
     const pushVert = (x: number, y: number, z: number, t: number): void => {
       const b = Math.min(1, (LIFE_MS - (now - t)) / (LIFE_MS - HOLD_MS));

@@ -1,3 +1,5 @@
+import { ChildLogger } from '../core/Logger.js';
+
 const STABLE_FRAME_SECONDS = 0.035;
 const WINDOW_SIZE = 30;
 const REQUIRED_STABLE = 18; // 60% of the window
@@ -12,7 +14,6 @@ const MAX_WARMUP_SECONDS = 4;
 const OBSERVE_SECONDS = 10;
 const HITCH_FRAME_SECONDS = 0.05;
 
-import { ChildLogger } from '../core/Logger.js';
 const logger = new ChildLogger('BootWarmup');
 
 /** Heavy work still in flight that the veil must hide (GLB retarget

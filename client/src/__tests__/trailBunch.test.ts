@@ -5,6 +5,9 @@
  * a deposit path dumping many particles into one spot. */
 import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
+import { initVfx, updateVfx } from '../effects/vfxRuntime.js';
+import { QuarksTrail } from '../effects/vfx.js';
+import { RKT_CONFIG } from '../projectiles/rocketLauncherConfig.js';
 
 // impactMat()/normalMat() bake canvas textures - jsdom has no 2d context.
 // The texture is render-only; particle math doesn't touch it.
@@ -12,10 +15,6 @@ vi.mock('../effects/glowTexture.js', () => ({
   getGlowTexture: (): THREE.Texture => new THREE.Texture(),
   getPuffTexture: (): THREE.Texture => new THREE.Texture(),
 }));
-
-import { initVfx, updateVfx } from '../effects/vfxRuntime.js';
-import { QuarksTrail } from '../effects/vfx.js';
-import { RKT_CONFIG } from '../projectiles/rocketLauncherConfig.js';
 
 describe('missile trail particle bunching - sim flight', (): void => {
   it('no spot on the flight line piles particles beyond expected spacing', (): void => {

@@ -87,7 +87,8 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     let board = deps.world.ffaScores;
     if (deltaId === undefined) {
       if (!scores || Object.values(scores).some((v): boolean => !Number.isFinite(v))) {return;}
-      board = deps.world.ffaScores = new Map(Object.entries(scores));
+      deps.world.ffaScores = new Map(Object.entries(scores));
+      board = deps.world.ffaScores;
     } else {
       // Steady-state delta — merge one row; the full-board replace below
       // stays for legacy peers and the join snapshot.

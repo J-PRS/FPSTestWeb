@@ -92,7 +92,10 @@ export class TouchControls {
           this.moveId = -1;
           this.base.style.display = 'none';
           const {keys} = this.input;
-          keys[MOVE_CODES.f()] = keys[MOVE_CODES.b()] = keys[MOVE_CODES.l()] = keys[MOVE_CODES.r()] = false;
+          keys[MOVE_CODES.f()] = false;
+          keys[MOVE_CODES.b()] = false;
+          keys[MOVE_CODES.l()] = false;
+          keys[MOVE_CODES.r()] = false;
         }
       }
     };

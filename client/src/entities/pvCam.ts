@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { PlayerVisuals } from './PlayerVisuals.js';
 import { aswBucket, ASW_HEX } from '../ui/hud/scoreboard.js';
+import type { Terrain } from '../world/terrain.js';
 
 // Camera boom constants live here (not on PlayerVisuals) so pvCam doesn't
 // depend on PlayerVisuals at runtime - PlayerVisuals imports pvCam for
@@ -8,7 +9,6 @@ import { aswBucket, ASW_HEX } from '../ui/hud/scoreboard.js';
 export const TP_BACK = 4.2;   // boom length
 export const TP_UP = 1.7;     // constant lift - keeps the body under the crosshair
 export const TP_FOCUS = 180;  // camera converges on the aim point at this range
-import type { Terrain } from '../world/terrain.js';
 
 const _obTarget = new THREE.Vector3(); // observer drift target - scratch
 

@@ -129,7 +129,8 @@ for (const variant of variants) {
       }
     }
     const cnv = document.createElement('canvas');
-    cnv.width = cnv.height = SIZE;
+    cnv.width = SIZE;
+    cnv.height = SIZE;
     cnv.getContext('2d')!.putImageData(img, 0, 0);
     aoOut[variant] = cnv.toDataURL('image/webp', 0.9);
     // _fx pass: grime / aedge / tint channels over the same uv tris.
@@ -159,7 +160,8 @@ for (const variant of variants) {
       }
     }
     const cnv2 = document.createElement('canvas');
-    cnv2.width = cnv2.height = SIZE;
+    cnv2.width = SIZE;
+    cnv2.height = SIZE;
     cnv2.getContext('2d')!.putImageData(fx, 0, 0);
     aoOut[`${variant}_fx`] = cnv2.toDataURL('image/webp', 0.9);
     // Attrs moved to textures - strip them from the vertex payload.
