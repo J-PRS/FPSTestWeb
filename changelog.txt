@@ -1,3 +1,4 @@
+2026-11-25 - boot: shader warm fires on heavy-load drain (was tick-count, landed up to 10s after veil drop)
 2026-11-24 - boot: shaderwarm compile timing attribution (programs before->after + ms) for post-veil hitch hunts
 2026-11-24 - bots: offline unstick escalation - impulse x2 then teleport step (mirrors server watchdog ladder)
 2026-11-24 - spawn warp kill (transit-shifted rewind + speed-scaled claim windows, bigSoak 5/5 zero-warp); kb rim-abstain zero-carry stamps (kb-unpredicted noise dead); Ladybird no-lock degraded mouse-look fallback

@@ -198,6 +198,7 @@ export interface LoopState {
   /** Frames rendered before the shader warmup fires - lets async content
    *  (interiors, rigs) land in the scene before compileAsync runs. */
   warmN: number;
+  heavySeen?: boolean;
   warmed: boolean;
   /** Terrain materials compiled once after the real terrain lands (under
    *  the veil) so stragglers don't hitch the live-under-veil frames. */
@@ -867,10 +868,18 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
     }
   }
   if (st.warmN <= 60) {return;}
+  // Fire on drain, not tick count: heavy loads (rig parses, model bakes)
+  // hold pendingHeavy nonzero, and their materials are exactly what the
+  // compile pass must cover - warming by tick count fired up to ~10s
+  // after the veil dropped on interior-less maps (shaderWarmDone 8s
+  // past veilDropped in bootmarks), shielding nothing. The compile cost
+  // itself re-enters pendingHeavy, so the veil holds over it too.
+  if (pendingHeavy.n > 0) {st.heavySeen = true;}
+  const drained = st.heavySeen === true && pendingHeavy.n === 0;
   // getObjectByName walks the whole scene - poll every 30 ticks instead of
   // per frame while interiors land (a live profile caught the scan at ~2%
   // of a match profile through getObjectByProperty).
-  if (st.warmN <= 600 && (st.warmN % 30 !== 0 || !deps.sceneSetup.scene.getObjectByName('__t2interiors'))) {return;}
+  if (!drained && st.warmN <= 600 && (st.warmN % 30 !== 0 || !deps.sceneSetup.scene.getObjectByName('__t2interiors'))) {return;}
   st.warmed = true;
   pendingHeavy.n += 1;
   Promise.resolve(deps.rendererSetup.warmup()).finally((): void => {
