@@ -860,7 +860,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // pass enables are only re-evaluated on that path.
   // 0.5X (2× supersample - fill-rate profiling) is a dev-box control:
   // localhost exposes the button, tunneled/prod users never see it.
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]') {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '[::1]') {
     document.getElementById('pscale-half')?.style.removeProperty('display');
   }
   markPscale = wireSegRow('pscale-row', (): number => pscale,

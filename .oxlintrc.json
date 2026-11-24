@@ -101,7 +101,7 @@
     "unicorn/prefer-number-properties": "warn",
     "unicorn/prefer-query-selector": "off",
     "unicorn/consistent-existence-index-check": "warn",
-    "oxc/no-rest-spread-properties": "warn",
+    "oxc/no-rest-spread-properties": "off",
     "oxc/no-async-await": "off",
     "oxc/no-accumulating-spread": "warn",
     "oxc/no-barrel-file": "warn",

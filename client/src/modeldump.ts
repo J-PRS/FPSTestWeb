@@ -46,8 +46,8 @@ function weldByPosSkin(geo: THREE.BufferGeometry): THREE.BufferGeometry {
 const unwrapper = new UVUnwrapper({ BufferAttribute: THREE.BufferAttribute });
 await unwrapper.loadLibrary(
   (mode: string, progress: number): void => console.log('xatlas', mode, progress),
-  `${location.origin}/node_modules/xatlasjs/dist/xatlas.wasm`,
-  `${location.origin}/node_modules/xatlasjs/dist/xatlas.js`,
+  `${window.location.origin}/node_modules/xatlasjs/dist/xatlas.wasm`,
+  `${window.location.origin}/node_modules/xatlasjs/dist/xatlas.js`,
 );
 unwrapper.chartOptions = { ...unwrapper.chartOptions, normalSeamWeight: 4 };
 unwrapper.packOptions = { ...unwrapper.packOptions, resolution: 1024, padding: 8, texelsPerUnit: 0 };

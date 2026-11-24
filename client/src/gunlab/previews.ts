@@ -265,24 +265,24 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
     }), false, 25.3, 'velvet');
     // Toon family - gradientMap texels ARE the shade. Gray ramps give
     // the usual cel bands; an RGB ramp tints each band (duotone).
-    const ramp = (rgb: number[]): THREE.DataTexture => {
+    const rampTex = (rgb: number[]): THREE.DataTexture => {
       const px = new Uint8Array(rgb.length / 3 * 4);
       for (let i = 0; i < rgb.length / 3; i += 1) {px.set([rgb[i * 3]!, rgb[i * 3 + 1]!, rgb[i * 3 + 2]!, 255], i * 4);}
       const d = new THREE.DataTexture(px, rgb.length / 3, 1, THREE.RGBAFormat);
       d.minFilter = THREE.NearestFilter; d.magFilter = THREE.NearestFilter; d.needsUpdate = true;
       return d;
     };
-    const gray = (g: number[]): number[] => g.flatMap((v): number[] => [v, v, v]);
+    const gray = (v: number[]): number[] => v.flatMap((x): number[] => [x, x, x]);
     // Hard 2-band anime - light or shadow, no mid. (Dark bands stay
     // readable: 60-90% of diffuse, not near-black.)
-    mkBall(new THREE.MeshToonMaterial({ color: 0xFF_50_50, gradientMap: ramp(gray([130, 255])) }),
+    mkBall(new THREE.MeshToonMaterial({ color: 0xFF_50_50, gradientMap: rampTex(gray([130, 255])) }),
       true, 27.6, 'toon2');
     // 5-step - still cel, but reads rounder.
-    mkBall(new THREE.MeshToonMaterial({ color: 0x50_80_FF, gradientMap: ramp(gray([110, 140, 175, 215, 255])) }),
+    mkBall(new THREE.MeshToonMaterial({ color: 0x50_80_FF, gradientMap: rampTex(gray([110, 140, 175, 215, 255])) }),
       true, 29.9, 'toon5');
     // Duotone sunset - RGB ramp paints shade bands navy → orange.
     mkBall(new THREE.MeshToonMaterial({ color: 0xFF_FF_FF,
-      gradientMap: ramp([60, 50, 130, 200, 100, 40, 255, 190, 70]) }), false, 32.2, 'duotone');
+      gradientMap: rampTex([60, 50, 130, 200, 100, 40, 255, 190, 70]) }), false, 32.2, 'duotone');
     // Halftone-ish - a noisy ramp dithers the bands (screenprint read).
     {
       const nz = new Uint8Array(24 * 3);
@@ -290,10 +290,10 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       for (let i = 0; i < 60; i += 1) {const j = Math.floor(Math.random() * 24) * 3; nz[j] = 140 + (Math.random() * 115);
       nz[j + 1] = nz[j];
       nz[j + 2] = nz[j];}
-      mkBall(new THREE.MeshToonMaterial({ color: 0xFF_C0_40, gradientMap: ramp([...nz]) }), false, 34.5, 'halftone');
+      mkBall(new THREE.MeshToonMaterial({ color: 0xFF_C0_40, gradientMap: rampTex([...nz]) }), false, 34.5, 'halftone');
     }
     // Ink - pale fill, BLACK hull: the comic-ink outline instead of glow.
-    mkBall(new THREE.MeshToonMaterial({ color: 0xE8_E0_D0, gradientMap: ramp(gray([180, 255])) }),
+    mkBall(new THREE.MeshToonMaterial({ color: 0xE8_E0_D0, gradientMap: rampTex(gray([180, 255])) }),
       false, 36.8, 'ink');
     {
       const h = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x10_10_10, side: THREE.BackSide }));

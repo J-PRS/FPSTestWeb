@@ -182,7 +182,7 @@ export class CoolShotsPanel {
       let desc = m?.[2] ?? shot.description;
       const kill = m?.[4] === ' KILL';
       const miss = !desc.replace(/^(?:\w+ )?[^[]*\[[^\]]*\] ?/, '').trim();
-      const dist = m?.[3];
+      const distTxt = m?.[3];
       hspan('rank', String(rank));
       if (pov === 'REC' || pov === 'POV') {
         hspan(`pov pov-${pov.toLowerCase()}`, pov);
@@ -205,7 +205,7 @@ export class CoolShotsPanel {
         foot.append(s);
       };
       fspan('lifetime', `${shot.projectileLifetime.toFixed(2)}s`);
-      if (dist) {fspan('shot-dist', `${dist}m`);}
+      if (distTxt) {fspan('shot-dist', `${distTxt}m`);}
       if (miss) {fspan('shot-miss', 'miss');}
       fspan('time-ago', this.timeAgo(shot.timestamp));
     } else {
@@ -297,7 +297,7 @@ export class CoolShotsPanel {
     // server points at them.
     if (shot.filename) {
       act('Copy share link', (): void => {
-        const url = `${location.origin}/clips/${shot.filename}`;
+        const url = `${window.location.origin}/clips/${shot.filename}`;
         const toast = (text: string): void => {
           const t = document.createElement('div');
           t.textContent = text;

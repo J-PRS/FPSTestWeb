@@ -123,7 +123,7 @@ export class BotFire {
     // arsenal picks: airborne body + groundedOnly pick = next legal slot,
     // not a dry pull that never fires.
     const picked = getWeaponStats(picked0).groundedOnly && !bot.grounded
-      ? ([lo.far, lo.mid, lo.near, lo.side].find((w): boolean => !getWeaponStats(w).groundedOnly && classCanFire(bot.armorClass, w)) ?? picked0)
+      ? ([lo.far, lo.mid, lo.near, lo.side].find((c): boolean => !getWeaponStats(c).groundedOnly && classCanFire(bot.armorClass, c)) ?? picked0)
       : picked0;
     // Kit locks have no melee - knife range still shoots the held gun.
     const melee = !insta && !gg && (picked === WeaponType.Melee || dist <= MELEE_RANGE);
@@ -132,7 +132,7 @@ export class BotFire {
     // Gun game bypasses it outright: the ladder crosses armor tiers, so
     // the rung weapon is legal on any chassis (server shotAdmit agrees).
     const wt = gg || melee || classCanFire(bot.armorClass, picked) ? picked
-      : ([lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(bot.armorClass, w)) ?? -1);
+      : ([lo.side, lo.near, lo.mid, lo.far].find((c): boolean => classCanFire(bot.armorClass, c)) ?? -1);
     if (!melee && wt < 0) {return;}
     if (!this.canFire(bot, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}
     // Mirror the pick to the hand prop - offline bots never ride the wire

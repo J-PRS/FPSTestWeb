@@ -97,9 +97,9 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
     const budget = Math.max(1.5, CRUISE * (FRAME_MS / 1000)) + 0.75;
     if (jump > budget) {
       snaps.push(jump);
-      const it = interp as unknown as Record<string, unknown>;
-      const sv = it.simulatedVelocity as THREE.Vector3 | undefined;
-      snapNotes.push(`f=${f} now=${now.toFixed(0)} jump=${jump.toFixed(2)} sim=${String(it._simulating)} cvg=${(it.convergeTimer as number).toFixed(2)} fresh=${String(it.net && (it.net as { freshSeed: boolean }).freshSeed)} sv=${sv ? sv.length().toFixed(1) : '?'}`);
+      const rec = interp as unknown as Record<string, unknown>;
+      const sv = rec.simulatedVelocity as THREE.Vector3 | undefined;
+      snapNotes.push(`f=${f} now=${now.toFixed(0)} jump=${jump.toFixed(2)} sim=${String(rec._simulating)} cvg=${(rec.convergeTimer as number).toFixed(2)} fresh=${String(rec.net && (rec.net as { freshSeed: boolean }).freshSeed)} sv=${sv ? sv.length().toFixed(1) : '?'}`);
     }
     prev.copy(h.position);
   }

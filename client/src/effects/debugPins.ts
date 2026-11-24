@@ -153,7 +153,7 @@ export function dropDebugPin(owner: object, p: { x: number; y: number; z: number
       const dot = pdLen > 1e-6
         ? ((pin.x - prev.x) * pd!.x + (pin.y - prev.y) * pd!.y + (pin.z - prev.z) * pd!.z) / (d * pdLen)
         : 1;
-      const ang = Math.acos(Math.min(1, Math.max(-1, dot)));
+      const dev = Math.acos(Math.min(1, Math.max(-1, dot)));
       // (c) exemption: steeper than 30° off horizontal is a real
       //     vertical hop, never a teleport - always allowed
       const vert = Math.abs(pin.y - prev.y) / d > 0.5;

@@ -100,7 +100,7 @@ function vertexizeGeo(g: THREE.BufferGeometry, m: THREE.MeshStandardMaterial): v
 export const ATLAS_BLACK = true;
 // true = Lambert ~black (normal shading reads the figure); false =
 // MeshBasicMaterial 0x000000 = hard void, cheapest shader possible.
-const ATLAS_BLACK_LIT = typeof location !== 'undefined' && new URLSearchParams(location.search).get('atlaslit') !== '0';
+const ATLAS_BLACK_LIT = typeof window.location !== 'undefined' && new URLSearchParams(window.location.search).get('atlaslit') !== '0';
 
 // Shared class clip set: _tools/strip_anims.ts deduped the byte-identical
 // 32-clip payload (~518KB×20 files) into class_anims.glb; class rigs now
@@ -990,8 +990,8 @@ export class PlayerModel {
         const idx = g.getIndex();
         if (idx) {
           for (let i = 0; i < idx.count; i += 3) {
-            const b = idx.getX(i + 1);
-            idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, b);
+            const tmp = idx.getX(i + 1);
+            idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, tmp);
           }
         }
       }
