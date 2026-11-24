@@ -133,3 +133,12 @@ All pure extractions - comments moved with code, no behavior change. Gates per c
 - botFire.ts `resolveShot` 36 -> 19 via `pickShotWeapon` (44e85719)
 
 All pure extractions; gates: tsc clean, targeted vitest green, full 792-suite green on the gameLoop split.
+
+## 2026-11-24 structural burn-down (cont. 4)
+
+- debugPins.ts `dropDebugPin` 34 -> 20 via `connIsBad`; `flushDebugPins` 34 -> thin via `bakeLineSpine`/`bakeQuadStrip` (3aa7a9cf)
+- projRemote.ts `tickRemote` 30 -> dispatcher via `hitTerrain`/`popOnBody` (386f9354)
+- fire.ts `spawnProjectile` 33 -> 16 via `launchKinematics`/`wireProjectileHooks`/`sendSpawnClaim` (207527a6)
+- impact.ts `handleProjectileImpact` 33 -> 20 via `handleRemoteImpact` (9423842a)
+
+All pure extractions; gates: tsc clean, full 792 vitest green on the combat splits.
