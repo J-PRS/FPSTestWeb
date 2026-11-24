@@ -16,6 +16,7 @@
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import { type BotBrain,BRAWL_RANGE,FOE_CONE_MIN_DOT,type BotVec,type BrainCtx,type BrainOut} from '../../shared/botBrain.ts';
 
 import { losClear } from '../../shared/botLos.ts';
@@ -314,7 +315,9 @@ export class ServerBots {
       const d = { x: brain.lastDest.x - p.position.x, z: brain.lastDest.z - p.position.z };
       const dl = Math.hypot(d.x, d.z) || 1;
       const nx = p.position.x + (d.x / dl) * 14, nz = p.position.z + (d.z / dl) * 14;
-      this.room.moveSim.resync(id, { x: nx, y: (this.field ? hmHeight(this.field, nx, nz) : p.position.y) + 0.5, z: nz }, Math.atan2(d.x, d.z));
+      const tp = { x: nx, y: (this.field ? hmHeight(this.field, nx, nz) : p.position.y) + 0.5, z: nz };
+      this.room.moveSim.resync(id, tp, Math.atan2(d.x, d.z));
+      this.wireTeleport(id, tp);
       logger.info('Bot unstick teleport', { bot: id, to: { x: Number(nx.toFixed(1)), z: Number(nz.toFixed(1)) } });
     }
   }
@@ -338,6 +341,13 @@ export class ServerBots {
    *  a wire claim. Effects: dash/bounce ride applyImpulse, slam dives
    *  + lands a blast, blink/warp teleport toward the current goal with
    *  a ground snap. */
+  /** Server-side bot teleports must declare on the wire, same contract
+   *  as a human's warp claim: an undeclared 14m snap hits the client's
+   *  interp as an impossible jump - GLITCH warn + wiped DR state. */
+  private wireTeleport(id: string, pos: { x: number; y: number; z: number }): void {
+    this.room.broadcast(eventPayload(WORLD_MODEL.player!, 'teleport', 'playerId', id, { position: { x: pos.x, y: pos.y, z: pos.z }, velocity: { x: 0, y: 0, z: 0 } }) as never);
+  }
+
   private applySkill(id: string, p: { position: BotVec; rotation: { yaw: number }; skill?: string; lastSkillUse?: number }, out: BrainOut): void {
     const {skill} = p;
     if (!skill || out.skill !== skill) {return;}
@@ -367,7 +377,9 @@ export class ServerBots {
       case 'blink':
       case 'warp': {
         const nx = p.position.x + dir.x * 14, nz = p.position.z + dir.z * 14;
-        this.room.moveSim.resync(id, { x: nx, y: (this.field ? hmHeight(this.field, nx, nz) : p.position.y) + 0.5, z: nz }, p.rotation.yaw);
+        const tp = { x: nx, y: (this.field ? hmHeight(this.field, nx, nz) : p.position.y) + 0.5, z: nz };
+        this.room.moveSim.resync(id, tp, p.rotation.yaw);
+        this.wireTeleport(id, tp);
         break;
       }
     }
