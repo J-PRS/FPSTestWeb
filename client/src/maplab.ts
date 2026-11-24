@@ -456,8 +456,8 @@ addEventListener('keydown', (e: KeyboardEvent): void => {
   e.preventDefault();
   const info = renderer.info.render;
   const text = `${PROF.map((r): string =>
-    `[${r.tag}] total ${r.total.toFixed(1)}ms\n` +
-    r.stages.map(([n, ms]): string => `  ${ms.toFixed(1).padStart(8)}ms  ${n}`).join('\n'),
+    `[${r.tag}] total ${r.total.toFixed(1)}ms\n${ 
+    r.stages.map(([n, ms]): string => `  ${ms.toFixed(1).padStart(8)}ms  ${n}`).join('\n')}`,
   ).join('\n')  }\nrenderer: ${info.calls} calls · ${info.triangles} tris · ${posAttr.count} verts · field ${field?.size ?? '?'}²`;
   // oxlint-disable-next-line no-console -- the dump IS the feature
   console.log(text);

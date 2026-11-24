@@ -63,7 +63,7 @@ export function makeProjectileConfig(
     meshColor: rest.meshColor ?? 0x80_80_80,
     meshType: rest.meshType ?? 'ball',
     glowShell: rest.glowShell ?? false,
-    glowColor: rest.glowColor ?? 0xFFFFFF,
+    glowColor: rest.glowColor ?? 0xFF_FF_FF,
     glowOpacity: rest.glowOpacity ?? 0.4,
     meshRampIn: rest.meshRampIn ?? true,
     meshRampInDuration: rest.meshRampInDuration ?? 0.2,

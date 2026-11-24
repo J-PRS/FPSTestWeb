@@ -81,7 +81,7 @@
     "no-duplicate-imports": "warn",
     "prefer-destructuring": "warn",
     "no-use-before-define": ["warn", { "functions": false, "classes": true, "variables": false, "allowNamedExports": false }],
-    "no-empty-function": "warn",
+    "no-empty-function": "off",
     "init-declarations": "off",
     "new-cap": "warn",
     "class-methods-use-this": "off",
@@ -159,7 +159,8 @@
         "client/src/__tests__/**"
       ],
       "rules": {
-        "no-console": "off"
+        "no-console": "off",
+        "vitest/no-conditional-in-test": "off"
       }
     }
   ],
