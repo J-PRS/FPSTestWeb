@@ -8,6 +8,7 @@ import type { Room } from './Room.ts';
 import { hmHeight, hmChord } from '../../shared/heightfield.ts';
 import { classCapsule, type ArmorClass } from '../../shared/botClasses.ts';
 import { inv } from '../../shared/invariants.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import type { PlayerState } from './types.ts';
 
@@ -77,9 +78,22 @@ export class RoomUnbury {
     if (((this.logN += 1) - 1) < 30) {
       logger.debug(`unbury ${p.id}: pos.y=${p.position.y.toFixed(1)} feet=${(p.position.y - eye).toFixed(1)} terrain=${terrain.toFixed(1)} bot=${p.isBot} ${room.moveSim.unburyDebug(p.id)}`);
     }
+    const lift = terrain + eye - p.position.y;
     p.position.y = terrain + eye;
     p.velocity.y = Math.max(0, p.velocity.y);
     room.moveSim.resync(p.id, p.position, p.rotation.yaw);
     room.healthBump('unbury');
+    // A big rescue is an instant server-side repositioning - undeclared,
+    // the client interp reads it as an impossible wire jump (the 10-14m
+    // dbgwire-jump population on heavy/medium bots that can't blink).
+    // Declare past 6m; smaller lifts interp smoothly and never flag.
+    // Bot-scoped: bot records are sim-owned truth, so a rescue IS a
+    // server teleport. Human records are claims - the owner's next
+    // report re-asserts truth, and a server-declared teleport of a
+    // human body would fight the claim stream.
+    if (lift > 6 && p.isBot) {
+      console.log('[unburyprobe] lift=' + lift.toFixed(1) + ' id=' + p.id); console.log();
+      room.broadcast(eventPayload(WORLD_MODEL.player!, 'teleport', 'playerId', p.id, { position: { x: p.position.x, y: p.position.y, z: p.position.z }, velocity: { x: p.velocity.x, y: p.velocity.y, z: p.velocity.z } }) as never);
+    }
   }
 }

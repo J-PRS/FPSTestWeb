@@ -1,3 +1,4 @@
+2026-11-25 - wire: unbury rescue of bots declared as teleport past 6m lift (second dbgwire-jump source closed)
 2026-11-25 - wire: bot blink/warp/unstick teleports now declared on the wire (were silent 14m jumps - the dbgwire-jump GLITCH population)
 2026-11-25 - boot: prewarm explosion + rig clones created before the compile pass (effect materials now inside the warm coverage)
 2026-11-25 - boot: shader warm fires on heavy-load drain (was tick-count, landed up to 10s after veil drop)
