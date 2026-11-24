@@ -128,39 +128,7 @@ export function dropDebugPin(owner: object, p: { x: number; y: number; z: number
     chainOwners.add(owner);
     wposDiag.conns += 1;
     const d = Math.hypot(pin.x - prev.x, pin.y - prev.y, pin.z - prev.z);
-    // conn.bad = this segment renders NOTHING (no line, no quad) - it's
-    // a discontinuity, not a trail.
-    // Two ways a conn goes bad:
-    //   1. DECLARED: the owner called breakDropDebugPin (teleport event)
-    //   2. DETECTED: long AND sideways AND flat-ish - see below
-    let bad = breakNext.delete(owner);
-    // Absolute discontinuity cap: pins drop ~every 4m of travel, so a
-    // >60m gap is NEVER one hop - it's an unbroken teleport the owner
-    // forgot to declare (blend re-seat, seek reconstruct, respawn).
-    // Without this the strip draws a sky-spanning chord.
-    if (!bad && d > 60) {bad = true;}
-    let log = gapLog.get(owner);
-    if (!log) {log = []; gapLog.set(owner, log);}
-    // Air→air conns can never hide: teleports happen at terrain, and
-    // terrain-contact pins are the event-marked ones.
-    if (!bad && (prev.ev || pin.ev) && log.length >= 4 && d > 1e-4) {
-      // (a) length outlier: >30x the mean of the last 10 gaps
-      const avg = log.reduce((a, g): number => a + g, 0) / log.length;
-      // (b) direction outlier: >12° off the ball's last movement step
-      //     (a teleport chord points somewhere the ball wasn't going)
-      const pd = lastDir.get(owner);
-      const pdLen = pd ? Math.hypot(pd.x, pd.y, pd.z) : 0;
-      const dot = pdLen > 1e-6
-        ? ((pin.x - prev.x) * pd!.x + (pin.y - prev.y) * pd!.y + (pin.z - prev.z) * pd!.z) / (d * pdLen)
-        : 1;
-      const dev = Math.acos(Math.min(1, Math.max(-1, dot)));
-      // (c) exemption: steeper than 30° off horizontal is a real
-      //     vertical hop, never a teleport - always allowed
-      const vert = Math.abs(pin.y - prev.y) / d > 0.5;
-      if (d > avg * 30 && dev > 0.21 && !vert) {bad = true;}
-    }
-    log.push(d);
-    if (log.length > 10) {log.shift();}
+    const bad = connIsBad(owner, prev, pin, d);
     if (bad) {
       conn.bad = true;
       wposDiag.bad += 1;
@@ -168,6 +136,40 @@ export function dropDebugPin(owner: object, p: { x: number; y: number; z: number
     }
   }
   lastPin.set(owner, pin);
+}
+
+/** conn.bad = this segment renders NOTHING (no line, no quad) - it's a
+ *  discontinuity, not a trail. Three ways a conn goes bad:
+ *    1. DECLARED: the owner called breakDropDebugPin (teleport event)
+ *    2. ABSOLUTE: >60m gap - pins drop ~every 4m, so that's NEVER one
+ *       hop; an unbroken teleport the owner forgot to declare (blend
+ *       re-seat, seek reconstruct, respawn). Without it the strip
+ *       draws a sky-spanning chord.
+ *    3. DETECTED on event-marked pins only (air->air conns can never
+ *       hide: teleports happen at terrain): (a) length >30x the mean
+ *       of the last 10 gaps AND (b) direction >12° off the ball's last
+ *       movement step (a teleport chord points somewhere the ball
+ *       wasn't going), unless (c) steeper than 30° off horizontal -
+ *       a real vertical hop, always allowed. */
+function connIsBad(owner: object, prev: Pin, pin: Pin, d: number): boolean {
+  let bad = breakNext.delete(owner);
+  if (!bad && d > 60) {bad = true;}
+  let log = gapLog.get(owner);
+  if (!log) {log = []; gapLog.set(owner, log);}
+  if (!bad && (prev.ev || pin.ev) && log.length >= 4 && d > 1e-4) {
+    const avg = log.reduce((a, g): number => a + g, 0) / log.length;
+    const pd = lastDir.get(owner);
+    const pdLen = pd ? Math.hypot(pd.x, pd.y, pd.z) : 0;
+    const dot = pdLen > 1e-6
+      ? ((pin.x - prev.x) * pd!.x + (pin.y - prev.y) * pd!.y + (pin.z - prev.z) * pd!.z) / (d * pdLen)
+      : 1;
+    const dev = Math.acos(Math.min(1, Math.max(-1, dot)));
+    const vert = Math.abs(pin.y - prev.y) / d > 0.5;
+    if (d > avg * 30 && dev > 0.21 && !vert) {bad = true;}
+  }
+  log.push(d);
+  if (log.length > 10) {log.shift();}
+  return bad;
 }
 
 /** Event pin (bounce/lunge/teleport): drops immediately AND resets the
@@ -240,13 +242,30 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
     if (now - c.t < LIFE_MS) {conns[ckeep] = c; ckeep += 1;}
   }
   conns.length = ckeep;
+  const w = bakeLineSpine(now);
+  mesh.visible = true;
+  (mesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+  (mesh.geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
+  mesh.geometry.setDrawRange(0, w / 3);
+
+  const q = camPos ? bakeQuadStrip(camPos, now) : 0;
+  quadMesh!.visible = true;
+  (quadMesh!.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+  (quadMesh!.geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
+  quadMesh!.geometry.setDrawRange(0, q / 3);
+}
+
+/** Bake the 1px wire spine into pos/col and return the vertex-word
+ *  count. Conn spine + pin gizmos are a debug skeleton - F1 only;
+ *  WPOS-alone mode is trail-only (quads carry the visuals, no wire
+ *  overlay). The live leash (body -> its last pin, brighter than the
+ *  recorded path) is also queued for the quad strip here. */
+function bakeLineSpine(now: number): number {
   let w = 0;
   const put = (x: number, y: number, z: number, b: number, red = false): void => {
     pos[w] = x; pos[w + 1] = y; pos[w + 2] = z;
     col[w] = b; col[w + 1] = red ? 0 : b * 0.4; col[w + 2] = 0; w += 3; // orange (red when flagged)
   };
-  // 1px conn spine is a debug skeleton - F1 only. WPOS-alone mode is
-  // trail-only: quads carry the visuals, no wire overlay.
   if (urlParams.debug) {
     for (const c of conns) {
       if (c.bad) {continue;} // discontinuity links render nothing - breaks, not trail
@@ -254,7 +273,7 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
       put(c.x1, c.y1, c.z1, b * 0.6); put(c.x2, c.y2, c.z2, b * 0.6);
     }
   }
-  // Live leash: body → its last pin, brighter than the recorded path.
+  // Live leash: body → its last pin.
   leashList.length = 0;
   for (const o of liveOwners) {
     const lp = livePos.get(o), lp2 = lastPin.get(o);
@@ -269,7 +288,6 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
     }
   }
   liveOwners.clear();
-  // Pin gizmos show only under F1 - WPOS alone is trail-only.
   if (urlParams.debug) {
     for (const p of pins) {
       const b = Math.min(1, (LIFE_MS - (now - p.t)) / (LIFE_MS - HOLD_MS));
@@ -279,19 +297,19 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
       }
     }
   }
-  mesh.visible = true;
-  (mesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-  (mesh.geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
-  mesh.geometry.setDrawRange(0, w / 3);
+  return w;
+}
 
-  // Connector quads: ONE continuous strip per owner - joints share
-  // vertices, the side vector at each joint averages the two segment
-  // directions, and width is per-VERTEX (fades with that pin's age), so
-  // the whole path renders as a single smoothly tapering ribbon. Bad
-  // conns break the strip - they're breaks, not chords. The live leash
-  // (ball -> last pin) extends the same strip to the body.
+/** Bake the connector quads and return the vertex-word count. ONE
+ *  continuous strip per owner - joints share vertices, the side vector
+ *  at each joint averages the two segment directions, and width is
+ *  per-VERTEX (fades with that pin's age), so the whole path renders
+ *  as a single smoothly tapering ribbon. Bad conns break the strip -
+ *  they're breaks, not chords. The live leash (ball -> last pin)
+ *  extends the same strip to the body. */
+function bakeQuadStrip(camPos: { x: number; y: number; z: number }, now: number): number {
   let q = 0;
-  if (camPos) {
+  {
     const qput = (x: number, y: number, z: number, b: number): void => {
       quadPos[q] = x; quadPos[q + 1] = y; quadPos[q + 2] = z;
       quadCol[q] = b; quadCol[q + 1] = b * 0.35; quadCol[q + 2] = b * 0.05; q += 3;
@@ -371,8 +389,5 @@ export function flushDebugPins(scene: THREE.Scene, camPos?: { x: number; y: numb
       emitRun(mult);
     }}
   }
-  quadMesh!.visible = true;
-  (quadMesh!.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-  (quadMesh!.geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
-  quadMesh!.geometry.setDrawRange(0, q / 3);
+  return q;
 }
