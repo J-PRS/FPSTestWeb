@@ -939,7 +939,15 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
         // Sync compile - compileAsync's KHR poll throws uncatchably in its
         // own setTimeout when a material lands mid-compile (Fe.get(e) →
         // undefined → 'isReady' crash). One serial pass has no async gap.
+        const before = renderer.info.programs?.length ?? 0;
+        const t0 = performance.now();
         renderer.compile(scene, camera);
+        // Attribution for the post-veil hitch hunts: a rewarm that costs
+        // 300+ms but adds zero programs was pure churn - the delta is the
+        // whole verdict, so log both every time.
+        const after = renderer.info.programs?.length ?? 0;
+        const ms = performance.now() - t0;
+        if (ms > 30) {console.warn(`[shaderwarm] compile ${ms.toFixed(0)}ms programs ${before}->${after}`);}
       } finally {compileInflight = false;}
     },
     setPixel,
