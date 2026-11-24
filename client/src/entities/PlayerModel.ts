@@ -815,75 +815,8 @@ export class PlayerModel {
     }
     let merged = _atlasGeoCache.get(this.variant)?.clone();
     if (!merged) {
-      const geos: THREE.BufferGeometry[] = [];
-      const geosSrc: THREE.BufferGeometry[] = [];
-      for (const sm of consumed) {
-        const g = denormGeo(sm.geometry.clone());
-        g.applyMatrix4(T.copy(Ainv).multiply(sm.matrixWorld));
-        // Mirrored parts (negative determinant) keep inward normals after
-        // applyMatrix4 - the winding flips, not the vectors. Flip tris.
-        if (T.determinant() < 0) {
-          const idx = g.getIndex();
-          if (idx) {
-            for (let i = 0; i < idx.count; i += 3) {
-              const b = idx.getX(i + 1);
-              idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, b);
-            }
-          } else {
-            for (const a of Object.values(g.attributes) as THREE.BufferAttribute[]) {
-              for (let i = 0; i < a.count; i += 3) {
-                for (let c = 0; c < a.itemSize; c += 1) {
-                  const t = a.getComponent(i + 1, c);
-                  a.setComponent(i + 1, c, a.getComponent(i + 2, c));
-                  a.setComponent(i + 2, c, t);
-                }
-              }
-            }
-          }
-        }
-        geos.push(g);
-        geosSrc.push(sm.geometry);
-      }
-      if (geos.length < 2) {return;}
-      merged = mergeGeometries(geos, false) ?? undefined;
+      merged = this.bakeAtlasGeometry(parts, consumed, Ainv);
       if (!merged) {return;}
-      // Rebuild authColor/tintMask across the merge for setTeamTint.
-      const nv = merged.getAttribute('position').count;
-      const auth = new Float32Array(nv * 3);
-      const mask = new Float32Array(nv);
-      let vo = 0;
-      for (const src of geosSrc) {
-        const a = src.userData.authColor as Float32Array | undefined;
-        const mk = src.userData.tintMask as Float32Array | undefined;
-        const n = src.getAttribute('position').count;
-        if (a) {auth.set(a, vo * 3);}
-        if (mk) {mask.set(mk, vo);}
-        vo += n;
-      }
-      merged.userData.authColor = auth;
-      merged.userData.tintMask = mask;
-      // Same wear bake the weapons get — run it HERE, pre-stash, so the
-      // cached clone carries baked attrs and a second player of this
-      // variant pays zero bake (was re-baking per model = seconds each).
-      if (!ATLAS_BLACK) {
-        const bakeWrap = new THREE.Group();
-        bakeWrap.add(new THREE.Mesh(merged, parts[0]!.material));
-        bakeVertexAO(bakeWrap, { grime: false, wearBoost: 0.2, edgeAngle: 28 });
-        // Pull the bake's darkening back toward authored color — full-
-        // strength AO paints joints/underlaps as void-black blotches on
-        // an organic body; floor keeps crevice shading without glitch-read.
-        const col = merged.getAttribute('color') as THREE.BufferAttribute | undefined;
-        if (col) {
-          for (let i = 0; i < col.count * 3; i += 1) {
-            col.array[i] = Math.max(auth[i]! * 0.55, auth[i]! * 0.6 + col.array[i]! * 0.4);
-          }
-          col.needsUpdate = true;
-        }
-      }
-      const stashed = merged.clone();
-      stashed.userData.authColor = auth; // clone()'s userData copy mangles Float32Arrays
-      stashed.userData.tintMask = mask;
-      _atlasGeoCache.set(this.variant, stashed);
     }
     const cached = _atlasGeoCache.get(this.variant)!;
     merged.userData.authColor = cached.userData.authColor;
@@ -934,6 +867,84 @@ export class PlayerModel {
     this.atlasParts.length = 0;
     this.atlasParts.push(mm);
     this.invalidateHulls(); // consumed meshes carried the hull clones
+  }
+
+  /** First-bake of the merged atlas geometry for this variant: anchor-
+   *  local bake of every consumed part, winding fix for mirrored parts,
+   *  authColor/tintMask rebuild, the wear bake (pre-stash so the cached
+   *  clone carries it), then stash. */
+  private bakeAtlasGeometry(parts: THREE.SkinnedMesh[], consumed: Set<THREE.SkinnedMesh>, Ainv: THREE.Matrix4): THREE.BufferGeometry | undefined {
+    const T = new THREE.Matrix4();
+    const geos: THREE.BufferGeometry[] = [];
+    const geosSrc: THREE.BufferGeometry[] = [];
+    for (const sm of consumed) {
+      const g = denormGeo(sm.geometry.clone());
+      g.applyMatrix4(T.copy(Ainv).multiply(sm.matrixWorld));
+      // Mirrored parts (negative determinant) keep inward normals after
+      // applyMatrix4 - the winding flips, not the vectors. Flip tris.
+      if (T.determinant() < 0) {
+        const idx = g.getIndex();
+        if (idx) {
+          for (let i = 0; i < idx.count; i += 3) {
+            const b = idx.getX(i + 1);
+            idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, b);
+          }
+        } else {
+          for (const a of Object.values(g.attributes) as THREE.BufferAttribute[]) {
+            for (let i = 0; i < a.count; i += 3) {
+              for (let c = 0; c < a.itemSize; c += 1) {
+                const t = a.getComponent(i + 1, c);
+                a.setComponent(i + 1, c, a.getComponent(i + 2, c));
+                a.setComponent(i + 2, c, t);
+              }
+            }
+          }
+        }
+      }
+      geos.push(g);
+      geosSrc.push(sm.geometry);
+    }
+    if (geos.length < 2) {return undefined;}
+    const merged = mergeGeometries(geos, false) ?? undefined;
+    if (!merged) {return undefined;}
+    // Rebuild authColor/tintMask across the merge for setTeamTint.
+    const nv = merged.getAttribute('position').count;
+    const auth = new Float32Array(nv * 3);
+    const mask = new Float32Array(nv);
+    let vo = 0;
+    for (const src of geosSrc) {
+      const a = src.userData.authColor as Float32Array | undefined;
+      const mk = src.userData.tintMask as Float32Array | undefined;
+      const n = src.getAttribute('position').count;
+      if (a) {auth.set(a, vo * 3);}
+      if (mk) {mask.set(mk, vo);}
+      vo += n;
+    }
+    merged.userData.authColor = auth;
+    merged.userData.tintMask = mask;
+    // Same wear bake the weapons get — run it HERE, pre-stash, so the
+    // cached clone carries baked attrs and a second player of this
+    // variant pays zero bake (was re-baking per model = seconds each).
+    if (!ATLAS_BLACK) {
+      const bakeWrap = new THREE.Group();
+      bakeWrap.add(new THREE.Mesh(merged, parts[0]!.material));
+      bakeVertexAO(bakeWrap, { grime: false, wearBoost: 0.2, edgeAngle: 28 });
+      // Pull the bake's darkening back toward authored color — full-
+      // strength AO paints joints/underlaps as void-black blotches on
+      // an organic body; floor keeps crevice shading without glitch-read.
+      const col = merged.getAttribute('color') as THREE.BufferAttribute | undefined;
+      if (col) {
+        for (let i = 0; i < col.count * 3; i += 1) {
+          col.array[i] = Math.max(auth[i]! * 0.55, auth[i]! * 0.6 + col.array[i]! * 0.4);
+        }
+        col.needsUpdate = true;
+      }
+    }
+    const stashed = merged.clone();
+    stashed.userData.authColor = auth; // clone()'s userData copy mangles Float32Arrays
+    stashed.userData.tintMask = mask;
+    _atlasGeoCache.set(this.variant, stashed);
+    return merged;
   }
 
   /** Rigid accessories are non-skinned meshes parented under a skeleton
