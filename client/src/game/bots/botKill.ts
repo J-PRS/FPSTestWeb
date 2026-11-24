@@ -270,6 +270,19 @@ function killChatter(b: TeamBots, killerId: string, bot: GameBot, weapon?: numbe
     }
     const dStreak = (b.deathStreak.get(bot.playerId) ?? 0) + 1;
     b.deathStreak.set(bot.playerId, dStreak);
+    victimChatter(bot, killerId, kn, vn, dStreak, skill);
+    if (killerId === 'local') {
+      // Same center headline the wire path (onPlayerKill) gives connected
+      // frags - offline kills were feed-row-only and read as no credit.
+      b.hooks.fragBanner?.(`FRAGGED ${bot.playerId.replace('bot:', '')}!`);
+      sfx.killConfirm();
+    }
+  }
+
+/** The dead bot's side of a frag: bully/tilt overrides, else the
+ *  props-or-deathTaunt roll, plus the killer's thanks beat. Mirrors the
+ *  server's victimLine order. */
+function victimChatter(bot: GameBot, killerId: string, kn: string, vn: string, dStreak: number, skill: boolean): void {
     if (bulliedBy(bot.playerId, killerId)) {
       const c = chatter('bully', bot.playerId, kn);
       botSay(bot.playerId, c?.text ?? null, c?.vgs, c?.team);
@@ -294,12 +307,6 @@ function killChatter(b: TeamBots, killerId: string, bot: GameBot, weapon?: numbe
         const dt = deathTaunt(bot.playerId, kn);
         botSay(bot.playerId, dt?.text ?? null, dt?.vgs);
       }
-    }
-    if (killerId === 'local') {
-      // Same center headline the wire path (onPlayerKill) gives connected
-      // frags - offline kills were feed-row-only and read as no credit.
-      b.hooks.fragBanner?.(`FRAGGED ${bot.playerId.replace('bot:', '')}!`);
-      sfx.killConfirm();
     }
   }
 
