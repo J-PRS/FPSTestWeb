@@ -84,7 +84,7 @@ describe('LG trace teammate pass-through', (): void => {
 
   it('includeTeammates latches the friendly contact (heal beam)', (): void => {
     const remotes = new Map([['pal', remote(0, 10, -20, 'alpha')]]);
-    const r = lgTrace(rig(remotes, { localTeam: 'alpha' }), cam(), { t: 0 }, 22, false, true);
+    const r = lgTrace(rig(remotes, { localTeam: 'alpha' }), cam(), { t: 0 }, { range: 22, bounce: false, includeTeammates: true });
     expect(r.hitPlayerId).toBe('pal');
     // HEALBEAM_SNAP fattens the capsule - the entry backs off by the pad.
     expect(r.hitT).toBeGreaterThan(15);
@@ -98,7 +98,7 @@ describe('LG trace teammate pass-through', (): void => {
       ['foe', remote(0, 10, -15, 'bravo')],
       ['pal', remote(0, 10, -20, 'alpha')],
     ]);
-    const r = lgTrace(rig(remotes, { localTeam: 'alpha' }), cam(), { t: 0 }, 22, false, true);
+    const r = lgTrace(rig(remotes, { localTeam: 'alpha' }), cam(), { t: 0 }, { range: 22, bounce: false, includeTeammates: true });
     expect(r.hitPlayerId).toBe('foe');
     expect(r.hitT).toBeLessThan(15);
   });

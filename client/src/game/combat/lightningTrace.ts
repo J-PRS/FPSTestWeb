@@ -105,8 +105,10 @@ function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o
 // Shared ray: eye + current camera forward → terrain march + nearest
 // sphere hit. Both the damage tick AND the per-frame visual refresh run
 // this - a stale tip between ticks is what detached the bolt on strafes.
+type LgOpts = { range?: number; bounce?: boolean; includeTeammates?: boolean; snapPad?: number; coneCos2?: number };
+
 export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number },
-                        range = LG_RANGE, bounce = true, includeTeammates = false, snapPad = HEALBEAM_SNAP, coneCos2 = HEALBEAM_ATTACH_COS2): {
+                        opts: LgOpts = {}): {
   hitT: number;
   hitTarget: (typeof deps.targets)[number] | null;
   hitPlayerId: string | null;
@@ -118,13 +120,51 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   cam.getWorldDirection(_lgD);
   // Server rewind = view + (victimPing−myPing)/2 - ghost sweeps judge
   // the victim at the adjudicated epoch, not the rendered one.
+  const o = { range: LG_RANGE, bounce: true, includeTeammates: false, snapPad: HEALBEAM_SNAP, coneCos2: HEALBEAM_ATTACH_COS2, ...opts };
   _lgTransit = (deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2;
 
-  // Terrain: march the ray in 1.5m steps until it goes under the heightmap,
-  // then bisect the last step - the coarse march alone can leave the tip
-  // buried ~1.5m inside a slope.
+  const world = worldStop(deps, o.range);
+  return finishTrace(deps, traceT, world, o);
+}
+
+/** Entity leg of the shared ray: ray-vs-sphere target + player pick,
+ *  then the single terrain bounce when only the field stopped the bolt. */
+function finishTrace(deps: CombatDeps, traceT: { t: number }, world: { hitT: number; fieldT: number }, o: Required<LgOpts>): {
+  hitT: number;
+  hitTarget: (typeof deps.targets)[number] | null;
+  hitPlayerId: string | null;
+  bend: THREE.Vector3 | null;
+} {
+  let {hitT} = world;
+  const {fieldT} = world;
+
+  // Targets: ray-vs-sphere, nearest wins - tip lands on the SURFACE entry
+  // point (exact aim), never magnetized to the center
+  const hitTarget = traceTargetHit(deps, hitT, traceT, _lgO, _lgD);
+  hitT = traceT.t;
+  const hitPlayerId = tracePlayerHit(deps, hitT, traceT, _lgO, _lgD, o.includeTeammates, o.snapPad, o.coneCos2);
+  hitT = traceT.t;
+
+  _lgHit.copy(_lgO).addScaledVector(_lgD, hitT);
+
+  // Terrain bounce: ground stopped the bolt (not a wall/hull, not an
+  // entity) - skip off the slope once, ≤LG_BOUNCE_RANGE, half damage.
+  // Mirrors the server's beamSweepRay leg-for-leg.
+  if (o.bounce && !hitTarget && !hitPlayerId && fieldT < o.range && hitT === fieldT) {
+    const bounced = bounceLeg(deps);
+    if (bounced) {return bounced;}
+  }
+  return { hitT, hitTarget, hitPlayerId, bend: null };
+}
+
+/** World stop for the shared ray: terrain march (1.5m steps + bisect of
+ *  the last step - the coarse march alone can leave the tip buried
+ *  ~1.5m inside a slope), then structures and deployable hulls contest
+ *  the reach. fieldT = the terrain distance specifically - only a FIELD
+ *  hit earns the bounce leg. */
+function worldStop(deps: CombatDeps, range: number): { hitT: number; fieldT: number } {
   let hitT = range;
-  let fieldT = range; // terrain stop distance - a FIELD hit can bounce
+  let fieldT = range;
   for (let d = 1.5; d <= range; d += 1.5) {
     _lgP.copy(_lgO).addScaledVector(_lgD, d);
     if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) {
@@ -153,25 +193,9 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
     const dh = segSolidHit(_lgO, _lgP, Projectile.dynColliders, undefined, deps.world.localTeam);
     if (dh) {hitT *= dh.t;}
   }
-
-  // Targets: ray-vs-sphere, nearest wins - tip lands on the SURFACE entry
-  // point (exact aim), never magnetized to the center
-  const hitTarget = traceTargetHit(deps, hitT, traceT, _lgO, _lgD);
-  hitT = traceT.t;
-  const hitPlayerId = tracePlayerHit(deps, hitT, traceT, _lgO, _lgD, includeTeammates, snapPad, coneCos2);
-  hitT = traceT.t;
-
-  _lgHit.copy(_lgO).addScaledVector(_lgD, hitT);
-
-  // Terrain bounce: ground stopped the bolt (not a wall/hull, not an
-  // entity) - skip off the slope once, ≤LG_BOUNCE_RANGE, half damage.
-  // Mirrors the server's beamSweepRay leg-for-leg.
-  if (bounce && !hitTarget && !hitPlayerId && fieldT < range && hitT === fieldT) {
-    const bounced = bounceLeg(deps);
-    if (bounced) {return bounced;}
-  }
-  return { hitT, hitTarget, hitPlayerId, bend: null };
+  return { hitT, fieldT };
 }
+
 
 // Second leg off the terrain hit in _lgHit: the bolt grounds, then arcs
 // to the nearest enemy within LG_BOUNCE_RANGE of the contact - any angle

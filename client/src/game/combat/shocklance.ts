@@ -101,7 +101,7 @@ export function createShocklance(deps: CombatDeps, hooks: LightningHooks): { lan
     const stats = getWeaponStats(WeaponType.Shocklance);
     const strs = ensureStrands();
 
-    const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT, LANCE_RANGE, false);
+    const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT, { range: LANCE_RANGE, bounce: false });
     const landed = hitT < LANCE_RANGE;
     const biting = hitTarget !== null || hitPlayerId !== null;
 

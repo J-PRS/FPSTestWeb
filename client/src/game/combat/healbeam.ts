@@ -50,13 +50,13 @@ export function createHealBeam(deps: CombatDeps) {
     // patient holds at the wider DETACH pad - only a wider miss lets a
     // fresh SNAP trace run, so edge-hovering can't flip-flop the beam.
     if (st.latchId) {
-      const res = lgTrace(deps, cam, _lgT, HEALBEAM_RANGE, false, true, HEALBEAM_DETACH, HEALBEAM_HOLD_COS2);
+      const res = lgTrace(deps, cam, _lgT, { range: HEALBEAM_RANGE, bounce: false, includeTeammates: true, snapPad: HEALBEAM_DETACH, coneCos2: HEALBEAM_HOLD_COS2 });
       if (res.hitPlayerId === st.latchId) {return { hitId: st.latchId, hitT: res.hitT };}
       st.latchId = null;
     }
     // includeTeammates: the paid contact IS a friendly body - without it
     // the ray skips teammates entirely and the beam can never latch.
-    const res = lgTrace(deps, cam, _lgT, HEALBEAM_RANGE, false, true);
+    const res = lgTrace(deps, cam, _lgT, { range: HEALBEAM_RANGE, bounce: false, includeTeammates: true });
     if (!res.hitPlayerId) {return { hitId: null, hitT: res.hitT };}
     const rp = deps.world.remotePlayers.get(res.hitPlayerId);
     const nm = deps.lazyNetworkManager?.();

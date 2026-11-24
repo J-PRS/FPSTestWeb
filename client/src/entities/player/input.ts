@@ -254,6 +254,20 @@ export class PlayerInput {
 
     if (h.isSpectating()) {return;}
 
+    this.bindCombatKeys(e);
+
+  }
+
+
+
+  /** Live-player bindings: fire/jet/sidearm/belt/melee/camera plus the
+
+   *  once-per-press actions (skill/deploy/respawn/throwFlag) and slots. */
+
+  private bindCombatKeys(e: KeyboardEvent): void {
+
+    const {h} = this;
+
     if (matchCode('fire', e.code)) {this.firePending = true; this.mouseHeld = true; this.needsRelease = false;}
 
     if (matchCode('jet', e.code)) {this.jetPending = true;}
