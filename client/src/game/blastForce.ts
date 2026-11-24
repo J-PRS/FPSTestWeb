@@ -331,11 +331,27 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks): {
     // predicting here is the kb-echo class (false shove, silent snap) or
     // the kb-unpredicted class (missed real shove). Abstain and let the
     // wire's verdict land ~one transit later - honest, never wrong.
-    if (shielded || margin < 0 || margin < 1.5 || occluded(pos, evalPos)) {return false;}
+    if (shielded || margin < 0 || occluded(pos, evalPos)) {return false;}
     const now = performance.now();
     const impulse = Math.min(
       aoeImpulseT1At(force, pos, evalPos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,
       BLAST_IMPULSE_MAX);
+    if (margin < 1.5) {
+      // Rim carry: the envelope edge genuinely can't be called client-side,
+      // so the wire verdict carries the shove ~one transit late - by design.
+      // But an UNstamped abstain leaves the echo unmatched, and the ledger
+      // screams kb-unpredicted over designed behavior (prod: forces 0.2-7,
+      // all rim-distance partial impulses). Stamp a zero-impulse carry: the
+      // echo consumes it, applies whole as residual, and only a truly
+      // unmatched echo ever reaches the unpredicted ledger.
+      // self:true - expiry must stay silent in BOTH outcomes: an echo
+      // consumes the carry, no echo means the server agreed we were out.
+      // f:0 because the residual math tops up by (wire force - stamp.f)
+      // and a carry applied nothing - the echo must land whole. iv=0
+      // likewise keeps the expiry reversal a no-op.
+      deps.world.selfBlastStamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, self: true, f: 0, m: Number(margin.toFixed(1)), iv: { x: 0, y: 0, z: 0 }, pid: meta?.pid, wt: meta?.wt, pop: meta?.pop });
+      return false;
+    }
     // Dedup, reverse direction: the knockback echo can beat its blast's
     // replica explode (handlers run on arrival, the predicted shove waits
     // for the next projectile tick). A recorded raw echo at this center
