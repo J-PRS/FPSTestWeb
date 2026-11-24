@@ -543,6 +543,57 @@ export class Player {
     return read.getInputState(this);
   }
 
+  /** Dead/spectate camera chain: killcam anchor (hold on the corpse,
+   *  then smootherstep glide to the killer - dwell > blend > track, a
+   *  hard teleport reads as a glitch), dead-spectate boom on a living
+   *  teammate's EYE pos, else T1/T2 free-fly observer till respawn. */
+  private updateObservingCam(dt: number): void {
+    const anchor = this.spectateAnchor;
+    if (anchor && performance.now() < this.spectateAnchorUntil && !anchor.isDead) {
+      if (!this.anchorOrbitSeeded) {
+        this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25;
+        this.anchorOrbitSeeded = true;
+      }
+      const elapsed = performance.now() - this.spectateAnchorStart;
+      if (elapsed < Player.KILLCAM_HOLD_MS) {
+        this.deadSpectateAnchor.copy(this.spectateAnchorFrom);
+      } else {
+        const t = Math.min(1, (elapsed - Player.KILLCAM_HOLD_MS) / Player.KILLCAM_BLEND_MS);
+        // smootherstep - zero velocity AND curvature at the ends, so the
+        // sweep leaves the corpse and settles on the killer without the
+        // smoothstep's mid-end snap.
+        const s = t * t * t * (t * (t * 6 - 15) + 10);
+        this.deadSpectateAnchor.lerpVectors(this.spectateAnchorFrom, anchor.pos, s);
+      }
+      this.visuals.updateCamera(this.camera, this.terrain, {
+        pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
+        thirdPerson: true,
+        orbit: this.orbit, dist: Player.SPECTATE_DIST,
+      });
+      return;
+    }
+    this.spectateAnchor = undefined;
+    this.anchorOrbitSeeded = false;
+    const spectateTarget = this.deadSpectateIdx >= 0
+      ? this.spectateTargets?.()[this.deadSpectateIdx]
+      : undefined;
+    if (spectateTarget?.alive) {
+      this.deadSpectateAnchor.copy(spectateTarget.pos);
+      this.visuals.updateCamera(this.camera, this.terrain, {
+        pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
+        thirdPerson: true,
+        orbit: this.orbit, dist: Player.SPECTATE_DIST,
+      });
+      return;
+    }
+    const obInput = this.readMoveInput();
+    // T1/T2 observer mode: free-look + fly till respawn
+    this.visuals.updateObserverCam(dt, this.camera, this.terrain, this.pos, this.vel, this.yaw, this.pitch, {
+      forward: obInput.forward, right: obInput.right, jumpHeld: obInput.jumpHeld || this.input.jetPending,
+      shiftDown: obInput.skiHeld || Boolean(this.input.keys['ShiftLeft'] || this.input.keys['ShiftRight']),
+    });
+  }
+
   update(dt: number): void {
     // Dying while spectating: death owns the cam now â€” drop the flag so
     // respawn doesn't leave the player stuck flying
@@ -581,56 +632,7 @@ export class Player {
     this.wasObserving = observing;
     if (observing) {
       if (!this.isDead) { this.deadSpectateIdx = -1; }
-      const anchor = this.spectateAnchor;
-      if (anchor && performance.now() < this.spectateAnchorUntil && !anchor.isDead) {
-        if (!this.anchorOrbitSeeded) {
-          this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25;
-          this.anchorOrbitSeeded = true;
-        }
-        // Hold on the corpse, then glide to the killer (Battlefield/CoD
-        // killcam pacing: dwell → blend → track) — a hard teleport reads
-        // as a glitch, not a "who got me" reveal.
-        const elapsed = performance.now() - this.spectateAnchorStart;
-        if (elapsed < Player.KILLCAM_HOLD_MS) {
-          this.deadSpectateAnchor.copy(this.spectateAnchorFrom);
-        } else {
-          const t = Math.min(1, (elapsed - Player.KILLCAM_HOLD_MS) / Player.KILLCAM_BLEND_MS);
-          // smootherstep — zero velocity AND curvature at the ends, so the
-          // sweep leaves the corpse and settles on the killer without the
-          // smoothstep's mid-end snap.
-          const s = t * t * t * (t * (t * 6 - 15) + 10);
-          this.deadSpectateAnchor.lerpVectors(this.spectateAnchorFrom, anchor.pos, s);
-        }
-        this.visuals.updateCamera(this.camera, this.terrain, {
-          pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
-          thirdPerson: true,
-          orbit: this.orbit, dist: Player.SPECTATE_DIST,
-        });
-        return;
-      }
-      this.spectateAnchor = undefined;
-      this.anchorOrbitSeeded = false;
-      const spectateTarget = this.deadSpectateIdx >= 0
-        ? this.spectateTargets?.()[this.deadSpectateIdx]
-        : undefined;
-      if (spectateTarget?.alive) {
-        // Dead-spectate: same boom as the middle-mouse inspect cam,
-        // anchored at the networked EYE pos — pivoting on the target's
-        // center mass, not their boots.
-        this.deadSpectateAnchor.copy(spectateTarget.pos);
-        this.visuals.updateCamera(this.camera, this.terrain, {
-          pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
-          thirdPerson: true,
-          orbit: this.orbit, dist: Player.SPECTATE_DIST,
-        });
-        return;
-      }
-      const obInput = this.readMoveInput();
-      // T1/T2 observer mode: free-look + fly till respawn
-      this.visuals.updateObserverCam(dt, this.camera, this.terrain, this.pos, this.vel, this.yaw, this.pitch, {
-        forward: obInput.forward, right: obInput.right, jumpHeld: obInput.jumpHeld || this.input.jetPending,
-        shiftDown: obInput.skiHeld || Boolean(this.input.keys['ShiftLeft'] || this.input.keys['ShiftRight']),
-      });
+      this.updateObservingCam(dt);
       return;
     }
     this.deadSpectateIdx = -1; // alive again — a fresh death re-opens the cycle
