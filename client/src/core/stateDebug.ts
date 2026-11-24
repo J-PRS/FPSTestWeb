@@ -1280,6 +1280,207 @@ function wireReplicaLanes(ctx: StateDebugContext, logger: ChildLogger): {
 }
 
 
+/** Streak-gate the raw snapshot diff list: transient health echoes,
+ *  liveness flips, membership gaps and fast-mover position deltas racing
+ *  in-flight events are expected - only ids that repeat across checks
+ *  count as real desync. */
+function significantSnapshotDiffs(
+  diffs: string[],
+  healthDriftIds: string[],
+  deadDriftIds: string[],
+  memberDriftIds: string[],
+  posDriftIds: string[],
+): { significantDiffs: string[]; transientCount: number; transientDeadCount: number } {
+  const { persistentIds, transientCount } = noteDrift(healthDriftStreak, healthDriftIds);
+
+  const { persistentIds: persistentDeadIds, transientCount: transientDeadCount } = noteDrift(deadDriftStreak, deadDriftIds);
+
+  const { persistentIds: persistentMemberIds } = noteDrift(memberDriftStreak, memberDriftIds);
+
+  const { persistentIds: persistentPosIds } = noteDrift(posDriftStreak, posDriftIds);
+
+  // Transient health sightings stay out of the warn — a first-seen
+
+  // [echo] diff is expected while combat is in flight. An [edge]
+
+  // isDead sighting is usually the liveness heal itself firing (the
+
+  // same snapshot that flags it also flips it back) — only a flip
+
+  // that persists across checks is real desync. Membership gaps are
+
+  // the same shape: a join/leave edge racing the roster heals via
+
+  // upsert/remoteDelete in this very pass.
+
+  const significantDiffs = diffs.filter((d): boolean => {
+
+    const h = /^\[echo\] Player (\S+) health/.exec(d);
+
+    if (h) {return persistentIds.has(h[1]!);}
+
+    const e = /^\[edge\] Player (\S+) isDead/.exec(d);
+
+    if (e) {return persistentDeadIds.has(e[1]!);}
+
+    const m = /^Player (\S+) on (?:server but not client|client but not server)/.exec(d);
+
+    if (m) {return persistentMemberIds.has(m[1]!);}
+
+    // [sim] position diffs get the same streak gate — a fast mover
+    // on a tier-delayed record legitimately exceeds 50m for one
+    // check; only a delta that survives consecutive snapshots is
+    // a stranded replica. The snapshot heal above still runs.
+    const s = /^\[sim\] Player (\S+) position/.exec(d);
+
+    if (s) {return persistentPosIds.has(s[1]!);}
+
+    return true;
+
+  });
+
+  return { significantDiffs, transientCount, transientDeadCount };
+
+}
+
+
+/** Local-player snapshot heal: health converges on server truth unless a
+ *  fresh event wrote it (tick-stale hashes must not resurrect old hp);
+ *  position stays correction-owned except a >30m delta on a dead send
+ *  channel, which no correction can ever reach. */
+function healLocalFromSnapshot(sp: SnapshotPlayer, ctx: StateDebugContext, networkManager: NetworkManager, logger: ChildLogger): void {
+  const player = ctx.getPlayer();
+
+
+
+  // The hash snapshot is a tick-interval stale — applying it
+  // over an event-driven write (playerHit/yourHealth <1s ago)
+  // resurrects the older hp, then the next echo 'drops' it
+  // back and warns. Fresh events win for DOWNWARD patches; an
+  // upward patch is a missed heal/hit echo and the freshness
+  // gate starved it exactly when combat events stream (the
+  // persistent 75-vs-125 desync class).
+  const hashHealthFresh = Date.now() - networkManager.lastHealthEventAt < 1000;
+  if (!player.isDead && Number.isFinite(sp.health)
+      && (sp.health > player.health + 0.5
+          || (!hashHealthFresh && player.health - sp.health > 0.5))) {player.health = sp.health;}
+  // Position is correction-owned — corrections answer position
+  // claims, but a hidden/idle client sends none (still-throttle
+  // floor is 4Hz; >10s silent means the channel is dead and no
+  // correction can ever fire). A >30m delta with dead sends is
+  // unhealable any other way: snap like a late respawn edge.
+  // lastSentPos is the hashed value (player.pos mirrors it per
+  // tick) — reading it here diffs the same coordinate the
+  // mismatch was raised on.
+  const sentPos = ctx.getLastSentPos();
+  if (Number.isFinite(sp.position.x + sp.position.y + sp.position.z)) {
+    const dist = Math.hypot(sentPos.x - sp.position.x, sentPos.y - sp.position.y, sentPos.z - sp.position.z);
+    if (dist > 30 && Date.now() - networkManager.lastPositionSendTime > 10_000 && player.pos) {
+      player.pos.set(sp.position.x, sp.position.y, sp.position.z);
+      player.syncMovement();
+      player.markTeleport();
+      logger.warn('[StateHash] local pos snapped to server truth', { dist: Math.round(dist), at: sp.position });
+    }
+  }
+
+}
+
+
+/** Remote-roster snapshot heal: mint missing members, converge health
+ *  and liveness flags that lost their events. */
+function healRemoteFromSnapshot(sp: SnapshotPlayer, cp: { health: number; isDead: boolean } | undefined, ctx: StateDebugContext, networkManager: NetworkManager): void {
+  // Missing-member heal — a join edge lost before we ever saw the
+
+  // player leaves them hashing "server but not client" forever:
+
+  // nothing else mints the roster record. Seed it from snapshot
+
+  // truth; the first-seen-update path spawns the entity when the
+
+  // next live record lands (dead members stay unspawned by design).
+
+  if (!cp && Number.isFinite(sp.position.x + sp.position.y + sp.position.z + sp.health)) {
+
+    networkManager.upsertRemotePlayer(sp.id, {
+
+      position: sp.position,
+
+      health: sp.health,
+
+      isDead: sp.isDead,
+
+    });
+
+  }
+
+  if (cp && Number.isFinite(sp.health) && Math.abs(cp.health - sp.health) > 0.5) {networkManager.healRemoteHealth(sp.id, sp.health);}
+
+  // Liveness heal — kill/respawn events muted by a resync gap or
+
+  // dropped elsewhere leave isDead divergent forever (health heals
+
+  // above, the flag itself never did). Server owns liveness; mirror
+
+  // the flip into the entity so visuals follow the roster.
+
+  if (cp && cp.isDead !== sp.isDead) {
+
+    const flip = networkManager.healRemoteLife(sp.id, sp.isDead, sp.health, sp.position);
+
+    const rp = ctx.remotePlayers.get(sp.id);
+
+    if (flip === 'revived') {rp?.respawn(sp.position);}
+
+    else if (flip === 'killed') {rp?.playDeath();}
+
+  }
+
+}
+
+
+/** Snapshot heal: health, liveness and membership all converge on server
+ *  truth. Runs on ANY diff - a filtered transient still needs this pass
+ *  to close or it keeps diverging until another diff happens to trigger. */
+function healSnapshotDivergence(
+  serverPlayers: SnapshotPlayer[],
+  clientPlayers: Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>,
+  ctx: StateDebugContext,
+  networkManager: NetworkManager,
+  logger: ChildLogger,
+): void {
+  const localId = networkManager.getLocalPlayerId();
+
+  for (const sp of serverPlayers) {
+
+    if (sp.id === localId) {healLocalFromSnapshot(sp, ctx, networkManager, logger); continue;}
+
+    healRemoteFromSnapshot(sp, clientPlayers.get(sp.id), ctx, networkManager);
+
+  }
+
+  // Mirror-direction heal: a roster entry the server no longer has
+
+  // (lost playerLeft) warns "client but not server" on every check
+
+  // forever. The snapshot is the membership authority — retire both
+
+  // the record and the entity.
+
+  const serverIds = new Set(serverPlayers.map((sp): string => sp.id));
+
+  for (const id of clientPlayers.keys()) {
+
+    if (id === localId || serverIds.has(id)) {continue;}
+
+    networkManager.remoteDelete(id);
+
+    ctx.remotePlayers.remove?.(id);
+
+  }
+
+}
+
+
 export function wireStateDebug(ctx: StateDebugContext): void {
 
   const { networkManager, logger } = ctx;
@@ -1405,55 +1606,7 @@ hashMismatchCount += 1;
 
       const { diffs, healthDriftIds, deadDriftIds, memberDriftIds, posDriftIds } = diffServerSnapshot(serverPlayers, clientPlayers);
 
-      const { persistentIds, transientCount } = noteDrift(healthDriftStreak, healthDriftIds);
-
-      const { persistentIds: persistentDeadIds, transientCount: transientDeadCount } = noteDrift(deadDriftStreak, deadDriftIds);
-
-      const { persistentIds: persistentMemberIds } = noteDrift(memberDriftStreak, memberDriftIds);
-
-      const { persistentIds: persistentPosIds } = noteDrift(posDriftStreak, posDriftIds);
-
-      // Transient health sightings stay out of the warn — a first-seen
-
-      // [echo] diff is expected while combat is in flight. An [edge]
-
-      // isDead sighting is usually the liveness heal itself firing (the
-
-      // same snapshot that flags it also flips it back) — only a flip
-
-      // that persists across checks is real desync. Membership gaps are
-
-      // the same shape: a join/leave edge racing the roster heals via
-
-      // upsert/remoteDelete in this very pass.
-
-      const significantDiffs = diffs.filter((d): boolean => {
-
-        const h = /^\[echo\] Player (\S+) health/.exec(d);
-
-        if (h) {return persistentIds.has(h[1]!);}
-
-        const e = /^\[edge\] Player (\S+) isDead/.exec(d);
-
-        if (e) {return persistentDeadIds.has(e[1]!);}
-
-        const m = /^Player (\S+) on (?:server but not client|client but not server)/.exec(d);
-
-        if (m) {return persistentMemberIds.has(m[1]!);}
-
-        // [sim] position diffs get the same streak gate — a fast mover
-        // on a tier-delayed record legitimately exceeds 50m for one
-        // check; only a delta that survives consecutive snapshots is
-        // a stranded replica. The snapshot heal above still runs.
-        const s = /^\[sim\] Player (\S+) position/.exec(d);
-
-        if (s) {return persistentPosIds.has(s[1]!);}
-
-        return true;
-
-      });
-
-
+      const { significantDiffs, transientCount, transientDeadCount } = significantSnapshotDiffs(diffs, healthDriftIds, deadDriftIds, memberDriftIds, posDriftIds);
 
       // Heal on ANY diff, warned or not — a transient isDead flip filtered
 
@@ -1487,123 +1640,7 @@ hashMismatchCount += 1;
 
         }
 
-        // Heal health divergence — the checker used to warn forever while
-
-        // a silently-dropped hit left local hp divergent for the session.
-
-        // Position stays correction-owned, isDead stays event-owned.
-
-        const localId = networkManager.getLocalPlayerId();
-
-        const player = ctx.getPlayer();
-
-        for (const sp of serverPlayers) {
-
-          if (sp.id === localId) {
-
-            // The hash snapshot is a tick-interval stale — applying it
-            // over an event-driven write (playerHit/yourHealth <1s ago)
-            // resurrects the older hp, then the next echo 'drops' it
-            // back and warns. Fresh events win for DOWNWARD patches; an
-            // upward patch is a missed heal/hit echo and the freshness
-            // gate starved it exactly when combat events stream (the
-            // persistent 75-vs-125 desync class).
-            const hashHealthFresh = Date.now() - networkManager.lastHealthEventAt < 1000;
-            if (!player.isDead && Number.isFinite(sp.health)
-                && (sp.health > player.health + 0.5
-                    || (!hashHealthFresh && player.health - sp.health > 0.5))) {player.health = sp.health;}
-            // Position is correction-owned — corrections answer position
-            // claims, but a hidden/idle client sends none (still-throttle
-            // floor is 4Hz; >10s silent means the channel is dead and no
-            // correction can ever fire). A >30m delta with dead sends is
-            // unhealable any other way: snap like a late respawn edge.
-            // lastSentPos is the hashed value (player.pos mirrors it per
-            // tick) — reading it here diffs the same coordinate the
-            // mismatch was raised on.
-            const sentPos = ctx.getLastSentPos();
-            if (Number.isFinite(sp.position.x + sp.position.y + sp.position.z)) {
-              const dist = Math.hypot(sentPos.x - sp.position.x, sentPos.y - sp.position.y, sentPos.z - sp.position.z);
-              if (dist > 30 && Date.now() - networkManager.lastPositionSendTime > 10_000 && player.pos) {
-                player.pos.set(sp.position.x, sp.position.y, sp.position.z);
-                player.syncMovement();
-                player.markTeleport();
-                logger.warn('[StateHash] local pos snapped to server truth', { dist: Math.round(dist), at: sp.position });
-              }
-            }
-
-            continue;
-
-          }
-
-          const cp = clientPlayers.get(sp.id);
-
-          // Missing-member heal — a join edge lost before we ever saw the
-
-          // player leaves them hashing "server but not client" forever:
-
-          // nothing else mints the roster record. Seed it from snapshot
-
-          // truth; the first-seen-update path spawns the entity when the
-
-          // next live record lands (dead members stay unspawned by design).
-
-          if (!cp && Number.isFinite(sp.position.x + sp.position.y + sp.position.z + sp.health)) {
-
-            networkManager.upsertRemotePlayer(sp.id, {
-
-              position: sp.position,
-
-              health: sp.health,
-
-              isDead: sp.isDead,
-
-            });
-
-          }
-
-          if (cp && Number.isFinite(sp.health) && Math.abs(cp.health - sp.health) > 0.5) {networkManager.healRemoteHealth(sp.id, sp.health);}
-
-          // Liveness heal — kill/respawn events muted by a resync gap or
-
-          // dropped elsewhere leave isDead divergent forever (health heals
-
-          // above, the flag itself never did). Server owns liveness; mirror
-
-          // the flip into the entity so visuals follow the roster.
-
-          if (cp && cp.isDead !== sp.isDead) {
-
-            const flip = networkManager.healRemoteLife(sp.id, sp.isDead, sp.health, sp.position);
-
-            const rp = ctx.remotePlayers.get(sp.id);
-
-            if (flip === 'revived') {rp?.respawn(sp.position);}
-
-            else if (flip === 'killed') {rp?.playDeath();}
-
-          }
-
-        }
-
-        // Mirror-direction heal: a roster entry the server no longer has
-
-        // (lost playerLeft) warns "client but not server" on every check
-
-        // forever. The snapshot is the membership authority — retire both
-
-        // the record and the entity.
-
-        const serverIds = new Set(serverPlayers.map((sp): string => sp.id));
-
-        for (const id of clientPlayers.keys()) {
-
-          if (id === localId || serverIds.has(id)) {continue;}
-
-          networkManager.remoteDelete(id);
-
-          ctx.remotePlayers.remove?.(id);
-
-        }
+        healSnapshotDivergence(serverPlayers, clientPlayers, ctx, networkManager, logger);
 
       } else {
 
