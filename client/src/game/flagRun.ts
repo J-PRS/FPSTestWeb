@@ -369,6 +369,17 @@ export class FlagRunBridge {
     this.capT += dt;
     const player = this.deps.lazyPlayer();
     this.playerPos = player.pos;
+    const touchers = this.collectTouchers(player, dt);
+    for (const f of this.flags) {
+      this.tickFlag(f, dt, touchers, player);
+    }
+    this.updateFlagMarkers();
+  }
+
+  /** Who can grab a flag this tick: [id, pos, prevPos] for the live
+   *  local player and every live bot, plus the run stats (path, time,
+   *  energy, top speed) the local body's segment updates. */
+  private collectTouchers(player: ReturnType<FlagRunDeps['lazyPlayer']>, dt: number): [string, THREE.Vector3, THREE.Vector3][] {
     const touchers: [string, THREE.Vector3, THREE.Vector3][] = [];
     if (!player.isDead) {
       const prev = this.lastTouchPos.get('local') ?? player.pos;
@@ -390,14 +401,21 @@ this.eN += 1;
       touchers.push([b.playerId, b.position, prev]);
       prev.copy(b.position);
     }
-    // Carried flags ride whatever body holds them — the local player OR
-    // a bot capper (?bots=N on flagrun puts rostered cappers on the
-    // circuit so a spectator can watch a run).
+    return touchers;
+  }
+
+  /** One flag's tick: carried = ride the carrier + cap check, dropped =
+   *  ballistic + return timer, home/dropped = swept-capsule touch.
+   *  Carried flags ride whatever body holds them — the local player OR
+   *  a bot capper (?bots=N on flagrun puts rostered cappers on the
+   *  circuit so a spectator can watch a run). */
+  private tickFlag(f: CircuitFlag, dt: number, touchers: [string, THREE.Vector3, THREE.Vector3][],
+    player: ReturnType<FlagRunDeps['lazyPlayer']>): void {
     const posOf = (id: string): THREE.Vector3 | null =>
       id === 'local' ? player.pos : this.w.bots.find((b): boolean => b.playerId === id)?.position ?? null;
     const deadOf = (id: string): boolean =>
       id === 'local' ? player.isDead : this.w.bots.find((b): boolean => b.playerId === id)?.isDead ?? true;
-    for (const f of this.flags) {
+    {
       if (f.state === 'carried') {
         const cPos = f.carrier ? posOf(f.carrier) : null;
         if (cPos && !deadOf(f.carrier!)) {
@@ -419,7 +437,7 @@ this.eN += 1;
           f.dropT = FLAG_RESET_S;
           this.w.onFeed(`${TEAM_LABEL[f.team]} flag dropped!`);
         }
-        continue;
+        return;
       }
       if (f.state === 'dropped') {
         this.tickBallistic(f, dt);
@@ -456,7 +474,10 @@ this.eN += 1;
       f.mesh.position.copy(f.pos);
       if (f.state === 'home') {f.mesh.position.y += STAND_TOP;}
     }
-    // Markers: one pin per stand, lifted to deck height.
+  }
+
+  /** Markers: one pin per stand, lifted to deck height. */
+  private updateFlagMarkers(): void {
     const cam = this.deps.lazyCamera();
     const hud = this.deps.lazyHud();
     for (const f of this.flags) {
