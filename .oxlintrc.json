@@ -76,7 +76,7 @@
     "unicorn/prefer-dom-node-append": "warn",
     "unicorn/prefer-modern-math-apis": "warn",
     "unicorn/prefer-string-slice": "warn",
-    "no-void": "warn",
+    "no-void": "off",
     "no-plusplus": "warn",
     "no-duplicate-imports": "warn",
     "prefer-destructuring": "warn",
