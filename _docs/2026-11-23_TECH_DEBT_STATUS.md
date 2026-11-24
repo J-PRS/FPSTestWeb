@@ -53,3 +53,27 @@ verification: `wc -l` census + targeted greps — no test runs.
 3. Shared `botTuning` funnel for the two armies (item 4, worsening).
 4. Lint burn-down on top 2-3 rules (item 3).
 5. Sign-or-delete leaderboard decision (item 5).
+
+## 2026-11-24 burn-down
+
+- **3. Lint ratchet.** ~1150 -> 527 warnings. Passes: oxlint --fix
+  (safe tier only, commit 2e2af3d2), unused-vars sweep (14 sites,
+  43cc8574), propSims namespace import (-86 in one line). Rules
+  retired as false-positive classes: no-void (9f6690f9 - void expr
+  is the deliberate fire-and-forget convention; --fix-suggestions
+  gutted ~20 real call sites to bare `undefined`), prefer-math-trunc
+  (43cc8574 - all remaining hits are deliberate uint32/int32 wraps
+  in PRNG/hash code). NOTE: never run `oxlint --fix-suggestions` -
+  it rewrites `void fetch/import/clipboard` to `undefined;` and
+  deletes the side effect. Remaining warnings are the structural
+  tier: complexity 125, no-conditional-in-test 41, nested ternary 40,
+  max-lines-per-function 30 - real refactors, not lint.
+- **7. hitLedger probes.** LANDED 9eca5a1c - selfKill* arrays,
+  preyNear lookup, foe sweep and recentKills upkeep gated behind
+  enableHitProbes(); soak tests opt in, prod skips the work.
+- **8-9.** wtmin.html unshipped - moved to _tools/wtmin/ (still
+  available manually); dead noindex rule removed from _headers.
+- **5. Leaderboard.** Narrowed: getStats() is LIVE (reads
+  matches.jsonl); only the signed-submit path (resultSigner +
+  leaderboard submit) is dormant on KRIBES_SIGN_KEY. Decision is
+  set-the-key vs delete the signer - owner call, not debt.
