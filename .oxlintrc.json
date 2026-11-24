@@ -97,7 +97,7 @@
     "unicorn/catch-error-name": "warn",
     "unicorn/switch-case-braces": "warn",
     "unicorn/no-negated-condition": "warn",
-    "unicorn/prefer-math-trunc": "warn",
+    "unicorn/prefer-math-trunc": "off",
     "unicorn/prefer-number-properties": "warn",
     "unicorn/prefer-query-selector": "off",
     "unicorn/consistent-existence-index-check": "warn",

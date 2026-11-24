@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
 import { urlParams } from '../core/params.js';
-import { glitch } from '../core/fxDiag.js';
 import { settings } from '../core/settings.js';
 /** On when F1 (urlParams.debug) OR the WPOS settings toggle - the
  *  latter keeps worldpos trails visible without the debug overlay. */
@@ -92,7 +91,6 @@ export function dropDebugPin(owner: object, p: { x: number; y: number; z: number
   let lp = livePos.get(owner);
   if (!lp) {lp = { x: 0, y: 0, z: 0 }; livePos.set(owner, lp);}
   const callAt = performance.now();
-  const callGapMs = callAt - (lastCall.get(owner) ?? callAt);
   lastCall.set(owner, callAt);
   const dx = p.x - lp.x, dy = p.y - lp.y, dz = p.z - lp.z;
   lp.x = p.x; lp.y = p.y; lp.z = p.z;
@@ -188,9 +186,7 @@ export function forceDropDebugPin(owner: object, p: { x: number; y: number; z: n
  *  strip ends at the old spot and restarts clean. Event-driven, so a
  *  legitimately fast ball can't false-trigger it. */
 const breakNext = new WeakSet<object>();
-/** Previous conn's unit direction per owner - the angle leg of the
- *  combined hide rule (long AND turned). */
-const lastConnDir = new WeakMap<object, { x: number; y: number; z: number }>();
+const _lastConnDir = new WeakMap<object, { x: number; y: number; z: number }>();
 export function breakDropDebugPin(owner: object, p: { x: number; y: number; z: number }): void {
   breakNext.add(owner);
   forceDropDebugPin(owner, p);

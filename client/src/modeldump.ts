@@ -6,7 +6,6 @@
 // Runtime mergeAtlasParts prefers that file → the 4-5s raycast bake
 // never runs at boot.
 import * as THREE from 'three';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { UVUnwrapper } from 'xatlas-three';
 import { PlayerModel } from './entities/PlayerModel.js';
 import { CLASS_BODY_VARIANT } from './entities/playerClips.js';

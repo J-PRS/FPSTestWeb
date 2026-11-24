@@ -49,8 +49,8 @@ describe('MoveSim deterministic replay', (): void => {
     const inputs = randInputs(0x5E_ED, 1200);
     const clientSim = new MoveSim(surf, spawn());
     const serverSim = new MoveSim(surf, spawn());
-    const rng1 = lcg32(0xCA_FE);
-    const rng2 = lcg32(0xCA_FE);
+    const _rng1 = lcg32(0xCA_FE);
+    const _rng2 = lcg32(0xCA_FE);
     for (const inp of inputs) {
       Object.assign(clientSim.input, inp);
       Object.assign(serverSim.input, inp);
@@ -75,7 +75,7 @@ describe('MoveSim deterministic replay', (): void => {
     // The interrupted run: same inputs, but restore at step 400.
     const interrupted = new MoveSim(surf, spawn());
     interrupted.jumpstart = 8; // same host-config as drive()/restored
-    const rng = lcg32(0x77);
+    const _rng = lcg32(0x77);
     let snap: ReturnType<MoveSim['snapshot']> | null = null;
     for (let i = 0; i < inputs.length; i += 1) {
       if (i === 400) {snap = interrupted.snapshot();}

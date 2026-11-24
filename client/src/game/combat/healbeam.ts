@@ -66,7 +66,7 @@ export function createHealBeam(deps: CombatDeps) {
     return { hitId: friendly ? res.hitPlayerId : null, hitT: res.hitT };
   }
 
-  function heal(e: FireEvent): void {
+  function heal(_e: FireEvent): void {
     const p = deps.lazyPlayer();
     // Dry tank refuses the tick — the server gates on the same tank;
     // refusing here keeps the beam honest before the echo lands.

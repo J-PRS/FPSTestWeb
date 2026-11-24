@@ -6,7 +6,7 @@ import { EMIT_GAIN } from '../core/config.js';
 
 // Beam shafts take the lerp-only tier color (no EMIT_GAIN — that's what
 // kept them off the lightsaber look); the core/glow ride the boosted emit.
-const emitHex = (tierColor: number): number =>
+const _emitHex = (tierColor: number): number =>
   new THREE.Color(tierColor).lerp(new THREE.Color(0xFF_FF_FF), 0.33).multiplyScalar(EMIT_GAIN).getHex();
 const shaftHex = (tierColor: number): number =>
   new THREE.Color(tierColor).lerp(new THREE.Color(0xFF_FF_FF), 0.33).getHex();

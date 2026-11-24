@@ -19,11 +19,11 @@ describe('tumble floor contract — client sampleHeight === shared hmChord', ():
     const restore = injectHeightmapBytes(data, size, 1, 40);
     try {
       const f = getHeightfield()!;
-      let worst = 0, wx = 0, wz = 0;
+      let worst = 0, _wx = 0, _wz = 0;
       for (let x = 0; x < 40; x += 0.5) {
         for (let z = 0; z < 40; z += 0.5) {
           const d = Math.abs(sampleHeight(x, z) - hmChord(f, x, z));
-          if (d > worst) {worst = d; wx = x; wz = z;}
+          if (d > worst) {worst = d; _wx = x; _wz = z;}
         }
       }
       expect(worst).toBeLessThan(1e-9); // at ${wx},${wz} — float noise only, surfaces identical

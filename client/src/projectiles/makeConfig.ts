@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
-import type { WeaponStats } from '../../../shared/weaponTable.js';
 import { KNOCKBACK_MULTIPLIER } from '../core/config.js';
 
 import type { ProjectileConfig } from './types.js';

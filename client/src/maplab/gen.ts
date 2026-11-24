@@ -260,7 +260,7 @@ function priorityFlood(h: Float32Array, N: number): Float32Array {
   while (heap.length > 0) {
     const top = pop();
     const i = Math.round(top % 1e7), ih = f[i]!;
-    const x = i % N, z = (i / N) | 0;
+    const x = i % N, z = Math.trunc(i / N);
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
       const nx = ((x + dx) % N + N) % N, nz = ((z + dz) % N + N) % N;
       const ni = nz * N + nx;
@@ -314,7 +314,7 @@ export function streamPower(h: Float32Array, N: number, p: GenParams): void {
       const r = rec[i];
       if (r < 0) { continue; }
       // Toroidal step - a receiver across the seam is one cell away, not N.
-      let dx = (i % N) - (r % N), dz = ((i / N) | 0) - ((r / N) | 0);
+      let dx = (i % N) - (r % N), dz = Math.trunc(i / N) - Math.trunc(r / N);
       if (dx > N / 2) { dx -= N; } else if (dx < -N / 2) { dx += N; }
       if (dz > N / 2) { dz -= N; } else if (dz < -N / 2) { dz += N; }
       const dist = Math.hypot(dx, dz);
@@ -777,7 +777,7 @@ export function breachPass(h: Float32Array, N: number, minFill = 0.01, margin = 
     const stack = [s]; comp[s] = nComp;
     while (stack.length > 0) {
       const i = stack.pop()!;
-      const x = i % N, z = (i / N) | 0;
+      const x = i % N, z = Math.trunc(i / N);
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const ni = (((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N);
         if (pit[ni] && comp[ni] < 0) { comp[ni] = nComp; stack.push(ni); }
@@ -793,7 +793,7 @@ export function breachPass(h: Float32Array, N: number, minFill = 0.01, margin = 
     const c = comp[i];
     if (c < 0) { continue; }
     spill[c] = f[i]!;
-    const x = i % N, z = (i / N) | 0;
+    const x = i % N, z = Math.trunc(i / N);
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
       const ni = (((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N);
       if (comp[ni] !== c && h[ni]! < rimH[c]!) { rimH[c] = h[ni]!; rim[c] = ni; }
@@ -805,7 +805,7 @@ export function breachPass(h: Float32Array, N: number, minFill = 0.01, margin = 
     h[r] = Math.min(h[r]!, spill[c]! - margin); // cut the saddle
     // Carve a short downhill channel outward from the breach - each
     // step dips just below the previous cell so water actually flows out.
-    let x = r % N, z = (r / N) | 0;
+    let x = r % N, z = Math.trunc(r / N);
     let prevH = h[r]!;
     for (let s = 0; s < Math.round(N / 6); s += 1) {
       let bn = -1, best = 0;
@@ -817,7 +817,7 @@ export function breachPass(h: Float32Array, N: number, minFill = 0.01, margin = 
       if (bn < 0) { break; }
       h[bn] = Math.min(h[bn]!, prevH - margin);
       prevH = h[bn]!;
-      x = bn % N; z = (bn / N) | 0;
+      x = bn % N; z = Math.trunc(bn / N);
     }
   }
 }

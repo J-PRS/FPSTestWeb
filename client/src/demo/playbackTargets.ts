@@ -68,7 +68,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
   }
 }
 
-const PLAYBACK_HARD_SNAP_DIST = 1.5; // meters - large desync -> hard snap
+const _PLAYBACK_HARD_SNAP_DIST = 1.5; // meters - large desync -> hard snap
 // Per-frame blend pull toward the last recorded keyframe - the event
 // stream becomes a moving target instead of a stair-step correction,
 // so motion stays smooth between the ~5-10Hz keyframes.

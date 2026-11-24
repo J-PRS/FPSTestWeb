@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import fc from 'fast-check';
+import * as fc from 'fast-check';
 import { aoeDamageAt, aoeImpulseAt, hitRadiusAt, lgTickDamage, lgChargeAt } from '../../../shared/combat.js';
 import { effectiveResist } from '../../../shared/perks.js';
 import { gunGameWeapon, gunGameAllows, gunGameRoll, gunGameBucket, gunGameClimax, igunChassis } from '../../../shared/gunGame.js';
