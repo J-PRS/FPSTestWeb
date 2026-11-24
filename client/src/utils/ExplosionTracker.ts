@@ -17,7 +17,11 @@ export class ExplosionTracker {
    *  caller's anomaly, not ours. */
   private pendingShoves: { x: number; y: number; z: number; t: number; force: number; pull: boolean }[] = [];
 
-  static readonly SHOVE_GRACE_MS = 600;
+  // Wire shove echoes systematically land ~1-3s after their stamped
+  // blast (kb-echo ageMs 1014-3016 observed live) - a 600ms grace
+  // expired every honest park into a kb-unpredicted row. 2s covers the
+  // observed lag ceiling; an expiry past it is a real unseen blast.
+  static readonly SHOVE_GRACE_MS = 2000;
 
   addExplosion(pos: THREE.Vector3, force: number, shooterId: string): void {
     // A poisoned entry leaks NaN into gib impulse math at kill time.

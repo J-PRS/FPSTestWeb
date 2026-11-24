@@ -17,6 +17,7 @@ import { recCorrection } from '../../core/telemetry.js';
 import { lastWeaponByPlayer, clipMetaForShot } from './projectiles.js';
 import { shotScore, computeAccuracy } from '../../projectiles/index.js';
 import { markLocalSeated, isSessionVeiled } from './world.js';
+import { msSinceRebase } from './resync.js';
 import { setIntel } from '../intel.js';
 import type { NetCtx } from './ctx.js';
 
@@ -405,7 +406,10 @@ function applyUnpredictedKb(ctx: NetCtx, position: { x: number; y: number; z: nu
   // in grace is the real invisible-force anomaly. Join-race leftovers
   // (echoes older than our prediction window) can't be "unpredicted".
   for (const s of deps.explosionTracker.expiredShoves(Date.now())) {
-    if (networkManager.msSinceConnect() > 2000) {
+    // Join-race leftovers can't be "unpredicted"; same for the rebase
+    // window - remote shells the volatile purge dropped can never have
+    // stamped a prediction, so their wire shoves are designed backlog.
+    if (networkManager.msSinceConnect() > 2000 && msSinceRebase() > 4000) {
       parityMiss('kb-unpredicted', { x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), force: Math.round(s.force * 10) / 10, pull: s.pull });
     }
   }

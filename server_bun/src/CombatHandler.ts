@@ -306,6 +306,13 @@ export class CombatHandler {
     // tier is the truth their client has to adopt mid-life.
     const shooter = this.playerManager.getPlayer(playerId);
     this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType, health: shooter?.health, shotId, armorClass: shooter?.armorClass });
+    // A ladder verdict means the shooter's mirror diverged - a rung edge
+    // lost to a lane stall leaves them firing the old rung's weapon and
+    // reject-spamming every pull. Re-send the authoritative edge so the
+    // band reseats at detection instead of the next matchState.
+    if (reason === 'gun-game weapon') {
+      this.sendToPlayer(playerId, { type: 'gunRung', rung: shooter?.gunRung ?? 0, wt: shooter?.weapon });
+    }
   }
 
   /** Honest-lag drop, not a reject - but the shooter's client already
@@ -464,6 +471,11 @@ w.n += 1;
     return this.beamIntents(playerId, player, msg, dir, now);
   }
 
+  /** Position reports stream ~20Hz; a journal whose newest sample is
+   *  older than this predates a lane stall (hidden tab, dead datagram
+   *  tier) and can't verify the shooter's now. */
+  private static readonly SHADOW_STALE_MS = 900;
+
   /** C7 derive-don't-arbitrate: when the shooter's shadow journal
    *  reaches back to the fire instant, the spawn frame is derived -
    *  the claim's pos is ignored, not bounded. A thin journal (join,
@@ -473,6 +485,18 @@ w.n += 1;
    *  doesn't archive aim yet. */
   private spawnFrame(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined): { at: Vec3; vel: Vec3 | undefined } {
     const uplinkMs = this.uplinkMsOf(playerId, msg);
+    const newest = player.history[player.history.length - 1];
+    if (newest && wallNow() - newest.t > CombatHandler.SHADOW_STALE_MS && msg.pos && finiteVec(msg.pos)) {
+      // Shadow blind: every journal sample predates a position-lane
+      // stall, so both the derived frame and claimOrigin's bound clamp
+      // to where the shooter was SECONDS ago - the server shell then
+      // flies a phantom arc hundreds of meters off the painted contact
+      // (post-hidden-tab dmg-echoes, offM ~350). The claim pos is the
+      // freshest measurement we have; the body itself stays gated by
+      // the move-claim path.
+      this.hb('shot.frameStale');
+      return { at: { x: msg.pos.x, y: msg.pos.y, z: msg.pos.z }, vel: undefined };
+    }
     const frame = rewindFrame(player, uplinkMs);
     if (frame) {
       this.hb('shot.frameDerive');

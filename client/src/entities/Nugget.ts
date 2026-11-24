@@ -8,6 +8,7 @@ import { GlowBatch } from '../effects/glowBatch.js';
 import { metalMat } from './procMetal.js';
 import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
 import { parityMiss, parityStamp } from '../game/parity.js';
+import { msSinceRebase } from '../game/net/resync.js';
 import { NUG_TUMBLE, type PickupKind } from '../../../shared/pickups.js';
 import { getHeightfield } from '../world/heightmap.js';
 import { hmSettleWalkable } from '../../../shared/heightfield.js';
@@ -395,7 +396,12 @@ export class Nugget {
     // Throttle class: a frozen tab steps no tumble cells while the
     // server's real-time tumble ran to rest - the leftover backlog is
     // the signature (the snap itself is the designed correction).
-    if (wasRest && dSq > 7 * 7 && !this.throttleBurst) {parityMiss('nugrest', { dM: Math.round((dSq) ** 0.5 * 10) / 10 });}
+    // Rebase class: a rest-vs-rest diff landing within the rebase
+    // window is replayed truth against a replica the volatile purge
+    // never let tumble - backlog, not a live mirror bug. The per-gem
+    // throttleBurst can't see it: a gem settled BEFORE the blackout
+    // never ticks again, so the flag never arms.
+    if (wasRest && dSq > 7 * 7 && !this.throttleBurst && msSinceRebase() > 8000) {parityMiss('nugrest', { dM: Math.round((dSq) ** 0.5 * 10) / 10 });}
     this.throttleBurst = false;
     this.pos.set(p.x, p.y, p.z);
     this.vel.set(0, 0, 0);

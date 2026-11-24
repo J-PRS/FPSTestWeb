@@ -11,11 +11,21 @@ import type { NetCtx } from './ctx.js';
 // resync is for real alt-tabs, not a quick task switch.
 const HIDDEN_RESYNC_MS = 3000;
 
+let lastRebaseAt = 0;
+/** ms since the volatile layer was last dropped for a world rebase
+ *  (hidden regain or gameState snapshot). Parity verdicts discovered in
+ *  that window are replayed backlog - rest edges/knockbacks the client
+ *  never had sim-time to predict - not live mirror bugs. */
+export function msSinceRebase(): number {
+  return lastRebaseAt === 0 ? Infinity : performance.now() - lastRebaseAt;
+}
+
 /** Volatile visuals can't be trusted after a backlog — shells the client
  *  fast-forwarded blind and fx that spawned (and slow-mo decayed at 5%
  *  speed) while the tab was hidden. Kill them; authoritative state
  *  (gameState/rosters/resync reply) re-seeds truth. Local shells stay. */
 export function dropVolatileWorldFx(w: { projectiles: { isRemote: boolean; dispose(): void }[]; explosions: { dispose(): void }[]; implosions: { dead: boolean }[] }): number {
+  lastRebaseAt = performance.now();
   let dropped = 0;
   // Splice in place — the dump/debug ctx captured world.projectiles by
   // reference at wire-up; rebinding the array leaves every such holder
