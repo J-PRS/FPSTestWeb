@@ -1,8 +1,9 @@
 import type { Vec3, PlayerState } from './types.ts';
 import { wallNow } from './wallClock.ts';
-import { hermiteBounded } from '../../shared/dmath.ts';
+import { hermiteBounded, dhypot3 } from '../../shared/dmath.ts';
 import { hmHeight, hmChord, type Heightfield } from '../../shared/heightfield.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
+import { finiteVec } from '../../shared/wire.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -96,4 +97,96 @@ export function rewindNearest(target: PlayerState, backMs: number, extraMs: numb
   const d = dist3(target.position, pt);
   if (d < bestD) {best = target.position;}
   return best;
+}
+
+// C7 (derive, don't arbitrate): the shooter's OWN shadow at the fire
+// instant is the spawn frame - position hermites like rewindPos and
+// velocity lerps the recorded samples, so the shell inherits what the
+// server measured the shooter doing then, never a claim field. null
+// when the journal doesn't reach backMs (join, reconnect, tab-resume):
+// nothing recorded can't be derived, and the caller falls back to the
+// gated claim path.
+export function rewindFrame(target: PlayerState, backMs: number): { at: Vec3; vel: Vec3 } | null {
+  const h = target.history;
+  if (h.length === 0) {return null;}
+  const tAt = wallNow() - backMs;
+  if (tAt <= h[0]!.t) {return null;} // fire instant predates the journal - thin
+  const last = h[h.length - 1]!;
+  if (tAt >= last.t) {return { at: target.position, vel: target.velocity };}
+  for (let i = h.length - 1; i > 0; i -= 1) {
+    if (h[i - 1]!.t <= tAt) {
+      const a = h[i - 1]!, b = h[i]!;
+      const spanMs = Math.max(b.t - a.t, 1);
+      const t = (tAt - a.t) / spanMs;
+      const r = { x: 0, y: 0, z: 0 };
+      hermiteBounded(a, b, t, spanMs / 1000, r);
+      return {
+        at: r,
+        vel: {
+          x: a.vx + (b.vx - a.vx) * t,
+          y: a.vy + (b.vy - a.vy) * t,
+          z: a.vz + (b.vz - a.vz) * t,
+        },
+      };
+    }
+  }
+  return { at: last, vel: { x: last.vx, y: last.vy, z: last.vz } };
+}
+
+/** Physics cap on a claimed shot velocity - generous over max
+ *  attainable speed; bounds a forged arc without refusing honest
+ *  skiing speeds. See ownerVelOf. */
+const OWNER_VEL_CAP = 140;
+/** Claim-vel slack around the derived shadow velocity (C7): covers
+ *  one unreceived blast impulse (~35 m/s) inside the uplink window. */
+const VEL_FRAME_SLACK = 45;
+
+/** Claim-driven origin: the shooter's reported eye/muzzle point,
+ *  bounded to honest reach of its uplink window - a teleported claim
+ *  clamps to the nearest recorded body sample instead of being taken
+ *  verbatim. No transit estimate: pos is claim truth, the window is
+ *  measured uplink. */
+export function claimOrigin(player: PlayerState, uplinkMs: number, pos: Vec3 | undefined): Vec3 {
+  const at = rewindPos(player, uplinkMs);
+  if (pos && finiteVec(pos)) {
+    const bound = rewindNearest(player, uplinkMs + 150, 150, pos);
+    const gap = dhypot3(bound.x - pos.x, bound.y - pos.y, bound.z - pos.z);
+    // A real muzzle sits within ~muzzle-lead + a step of some recorded
+    // body sample in the window - a bigger gap is a teleported claim.
+    if (gap <= 3) {return { x: pos.x, y: pos.y, z: pos.z };}
+  }
+  return at;
+}
+
+/** Shell-owner velocity for inherit: take the CLAIMED vector, not the
+ *  shadow. The shadow lags the newest impulses the client already
+ *  predicted (a painted disc after a knockback), so a shadow-diff gate
+ *  drops honest velocity exactly when it diverges - and bent the arc
+ *  past every rewind check (pd 16-41m body refuses, 2026-11-23). A
+ *  forged vel only bends the arc the victim-side reachability gates
+ *  still police, so the bound is a physics cap, not shadow distance. */
+export function ownerVelOf(player: PlayerState, vel: Vec3 | undefined, frameVel: Vec3 | undefined, hb: (key: string) => void): Vec3 {
+  const cv = vel;
+  // C7: with a derived frame the claim is a refinement INSIDE the
+  // shadow, not an independent number. The shadow's fire-aged velocity
+  // misses impulses younger than the uplink window (a knockback the
+  // client predicted but hasn't reported yet), so the claim wins
+  // within one blast worth of slack; beyond it the claim is forged or
+  // stale and the shadow's measured velocity takes the spawn whole.
+  if (frameVel) {
+    if (cv && finiteVec(cv)) {
+      const gap = dhypot3(cv.x - frameVel.x, cv.y - frameVel.y, cv.z - frameVel.z);
+      if (gap <= VEL_FRAME_SLACK) {return { x: cv.x, y: cv.y, z: cv.z };}
+      hb('shot.frameVelBound');
+    }
+    return frameVel;
+  }
+  if (!cv || !finiteVec(cv)) {return player.velocity;}
+  const gap = dhypot3(cv.x - player.velocity.x, cv.y - player.velocity.y, cv.z - player.velocity.z);
+  if (gap > 20) {hb('shot.velGap');}
+  const mag = dhypot3(cv.x, cv.y, cv.z);
+  if (mag <= OWNER_VEL_CAP) {return { x: cv.x, y: cv.y, z: cv.z };}
+  hb('shot.velClamp');
+  const s = OWNER_VEL_CAP / mag;
+  return { x: cv.x * s, y: cv.y * s, z: cv.z * s };
 }

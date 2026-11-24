@@ -12,7 +12,7 @@ import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
-import { rewindPos, rewindNearest } from './claimLedger.ts';
+import { rewindFrame, claimOrigin, ownerVelOf } from './claimLedger.ts';
 import { KillFeed } from './killFeed.ts';
 import { RespawnManager } from './respawn.ts';
 import { ChargeBank } from './combatCharge.ts';
@@ -51,6 +51,11 @@ export interface BeamContact {
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
 type ShotMsg = Extract<ClientMessage, { type: 'shotFired' }>;
+
+/** Mirror of client fire.ts's MUZZLE_LEAD: the claim's pos is the
+ *  muzzle point (eye + dir*1), so a derived spawn frame applies the
+ *  same lead or the server's arc starts behind the painted shell. */
+const MUZZLE_LEAD = 1;
 
 /** Optional room wiring - mirrors the subset of RoomInfo combat needs. */
 export interface CombatDeps {
@@ -192,10 +197,6 @@ export class CombatHandler {
    *  flew); outside it the intent is simply new. */
   private seenShots = new Map<string, Map<string, number>>();
   private static readonly SHOT_DEDUPE_MS = 10_000; // resync replays ride the whole journal - >5s hidden gaps are normal
-  /** Physics cap on a claimed shot velocity - generous over max
-   *  attainable speed; bounds a forged arc without refusing honest
-   *  skiing speeds. See ownerVelOf. */
-  private static readonly OWNER_VEL_CAP = 140;
   /** Cadence gate (registerMiss uses it): per `${playerId}:${weaponType}`
    *  burst window - start time + claims seen inside it. The client fire
    *  timer is feel; this is the law. A window holds up to `burst` spawn
@@ -271,23 +272,6 @@ export class CombatHandler {
     const bound = (this.deps.transitOf?.(playerId) ?? 0)
       + 3 * (this.deps.transitVarOf?.(playerId) ?? 0) + 200;
     return Math.min(age, Math.max(bound, 400));
-  }
-
-  /** Claim-driven origin: the shooter's reported eye/muzzle point,
-   *  bounded to honest reach of its uplink window - a teleported claim
-   *  clamps to the nearest recorded body sample instead of being taken
-   *  verbatim. No transit estimate: pos is claim truth, the window is
-   *  measured uplink. */
-  private claimOrigin(player: PlayerState, uplinkMs: number, pos: Vec3 | undefined): Vec3 {
-    const at = rewindPos(player, uplinkMs);
-    if (pos && finiteVec(pos)) {
-      const bound = rewindNearest(player, uplinkMs + 150, 150, pos);
-      const gap = dhypot3(bound.x - pos.x, bound.y - pos.y, bound.z - pos.z);
-      // A real muzzle sits within ~muzzle-lead + a step of some recorded
-      // body sample in the window - a bigger gap is a teleported claim.
-      if (gap <= 3) {return { x: pos.x, y: pos.y, z: pos.z };}
-    }
-    return at;
   }
 
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
@@ -443,16 +427,7 @@ w.n += 1;
     const admit = this.shotAdmit(playerId, msg);
     if (admit === null) {return;}
     const { player, now, dir, fireProjectile } = admit;
-    // Chambered: ANY admitted pull (beam, melee, hitscan, or the simmed
-    // spawn below, which re-checks for direct-spawn callers) fades the
-    // owner's in-flight shell before the new shot resolves - except
-    // sub-0.35s weapons, which the perk leaves untouched entirely.
-    if (perkMods(player.perk).singleChamber > 0 && chamberedEligible(getWeaponStats(msg.weaponType)?.fireInterval, getWeaponStats(msg.weaponType)?.burst)) {this.deps.fizzleProjectiles?.(playerId);}
-    if (msg.weaponType === WeaponType.Melee && dir) {
-      this.meleeIntent(playerId, player, msg, dir);
-      return;
-    }
-    if (this.beamIntents(playerId, player, msg, dir, now)) {return;}
+    if (this.intentFanout(playerId, player, msg, dir, now)) {return;}
     if (fireProjectile) {
       // Intents spawn real sims + broadcasts, so they need a real flood
       // gate - the fastest legit simmed weapon is ~13/s; 20/s is spam.
@@ -466,14 +441,49 @@ w.n += 1;
     // Spawn epoch from the CLAIM, not a transit heuristic: the shooter
     // reports the muzzle pos it drew from + a fireAt stamp; uplinkMs is
     // the measured claim age (also the lagS lead below).
-    const uplinkMs = this.uplinkMsOf(playerId, msg);
-    const at = this.claimOrigin(player, uplinkMs, msg.pos);
+    const spawn = this.spawnFrame(playerId, player, msg, dir);
     // Claimless pilot: a server-simmed intent spawns an authoritative
     // shell - the intent IS the whole claim; contact/blast outcomes
     // arrive as broadcasts, never as client claims. projectileCreated
     // covers observers' visuals, so the playerShot relay is skipped.
-    if (fireProjectile && this.simmedShot(playerId, player, msg, { dir: dir!, at }, now, fireProjectile) === 'stop') {return;}
-    this.relayShot(playerId, msg, at, now);
+    if (fireProjectile && this.simmedShot(playerId, player, msg, { dir: dir!, ...spawn }, now, fireProjectile) === 'stop') {return;}
+    this.relayShot(playerId, msg, spawn.at, now);
+  }
+
+  /** Post-admission intent fanout. Chambered: ANY admitted pull (beam,
+   *  melee, hitscan, or the simmed spawn, which re-checks for direct-
+   *  spawn callers) fades the owner's in-flight shell before the new
+   *  shot resolves - except sub-0.35s weapons, which the perk leaves
+   *  untouched entirely. True = resolved as a non-spawn intent. */
+  private intentFanout(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined, now: number): boolean {
+    if (perkMods(player.perk).singleChamber > 0 && chamberedEligible(getWeaponStats(msg.weaponType)?.fireInterval, getWeaponStats(msg.weaponType)?.burst)) {this.deps.fizzleProjectiles?.(playerId);}
+    if (msg.weaponType === WeaponType.Melee && dir) {
+      this.meleeIntent(playerId, player, msg, dir);
+      return true;
+    }
+    return this.beamIntents(playerId, player, msg, dir, now);
+  }
+
+  /** C7 derive-don't-arbitrate: when the shooter's shadow journal
+   *  reaches back to the fire instant, the spawn frame is derived -
+   *  the claim's pos is ignored, not bounded. A thin journal (join,
+   *  reconnect, tab-resume) falls back to the gated claim; the
+   *  frameThin counter says how often the fallback still carries
+   *  shots. dir stays a sanitized claim either way - the journal
+   *  doesn't archive aim yet. */
+  private spawnFrame(playerId: string, player: PlayerState, msg: ShotMsg, dir: Vec3 | undefined): { at: Vec3; vel: Vec3 | undefined } {
+    const uplinkMs = this.uplinkMsOf(playerId, msg);
+    const frame = rewindFrame(player, uplinkMs);
+    if (frame && dir) {
+      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+      // The claim's pos was the muzzle point (eye + dir*MUZZLE_LEAD) -
+      // apply the same lead to the derived eye or the server's arc
+      // starts a meter behind the shell the client painted.
+      this.hb('shot.frameDerive');
+      return { at: { x: frame.at.x + (dir.x / l) * MUZZLE_LEAD, y: frame.at.y + (dir.y / l) * MUZZLE_LEAD, z: frame.at.z + (dir.z / l) * MUZZLE_LEAD }, vel: frame.vel };
+    }
+    if (msg.pos !== undefined) {this.hb('shot.frameThin');}
+    return { at: claimOrigin(player, uplinkMs, msg.pos), vel: undefined };
   }
 
   /** Admission gates, in order: dead shooter, uplink stamp, dir
@@ -533,7 +543,7 @@ w.n += 1;
     const meleeStats = getWeaponStats(WeaponType.Melee);
     const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
     const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const mpos = claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
     // The creature half of the swing pays here too - same derived
     // origin, same dir - so the client's predicted contact never
     // needs a creatureHit claim.
@@ -589,7 +599,7 @@ w.n += 1;
     if (msg.weaponType !== WeaponType.Lightning || !dir || !sweep) {return false;}
     if (this.beamFloodGate(playerId, now)) {return true;}
     player.protectedUntil = simMs(0);
-    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const mpos = claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
     const l = dhypot3(dir.x, dir.y, dir.z) || 1;
     this.beamPay(playerId, player, sweep(playerId,
       { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -610,7 +620,7 @@ w.n += 1;
     if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return true; }
     this.lastLance.set(playerId, now);
     player.protectedUntil = simMs(0);
-    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const mpos = claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
     const l = dhypot3(dir.x, dir.y, dir.z) || 1;
     this.lancePay(playerId, player, sweep(playerId,
       { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -625,7 +635,7 @@ w.n += 1;
     const { repairTarget } = this.deps;
     if (msg.weaponType !== WeaponType.Repair || !dir || !repairTarget) {return false;}
     if (this.beamFloodGate(playerId, now)) {return true;}
-    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const mpos = claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
     const l = dhypot3(dir.x, dir.y, dir.z) || 1;
     const id = repairTarget(playerId,
       { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -644,7 +654,7 @@ w.n += 1;
     const sweep = this.deps.beamSweep;
     if (msg.weaponType !== WeaponType.HealBeam || !dir || !sweep) {return false;}
     if (this.beamFloodGate(playerId, now)) {return true;}
-    const mpos = this.claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
+    const mpos = claimOrigin(player, this.uplinkMsOf(playerId, msg), msg.pos);
     const l = dhypot3(dir.x, dir.y, dir.z) || 1;
     // includeTeammates: the honest ray must CONTACT the patient - damage
     // beams skip friendly bodies, but the heal contact IS a teammate.
@@ -748,7 +758,7 @@ win.violations += 1;
    *  authoritative fireProjectile call. 'stop' = spawned or hard-
    *  rejected (handler ends); 'relay' = spawn declined, fall through
    *  to the cosmetic playerShot tail. */
-  private simmedShot(playerId: string, player: PlayerState, msg: ShotMsg, aim: { dir: Vec3; at: Vec3 }, now: number, fireProjectile: NonNullable<CombatDeps['fireProjectile']>): 'relay' | 'stop' {
+  private simmedShot(playerId: string, player: PlayerState, msg: ShotMsg, aim: { dir: Vec3; at: Vec3; vel?: Vec3 }, now: number, fireProjectile: NonNullable<CombatDeps['fireProjectile']>): 'relay' | 'stop' {
     if (!this.shotCosts(playerId, player, msg, now)) {return 'stop';}
     player.protectedUntil = simMs(0); // firing breaks your own spawn shield
     const l = dhypot3(aim.dir.x, aim.dir.y, aim.dir.z) || 1;
@@ -764,7 +774,7 @@ win.violations += 1;
     }
     const ndir = this.bloomAim(playerId, msg, base);
     this.noteSpawnWarp(playerId, msg, aim, base, ndir);
-    const ownerVel = this.ownerVelOf(player, msg);
+    const ownerVel = ownerVelOf(player, msg.vel, aim.vel, (k): void => this.hb(k));
     // Back-date the shell's age by the MEASURED uplink transit - the
     // EMA fed by pongs + bounded claim samples, not this claim's stamp
     // (a stale/forged fireAt only re-anchors the ORIGIN above; it may
@@ -890,25 +900,6 @@ win.violations += 1;
     player.bloomSeq += 1;
     player.bloom = bloomGrow(bs.bloom, msg.weaponType);
     player.bloomAt = now / 1000;
-  }
-
-  /** Shell-owner velocity for inherit: take the CLAIMED vector, not the
-   *  shadow. The shadow lags the newest impulses the client already
-   *  predicted (a painted disc after a knockback), so a shadow-diff gate
-   *  drops honest velocity exactly when it diverges - and bent the arc
-   *  past every rewind check (pd 16-41m body refuses, 2026-11-23). A
-   *  forged vel only bends the arc the victim-side reachability gates
-   *  still police, so the bound is a physics cap, not shadow distance. */
-  private ownerVelOf(player: PlayerState, msg: ShotMsg): Vec3 {
-    const cv = msg.vel;
-    if (!cv || !finiteVec(cv)) {return player.velocity;}
-    const gap = dhypot3(cv.x - player.velocity.x, cv.y - player.velocity.y, cv.z - player.velocity.z);
-    if (gap > 20) {this.hb('shot.velGap');}
-    const mag = dhypot3(cv.x, cv.y, cv.z);
-    if (mag <= CombatHandler.OWNER_VEL_CAP) {return { x: cv.x, y: cv.y, z: cv.z };}
-    this.hb('shot.velClamp');
-    const s = CombatHandler.OWNER_VEL_CAP / mag;
-    return { x: cv.x * s, y: cv.y * s, z: cv.z * s };
   }
 
   /** shotId → spawn bookkeeping: dedupe record, stale-entry trim,

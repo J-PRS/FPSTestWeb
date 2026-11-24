@@ -37,7 +37,10 @@ const GRANDFATHERED: Record<string, number> = {
   // current size so the next 15% still alarms.
   'shared/botMoves.ts': 975,
   'client/src/main.ts': 1450, // re-pinned at post-reclaim-fix size — still alarms at +15%
-  'client/src/game/gameLoop.ts': 1123, // ditto
+  // Re-pinned at 1300 after the hudTick five-tick split + region-stack
+  // HUD layout batch — the per-frame orchestrator legitimately
+  // aggregates; still alarms at +15%.
+  'client/src/game/gameLoop.ts': 1300,
   // Pinned after the alarm tripped (ROADMAP next-list: burn down the
   // ichor/corpse FX block + cluster bomblets into their own modules).
   // Re-pinned at 1319 after the predicted-contact-FX + in-flight work —

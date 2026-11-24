@@ -285,7 +285,15 @@ ew Ball(...).
 - **Rollback**: both halves are local-render only; wire untouched.
 
 ### C7 — Derive, don't arbitrate: the claim-free spawn frame
-- **Status**: PROPOSED 2026-11-23 — full audit in
+- **Status**: PILOT 2026-11-24 — `claimLedger.rewindFrame` derives
+  origin (hermite pos + MUZZLE_LEAD) and ownerVel (lerped shadow vel)
+  when the journal reaches fireAt; claim pos ignored on the derived
+  path, claim vel bounded to VEL_FRAME_SLACK=45 else shadow wins.
+  Fallback = gated claimOrigin for thin journals. Measurability:
+  `shot.frameDerive`/`shot.frameThin`/`shot.frameVelBound` heartbeat
+  counters. dir stays a sanitized claim this step (journal doesn't
+  archive aim). claimOrigin/ownerVelOf moved to claimLedger.ts.
+- **Prior**: PROPOSED 2026-11-23 — full audit in
   `_docs/2026-11-23_NET_TRUST_BOUNDARY_AUDIT.md`. Evidence: prod
   `body refuse`/`aoe-refuse` forensics — painted hits refused 16-41m out
   when the per-field `ownerVel` gate silently swapped claim velocity for
