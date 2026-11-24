@@ -104,160 +104,84 @@ function flagTeamIdx(targetId: number): number {
 
 
 
-export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent, audible = false): void {
+/** Kill marker: burst at the victim pos, optional death bark. */
+function markKill(world: PlaybackWorld, ev: TargetEvent, audible: boolean): void {
+  // Victim pos + a small red burst — the body gibs ride remoteFrames.
 
-  if (ev.targetType === TARGETTYPE_KILL) {
+  const pos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
 
-    // Victim pos + a small red burst — the body gibs ride remoteFrames.
+  world.explosions.push(new Explosion(world.scene, pos, false, 0, world.terrain, 0.8, 0xDD_33_33));
 
-    const pos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
+  // Live kills cue a death bark at the body — playback's version.
 
-    world.explosions.push(new Explosion(world.scene, pos, false, 0, world.terrain, 0.8, 0xDD_33_33));
+  if (audible) {sfxUtil.at(pos, 'robot_die', 0.9);}
 
-    // Live kills cue a death bark at the body — playback's version.
+}
 
-    if (audible) {sfxUtil.at(pos, 'robot_die', 0.9);}
+
+/** Flag cues are global in live play, but a clip is about THE shot -
+ *  a grab on the far side of the map is mix noise. Earshot only. */
+function flagCueNear(world: PlaybackWorld, flag: THREE.Object3D & { userData: { state?: number } }, ev: TargetEvent): void {
+  const prev = flag.userData.state;
+
+  if (world.camera.position.distanceToSquared(flag.position) >= 80 * 80) {return;}
+
+  if (ev.health === prev) {return;}
+
+  if (ev.health === 1) {sfxPlayer.flagCue('taken', false);}
+
+  else if (ev.health === 2) {sfxPlayer.flagCue('dropped', false);}
+
+  else if (ev.health === 0 && prev === 2) {sfxPlayer.flagCue('returned', false);}
+
+}
+
+
+/** Flag marker: proxy pole+banner; health = state code, peakPosX = carrier idx+1. A carried flag parks until the per-frame tick re-pins it to the replayed carrier. */
+function markFlag(world: PlaybackWorld, ev: TargetEvent, audible: boolean): void {
+  const map = world.playbackFlags;
+
+  if (ev.eventType === TargetEventType.Spawned || ev.eventType === TargetEventType.StateChanged || ev.eventType === TargetEventType.Bounce) {
+
+    let flag = map.get(ev.targetId);
+
+    if (!flag) {
+
+      flag = buildFlagProxy(flagTeamIdx(ev.targetId));
+
+      map.set(ev.targetId, flag);
+
+      world.scene.add(flag);
+
+    }
+
+    // health = state code; peakPosX = carrier roster idx + 1. A carried
+
+    // flag parks at its last pos until the per-frame tick re-pins it to
+
+    // the replayed carrier.
+
+    if (audible) {flagCueNear(world, flag, ev);}
+
+    flag.userData.state = ev.health;
+
+    flag.userData.carrierIdx = ev.peakPosX - 1;
+
+    flag.position.set(ev.posX, ev.posY, ev.posZ);
+
+    flag.visible = ev.health !== 1 || !world.remotePosAt?.(flag.userData.carrierIdx);
 
     return;
 
   }
 
+  if (ev.eventType === TargetEventType.Destroyed) {
 
+    const flag = map.get(ev.targetId);
 
-  if (ev.targetType === TARGETTYPE_FLAG) {
+    if (flag) {
 
-    const map = world.playbackFlags;
-
-    if (ev.eventType === TargetEventType.Spawned || ev.eventType === TargetEventType.StateChanged || ev.eventType === TargetEventType.Bounce) {
-
-      let flag = map.get(ev.targetId);
-
-      if (!flag) {
-
-        flag = buildFlagProxy(flagTeamIdx(ev.targetId));
-
-        map.set(ev.targetId, flag);
-
-        world.scene.add(flag);
-
-      }
-
-      // health = state code; peakPosX = carrier roster idx + 1. A carried
-
-      // flag parks at its last pos until the per-frame tick re-pins it to
-
-      // the replayed carrier.
-
-      if (audible) {
-
-        // Flag cues are global in live play, but a clip is about THE shot —
-
-        // a grab on the far side of the map is mix noise. Earshot only.
-
-        const prev = flag.userData.state as number | undefined;
-
-        const near = world.camera.position.distanceToSquared(flag.position) < 80 * 80;
-
-        if (near && ev.health !== prev) {
-
-          if (ev.health === 1) {sfxPlayer.flagCue('taken', false);}
-
-          else if (ev.health === 2) {sfxPlayer.flagCue('dropped', false);}
-
-          else if (ev.health === 0 && prev === 2) {sfxPlayer.flagCue('returned', false);}
-
-        }
-
-      }
-
-      flag.userData.state = ev.health;
-
-      flag.userData.carrierIdx = ev.peakPosX - 1;
-
-      flag.position.set(ev.posX, ev.posY, ev.posZ);
-
-      flag.visible = ev.health !== 1 || !world.remotePosAt?.(flag.userData.carrierIdx);
-
-      return;
-
-    }
-
-    if (ev.eventType === TargetEventType.Destroyed) {
-
-      const flag = map.get(ev.targetId);
-
-      if (flag) {
-
-        world.scene.remove(flag);
-
-        map.delete(ev.targetId);
-
-      }
-
-    }
-
-    return;
-
-  }
-
-
-
-  if (ev.targetType === TARGETTYPE_MATCH) {
-    // Scoreboard/clock — world.teamScores/matchEndsAt drive the same
-    // HUD lanes live wire updates do. Clock is remaining-ms at event
-    // time projected onto the playback clock, so seeking mid-clip stays
-    // honest rather than re-arming a wall-clock deadline.
-    if (world.playbackMatchMeta) {world.playbackMatchMeta(ev);}
-    return;
-  }
-
-  if (ev.targetType === TARGETTYPE_NODE) {
-    // Marker state arrives packed — decode straight into the mirror
-    // map; the HUD diamond tick reads world.nodeMarkers.
-    if (ev.eventType === TargetEventType.Destroyed) {
-      world.playbackNodes.delete(ev.targetId & 0xF_FF);
-      return;
-    }
-    world.playbackNodes.set(ev.targetId & 0xF_FF, {
-      x: ev.posX, y: ev.posY, z: ev.posZ,
-      meta: ev.peakPosX, gx: ev.peakPosY, gz: ev.peakPosZ, hp: ev.health,
-    });
-    return;
-  }
-
-  if (ev.targetType >= TARGETTYPE_PICKUP_BASE) {
-
-    const map = world.playbackPickups;
-
-    if (ev.eventType === TargetEventType.Spawned) {
-
-      if (!map.has(ev.targetId)) {
-
-        map.set(ev.targetId, new PlaybackPickup(world.scene, ev.targetType - TARGETTYPE_PICKUP_BASE, new THREE.Vector3(ev.posX, ev.posY, ev.posZ)));
-
-      }
-
-      return;
-
-    }
-
-    if (ev.eventType === TargetEventType.Destroyed) {
-
-      const p = map.get(ev.targetId);
-
-      if (!p) {return;}
-
-      // Grabbed — gem/tag ping like a pickup, the rest chime like a
-
-      // powerup, matching the live pickupGrab/powerup split.
-
-      if (audible) {
-
-        sfxUtil.at(p.mesh.position, ev.targetType - TARGETTYPE_PICKUP_BASE <= 1 ? 'pickup' : 'powerup');
-
-      }
-
-      p.dispose(world.scene);
+      world.scene.remove(flag);
 
       map.delete(ev.targetId);
 
@@ -266,6 +190,91 @@ export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent, 
   }
 
 }
+
+
+/** Match marker: scoreboard/clock onto playback meta. */
+function markMatch(world: PlaybackWorld, ev: TargetEvent, _audible: boolean): void {
+  // Scoreboard/clock — world.teamScores/matchEndsAt drive the same
+  // HUD lanes live wire updates do. Clock is remaining-ms at event
+  // time projected onto the playback clock, so seeking mid-clip stays
+  // honest rather than re-arming a wall-clock deadline.
+  if (world.playbackMatchMeta) {world.playbackMatchMeta(ev);}
+
+}
+
+
+/** Node marker: packed state decoded into the mirror map. */
+function markNode(world: PlaybackWorld, ev: TargetEvent, _audible: boolean): void {
+  // Marker state arrives packed — decode straight into the mirror
+  // map; the HUD diamond tick reads world.nodeMarkers.
+  if (ev.eventType === TargetEventType.Destroyed) {
+    world.playbackNodes.delete(ev.targetId & 0xF_FF);
+    return;
+  }
+  world.playbackNodes.set(ev.targetId & 0xF_FF, {
+    x: ev.posX, y: ev.posY, z: ev.posZ,
+    meta: ev.peakPosX, gx: ev.peakPosY, gz: ev.peakPosZ, hp: ev.health,
+  });
+
+}
+
+
+/** Pickup markers: kind-tinted gems; destroyed = grabbed. */
+function markPickup(world: PlaybackWorld, ev: TargetEvent, audible: boolean): void {
+  const map = world.playbackPickups;
+
+  if (ev.eventType === TargetEventType.Spawned) {
+
+    if (!map.has(ev.targetId)) {
+
+      map.set(ev.targetId, new PlaybackPickup(world.scene, ev.targetType - TARGETTYPE_PICKUP_BASE, new THREE.Vector3(ev.posX, ev.posY, ev.posZ)));
+
+    }
+
+    return;
+
+  }
+
+  if (ev.eventType === TargetEventType.Destroyed) {
+
+    const p = map.get(ev.targetId);
+
+    if (!p) {return;}
+
+    // Grabbed — gem/tag ping like a pickup, the rest chime like a
+
+    // powerup, matching the live pickupGrab/powerup split.
+
+    if (audible) {
+
+      sfxUtil.at(p.mesh.position, ev.targetType - TARGETTYPE_PICKUP_BASE <= 1 ? 'pickup' : 'powerup');
+
+    }
+
+    p.dispose(world.scene);
+
+    map.delete(ev.targetId);
+
+  }
+
+}
+
+
+export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent, audible = false): void {
+
+  if (ev.targetType === TARGETTYPE_KILL) {markKill(world, ev, audible); return;}
+
+  if (ev.targetType === TARGETTYPE_FLAG) {markFlag(world, ev, audible); return;}
+
+  if (ev.targetType === TARGETTYPE_MATCH) {markMatch(world, ev, audible); return;}
+
+  if (ev.targetType === TARGETTYPE_NODE) {markNode(world, ev, audible); return;}
+
+  if (ev.targetType >= TARGETTYPE_PICKUP_BASE) {markPickup(world, ev, audible);}
+
+}
+
+
 
 
 
