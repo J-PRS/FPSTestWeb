@@ -345,7 +345,7 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
       const px = new Uint8Array(64 * 64 * 4);
       for (let y = 0; y < 64; y += 1) {for (let x = 0; x < 64; x += 1) {
         const dx = (x - 26) / 32, dy = (y - 30) / 32;
-        const l = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy));
+        const l = Math.max(0, 1 - Math.hypot(dx, dy));
         const i = (y * 64 + x) * 4;
         px.set([180 + 75 * l, 200 + 55 * l, 235 + 20 * l, 255], i);
       }}

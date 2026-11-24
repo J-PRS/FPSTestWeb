@@ -45,6 +45,7 @@ function weldByPosSkin(geo: THREE.BufferGeometry): THREE.BufferGeometry {
 
 const unwrapper = new UVUnwrapper({ BufferAttribute: THREE.BufferAttribute });
 await unwrapper.loadLibrary(
+  // oxlint-disable-next-line no-console -- xatlas progress is the tool output
   (mode: string, progress: number): void => console.log('xatlas', mode, progress),
   `${window.location.origin}/node_modules/xatlasjs/dist/xatlas.wasm`,
   `${window.location.origin}/node_modules/xatlasjs/dist/xatlas.js`,

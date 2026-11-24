@@ -392,7 +392,7 @@ export class VideoRecorder {
     // Inline worklet - a blob URL keeps it a single-file module. The
     // processor name must be unique per start: a second recording on the
     // same AudioContext re-registers and 'cap' collides, killing start().
-    const capName = `cap${VideoRecorder.capSeq++}`;
+    const capName = `cap${VideoRecorder.capSeq}`; VideoRecorder.capSeq += 1;
     const wsrc = `class Cap extends AudioWorkletProcessor{process(i){const n=i[0];if(n&&n[0]){this.port.postMessage([n[0].slice(0),(n[1]||n[0]).slice(0)])}return true}}registerProcessor('${capName}',Cap)`;
     const url = URL.createObjectURL(new Blob([wsrc], { type: 'application/javascript' }));
     try {

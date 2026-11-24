@@ -445,10 +445,10 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   // fps-aa: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x - MSAA rebuilds
   // the multisampled buffer via the composer's setter, the rest toggle a
   // pass. syncRenderToScreen must re-run since the tail pass changed.
-  function applyAA(v: number): void {
+  function applyAA(v0: number): void {
     // MSAA hidden: its composer-buffer resolve paints black speckle
     // artifacts (worst at low res) - a stored MSAA pick behaves as SMAA.
-    if (v >= 3) {v = 2;}
+    const v = Math.min(v0, 2);
     fxaaPass.enabled = v === 1;
     smaaPass.enabled = v === 2;
     composer.multisampling = 0;

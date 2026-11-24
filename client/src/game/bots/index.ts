@@ -7,7 +7,7 @@ import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWi
 import { botRand } from '../../../../shared/botRand.js';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { gunGameWeapon, igunChassis } from '../../../../shared/gunGame.js';
-import { ENERGY } from '../../../../shared/movement.js';
+import { ENERGY, type BodyCapsule } from '../../../../shared/movement.js';
 import type { Nugget } from '../../entities/Nugget.js';
 import type { Targetable } from '../../entities/balls.js';
 import type { GameContext } from '../context.js';
@@ -44,7 +44,6 @@ import { simRand } from '../../../../shared/simRand.js';
 
 import { BOT_NAMES } from '../../../../shared/botNames.js';
 import { CLASS_STATS, classCapsule, classMass, type ArmorClass } from '../../../../shared/botClasses.js';
-import type { BodyCapsule } from '../../../../shared/movement.js';
 import type { DeployOwner } from '../deployables.js';
 import type { MapSpec } from '../../../../shared/mapSpec.js';
 
@@ -899,6 +898,7 @@ bn += 1;
         bot.position.y = (bot.terrain ? bot.terrain.getHeight(bot.position.x, bot.position.z) : bot.position.y) + 0.5;
         break;
       }
+      default: { break; }
     }
   }
 

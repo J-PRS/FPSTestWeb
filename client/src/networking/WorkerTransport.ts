@@ -201,7 +201,7 @@ export class WorkerTransport implements GameTransport {
     const drainStart = performance.now();
     const deadline = drainStart + 8;
     let i = 0;
-    for (; i < evs.length; i++) {
+    for (; i < evs.length; i += 1) {
       if (i > 0 && (i & 63) === 0 && performance.now() > deadline) {break;}
       const ev = evs[i]!;
       try {

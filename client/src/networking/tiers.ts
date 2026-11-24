@@ -81,6 +81,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
       await new Promise<void>((res): void => {
         const t = setTimeout(res, 2500);
         conn.addEventListener('icegatheringstatechange', (): void => {
+          // oxlint-disable-next-line promise/no-multiple-resolved -- first-wins race; extra resolve() is a no-op
           if (conn.iceGatheringState === 'complete') { clearTimeout(t); res(); }
         });
       });

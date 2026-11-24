@@ -127,7 +127,7 @@ export class ViewModel {
     // amortized (~100ms chunks per weapon via yieldFrame) - safe past
     // the veil; gating it turned a background stream into a serial
     // TTS blocker (~4-5s). Keep the mark, skip pendingHeavy.
-    this.baked.load().finally((): void => { performance.mark('load:vmBakedDone'); });
+    this.baked.load().finally((): void => { performance.mark('load:vmBakedDone'); }).catch((): void => {});
 
     const hf = buildHandAndFlash(this.group);
     this.fistGroup = hf.fistGroup;

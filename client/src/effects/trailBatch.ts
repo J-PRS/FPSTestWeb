@@ -63,7 +63,7 @@ export class TrailBatch {
     const debugMesh = this.ensureDebugMesh();
     const C = 0.28; // half-size of the cross gizmo, meters - readable
     let w = 0;
-    const put = (x: number, y: number, z: number): void => { this.debugPos[w++] = x; this.debugPos[w++] = y; this.debugPos[w++] = z; };
+    const put = (x: number, y: number, z: number): void => { this.debugPos[w] = x; this.debugPos[w + 1] = y; this.debugPos[w + 2] = z; w += 3; };
     const now = performance.now();
     this.debugDrawSlots(put, now, C);
     debugMesh.visible = true;
@@ -124,8 +124,8 @@ export class TrailBatch {
   private rebuildGhosts(now: number, C: number): void {
     const LIFE = 4000;
     let keep = 0;
-    for (let i = 0; i < this.ghosts.length; i += 1) {
-      if (now - this.ghosts[i]!.t < LIFE) {this.ghosts[keep] = this.ghosts[i]!; keep += 1;}
+    for (const g of this.ghosts) {
+      if (now - g.t < LIFE) {this.ghosts[keep] = g; keep += 1;}
     }
     this.ghosts.length = keep;
     if (!this.ghostMesh) {

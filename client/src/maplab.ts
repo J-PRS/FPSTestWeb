@@ -1001,16 +1001,16 @@ function paintRail(): void {
   };
   row1.append(
     playButton(),
-    mk(state.showRaw ? 'A/B: raw' : 'A/B: eroded', function (this: HTMLButtonElement): void {
+    mk(state.showRaw ? 'A/B: raw' : 'A/B: eroded', (): void => {
       state.showRaw = !state.showRaw; save(); paintRail(); refresh();
     }, state.showRaw),
-    mk('wireframe', function (this: HTMLButtonElement): void {
+    mk('wireframe', (): void => {
       state.wire = !state.wire; applyWire(); save(); paintRail();
     }, state.wire),
-    mk('wire solid', function (this: HTMLButtonElement): void {
+    mk('wire solid', (): void => {
       state.wireSolid = !state.wireSolid; applyWire(); save(); paintRail();
     }, state.wireSolid),
-    mk('slope tint', function (this: HTMLButtonElement): void {
+    mk('slope tint', (): void => {
       state.slopeOverlay = !state.slopeOverlay; save(); paintRail(); paintHeightmap();
     }, state.slopeOverlay),
     mk('clay', function (this: HTMLButtonElement): void {
@@ -1018,7 +1018,7 @@ function paintRail(): void {
       terrain.material = clayOn ? clayMat : mat;
       this.classList.toggle('active', clayOn);
     }),
-    mk('flow map', function (this: HTMLButtonElement): void {
+    mk('flow map', (): void => {
       state.flowOverlay = !state.flowOverlay; save(); paintRail(); refresh();
     }, state.flowOverlay),
   );
@@ -1081,8 +1081,8 @@ function paintRail(): void {
   // the verb button ARMS, then clicks on the heightmap paint it in a
   // circle (logged as op@x,z so replay keeps the stroke).
   const modeRow = document.createElement('div'); modeRow.className = 'btnrow';
-  const gb = mk('GLOBAL', function (this: HTMLButtonElement): void { brushMode = false; brushVerb = null; paintRail(); });
-  const bb = mk('BRUSH', function (this: HTMLButtonElement): void { brushMode = true; paintRail(); });
+  const gb = mk('GLOBAL', (): void => { brushMode = false; brushVerb = null; paintRail(); });
+  const bb = mk('BRUSH', (): void => { brushMode = true; paintRail(); });
   const syncMode = (): void => {
     gb.classList.toggle('active', !brushMode);
     bb.classList.toggle('active', brushMode);

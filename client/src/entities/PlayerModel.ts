@@ -78,7 +78,7 @@ function vertexizeGeo(g: THREE.BufferGeometry, m: THREE.MeshStandardMaterial): v
   const rg = new Float32Array(n);
   const mt = new Float32Array(n);
   const mask = new Float32Array(n).fill(m.name === 'armor' ? 1 : 0);
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i += 1) {
     col[i * 3] = m.color.r; col[i * 3 + 1] = m.color.g; col[i * 3 + 2] = m.color.b;
     rg[i] = m.roughness; mt[i] = m.metalness;
   }
@@ -452,7 +452,7 @@ export class PlayerModel {
             // one that started it - or clones made mid-bake stay matte.
             gunmetalBake.get(url)!.then((): void => {
               if (!this._disposed) {this.model?.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {this.mats.rearm(o as THREE.Mesh);}});}
-            });
+            }).catch((): void => {});
           }
         return; },
         (error): void => {
@@ -794,7 +794,7 @@ export class PlayerModel {
         return c;
       });
       const first = chains[0]!;
-      for (let i = 0; i < first.length; i++) {
+      for (let i = 0; i < first.length; i += 1) {
         if (chains.every((c): boolean => c[i] === first[i])) {anchor = first[i]!;} else {break;}
       }
     }
@@ -1520,10 +1520,10 @@ export class PlayerModel {
         const attr = g?.getAttribute('color') as THREE.BufferAttribute | undefined;
         if (!g || !auth || !mask || !attr) {continue;}
         const arr = attr.array as Float32Array;
-        for (let i = 0; i < mask.length; i++) {
+        for (let i = 0; i < mask.length; i += 1) {
           const t = mask[i]! * 0.7;
           const tc = tint ? [tint.r, tint.g, tint.b] : null;
-          for (let c = 0; c < 3; c++) {
+          for (let c = 0; c < 3; c += 1) {
             const a = auth[i * 3 + c]!;
             arr[i * 3 + c] = tc ? a + (tc[c]! - a) * t : a;
           }

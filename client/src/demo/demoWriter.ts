@@ -2,8 +2,7 @@
 // Uses DataView for efficient binary read/write.
 // Format: magic(1) + version(4) + header fields + frames + events
 
-import type { DemoFile } from './types.js';
-import { DEMO_DEPLOY_KINDS, DEMO_PICKUP_KINDS, DEMO_SPECIES } from './types.js';
+import { DEMO_DEPLOY_KINDS, DEMO_PICKUP_KINDS, DEMO_SPECIES, type DemoFile } from './types.js';
 import { getRunSeed } from './demoSeed.js';
 import { BALL_VARIANT_HEALTH, BALL_VARIANT_SCALE } from '../../../shared/ballSim.js';
 

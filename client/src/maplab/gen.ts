@@ -875,7 +875,7 @@ export function rockPass(h: Float32Array, N: number, o: { rocks?: number; radius
   const rocks = o.rocks ?? 3, baseR = o.radius ?? 36;
   const depth = o.depth ?? 0.18, rimRaise = o.rim ?? 0.08, warp = o.warp ?? 0.3;
   const tanRepose = Math.tan(33 * Math.PI / 180);
-  const H = (x: number, z: number): number =>
+  const hgt = (x: number, z: number): number =>
     h[(((z % N) + N) % N) * N + (((x % N) + N) % N)]!;
   const settle = (x0: number, z0: number): { x: number; z: number } => {
     let x = x0, z = z0;
@@ -884,7 +884,7 @@ export function rockPass(h: Float32Array, N: number, o: { rocks?: number; radius
       for (let dz = -1; dz <= 1; dz += 1) {
         for (let dx = -1; dx <= 1; dx += 1) {
           if (!dx && !dz) {continue;}
-          const sl = (H(x, z) - H(x + dx, z + dz)) / (Math.hypot(dx, dz) * texel);
+          const sl = (hgt(x, z) - hgt(x + dx, z + dz)) / (Math.hypot(dx, dz) * texel);
           if (sl > bestSlope) { bestSlope = sl; bx = dx; bz = dz; }
         }
       }

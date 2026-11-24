@@ -1420,13 +1420,13 @@ if (import.meta.env.PROD && (window.location.hostname === 'localhost' || window.
   // Push when the preview exposes it (fs.watch → SSE); fall back to a
   // poll if the endpoint isn't there (older preview / real prod).
   const es = new EventSource('/dev/stale-events');
-  es.onmessage = (e): void => {
+  es.addEventListener('message', (e): void => {
     try { applyStale(JSON.parse(e.data)); } catch { /* malformed push */ }
-  };
-  es.onerror = (): void => {
+  });
+  es.addEventListener('error', (): void => {
     es.close();
     setInterval(poll, 4000);
-  };
+  });
 }
 const hot = import.meta.hot as unknown as { on(e: string, cb: (d: { count: number; files?: string[] }) => void): void } | undefined;
 if (hot) {

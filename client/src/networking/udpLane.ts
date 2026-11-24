@@ -16,6 +16,7 @@ import { urlParams } from '../core/params.js';
 // app once squatted the default.
 const SHIM_PORTS = [8787, 8788, 8789, 8790, 8791];
 const TOKEN_BYTES = 16;
+// oxlint-disable-next-line no-console -- UdpLane debug channel
 const log = (msg: string): void => { console.info(`[UdpLane] ${msg}`); };
 
 export class UdpLane {

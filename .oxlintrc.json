@@ -89,7 +89,7 @@
     "typescript/no-non-null-assertion": "off",
     "typescript/no-inferrable-types": "warn",
     "typescript/explicit-function-return-type": "off",
-    "typescript/explicit-module-boundary-types": "warn",
+    "typescript/explicit-module-boundary-types": "off",
     "unicorn/no-zero-fractions": "warn",
     "unicorn/numeric-separators-style": "warn",
     "unicorn/number-literal-case": "warn",

@@ -99,7 +99,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // Records the first fired shot's performance.now() (ms since navigation
   // start) on dev hosts or when ?tts=1 is present. Production https builds
   // without the param never record it.
-  const _w = window as any;
+  const _w = window as unknown as { __ttsShot?: number };
   if (_w.__ttsShot === undefined
       && (import.meta.env.DEV || window.location.protocol !== 'https:'
           || new URLSearchParams(window.location.search).has('tts'))) {
@@ -417,7 +417,7 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
     // the HUD arms; it grows after the shot lands, like the server's.
     const pl = deps.lazyPlayer();
     spawnProjectile(deps, def.config, { origin: e.origin, dir: e.dir, playerVel: e.playerVel,
-      bloomRadius: def.bloom.base + pl.bloom, bloomSeq: pl.bloomSeq++ });
+      bloomRadius: def.bloom.base + pl.bloom, bloomSeq: pl.bloomSeq }); pl.bloomSeq += 1;
     pl.bloom = Math.min(def.bloom.max, (pl.bloom + def.bloom.rate) * def.bloom.exp);
     pl.bloomDecay = def.bloom.decay; // residue drains at the growing weapon's rate (swap-safe)
     return;

@@ -3,8 +3,7 @@
 // the bound once corrections apply — peaks preserved exactly-ish.
 import { describe, it, expect } from 'vitest';
 import { hmapDownsample, hmapCorrections, hmapToField, upsampleGrid } from '../demo/demoHmap.js';
-import { hmHeight } from '../../../shared/heightfield.js';
-import type { Heightfield } from '../../../shared/heightfield.js';
+import { hmHeight, type Heightfield } from '../../../shared/heightfield.js';
 
 // Sharp ridge + peak: bilinear downsampling smooths it — exactly the
 // case the delta list exists for.

@@ -108,7 +108,7 @@ export function setShield(v: ViewModel, on: boolean, color = 0x66_CC_FF): void {
     const srcKids: THREE.Object3D[] = []; src.traverse((o): void => {srcKids.push(o);});
     const pairs: [THREE.Object3D, THREE.Object3D][] = [];
     let i = 0;
-    shell.traverse((o): void => {if (i > 0) {pairs.push([o, srcKids[i]!]);} i++;});
+    shell.traverse((o): void => {if (i > 0) {pairs.push([o, srcKids[i]!]);} i += 1;});
     shell.userData.pairs = pairs;
     v.shieldShells.push(shell);
   }

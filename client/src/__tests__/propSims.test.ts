@@ -233,7 +233,7 @@ describe('shared sim properties', (): void => {
       (w, now): void => {
         const pool: AmmoPool = new Map();
         // Whatever the cell seeds to, spending past empty must fail.
-        for (let i = 0; i < 50; i++) {spendAmmo(pool, w, now + i * 0.1);}
+        for (let i = 0; i < 50; i += 1) {spendAmmo(pool, w, now + i * 0.1);}
         const cell = pool.get(w);
         if (cell) {expect(cell.ammo).toBeGreaterThanOrEqual(0);}
       },

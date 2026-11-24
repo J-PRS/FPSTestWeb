@@ -32,8 +32,8 @@ class FakeWorker {
   }
 }
 
-// oxlint-disable-next-line consistent-type-imports -- lazy class type; typeof import() has no import type equivalent
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+// oxlint-disable-next-line typescript/consistent-type-imports -- lazy class type; typeof import() has no import type equivalent
 let WorkerTransport!: typeof import('../networking/WorkerTransport.js').WorkerTransport;
 
 function makeConfig(): ConnectionConfig {
@@ -122,13 +122,13 @@ describe('WorkerTransport drain', (): void => {
     const seen: number[] = [];
     config.onMessage = vi.fn((j) => { spin(1); seen.push((j as unknown as { n: number }).n); });
     const _t = new WorkerTransport(config);
-    for (let i = 0; i < 130; i++) {FakeWorker.last.emit({ kind: 'ev', j: { type: 'm', n: i }, at: 0 });}
+    for (let i = 0; i < 130; i += 1) {FakeWorker.last.emit({ kind: 'ev', j: { type: 'm', n: i }, at: 0 });}
 
     await new Promise((r): number => setTimeout(r, 0) as unknown as number);
     const first = (config.onMessage as ReturnType<typeof vi.fn>).mock.calls.length;
     expect(first).toBeGreaterThanOrEqual(64);
     expect(first).toBeLessThan(130);          // budget tripped — not one giant task
-    for (let i = 0; i < 10 && (config.onMessage as ReturnType<typeof vi.fn>).mock.calls.length < 130; i++) {
+    for (let i = 0; i < 10 && (config.onMessage as ReturnType<typeof vi.fn>).mock.calls.length < 130; i += 1) {
       await new Promise((r): number => setTimeout(r, 0) as unknown as number);
     }
     expect(config.onMessage).toHaveBeenCalledTimes(130); // carry-over turns finished it

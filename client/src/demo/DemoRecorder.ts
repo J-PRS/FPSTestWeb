@@ -441,6 +441,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     // at write time instead of leaving it for post-hoc file analysis.
     const newest = this.frameBuffer.peekNewest();
     if (newest !== frame || (this.frameBuffer.Count > 1 && newest.timestamp < this.frameBuffer.getUnsafe(this.frameBuffer.Count - 2).timestamp)) {
+      // oxlint-disable-next-line no-console -- frame-ring diagnostic
       console.warn(`[demo] frame ring splice: wrote f#${  frame.frameNumber  } t=${  frame.timestamp.toFixed(3)
          } newest=${  newest === frame  } count=${  this.frameBuffer.Count}`);
     }

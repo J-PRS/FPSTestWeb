@@ -401,7 +401,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
    *  needs mesh counts from the device, not a local repro. */
   get levelStats(): { levels: number; visible: number } {
     let visible = 0;
-    for (const l of this.levels) {if (l.mesh.visible) {visible++;}}
+    for (const l of this.levels) {if (l.mesh.visible) {visible += 1;}}
     return { levels: this.levels.length, visible };
   }
 

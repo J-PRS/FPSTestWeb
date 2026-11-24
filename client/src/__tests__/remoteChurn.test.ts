@@ -37,15 +37,15 @@ describe('remoteInterp seam absorb', () => {
     let simFrames = 0, frames = 0, maxStep = 0;
     const prev = h.position.clone();
     const seen: number[] = [];
-    for (let i = 0; i < 1200; i++) {
+    for (let i = 0; i < 1200; i += 1) {
       wall += 16;
       vi.setSystemTime(wall);
       if (seen.length === 0 || srvT < (wall - 1_000_000) * 1 + 100) {
         push(); seen.push(srvT);
       }
       ri.step(0.016, false);
-      frames++;
-      if (ri.simulating) {simFrames++;}
+      frames += 1;
+      if (ri.simulating) {simFrames += 1;}
       const st = h.position.distanceTo(prev);
       if (st > maxStep) {maxStep = st;}
       prev.copy(h.position);

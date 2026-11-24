@@ -109,7 +109,7 @@ scene.add(sun);
 // dome itself draws behind every preview. 4km dome scaled inside the
 // camera's 100 far plane; the shader is view-direction based so scale
 // only affects depth, never the gradient.
-new AtmosphericSky(scene);
+void new AtmosphericSky(scene);
 (scene.getObjectByName('__sky') as THREE.Mesh).scale.setScalar(60 / 4000);
 // PMREM env bake - physical materials (transmission/metal) are dead
 // without something to reflect/refract; same recipe as main.ts.
@@ -624,6 +624,7 @@ let unioned: { mesh: THREE.Mesh; hidden: THREE.Object3D[] } | null = null;
 let maniMod: any = null;
 async function mani(): Promise<any> {
   if (!maniMod) {
+    // oxlint-disable-next-line new-cap -- WASM module factory, not a ctor
     maniMod = await (ManifoldModuleFactory as any)({ locateFile: () => manifoldWasmUrl });
     maniMod.setup();
   }
@@ -1355,6 +1356,7 @@ function pickPiece(cx: number, cy: number): void {
   const segs: string[] = [];
   let o: THREE.Object3D | null = hit.object;
   while (o && o !== vm.group && o !== scene) {
+    // oxlint-disable-next-line prefer-destructuring -- destructure form trips TS7022 here
     const parent: THREE.Object3D | null = o.parent;
     const idx = parent ? parent.children.indexOf(o) : -1;
     const mesh = o as THREE.Mesh;

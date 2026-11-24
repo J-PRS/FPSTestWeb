@@ -78,7 +78,7 @@ if (q.get('export')) {
   window.__glb = out;
   window.__ready = true;
 }
-if (q.get('export')) {throw 0;} // export mode ends above — __ready already set
+if (q.get('export')) {throw new Error('export-done');} // export mode ends above — __ready already set
 if (!ao) {
   // Unbake: drop the vertex-color attribute so we capture the pre-AO look.
   vm.group.traverse((o): void => {

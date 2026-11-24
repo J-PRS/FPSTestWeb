@@ -6,6 +6,7 @@
 import type * as THREE from 'three';
 import type { Player } from '../entities/Player.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
+import type { TeamBots } from '../game/bots/index.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Terrain } from '../world/terrain.js';
 import type { createEntities } from '../game/entities.js';
@@ -32,7 +33,7 @@ export interface TestHandle {
   chatSink: typeof chatSink;
   hud: HUD;
   /** Offline bot squad - null outside solo. Lets soaks count alive/moving. */
-  teamBots: import('../game/bots/index.js').TeamBots | null;
+  teamBots: TeamBots | null;
   /** parity.ts counters - fates/echoes census for soak verdicts. */
   parity: { fatesSeen: number; echoesStamped: number; echoesConfirmed: number; destroysSeen: number; msgSeen: Record<string, number> };
 }

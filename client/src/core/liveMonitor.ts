@@ -14,6 +14,7 @@ export function violation(kind: string, detail: Record<string, unknown>): void {
   counts[kind] = (counts[kind] ?? 0) + 1;
   ring.push({ t: Math.round(performance.now()), kind, detail });
   if (ring.length > RING) {ring.splice(0, ring.length - RING);}
+  // oxlint-disable-next-line no-console -- the ring IS a log channel
   console.warn(`[MONITOR] ${kind} ${JSON.stringify(detail)}`);
 }
 

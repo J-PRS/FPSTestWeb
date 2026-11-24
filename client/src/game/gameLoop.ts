@@ -816,7 +816,7 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
         // compileAsync's serial link+introspection is a live-frame block
         // - count it so the veil never drops into a mid-warm hitch.
         pendingHeavy.n += 1;
-        Promise.resolve(deps.rendererSetup.warmup()).finally((): void => { pendingHeavy.n -= 1; });
+        Promise.resolve(deps.rendererSetup.warmup()).finally((): void => { pendingHeavy.n -= 1; }).catch((): void => {});
       }
     }
     const count = deps.world.remotePlayers.size;
@@ -845,7 +845,7 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   Promise.resolve(deps.rendererSetup.warmup()).finally((): void => {
     pendingHeavy.n -= 1;
     performance.mark('load:shaderWarmDone');
-  });
+  }).catch((): void => {});
   // Pre-clone each armor-class rig so a mid-match join grabs one off
   // the shelf instead of paying SkeletonUtils.clone on the live frame.
   // Depth 4/variant - a 15-bot churn exhausts 2 before the macrotask

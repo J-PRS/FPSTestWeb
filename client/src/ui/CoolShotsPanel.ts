@@ -306,8 +306,8 @@ export class CoolShotsPanel {
           document.body.append(t);
           setTimeout((): void => t.remove(), 1800);
         };
-        navigator.clipboard.writeText(url).then((): void => { toast('Share link copied'); },
-          (): void => { prompt('Share link:', url); });
+        navigator.clipboard.writeText(url).then((): void => { toast('Share link copied'); })
+          .catch((): void => { prompt('Share link:', url); });
       });
     }
     if (shot.mp4Name) {

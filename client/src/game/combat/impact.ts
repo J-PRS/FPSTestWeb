@@ -975,7 +975,7 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // Premature-detonation split (Reitich's bPredictFX): a contact on a
   // remote BODY is the only mispredictable pop - the victim moved in the
   // transit gap and the wire blast lands where the server actually saw
-  // it (offM 55-90m in dumps). Painting our ghost blast would lie twice;
+  // the blast (offM 55-90m in dumps). Painting our ghost blast would lie twice;
   // the wire 'gone' still owns the true detonation. The CLAIM still
   // fires below - the server adjudicates the hit from real aim data.
   // Terrain hits are provably identical both sides - predict them fully.

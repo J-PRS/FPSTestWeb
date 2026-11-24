@@ -89,13 +89,11 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
       if (!scores || Object.values(scores).some((v): boolean => !Number.isFinite(v))) {return;}
       deps.world.ffaScores = new Map(Object.entries(scores));
       board = deps.world.ffaScores;
-    } else {
-      // Steady-state delta — merge one row; the full-board replace below
-      // stays for legacy peers and the join snapshot.
-      if (rm) {board.delete(deltaId);}
-      else if (Number.isFinite(deltaScore)) {board.set(deltaId, deltaScore!);}
-      else {return;}
-    }
+    // Steady-state delta — merge one row; the full-board replace above
+    // stays for legacy peers and the join snapshot.
+    } else if (rm) {board.delete(deltaId);}
+    else if (Number.isFinite(deltaScore)) {board.set(deltaId, deltaScore!);}
+    else {return;}
     if (!Number.isFinite(winAt)) {return;}
     const me = nm().getLocalPlayerId();
     const mine = board.get(me) ?? 0;

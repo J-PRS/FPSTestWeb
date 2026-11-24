@@ -92,7 +92,7 @@ export function updateFeetMarker(v: PlayerVisuals, terrain: Terrain, pos: THREE.
     // span. Standard terrain-decal trick: each vertex reads its own
     // height, so the decal can't clip at any angle. 98 verts ~ free.
     const attr = (v.groundGizmo.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
-    for (let i = 0; i < attr.count; i++) {
+    for (let i = 0; i < attr.count; i += 1) {
       const wx = pos.x + attr.getX(i), wz = pos.z + attr.getZ(i);
       attr.setY(i, Math.max(terrain.getHeight(wx, wz), terrain.getRenderedHeight(wx, wz)) - groundY);
     }

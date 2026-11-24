@@ -157,7 +157,7 @@ export function dropDebugPin(owner: object, p: { x: number; y: number; z: number
       // (c) exemption: steeper than 30° off horizontal is a real
       //     vertical hop, never a teleport - always allowed
       const vert = Math.abs(pin.y - prev.y) / d > 0.5;
-      if (d > avg * 30 && ang > 0.21 && !vert) {bad = true;}
+      if (d > avg * 30 && dev > 0.21 && !vert) {bad = true;}
     }
     log.push(d);
     if (log.length > 10) {log.shift();}

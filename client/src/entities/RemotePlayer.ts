@@ -393,6 +393,7 @@ export class RemotePlayer {
       const ja = adj.distanceTo(this._dbgPrevAdj);
       const jp = this.position.distanceTo(this._dbgPrevPos);
       if (jw > wireBudget || ja > budget || jp > budget) {
+        // oxlint-disable-next-line no-console -- GLITCH probe feed
         console.error(`[GLITCH:dbgghost-jump] ${JSON.stringify({
           id: this.playerId, wire: Number(jw.toFixed(1)), adj: Number(ja.toFixed(1)), model: Number(jp.toFixed(1)),
           sim: this.interp.simulating, conv: this.interpConverging,

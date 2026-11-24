@@ -22,6 +22,7 @@ import { flushDebugPins } from '../effects/debugPins.js';
 import { targetDemoId } from '../demo/types.js';
 
 import { Nugget } from '../entities/Nugget.js';
+import type { BotEntry } from './bots/botSenses.js';
 import { PICKUP_ACCENT, pickupParts } from '../entities/PickupModel.js';
 import { tokenTier, type PickupKind } from '../../../shared/pickups.js';
 
@@ -74,7 +75,7 @@ export interface EntitiesDeps extends GameContext {
 
   /** Hostiles of a given team - a bot-owned turret/mine scans these. */
 
-  deployBotFoes?: (team: string) => import('./bots/botSenses.js').BotEntry[];
+  deployBotFoes?: (team: string) => BotEntry[];
 
   deployDamageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
 
@@ -363,7 +364,7 @@ function updateBalls(dt: number): void {
     const t2 = prof ? performance.now() : 0;
 
     f.kickDust(b, dt); // bounce frames puff - airborne frames don't
-    if (prof) {prof.aggro += t1 - t0; prof.upd += t2 - t1; prof.dust += performance.now() - t2; prof.n++;}
+    if (prof) {prof.aggro += t1 - t0; prof.upd += t2 - t1; prof.dust += performance.now() - t2; prof.n += 1;}
 
     // Only remove ball when trails have fully faded out
 

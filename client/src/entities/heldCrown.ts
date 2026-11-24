@@ -68,7 +68,7 @@ export class HeldCrown {
     this.beams.length = 0;
     if (held <= 0) {return;}
     const vals = decomposeTokens(held).slice(0, MAX_MESHES);
-    for (let i = 0; i < vals.length; i++) {
+    for (let i = 0; i < vals.length; i += 1) {
       const tier = tokenTier(vals[i]!);
       // Field-token recipe: emitColor is lerp-only (the ×EMIT_GAIN push
       // lives on the bloom-writing core, not the shaft — a 3× additive
@@ -122,7 +122,7 @@ export class HeldCrown {
     if (!this.group.visible) {return;}
     this.spin += dt * SPIN;
     const t = performance.now() / 1000;
-    for (let i = 0; i < this.octas.length; i++) {
+    for (let i = 0; i < this.octas.length; i += 1) {
       const o = this.octas[i]!;
       const a = this.spin + o.userData.ringA;
       const y = o.userData.ringY + Math.sin(t * 2 + o.userData.ringA * 3) * BOB_AMP;

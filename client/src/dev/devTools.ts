@@ -11,6 +11,7 @@ import type { createEntities } from '../game/entities.js';
 import type { createRemotes } from '../game/remotes.js';
 import type { createRenderer } from '../core/renderer.js';
 import type { createDemoLifecycle } from '../game/demoLifecycle.js';
+import type { wireDiagHeader } from '../core/stateDebug.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Terrain } from '../world/terrain.js';
 import type { ViewModel } from '../entities/ViewModel.js';
@@ -37,7 +38,7 @@ export interface DevToolsCtx {
 
 let wired = false;
 
-function stateDebugCtx(c: DevToolsCtx): Parameters<typeof import('../core/stateDebug.js').wireDiagHeader>[0] {
+function stateDebugCtx(c: DevToolsCtx): Parameters<typeof wireDiagHeader>[0] {
   return {
     networkManager: c.networkManager,
     getPlayer: (): Player => c.player,

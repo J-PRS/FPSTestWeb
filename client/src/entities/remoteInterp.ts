@@ -202,6 +202,7 @@ export class RemoteInterp {
       : 0;
     const teleported = jumpDist > Math.max(8, jumpSpanSec * 90 + 4);
     if (teleported) {
+      // oxlint-disable-next-line no-console -- GLITCH probe feed
       console.error(`[GLITCH:dbgwire-jump] ${JSON.stringify({
         id: this.h.playerId,
         dM: Number(jumpDist.toFixed(1)),

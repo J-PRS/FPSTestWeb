@@ -388,7 +388,7 @@ function rebuildVisual(): void {
   let idx = 0;
   for (const list of bumpSources.values()) {
     for (const b of list) {
-      const seed = idx++ * 2.17;
+      const seed = idx * 2.17; idx += 1;
       const gx = (((b.x / hmWorldScale) % 1 + 1) % 1) * hmSize;
       const gz = (((b.z / hmWorldScale) % 1 + 1) % 1) * hmSize;
       const gr = (b.r / hmWorldScale) * hmSize;
@@ -402,7 +402,7 @@ function rebuildVisual(): void {
           const tw = d / (gr * (1 + 0.2 * Math.sin(3 * ang + seed) + 0.1 * Math.sin(7 * ang + seed * 1.7)));
           // Apron profile: flat under the footprint (<0.35r), peak ~0.9r,
           // fade to zero at 2r - soil piled at the wall, not under it.
-          let amp = 0;
+          let amp: number;
           if (tw > 0.35 && tw <= 0.9) { const t = (tw - 0.35) / 0.55; amp = t * t * (3 - 2 * t); }
           else if (tw > 0.9 && tw < 2) { const t = 1 - (tw - 0.9) / 1.1; amp = t * t * (3 - 2 * t); }
           else {continue;}

@@ -724,7 +724,7 @@ export function mkBoulder(size = 4, seed = 1): THREE.Group {
   const geo = new THREE.IcosahedronGeometry(size * 0.5, 4);
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const v = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
+  for (let i = 0; i < pos.count; i += 1) {
     v.fromBufferAttribute(pos, i);
     const n = (Math.sin(v.x * 1.7 + seed) + Math.sin(v.y * 2.1 + seed * 1.3) + Math.sin(v.z * 1.9 + seed * 0.7)) / 3;
     const disp = 1 + n * 0.25;
