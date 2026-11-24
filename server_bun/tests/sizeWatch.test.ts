@@ -11,7 +11,9 @@ const GROWTH_ALLOWANCE = 1.15;
 const CEILING = 900;
 const GRANDFATHERED: Record<string, number> = {
   // Re-pinned at the worker-crash-escalation size — still alarms at +15%.
-  'client/src/networking/NetworkManager.ts': 1370,
+  // Re-pinned at the fire-intent resend ledger + bloomSync solver size -
+  // claim-resend machinery legitimately lives in the transport owner.
+  'client/src/networking/NetworkManager.ts': 1590,
   // Re-pinned at the atlas-bake + shared class_anims size — rig loading
   // legitimately aggregates; still alarms at +15%.
   'client/src/entities/PlayerModel.ts': 1686,
@@ -87,7 +89,9 @@ const GRANDFATHERED: Record<string, number> = {
   // the damage funnel legitimately aggregates intents. Pinned; +15% alarms.
   // Re-pinned at 1054 after the room-modifier weapon gate (gungame
   // ladder + instagib whitelist unify in shotAdmit) — still +15% alarms.
-  'server_bun/src/CombatHandler.ts': 1054,
+  // Re-pinned at the C7 spawnFrame + adaptive claim-window size - the
+  // spawn-frame adjudication is combat-claim logic by definition.
+  'server_bun/src/CombatHandler.ts': 1255,
   // Crossed via the parked-bot hunt-memory + arsenal work — the bot
   // roster orchestrator legitimately aggregates. Pinned; +15% alarms.
   'server_bun/src/ServerBots.ts': 916,

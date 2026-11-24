@@ -1,16 +1,16 @@
 /** Bloom-seed self-heal at echo bind.
  *
  * The server draws its cone off a counter that ticks per unique claim
- * arrival — a claim it never received can't skew it (the CSGO
+ * arrival - a claim it never received can't skew it (the CSGO
  * random_seed hole). The client predicts with its own per-pull counter;
- * a dropped claim skews the two until the next reclaim reseat — and the
+ * a dropped claim skews the two until the next reclaim reseat - and the
  * join path is the only channel that carried the authority's count.
  *
  * The projectileCreated echo's velocity IS the server's drawn dir, so
  * the seq is recoverable at bind: scan the window around the predicted
  * draw for the seed whose cone angle matches the echoed dir, and solve
  * the implied cone magnitude back into the server's bloom counter.
- * No wire field — the echo already carries everything. */
+ * No wire field - the echo already carries everything. */
 import { jitter01, getWeaponStats, bloomGrow, type WeaponType } from '../../../../shared/weapons.js';
 import { idSeed } from '../../../../shared/weaponTable.js';
 
@@ -33,7 +33,7 @@ interface V3 { x: number; y: number; z: number }
 /** Recover the seq the server drew for one echoed bloom dir, by
  * scanning ±window around the client's predicted seq for the jitter
  * whose cone ANGLE matches. Returns null when no seed explains the dir
- * — a divergence that isn't a seed skew (wrong claim dir, stalled aim)
+ * - a divergence that isn't a seed skew (wrong claim dir, stalled aim)
  * must never move the counter.
  *
  * Angle alone identifies the seq almost uniquely over ±32 uniform
@@ -56,7 +56,7 @@ export function solveBloomSeq(opts: {
   const bloomMax = st.bloomMax ?? 0;
   const win = opts.window ?? 64;
   const d = opts.baseDir, s = opts.serverDir;
-  // Tangent basis — the same right/up construction coneDir applies.
+  // Tangent basis - the same right/up construction coneDir applies.
   let rx = -d.z, rz = d.x;
   const rl = Math.hypot(rx, rz);
   if (rl < 1e-8) { rx = 1; rz = 0; } else { rx /= rl; rz /= rl; }
