@@ -625,6 +625,85 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
 
 
 
+/** Pin the resolved server into the address bar so a refresh lands on
+ *  the same host: named servers get the pretty /<alias>/<room> path,
+ *  anything else ?server=. Pin the ENTRY host, not the seat - on a fleet,
+ *  wsUrl is the assigned worker, so alias-matching it misses NAMED_SERVERS
+ *  and stamps ?server=wss://host:8443 into the bar (ugly, and pins share
+ *  recipients to one worker, bypassing matchmaking). lobbyUrl is the
+ *  matchmaker a fresh joiner must enter through. Local/same-origin hosts
+ *  stay unpinned - the page derives endpoints from window.location, and
+ *  a share link must never hardcode ws://127.0.0.1. */
+function pinServerEntry(pinBase: string, serverUrl: string): void {
+  const u = new URL(pinBase);
+  const local = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname)
+    || u.host === window.location.host;
+  // A ?server= that already names the entry host is redundant - it only
+  // ever needed the param to SAY it. Those get the alias path too (and
+  // drop the param), which self-heals stamped worker URLs from before
+  // this ran against the entry host.
+  const serverParam = urlParams.get('server');
+  const serverParamHost = ((): string => { try { return new URL(serverParam ?? '').host; } catch { return ''; } })();
+  const serverUrlHost = ((): string => { try { return new URL(serverUrl).host; } catch { return ''; } })();
+  const redundantParam = Boolean(serverParam) && (serverParamHost === u.host || serverParamHost === serverUrlHost || serverParamHost === window.location.host);
+  if (local || (urlParams.has('server') && !redundantParam) || urlParams.serverPath) {return;}
+  const alias = Object.entries(NAMED_SERVERS).find(([, v]): boolean => {
+    try { return new URL(v).host === u.host; } catch { return false; }
+  })?.[0];
+  const q = new URLSearchParams(window.location.search);
+  if (redundantParam) {q.delete('server');}
+  if (alias && window.location.pathname.startsWith('/s/')) {
+    history.replaceState(null, '', `/${alias}${window.location.pathname.slice(2)}${q.size > 0 ? `?${q}` : ''}`);
+  } else if (!alias) {
+    // A ws:// pin on an https: page is always poison - the later
+    // re-resolves (mapAssets/lobby/world) downgrade httpUrl to http://
+    // and every API fetch dies as mixed content. LAN pins are for http:
+    // pages; here the fallback just stays unpinned.
+    if (!serverParam && !(window.location.protocol === 'https:' && u.protocol === 'ws:')) {q.set('server', `${u.protocol}//${u.host}`);}
+    history.replaceState(null, '', `${window.location.pathname}${q.size > 0 ? `?${q}` : ''}`);
+  }
+}
+
+/** Offline apply of a spec map's player-facing bits: authored spawn
+ *  anchor, map/mode labels, and deploys (generators/sentries are
+ *  server-seeded in rooms; offline they spawn as remote items with the
+ *  same visuals + repair/weld paths). Deploy pos.y rides the lowest
+ *  structure top above authored Y within 12m - Room.deployFloor's rule,
+ *  so the generator lands on the vault deck. */
+function applySoloSpec(s: MapSpec, mode: string | undefined, bootMapName: string | null): void {
+  const anchor = s.teamSpawns?.alpha?.[0] ?? s.spawns?.[0] ?? s.bases?.alpha;
+  if (anchor) {
+    player.resetLifeState();
+    player.pos.set(anchor.x, Math.max(anchor.y, terrain.getHeight(anchor.x, anchor.z) + 2), anchor.z);
+    player.yaw = Math.atan2(-anchor.x, -anchor.z);
+    noteLocalSnap();
+    player.syncMovement();
+    player.markTeleport();
+  }
+  if (s.name) {world.mapName = s.name;}
+  else {world.mapName = bootMapName ?? undefined;}
+  world.mode = mode ?? s.mode;
+  const cols = structureColliders(s.structures);
+  let depId = 9000;
+  for (const d of s.deploys ?? []) {
+    let floor = Infinity;
+    for (const c of cols) {
+      const lx = (d.pos.x - c.cx) * c.cos + (d.pos.z - c.cz) * c.sin;
+      const lz = -(d.pos.x - c.cx) * c.sin + (d.pos.z - c.cz) * c.cos;
+      if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) {continue;}
+      const t = c.cy + c.hy;
+      if (t > d.pos.y && t < floor && t <= d.pos.y + 12) {floor = t;}
+    }
+    const y = floor === Infinity ? Math.max(d.pos.y, terrain.getHeight(d.pos.x, d.pos.z)) : floor;
+    entities.deployables.remoteSpawn(((depId += 1) - 1), {
+      owner: d.team ? `base:${d.team}` : 'base',
+      kind: d.kind as DeployKind,
+      pos: Object.assign({}, d.pos, {y}),
+      team: d.team,
+    });
+  }
+}
+
 /** Connect to server (non-blocking for offline mode). Classic is a solo
  *  ruleset - connecting would hand ball ownership to the server sim,
  *  which enrages and spawns the full roster behind your back.
@@ -662,46 +741,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // to localhost. Named servers get the pretty /<alias>/<room> path;
   // anything else falls back to ?server=. Local hosts stay unpinned -
   // a shared link must never hardcode ws://127.0.0.1 for its opener.
-  {
-    // Pin the ENTRY host, not the seat: on a fleet, wsUrl is the assigned
-    // worker (host:8443) - alias-matching it misses NAMED_SERVERS and
-    // stamps ?server=wss://host:8443 into the bar, which both stays ugly
-    // and pins share recipients to one worker, bypassing matchmaking.
-    // lobbyUrl is the matchmaker a fresh joiner must enter through.
-    const pinBase = (await serverEndpoints).lobbyUrl ?? serverUrl;
-    const u = new URL(pinBase);
-    // Same-origin needs no pin either: the page already derives its
-    // endpoints from window.location (localEp), so ?server= repeating
-    // it only uglifies the share link.
-    const local = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname)
-      || u.host === window.location.host;
-    // A ?server= that already names the entry host is redundant - it
-    // only ever needed the param to SAY it. Those get the alias path
-    // too (and drop the param), which self-heals stamped worker URLs
-    // from before this ran against the entry host.
-    const serverParam = urlParams.get('server');
-    const serverParamHost = ((): string => { try { return new URL(serverParam ?? '').host; } catch { return ''; } })();
-    const redundantParam = Boolean(serverParam) && (serverParamHost === u.host || serverParamHost === serverUrlHost() || serverParamHost === window.location.host);
-    function serverUrlHost(): string { try { return new URL(serverUrl).host; } catch { return ''; } }
-    if (!local && (!urlParams.has('server') || redundantParam) && !urlParams.serverPath) {
-      const alias = Object.entries(NAMED_SERVERS).find(([, v]): boolean => {
-        try { return new URL(v).host === u.host; } catch { return false; }
-      })?.[0];
-      const q = new URLSearchParams(window.location.search);
-      if (redundantParam) {q.delete('server');}
-      const search = q.size > 0 ? `?${q}` : '';
-      if (alias && window.location.pathname.startsWith('/s/')) {
-        history.replaceState(null, '', `/${alias}${window.location.pathname.slice(2)}${search}`);
-      } else if (!alias) {
-        // A ws:// pin on an https: page is always poison - the later
-        // re-resolves (mapAssets/lobby/world) downgrade httpUrl to
-        // http:// and every API fetch dies as mixed content. LAN pins
-        // are for http: pages; here the fallback just stays unpinned.
-        if (!serverParam && !(window.location.protocol === 'https:' && u.protocol === 'ws:')) {q.set('server', `${u.protocol}//${u.host}`);}
-        history.replaceState(null, '', `${window.location.pathname}${q.size > 0 ? `?${q}` : ''}`);
-      }
-    }
-  }
+  pinServerEntry((await serverEndpoints).lobbyUrl ?? serverUrl, serverUrl);
   // F5 with a stored session token = the server may hand back our old
   // body - but only a LIVE host earns the restore veil. Dead server
   // means the offline world owns the first frames outright; a "restoring"
@@ -741,44 +781,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   }
   // Spec maps spawn you at an authored anchor (team spawn > generic
   // spawn > own base) - origin on a T2 port can be kilometers from play.
-  if (soloMode && soloSpec) {
-    const s = soloSpec.spec;
-    const anchor = s.teamSpawns?.alpha?.[0] ?? s.spawns?.[0] ?? s.bases?.alpha;
-    if (anchor) {
-      player.resetLifeState();
-      player.pos.set(anchor.x, Math.max(anchor.y, terrain.getHeight(anchor.x, anchor.z) + 2), anchor.z);
-      player.yaw = Math.atan2(-anchor.x, -anchor.z);
-      noteLocalSnap();
-      player.syncMovement();
-      player.markTeleport();
-    }
-    if (s.name) {world.mapName = s.name;}
-    else {world.mapName = bootMap ?? undefined;}
-    world.mode = mode ?? s.mode;
-    // Deploys - generators/sentries are server-seeded in rooms; offline
-    // they spawn as remote items (same visuals + repair/weld paths).
-    // pos.y rides the lowest structure top above authored Y within 12m -
-    // Room.deployFloor's rule, so the generator lands on the vault deck.
-    const cols = structureColliders(s.structures);
-    let depId = 9000;
-    for (const d of s.deploys ?? []) {
-      let floor = Infinity;
-      for (const c of cols) {
-        const lx = (d.pos.x - c.cx) * c.cos + (d.pos.z - c.cz) * c.sin;
-        const lz = -(d.pos.x - c.cx) * c.sin + (d.pos.z - c.cz) * c.cos;
-        if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) {continue;}
-        const t = c.cy + c.hy;
-        if (t > d.pos.y && t < floor && t <= d.pos.y + 12) {floor = t;}
-      }
-      const y = floor === Infinity ? Math.max(d.pos.y, terrain.getHeight(d.pos.x, d.pos.z)) : floor;
-      entities.deployables.remoteSpawn(((depId += 1) - 1), {
-        owner: d.team ? `base:${d.team}` : 'base',
-        kind: d.kind as DeployKind,
-        pos: Object.assign({}, d.pos, {y}),
-        team: d.team,
-      });
-    }
-  }
+  if (soloMode && soloSpec) {applySoloSpec(soloSpec.spec, mode, bootMap);}
 
   // Initial balls - offline only. In a room the wire owns the ball
   // population; boot-time locals were duplicate spam on the default map.
@@ -856,6 +859,114 @@ async function loadSoloSpec(name: string): Promise<{ spec: MapSpec; map: MapSnap
 
 
 
+/** Address-bar normalization BEFORE anything reads urlParams: /quickjoin
+ *  asks the matchmaker for a seat and rewrites to the canonical /s/<room>
+ *  path so the whole boot just sees an ordinary online join (failure
+ *  leaves the path alone = normal menu boot); a lobby-saved fps-server
+ *  with no ?server= mirrors into the search so the bar is always a
+ *  complete invite (an explicit ?server= already carries it and wins);
+ *  a bare '/' with a remembered room resumes it - explicit leaves clear
+ *  fps-last-room, so its presence means "was in a match, never left",
+ *  and a solo pick (fps-solo) suppresses the resume.
+ *  Returns true when this boot came through the public pool - its saved
+ *  host must NOT be mirrored: a ws:// host would poison every later
+ *  resolveServerEndpoints() re-resolve and die as mixed content on the
+ *  funnel. publicPoolBoot, not the current path: quickplay already
+ *  rewrote it to /s/. */
+async function normalizeBootUrl(): Promise<boolean> {
+  const publicPoolBoot = /^\/(quickplay|quickjoin)\b/.test(window.location.pathname);
+  if (publicPoolBoot) {
+    try {
+      const { httpUrl } = await serverEndpoints;
+      const q = new URLSearchParams(window.location.search);
+      q.set('humans', '1');
+      // /quickplay/<mode> scopes the seat pick - the matchmaker filters
+      // lobby rows by mode and mints <mode>-N when none have room.
+      const mode = window.location.pathname.split('/')[2] ?? '';
+      if (mode) {q.set('mode', mode);}
+      const res = await fetch(`${httpUrl}/join?${q}`, { cache: 'no-cache' });
+      if (res.ok) {
+        const { room } = (await res.json()) as { room: string };
+        if (room) {history.replaceState(null, '', `/s/${encodeURIComponent(room)}${window.location.search}`);}
+      }
+    } catch { /* offline or matchmaker down - menu boot owns it */ }
+  }
+  if (!publicPoolBoot && !urlParams.get('server') && settings.get('fps-server').trim()) {
+    // Same-origin saved host: pinning repeats what the page already
+    // derives - skip it so /s/ links stay clean.
+    const saved = settings.get('fps-server').trim();
+    const savedHost = ((): string => {
+      // 'host:port' parses as scheme:path with empty host - require a
+      // real host before accepting either form.
+      for (const v of [saved, `wss://${saved}`]) { try { const h = new URL(v).host; if (h) {return h;} } catch { /* next form */ } }
+      return '';
+    })();
+    if (savedHost !== window.location.host) {
+      const q = new URLSearchParams(window.location.search);
+      q.set('server', settings.get('fps-server').trim());
+      history.replaceState(null, '', `${window.location.pathname}?${q}`);
+    }
+  }
+  // Bare '/' ONLY - a public-pool path whose matchmaker call didn't land
+  // must NOT resume a stale last-room (that hijack is exactly 'quickplay
+  // puts me in arena-1').
+  if (window.location.pathname === '/' && !urlParams.room && !urlParams.p2p && !urlParams.solo && settings.get('fps-last-room')) {
+    const resume = settings.get('fps-last-room');
+    history.replaceState(null, '', `/s/${encodeURIComponent(resume)}${window.location.search}`);
+  }
+  return publicPoolBoot;
+}
+
+/** Boot terrain priming - the first resident field is the one the player
+ *  lands on, so every lane races the dial instead of serializing inside
+ *  the veil. Order: solo ?map= spec > saved-room probe > /rooms-list map
+ *  lookup > default field. fieldLoaded marks a prime resident so
+ *  applyTerrain skips the refetch; only heights prime - tex/sky/
+ *  interiors still apply at gameState as before.
+ *  Returns the saved-room probe result - connectPhase applies its map. */
+async function primeBootTerrain(onlineBoot: boolean): Promise<{ httpUrl: string; map: MapSnapshot } | null> {
+  // Solo-with-a-map: ?map= without a room is the SOLO tab's pick - fetch
+  // the spec JSON off the same static /maps route the wire path uses and
+  // resolve it client-side (resolveMapSpec is shared/, pure).
+  soloSpec = !onlineBoot && bootMap
+    ? await loadSoloSpec(bootMap) : null;
+  // Probe the saved last-room BEFORE the boot heightmap: when it pings
+  // live, its terrain loads as the boot field and the default map is
+  // never resident - no default-field flash on F5.
+  const bootSaved = onlineBoot ? await probeBootMap() : null;
+  const soloPrimed = soloSpec?.map && (await serverEndpoints).httpUrl
+    ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch((): boolean => false)
+    : false;
+  // Fresh-join terrain prime: ?room=X learns its map from the public
+  // /rooms lobby list - the heightfield fetch then rides the dial
+  // instead of serializing inside the veil (the ~2.7s
+  // gameState→terrainSwapped gap).
+  let roomPrimed = false;
+  if (!soloPrimed && !bootSaved && onlineBoot && urlParams.room) {
+    try {
+      const { httpUrl } = await serverEndpoints;
+      const rooms = await (await fetch(`${httpUrl}/rooms`)).json() as { name: string; map?: string }[];
+      const mine = rooms.find((r): boolean => r.name === urlParams.room);
+      // Spec JSON first: the resolved spec carries terrainPreset +
+      // heightScale so the primed field is exactly right AND the boot
+      // program compiles the real palette (bootPrimedPreset seeds
+      // setPreset before the tick-60 warmup). Bin-only fallback keeps
+      // the old behavior when the spec route misses.
+      if (mine?.map) {
+        const hit = await loadSoloSpec(mine.map);
+        roomPrimed = hit
+          ? await bootPrimeTerrain(httpUrl, hit.map)
+          : await bootPrimeTerrain(httpUrl, { terrain: `${mine.map}.bin` });
+      }
+    } catch { roomPrimed = false; }
+  }
+  if (!soloPrimed && !roomPrimed && (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map)))) {
+    await loadHeightfieldBin('/assets/heightmaps/heightmap.bin');
+  }
+  profiler.markTime('heightmapLoaded');
+  return bootSaved;
+}
+
 async function init(): Promise<void> {
   profiler.markTime('initStart');
   // Invariant violations land in the glitch census - a named truth
@@ -890,68 +1001,7 @@ async function init(): Promise<void> {
   networkManager.armWireQueue();
   // Captured BEFORE the quickplay block rewrites the path to /s/<room> -
   // the mirror below must still know this boot came through the pool.
-  const publicPoolBoot = /^\/(quickplay|quickjoin)\b/.test(window.location.pathname);
-  // /quickjoin - ask the matchmaker for a seat before anything reads
-  // urlParams; the picked room lands as the canonical /s/<room> path, so
-  // the whole boot below just sees an ordinary online join. Failure
-  // leaves the path alone → normal menu boot.
-  if (publicPoolBoot) {
-    try {
-      const { httpUrl } = await serverEndpoints;
-      const q = new URLSearchParams(window.location.search);
-      q.set('humans', '1');
-      // /quickplay/<mode> scopes the seat pick - the matchmaker filters
-      // lobby rows by mode and mints <mode>-N when none have room.
-      const mode = window.location.pathname.split('/')[2] ?? '';
-      if (mode) {q.set('mode', mode);}
-      const res = await fetch(`${httpUrl}/join?${q}`, { cache: 'no-cache' });
-      if (res.ok) {
-        const { room } = (await res.json()) as { room: string };
-        if (room) {history.replaceState(null, '', `/s/${encodeURIComponent(room)}${window.location.search}`);}
-      }
-    } catch { /* offline or matchmaker down - menu boot owns it */ }
-  }
-  // Invite completeness: a room joined via the lobby's saved fps-server
-  // pick carries no ?server= in the URL - sharing /s/<room> would land
-  // friends on THEIR default host, where the room doesn't exist. Mirror
-  // the saved host into the search so the address bar is always the full
-  // invite. An explicit ?server= link already carries it and wins; an
-  // empty setting is the default host (a public deploy's server.json
-  // resolves identically for the recipient - nothing to carry).
-  // Public-pool paths exempt the saved host (savedHost() above) - mirroring
-  // it back in would re-poison every later resolveServerEndpoints() call
-  // (mapAssets/lobby/world re-resolve per use) with a ws:// host that
-  // downgrades httpUrl to http:// and dies as mixed content on the funnel.
-  // publicPoolBoot, not the current path: quickplay already rewrote it to /s/.
-  if (!publicPoolBoot && !urlParams.get('server') && settings.get('fps-server').trim()) {
-    // Same-origin saved host: pinning repeats what the page already
-    // derives - skip it so /s/ links stay clean.
-    const saved = settings.get('fps-server').trim();
-    const savedHost = ((): string => {
-      // 'host:port' parses as scheme:path with empty host - require a
-      // real host before accepting either form.
-      for (const v of [saved, `wss://${saved}`]) { try { const h = new URL(v).host; if (h) {return h;} } catch { /* next form */ } }
-      return '';
-    })();
-    if (savedHost !== window.location.host) {
-      const q = new URLSearchParams(window.location.search);
-      q.set('server', settings.get('fps-server').trim());
-      history.replaceState(null, '', `${window.location.pathname}?${q}`);
-    }
-  }
-  // Boot resume: a bare '/' load with a remembered room rejoins it - the
-  // canonical /s/<room> path is written BEFORE anything reads urlParams,
-  // so every downstream consumer (early wire, join payload, lobby) sees
-  // the resumed identity. Explicit leaves clear fps-last-room, so its
-  // presence means "was in a match and never left". A solo pick
-  // (fps-solo) suppresses the resume - the player chose offline.
-  // Bare '/' ONLY - a public-pool path (/quickplay|/quickjoin) whose
-  // matchmaker call didn't land must NOT resume a stale last-room
-  // (that hijack is exactly 'quickplay puts me in arena-1').
-  if (window.location.pathname === '/' && !urlParams.room && !urlParams.p2p && !urlParams.solo && settings.get('fps-last-room')) {
-    const resume = settings.get('fps-last-room');
-    history.replaceState(null, '', `/s/${encodeURIComponent(resume)}${window.location.search}`);
-  }
+  const publicPoolBoot = await normalizeBootUrl();
   const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p);
   if (urlParams.room) {
     settings.set('fps-last-room', urlParams.room);
@@ -1005,47 +1055,7 @@ async function init(): Promise<void> {
     const bootUrl = RIG_MANIFEST[(CLASS_BODY_VARIANT[bootClass] ?? 'vexa') as PlayerModelVariant]?.url;
     if (bootUrl) {void fetch(bootUrl).catch((): void => undefined);}
   }
-  // Probe the saved last-room BEFORE the boot heightmap: when it pings
-  // live, its terrain loads as the boot field and the default map is
-  // never resident - no default-field flash on F5.
-  // Solo-with-a-map: ?map= without a room is the SOLO tab's pick - fetch
-  // the spec JSON off the same static /maps route the wire path uses and
-  // resolve it client-side (resolveMapSpec is shared/, pure).
-  soloSpec = !onlineBoot && bootMap
-    ? await loadSoloSpec(bootMap) : null;
-  const bootSaved = onlineBoot ? await probeBootMap() : null;
-  const soloPrimed = soloSpec?.map && (await serverEndpoints).httpUrl
-    ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch((): boolean => false)
-    : false;
-  // Fresh-join terrain prime: ?room=X learns its map from the public
-  // /rooms lobby list - the heightfield fetch then rides the dial
-  // instead of serializing inside the veil (the ~2.7s
-  // gameState→terrainSwapped gap). fieldLoaded marks it resident so
-  // applyTerrain skips the refetch. Only heights are primed - tex/sky/
-  // interiors still apply at gameState as before.
-  let roomPrimed = false;
-  if (!soloPrimed && !bootSaved && onlineBoot && urlParams.room) {
-    try {
-      const { httpUrl } = await serverEndpoints;
-      const rooms = await (await fetch(`${httpUrl}/rooms`)).json() as { name: string; map?: string }[];
-      const mine = rooms.find((r): boolean => r.name === urlParams.room);
-      // Spec JSON first: the resolved spec carries terrainPreset +
-      // heightScale so the primed field is exactly right AND the boot
-      // program compiles the real palette (bootPrimedPreset seeds
-      // setPreset before the tick-60 warmup). Bin-only fallback keeps
-      // the old behavior when the spec route misses.
-      if (mine?.map) {
-        const hit = await loadSoloSpec(mine.map);
-        roomPrimed = hit
-          ? await bootPrimeTerrain(httpUrl, hit.map)
-          : await bootPrimeTerrain(httpUrl, { terrain: `${mine.map}.bin` });
-      }
-    } catch { roomPrimed = false; }
-  }
-  if (!soloPrimed && !roomPrimed && (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map)))) {
-    await loadHeightfieldBin('/assets/heightmaps/heightmap.bin');
-  }
-  profiler.markTime('heightmapLoaded');
+  const bootSaved = await primeBootTerrain(onlineBoot);
 
   terrain = new Terrain(scene, sun.position.clone().normalize());
   // A primed field (solo ?map= / saved-room probe) already carries its
