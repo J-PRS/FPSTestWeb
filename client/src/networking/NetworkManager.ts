@@ -813,7 +813,7 @@ this.sendDrops += 1;
     if (this.isConnected()) {
       const resendMs = Math.min(Math.max((this.telemetry.ping || 60) * 2, 150), 450);
       for (const e of this.claimIntents) {
-        if (e.acked || now - e.t >= NetworkManager.FIRE_REPLAY_MS) {continue;}
+        if (e.acked || now - e.t >= NetworkManager.FIRE_FRESH_MS) {continue;}
         if ((e.msg as { shotId?: string }).shotId === undefined) {continue;}
         if ((e.resends ?? 0) >= NetworkManager.FIRE_RESEND_MAX) {continue;}
         if (now - (e.lastResend ?? e.t) < resendMs) {continue;}
@@ -1077,7 +1077,10 @@ this.sendDrops += 1;
     this.lastSentState.yaw = rotation.yaw; this.lastSentState.pitch = rotation.pitch;
 
     const nowMs = performance.now();
-    if (nowMs - this.lastLedgerSweep >= 1000) {
+    // ~10Hz: the resend budget inside paces retries by ~2xRTT, so the
+    // sweep must run well under that or a dropped claim waits a second
+    // before its first retry (shells fly ~250m in that gap).
+    if (nowMs - this.lastLedgerSweep >= 100) {
       this.lastLedgerSweep = nowMs;
       this.sweepLedgers(nowMs);
     }
@@ -1278,6 +1281,11 @@ this.sendDrops += 1;
   /** Per-entry resend cap inside a session: covers loss bursts without
    *  an unbounded retry storm; the reclaim replay still backs it up. */
   private static readonly FIRE_RESEND_MAX = 6;
+  /** Past ~3s the server's fireAt clamp collapses replays onto one
+   *  timestamp and a fresh spawn would diverge from the long-resolved
+   *  prediction - replay AND in-session resends share this freshness
+   *  bound (a resend at 4s only paints a phantom arc). */
+  private static readonly FIRE_FRESH_MS = 2800;
 
   /** Called by wireIn's gameState handler - the seat is (re)established.
    *  Resends fire intents the dead lane may have lost; entries from a
@@ -1303,7 +1311,7 @@ this.sendDrops += 1;
       // burst and cadence-rejects the whole reclaim (the 4/s rejects on
       // stall recovery). A shell predicted that long ago resolved locally
       // anyway; a fresh spawn now would diverge from the arc we painted.
-      if ((e.msg.type === 'shotFired' || e.msg.type === 'aoeShot') && now - e.t >= 2800) {continue;}
+      if ((e.msg.type === 'shotFired' || e.msg.type === 'aoeShot') && now - e.t >= NetworkManager.FIRE_FRESH_MS) {continue;}
       this.intentReplays += 1;
       this.send(e.msg);
     }

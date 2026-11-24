@@ -770,7 +770,12 @@ w.n += 1;
         ? Math.min(Math.max(msg.fireAt, now - 3000), now)
         : now;
       win.arr = win.arr.filter((v): boolean => t - v.t < 1000 && v.t <= t);
-      win.arr.push({ t, id: msg.shotId });
+      // A resend/wire-dup of an already-judged claim re-enters this gate
+      // (noteShot only stamps spawned shells) - the same shotId must
+      // count once or a retry burst inflates the window into self-rejects.
+      if (msg.shotId === undefined || !win.arr.some((v): boolean => v.id === msg.shotId)) {
+        win.arr.push({ t, id: msg.shotId });
+      }
       if (win.arr.length >= Math.ceil(1000 / (interval * 850)) + 2) {
 win.violations += 1;
         // Name the colliding claims in the reject - a dup-minted pull and a

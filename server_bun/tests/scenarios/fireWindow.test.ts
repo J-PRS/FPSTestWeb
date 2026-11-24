@@ -71,3 +71,33 @@ describe('scenario: intent flood gate', () => {
     expect(rejects.filter((m) => m.type === 'shotRejected')).toHaveLength(0);
   });
 });
+
+describe('scenario: cadence window dedupe', () => {
+  it('a resend of an in-window claim counts once - the window keys on shotId', () => {
+    const room = mkRoom({ bots: 2 }, 'tdm');
+    const w = watch(room);
+    const [a] = twoPlayers(room);
+    const rejects = spyRejects(room, a.id);
+    const interval = WEAPON_FIRE_INTERVAL_S[WeaponType.Chaingun]!;
+    const admits = Math.ceil(1000 / (interval * 850)) + 2 - 1;
+    const fire = (shotId: string): void => {
+      room.messages.handleMessage(a.id, {
+        type: 'shotFired', weaponType: GUN,
+        dir: { x: 1, y: 0, z: 0 }, pos: { x: 1, y: 32, z: 0 }, shotId,
+      } as never);
+    };
+    // Fill the window to the admit bound (each judged at now - no fireAt).
+    for (let i = 0; i < admits; i++) {fire(`s${i}`);}
+    // 'late' crowds the bound and rejects; its resends re-enter the gate
+    // (rejected claims earn no seenShots stamp). Same shotId = one count.
+    fire('late'); fire('late'); fire('late');
+    const win = (room.messages.combat as unknown as { fireWindows: Map<string, { arr: unknown[] }> })
+      .fireWindows.get(`${a.id}:${GUN}`);
+    expect(win?.arr.length).toBe(admits + 1);
+    // A resend of a SPAWNED claim dies at shotAdmit's dedupe - never
+    // reaches the gate, emits nothing.
+    fire('s0');
+    expect(w.count('projectileCreated')).toBe(admits);
+    expect(rejects.filter((m) => m.type === 'shotRejected').length).toBeGreaterThanOrEqual(1);
+  });
+});
