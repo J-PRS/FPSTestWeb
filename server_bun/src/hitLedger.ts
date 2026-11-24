@@ -25,6 +25,10 @@ export const selfKillFoeDist: number[] = [];
 export const selfKillTrades: { trades: number } = { trades: 0 };
 const recentKills: { t: number; shooterId: string }[] = [];
 const TRADE_MS = 300;
+// Soak-only forensics - probe tests opt in; prod never runs the
+// self-frag scans (nearest-foe sweep, preyNear call, array upkeep).
+let hitProbes = false;
+export function enableHitProbes(): void { hitProbes = true; }
 // Debug probes below are module-global — a long-lived room pushes one
 // entry per self-frag forever. Same tail-cap shape as recentKills.
 const PROBE_CAP = 256;
@@ -122,13 +126,13 @@ export class HitLedger {
       c.deps.influence?.splat(victim.position, c.deps.influence.dangerLayer(victim.team ?? 'alpha'), 2);
       c.deps.influence?.splat(victim.position, 'opportunity', 0.8);
     }
-    if (shooterId === targetId && impactDist !== undefined) {probePush(selfKillImpactDist, impactDist);}
-    if (shooterId === targetId && impactPos) {
+    if (hitProbes && shooterId === targetId && impactDist !== undefined) {probePush(selfKillImpactDist, impactDist);}
+    if (hitProbes && shooterId === targetId && impactPos) {
       probePush(selfKillImpactPos, { x: impactPos.x, y: impactPos.y, z: impactPos.z });
       const near = c.deps.preyNear?.(impactPos, shooterId);
       if (near) {probePush(selfKillPrey, near);}
     }
-    if (shooterId === targetId) {
+    if (hitProbes && shooterId === targetId) {
       const me2 = c.playerManager.getPlayer(shooterId);
       if (me2) {
         let foeD = Infinity;
@@ -142,10 +146,12 @@ export class HitLedger {
     }
     // Trade accounting runs both directions of the batch: a self-frag
     // after a same-window enemy kill, or the enemy kill landing first.
-    const now0 = simNow();
-    if (recentKills.some((k): boolean => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) {selfKillTrades.trades += 1;}
-    recentKills.push({ t: now0, shooterId });
-    if (recentKills.length > 256) {recentKills.splice(0, recentKills.length - 256);}
+    if (hitProbes) {
+      const now0 = simNow();
+      if (recentKills.some((k): boolean => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) {selfKillTrades.trades += 1;}
+      recentKills.push({ t: now0, shooterId });
+      if (recentKills.length > 256) {recentKills.splice(0, recentKills.length - 256);}
+    }
     weaponStats.recordKillSpeed(modeTag,
       c.playerManager.getPlayer(shooterId)?.velocity ?? null,
       victim?.velocity ?? null);

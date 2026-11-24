@@ -8,7 +8,9 @@ import { GRAVITY } from '../../../shared/movement.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { sharedEnv } from '../../../shared/env.ts';
 import { weaponStats } from '../../src/weaponStats.ts';
-import { selfKillImpactDist, selfKillImpactPos, selfKillPrey, selfKillFoeDist, selfKillTrades } from '../../src/hitLedger.ts';
+import { selfKillImpactDist, selfKillImpactPos, selfKillPrey, selfKillFoeDist, selfKillTrades, enableHitProbes } from '../../src/hitLedger.ts';
+
+enableHitProbes();
 import { WeaponType } from '../../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.ts';
 

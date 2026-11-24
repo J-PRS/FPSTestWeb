@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, firstPlayer } from './harness.ts';
-import { selfKillImpactDist, selfKillFoeDist } from '../../src/hitLedger.ts';
+import { selfKillImpactDist, selfKillFoeDist, enableHitProbes } from '../../src/hitLedger.ts';
+
+enableHitProbes();
 
 // The self-frag probes are module-global soak data — they must stay
 // tail-capped or a long-lived room grows them forever.
