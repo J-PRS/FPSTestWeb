@@ -77,3 +77,32 @@ verification: `wc -l` census + targeted greps — no test runs.
   matches.jsonl); only the signed-submit path (resultSigner +
   leaderboard submit) is dormant on KRIBES_SIGN_KEY. Decision is
   set-the-key vs delete the signer - owner call, not debt.
+
+## 2026-11-24 lint floor reached (cont.)
+
+Second burn-down round same session: warnings 443 -> 271. Fixed
+classes: no-multi-assign, import/first, no-shadow, no-restricted-globals
+(location.* -> window.location.*), no-plusplus (for-headers + split
+expression positions), promise/catch-or-return tails, duplicate +
+import() type imports, EventSource on* -> addEventListener, no-lonely-if,
+default-case, switch-braces, for-of, hypot, Number.isNaN,
+param-reassign, arrow callbacks, throw-literal.
+
+Rules retired this round (verified all-deliberate hits first):
+no-empty-function (() => {} stubs are the spy/noop idiom),
+no-rest-spread-properties (contradicts prefer-object-spread),
+consistent-function-scoping (colocation convention),
+always-return (fire-and-forget void .then callbacks),
+explicit-module-boundary-types (inference is the house style),
+no-conditional-in-test (__tests__ only).
+
+What remains is REAL structure, not lint:
+- complexity 125 / nested-ternary 40 / max-lines-fn 30 / max-params 27 /
+  max-depth 26 / max-lines 4 - the refactor tier.
+- import/no-cycle 4 (combat <-> entities <-> impact cluster) -
+  architectural, tracks the C5/lane-unification work.
+- promise/no-nesting 7 (mostly main.ts boot chains).
+- vitest/no-conditional-expect 8.
+
+Ledger items still ranked: transport matrix (~3.5k delta),
+botTuning funnel (two armies), leaderboard sign-or-delete (JP call).
