@@ -397,6 +397,14 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     };
   }
 
+  /** Clipmap draw-state for the shipped boot diag - a no-terrain report
+   *  needs mesh counts from the device, not a local repro. */
+  get levelStats(): { levels: number; visible: number } {
+    let visible = 0;
+    for (const l of this.levels) {if (l.mesh.visible) {visible++;}}
+    return { levels: this.levels.length, visible };
+  }
+
   /** Hot-swap the heightfield (map change via gameState): re-upload the
    *  displacement texture and point every level's material at it. Positions
    *  already in flight resolve against the new field on the next sample -

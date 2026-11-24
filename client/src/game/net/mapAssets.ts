@@ -193,6 +193,21 @@ export const firstTerrain = new Promise<void>((r): void => { firstTerrainGate.re
 
 const BOOT_HEIGHTMAP = '/assets/heightmaps/heightmap.bin';
 
+// Throwaway-context GPU id for the shipped terrain diag - cheap enough
+// to run once per map apply; identifies the device tier a field report
+// came from (masked string on locked-down browsers).
+function glRendererString(): string {
+  try {
+    const c = document.createElement('canvas');
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null;
+    if (!gl) {return 'no-gl';}
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const r = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'masked');
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return r;
+  } catch { return 'err'; }
+}
+
 
 
 /** Baked albedo + optional full-fidelity material layer (mats.json next
@@ -403,6 +418,10 @@ async function terrainSwapTask(req: TerrainSwapReq): Promise<void> {
     deps.world.onTerrainApplied?.(file);
 
     deps.logger.info(`Terrain swapped to maps/${file}`);
+    // Shipped boot diag - WARN+ lines reach logs/client.log, which is the
+    // only telemetry a mobile "terrain invisible" report produces.
+    const st = deps.lazyTerrain().levelStats;
+    deps.logger.warn(`terrain applied ${file ?? BOOT_HEIGHTMAP} preset=${deps.lazyTerrain().preset} levels=${st.levels} vis=${st.visible} win=${window.innerWidth}x${window.innerHeight} dpr=${window.devicePixelRatio} gl=${glRendererString()}`);
 
   } catch (error) {
 
