@@ -69,7 +69,7 @@ type MkDrop = (options: DropOpt[], onPick: (v: string) => void, faceOpts?: DropO
 // Panel construction - three labeled groups (ARMOR / WEAPONS / KIT) inside
 // one bottom sheet. Class is a tile picker because its tradeoff (speed vs
 // HP) reads at a glance; everything else stays a dropup chip.
-function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
+function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDropFn: MkDrop): BarUi {
   const ui: BarUi = {
     slotDrops: [], beltDrop: null, skillDrop: null, perkDrop: null,
     classDrop: null, sidearmDrop: null, packDrop: null,
@@ -147,7 +147,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   for (let i = 0; i < Player.LOADOUT_SLOTS; i += 1) {
     const { cell, cap } = mkCellDom(weaponCells);
     cap.textContent = `SLOT ${i + 1}`;
-    const drop = mkDrop(weaponOpts, (v): void => deps.lazyPlayer().setLoadoutSlot(i, Number(v)), allWeaponOpts);
+    const drop = mkDropFn(weaponOpts, (v): void => deps.lazyPlayer().setLoadoutSlot(i, Number(v)), allWeaponOpts);
     cell.append(drop.el);
     ui.slotDrops.push(drop);
   }
@@ -159,62 +159,72 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   ui.kitBoxA = kitRowA;
   const kitRowB = mkGroup('KIT', false);
   kitRowB.classList.add('lo-grid3');
-  const sidearm = mkCellDom(kitRowA);
-  ui.sidearmCell = sidearm.cell;
-  ui.sidearmLabel = sidearm.cap;
-  ui.sidearmDrop = mkDrop(
-    // The SIDEARM table owns id→wid+label - the menu derives, so a new
-    // sidearm is one table entry, not a menu edit.
-    Object.entries(PlayerLoadout.SIDEARM)
-      .map(([v, s]): { v: string; label: string } => ({ v, label: s.label }))
-      .toSorted(byLabel),
-    (v): void => deps.lazyPlayer().setSidearm(v as SidearmId),
-  );
-  sidearm.cell.append(ui.sidearmDrop.el);
-
-  const belt = mkCellDom(kitRowA);
-  ui.beltLabel = belt.cap;
-  ui.beltDrop = mkDrop(
-    BELT_OPTS,
-    (v): void => deps.lazyPlayer().setBeltItem(v as BeltItem),
-  );
-  belt.cell.append(ui.beltDrop.el);
-
-  const pack = mkCellDom(kitRowB);
-  ui.packCell = pack.cell;
-  ui.packLabel = pack.cap;
-  ui.packDrop = mkDrop(
-    PACK_KINDS.map((kind): { v: DeployKind; label: string; } => ({ v: kind, label: DEPLOY_ITEMS[kind].label })).toSorted(byLabel),
-    (v): void => deps.lazyPlayer().setPackItem(v as DeployKind),
-  );
-  pack.cell.append(ui.packDrop.el);
-
-  const skill = mkCellDom(kitRowB);
-  ui.skillLabel = skill.cap;
-  ui.skillDrop = mkDrop(
-    SKILL_ORDER.map((s): { v: SkillId; label: string; } => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })).toSorted(byLabel),
-    (v): void => deps.lazyPlayer().setSkill(v as SkillId),
-  );
-  skill.cell.append(ui.skillDrop.el);
-
-  const perk = mkCellDom(kitRowB);
-  perk.cap.textContent = 'PERK';
-  ui.perkDrop = mkDrop(
-    // 'none' stays on top — it banners full-width as the absence pick.
-    PERK_ORDER.map((p): { v: PerkId; label: string; desc: string; } => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb }))
-      .toSorted((a, b): number => (a.v === 'none' ? -1 : b.v === 'none' ? 1 : byLabel(a, b))),
-    (v): void => {
-      deps.lazyPlayer().setPerk(v as PerkId);
-      deps.lazyNetworkManager?.()?.sendPerkUpdate(v);
-    },
-    undefined, true, // 2 cols - 10 perks stack taller than the menu otherwise
-  );
-  perk.cell.append(ui.perkDrop.el);
+  mkKitCells(ui, kitRowA, kitRowB, deps, mkDropFn);
 
   return ui;
 }
 
 
+
+/** KIT-row cells: sidearm/belt/pack/skill/perk drops, each in
+ *  its own labelled cell across the two kit rows. */
+function mkKitCells(ui: BarUi, kitRowA: HTMLElement, kitRowB: HTMLElement, deps: LoadoutDeps, mkDropFn: MkDrop): void {
+const sidearm = mkCellDom(kitRowA);
+ui.sidearmCell = sidearm.cell;
+ui.sidearmLabel = sidearm.cap;
+ui.sidearmDrop = mkDropFn(
+  // The SIDEARM table owns id→wid+label - the menu derives, so a new
+  // sidearm is one table entry, not a menu edit.
+  Object.entries(PlayerLoadout.SIDEARM)
+    .map(([v, s]): { v: string; label: string } => ({ v, label: s.label }))
+    .toSorted(byLabel),
+  (v): void => deps.lazyPlayer().setSidearm(v as SidearmId),
+);
+sidearm.cell.append(ui.sidearmDrop.el);
+
+const belt = mkCellDom(kitRowA);
+ui.beltLabel = belt.cap;
+ui.beltDrop = mkDropFn(
+  BELT_OPTS,
+  (v): void => deps.lazyPlayer().setBeltItem(v as BeltItem),
+);
+belt.cell.append(ui.beltDrop.el);
+
+const pack = mkCellDom(kitRowB);
+ui.packCell = pack.cell;
+ui.packLabel = pack.cap;
+ui.packDrop = mkDropFn(
+  PACK_KINDS.map((kind): { v: DeployKind; label: string; } => ({ v: kind, label: DEPLOY_ITEMS[kind].label })).toSorted(byLabel),
+  (v): void => deps.lazyPlayer().setPackItem(v as DeployKind),
+);
+pack.cell.append(ui.packDrop.el);
+
+const skill = mkCellDom(kitRowB);
+ui.skillLabel = skill.cap;
+ui.skillDrop = mkDropFn(
+  SKILL_ORDER.map((s): { v: SkillId; label: string; } => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })).toSorted(byLabel),
+  (v): void => deps.lazyPlayer().setSkill(v as SkillId),
+);
+skill.cell.append(ui.skillDrop.el);
+
+const perk = mkCellDom(kitRowB);
+perk.cap.textContent = 'PERK';
+ui.perkDrop = mkDropFn(
+  // 'none' stays on top — it banners full-width as the absence pick.
+  PERK_ORDER.map((p): { v: PerkId; label: string; desc: string; } => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb }))
+    .toSorted((a, b): number => {
+      if (a.v === 'none') {return -1;}
+      if (b.v === 'none') {return 1;}
+      return byLabel(a, b);
+    }),
+  (v): void => {
+    deps.lazyPlayer().setPerk(v as PerkId);
+    deps.lazyNetworkManager?.()?.sendPerkUpdate(v);
+  },
+  undefined, true, // 2 cols - 10 perks stack taller than the menu otherwise
+);
+perk.cell.append(ui.perkDrop.el);
+}
 
 const byLabel = (a: { label: string }, b: { label: string }): number => a.label.localeCompare(b.label);
 
@@ -257,107 +267,109 @@ function markSlotUse(player: Player, slotDrops: Drop[]): void {
 
 
 
+function mkDrop(
+deps: LoadoutDeps,
+refresh: () => void,
+initialOptions: DropOpt[],
+onPick: (v: string) => void,
+faceOpts?: DropOpt[],
+cols2 = false,
+): Drop {
+  const el = document.createElement('div');
+  el.className = 'lo-chip lo-drop';
+  const face = document.createElement('span');
+  el.append(face);
+  const caret = document.createElement('span');
+  caret.className = 'lo-caret';
+  caret.textContent = '▴';
+  el.append(caret);
+  const list = document.createElement('div');
+  list.className = cols2 ? 'lo-list cols2' : 'lo-list';
+  el.append(list);
+  let options = initialOptions;
+  let currentV = '';
+  const rebuild = (): void => {
+    // Measure the widest list this drop can EVER show (faceOpts = the
+    // union) not the currently filtered one - class swaps re-call
+    // setOptions, and a per-class measurement resized the whole bar.
+    const w = dropWidth(faceOpts ?? options);
+    // Width lives on the LIST (it's absolutely positioned, can overflow
+    // the face) - under a kit lock the face shrinks to its label.
+    el.dataset.loW = String(w);
+    el.style.minWidth = kitLocked ? '0px' : `${w}px`;
+    list.style.minWidth = `${w}px`;
+    list.innerHTML = '';
+    for (const o of options) {
+      const it = document.createElement('div');
+      it.className = 'lo-opt';
+      if (o.disabled) {it.classList.add('locked');}
+      // 'none' isn't a perk - banner it across both columns.
+      if (cols2 && o.v === 'none') {it.classList.add('full');}
+      const name = document.createElement('span');
+      name.className = 'lo-name';
+      name.textContent = o.label;
+      it.append(name);
+      if (o.desc) {
+        // Perks are the only invisible pick - everything else
+        // self-explains in a second of firing it.
+        it.classList.add('has-desc');
+        const d = document.createElement('span');
+        d.className = 'lo-desc';
+        d.textContent = o.desc;
+        it.append(d);
+      }
+      it.dataset.v = o.v;
+      it.addEventListener('click', (e): void => {
+        e.stopPropagation();
+        // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
+        // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
+        if (o.disabled) {return;} // tier-locked - visible but unshoulderable
+        onPick(o.v);
+        el.classList.remove('open');
+        openDrop = null;
+        refresh();
+      });
+      list.append(it);
+    }
+  };
+  rebuild();
+  el.addEventListener('click', (e): void => {
+    e.stopPropagation();
+    const was = el.classList.contains('open');
+    openDrop?.classList.remove('open');
+    el.classList.toggle('open', !was);
+    openDrop = was ? null : el;
+  });
+  return {
+    el,
+    setValue(v): void {
+      currentV = v;
+      // faceOpts resolves labels the filtered list can't - an equipped
+      // heavy weapon on lighter armor must name itself, not print "6".
+      face.textContent = options.find((o): boolean => o.v === v)?.label
+        ?? faceOpts?.find((o): boolean => o.v === v)?.label ?? v;
+      list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): boolean =>
+        o.classList.toggle('sel', o.dataset.v === v));
+    },
+    setOptions(next): void {
+      options = next;
+      rebuild();
+      // The equipped value may have survived the filter - re-face it.
+      this.setValue(currentV);
+    },
+    // 'used' = equipped in a sibling slot - a faint tint reads "already
+    // in the kit" without competing with this slot's bright .sel.
+    markUsed(used): void {
+      list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): void => {
+        const v = o.dataset.v ?? '';
+        o.classList.toggle('used', v !== currentV && used.has(v));
+      });
+    },
+  };
+}
+
 export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; closeDrops(): void } {
   const loadoutBar = document.getElementById('loadout-bar');
-
-  function mkDrop(
-    initialOptions: DropOpt[],
-    onPick: (v: string) => void,
-    faceOpts?: DropOpt[],
-    cols2 = false,
-  ): Drop {
-    const el = document.createElement('div');
-    el.className = 'lo-chip lo-drop';
-    const face = document.createElement('span');
-    el.append(face);
-    const caret = document.createElement('span');
-    caret.className = 'lo-caret';
-    caret.textContent = '▴';
-    el.append(caret);
-    const list = document.createElement('div');
-    list.className = cols2 ? 'lo-list cols2' : 'lo-list';
-    el.append(list);
-    let options = initialOptions;
-    let currentV = '';
-    const rebuild = (): void => {
-      // Measure the widest list this drop can EVER show (faceOpts = the
-      // union) not the currently filtered one - class swaps re-call
-      // setOptions, and a per-class measurement resized the whole bar.
-      const w = dropWidth(faceOpts ?? options);
-      // Width lives on the LIST (it's absolutely positioned, can overflow
-      // the face) - under a kit lock the face shrinks to its label.
-      el.dataset.loW = String(w);
-      el.style.minWidth = kitLocked ? '0px' : `${w}px`;
-      list.style.minWidth = `${w}px`;
-      list.innerHTML = '';
-      for (const o of options) {
-        const it = document.createElement('div');
-        it.className = 'lo-opt';
-        if (o.disabled) {it.classList.add('locked');}
-        // 'none' isn't a perk - banner it across both columns.
-        if (cols2 && o.v === 'none') {it.classList.add('full');}
-        const name = document.createElement('span');
-        name.className = 'lo-name';
-        name.textContent = o.label;
-        it.append(name);
-        if (o.desc) {
-          // Perks are the only invisible pick - everything else
-          // self-explains in a second of firing it.
-          it.classList.add('has-desc');
-          const d = document.createElement('span');
-          d.className = 'lo-desc';
-          d.textContent = o.desc;
-          it.append(d);
-        }
-        it.dataset.v = o.v;
-        it.addEventListener('click', (e): void => {
-          e.stopPropagation();
-          // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
-          // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
-          if (o.disabled) {return;} // tier-locked - visible but unshoulderable
-          onPick(o.v);
-          el.classList.remove('open');
-          openDrop = null;
-          refreshLoadout();
-        });
-        list.append(it);
-      }
-    };
-    rebuild();
-    el.addEventListener('click', (e): void => {
-      e.stopPropagation();
-      const was = el.classList.contains('open');
-      openDrop?.classList.remove('open');
-      el.classList.toggle('open', !was);
-      openDrop = was ? null : el;
-    });
-    return {
-      el,
-      setValue(v): void {
-        currentV = v;
-        // faceOpts resolves labels the filtered list can't - an equipped
-        // heavy weapon on lighter armor must name itself, not print "6".
-        face.textContent = options.find((o): boolean => o.v === v)?.label
-          ?? faceOpts?.find((o): boolean => o.v === v)?.label ?? v;
-        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): boolean =>
-          o.classList.toggle('sel', o.dataset.v === v));
-      },
-      setOptions(next): void {
-        options = next;
-        rebuild();
-        // The equipped value may have survived the filter - re-face it.
-        this.setValue(currentV);
-      },
-      // 'used' = equipped in a sibling slot - a faint tint reads "already
-      // in the kit" without competing with this slot's bright .sel.
-      markUsed(used): void {
-        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): void => {
-          const v = o.dataset.v ?? '';
-          o.classList.toggle('used', v !== currentV && used.has(v));
-        });
-      },
-    };
-  }
 
   // Clicking the bar's dead space closes any open dropup
   loadoutBar?.addEventListener('click', (): void => {
@@ -365,7 +377,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     openDrop = null;
   });
 
-  const ui = loadoutBar ? buildRows(loadoutBar, deps, mkDrop) : null;
+  const ui = loadoutBar ? buildRows(loadoutBar, deps, (o, p, f, c): Drop => mkDrop(deps, refreshLoadout, o, p, f, c)) : null;
 
   function refreshLoadout(): void {
     if (!ui) {return;}
@@ -381,9 +393,28 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     // or after races rebuilds, the CSS rule can't be outrun.
     document.getElementById('loadout-bar')?.classList.toggle('lo-lock', kitLocked);
     compactDrops(ui);
+    applyLoadoutLocks(insta, gg, igun);
+    syncLoadoutDrops(player, insta, gg);
+    refreshLoadoutLabels();
+  }
+
+  /** Cells the room rules hide outright - instagib/gg strip armor,
+   *  weapon, kit, sidearm and pack; igun strips just the chassis row. */
+  function applyLoadoutLocks(insta: boolean, gg: boolean, igun: boolean): void {
+    if (!ui) {return;}
+    const strip = insta || gg ? 'none' : '';
+    ui.weaponBox?.style.setProperty('display', strip);
+    ui.kitBoxA?.style.setProperty('display', strip);
+    ui.sidearmCell?.style.setProperty('display', strip);
+    ui.packCell?.style.setProperty('display', strip);
     if (ui.armorBox) {ui.armorBox.style.display = (insta || igun) ? 'none' : '';}
-    if (ui.weaponBox) {ui.weaponBox.style.display = (insta || gg) ? 'none' : '';}
-    if (ui.kitBoxA) {ui.kitBoxA.style.display = (insta || gg) ? 'none' : '';}
+  }
+
+  /** Repopulate every drop's options + current value off the player's
+   *  menu picks - instagib collapses the slot list to the rail only and
+   *  the belt to hook-only. */
+  function syncLoadoutDrops(player: ReturnType<typeof deps.lazyPlayer>, insta: boolean, gg: boolean): void {
+    if (!ui) {return;}
     const opts = insta
       ? weaponOptsFor('light').filter((o): boolean => o.v === String(RAIL_WID))
       : weaponOptsFor(player.armorClass);
@@ -396,8 +427,12 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     ui.classDrop?.setValue(player.armorClass);
     ui.sidearmDrop?.setValue(player.menuGear.sidearm);
     ui.packDrop?.setValue(player.menuGear.packItem);
-    if (ui.sidearmCell) {ui.sidearmCell.style.display = (insta || gg) ? 'none' : '';}
-    if (ui.packCell) {ui.packCell.style.display = (insta || gg) ? 'none' : '';}
+  }
+
+  /** Key-cap hints ride the current keybinds - re-stamp on every refresh
+   *  so a rebind shows up without a menu rebuild. */
+  function refreshLoadoutLabels(): void {
+    if (!ui) {return;}
     if (ui.beltLabel) {ui.beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;}
     if (ui.skillLabel) {ui.skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;}
     if (ui.sidearmLabel) {ui.sidearmLabel.textContent = `SIDEARM (${codeLabel(codeFor('sidearm'))})`;}
