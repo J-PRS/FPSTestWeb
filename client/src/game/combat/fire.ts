@@ -89,16 +89,11 @@ export function fadeChambered(deps: CombatDeps, weaponType: number): void {
   for (const old of deps.world.projectiles) {if (!old.isRemote && old.shooterId == null && !old.exploded) {old.explode();}}
 }
 
-function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false, claimType?: number): Projectile | undefined {
-  // Same law as combat.ts's onWeaponFire gate: a weapon the authority
-  // calls class-locked must not spawn a predicted shell or send an
-  // intent - every pull otherwise spam-rejects for the life (belt
-  // throws reach this without passing fireWeapon).
-  if (!deps.lazyPlayer().armory.kitLocked && !classCanFire(deps.lazyPlayer().appliedClass, config.weaponType)) {return undefined;}
-  // One-shot TTS (time-to-shoot) marker - invisible, no debug overlays.
-  // Records the first fired shot's performance.now() (ms since navigation
-  // start) on dev hosts or when ?tts=1 is present. Production https builds
-  // without the param never record it.
+/** One-shot TTS (time-to-shoot) marker - invisible, no debug overlays.
+ *  Records the first fired shot's performance.now() (ms since navigation
+ *  start) on dev hosts or when ?tts=1 is present. Production https builds
+ *  without the param never record it. */
+function markTtsShot(): void {
   const _w = window as unknown as { __ttsShot?: number };
   if (_w.__ttsShot === undefined
       && (import.meta.env.DEV || window.location.protocol !== 'https:'
@@ -106,6 +101,15 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     _w.__ttsShot = performance.now();
     try { performance.mark('tts:shot'); } catch { /* ignore */ }
   }
+}
+
+function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false, claimType?: number): Projectile | undefined {
+  // Same law as combat.ts's onWeaponFire gate: a weapon the authority
+  // calls class-locked must not spawn a predicted shell or send an
+  // intent - every pull otherwise spam-rejects for the life (belt
+  // throws reach this without passing fireWeapon).
+  if (!deps.lazyPlayer().armory.kitLocked && !classCanFire(deps.lazyPlayer().appliedClass, config.weaponType)) {return undefined;}
+  markTtsShot();
   if (deps.inputTracking.isTabHidden()) {return undefined;}
   if (deps.lazyDemoManager()?.isPlaying) {return undefined;}
 
@@ -373,22 +377,24 @@ function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count
 // Trigger dispatch: kick + spawn shape come from the def. 'beam' never
 // reaches here — combat.ts routes it to the lightning module, which owns
 // its own tick/raycast loop.
-function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
+/** Spend gates ahead of any spawn — a refused pull must not charge
+ *  energy or ammo, arm recoil, or draw a ghost shell prediction. */
+function spendFireGates(deps: CombatDeps, def: WeaponDef, e: FireArgs): boolean {
   // Class lock ahead of every spend — a refused pull must not charge
   // energy or ammo, and must not spawn the ghost shell prediction.
-  if (!deps.lazyPlayer().armory.kitLocked && !classCanFire(deps.lazyPlayer().appliedClass, def.config.weaponType)) {return;}
+  if (!deps.lazyPlayer().armory.kitLocked && !classCanFire(deps.lazyPlayer().appliedClass, def.config.weaponType)) {return false;}
   // Energy-paid weapons (Blaster): the jet tank IS the magazine — the
   // shared payShotCost gate keeps client prediction, server intent and
   // bot fire on one formula; a dry tank can't draw a ghost bolt.
   if (!payShotCost(def.config.weaponType, '', (): number => deps.lazyPlayer().energy,
-    (_id, n): void => { const pl = deps.lazyPlayer(); pl.energy = Math.max(0, pl.energy - n); })) {return;}
+    (_id, n): void => { const pl = deps.lazyPlayer(); pl.energy = Math.max(0, pl.energy - n); })) {return false;}
   // Pool ammo (PlasmaGun pilot): the predicted debit mirrors the server's
   // intent gate - a desync reject just closes the ledger, no ghost bolt.
-  if (!spendAmmo(deps.lazyPlayer().ammoPool, def.config.weaponType, performance.now() / 1000)) {return;}
+  if (!spendAmmo(deps.lazyPlayer().ammoPool, def.config.weaponType, performance.now() / 1000)) {return false;}
   // Deploy weapons (howitzer): feet on dirt and not skiing, or the pull
   // is dead. Ahead of the recoil arm so a refused shot can't arm it.
   if (getWeaponStats(def.config.weaponType).groundedOnly
-    && (!deps.lazyPlayer().onGround || deps.lazyPlayer().getInputState().skiHeld)) {return;}
+    && (!deps.lazyPlayer().onGround || deps.lazyPlayer().getInputState().skiHeld)) {return false;}
   // Launcher recoil (howitzer): momentum opposite the shot. Aimed up off
   // dirt the kick is the fall damage; airborne it's propulsion.
   const recoil = getWeaponStats(def.config.weaponType).recoilImpulse ?? 0;
@@ -399,27 +405,34 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
     deps.lazyPlayer().movement.armFallBoost(3);
   }
   deps.lazyViewModel()?.kick(def.kick);
-  // Chambered shell (stats.loadable): the host weapon's trigger sends
-  // the loaded belt projectile instead of its own - the claim rides the
-  // HOST's weaponType so the authority's simmedShot swaps the spawn
-  // identically. A weapon the row doesn't declare never reaches this.
+  return true;
+}
+
+/** Chambered shell (stats.loadable): the host weapon's trigger sends the
+ *  loaded belt projectile instead of its own - the claim rides the HOST's
+ *  weaponType so the authority's simmedShot swaps the spawn identically.
+ *  A weapon the row doesn't declare never reaches this. */
+function fireChamberedShell(deps: CombatDeps, def: WeaponDef, e: FireArgs): boolean {
   const ld = deps.lazyPlayer().loadedShell;
-  if (ld !== undefined) {
-    const lspec = getWeaponStats(ld)?.loadable;
-    if (lspec?.into === def.config.weaponType) {
-      const cfg = Object.values(BELT_THROWS).find((c): boolean => c.weaponType === ld);
-      deps.lazyPlayer().loadedShell = undefined;
-      deps.lazyViewModel()?.setLoadedSpear(false);
-      if (cfg) {
-        const shot = spawnProjectile(deps, cfg, e, false, def.config.weaponType);
-        if (shot) {
-          shot.directBonus = (shot.directBonus ?? 1) * (lspec.dmgMult ?? 1);
-          shot.applyVariant(PROJVAR_LOADED); // charged tight-coil - mirrors the edge replicas draw
-        }
-      }
-      return;
+  if (ld === undefined) {return false;}
+  const lspec = getWeaponStats(ld)?.loadable;
+  if (lspec?.into !== def.config.weaponType) {return false;}
+  const cfg = Object.values(BELT_THROWS).find((c): boolean => c.weaponType === ld);
+  deps.lazyPlayer().loadedShell = undefined;
+  deps.lazyViewModel()?.setLoadedSpear(false);
+  if (cfg) {
+    const shot = spawnProjectile(deps, cfg, e, false, def.config.weaponType);
+    if (shot) {
+      shot.directBonus = (shot.directBonus ?? 1) * (lspec.dmgMult ?? 1);
+      shot.applyVariant(PROJVAR_LOADED); // charged tight-coil - mirrors the edge replicas draw
     }
   }
+  return true;
+}
+
+function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
+  if (!spendFireGates(deps, def, e)) {return;}
+  if (fireChamberedShell(deps, def, e)) {return;}
   if (def.pellets) { spawnFan(deps, def.config, e, def.pellets.count, def.pellets.spread); return; }
   if (def.bloom) {
     // Bloom: claim the RAW aim dir - the server owns the cone. The

@@ -657,27 +657,37 @@ export class ViewModel {
       if (p.armR) {p.armR.rotation.y = (p.armR.userData.baseRot ?? -1.9) * (1 - flex * 0.17);}
     }
     if (p.string) {p.string.position.z = latchOff;}
-    // Dynamic string legs: cam breech-side rim → latch vertex, re-solved
-    // per frame in bow space so the legs track the rotating arms.
+    this.solveBowLegs(p, latchOff);
+    this.tickBowBolt(dt, p);
+  }
+
+  /** Dynamic string legs: cam breech-side rim → latch vertex, re-solved
+   *  per frame in bow space so the legs track the rotating arms. */
+  private solveBowLegs(p: NonNullable<typeof this.bowParts>, latchOff: number): void {
     const g = p.geom;
-    if (g) {
-      for (const [leg, arm, side] of [[p.strL, p.armL, -1], [p.strR, p.armR, 1]] as const) {
-        if (!leg || !arm) {continue;}
-        const th = arm.rotation.y;
-        const cx = side * 0.07 + (-Math.sin(th)) * g.camDist;
-        const cz = g.armZ + (-Math.cos(th)) * g.camDist;
-        // attach = cam center pulled camR toward the breech (+z)
-        this.strA.set(cx, 0, cz + g.camR);
-        this.strB.set(0, g.latchY, g.latchZ + latchOff);
-        this.strD.subVectors(this.strB, this.strA);
-        const len = this.strD.length();
-        if (len > 1e-6) {
-          leg.position.copy(this.strA).addScaledVector(this.strD, 0.5);
-          leg.scale.set(1, len, 1);
-          leg.quaternion.setFromUnitVectors(ViewModel.UP_Y, this.strD.multiplyScalar(1 / len));
-        }
+    if (!g) {return;}
+    for (const [leg, arm, side] of [[p.strL, p.armL, -1], [p.strR, p.armR, 1]] as const) {
+      if (!leg || !arm) {continue;}
+      const th = arm.rotation.y;
+      const cx = side * 0.07 + (-Math.sin(th)) * g.camDist;
+      const cz = g.armZ + (-Math.cos(th)) * g.camDist;
+      // attach = cam center pulled camR toward the breech (+z)
+      this.strA.set(cx, 0, cz + g.camR);
+      this.strB.set(0, g.latchY, g.latchZ + latchOff);
+      this.strD.subVectors(this.strB, this.strA);
+      const len = this.strD.length();
+      if (len > 1e-6) {
+        leg.position.copy(this.strA).addScaledVector(this.strD, 0.5);
+        leg.scale.set(1, len, 1);
+        leg.quaternion.setFromUnitVectors(ViewModel.UP_Y, this.strD.multiplyScalar(1 / len));
       }
     }
+  }
+
+  /** Bolt re-chamber: slides forward out of the drum feed on an eased
+   *  curve, then bowT keeps counting so the limb/string re-cock finishes
+   *  instead of popping back when the bolt seats. */
+  private tickBowBolt(dt: number, p: NonNullable<typeof this.bowParts>): void {
     if (this.bowT < 0 || !p.bolt) {return;}
     this.bowT += dt;
     if (this.bowT < ViewModel.BOW_HIDE) {return;}
