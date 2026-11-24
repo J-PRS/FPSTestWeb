@@ -579,6 +579,10 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
     networkManager.sendShotFired({
       weaponType: WeaponType.Melee, dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
       pos: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
+      // The swing pays real damage - a nonce makes its intent ledger
+      // resends + reclaim replays dedupe-safe (server shotDup) instead
+      // of best-effort.
+      shotId: nextShotId(deps.world.projectileRegistry),
     });
   }
   // igun: the punch IS the blast envelope - server pays aoeDamage×10,

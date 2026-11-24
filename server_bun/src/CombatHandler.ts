@@ -434,7 +434,13 @@ w.n += 1;
     const admit = this.shotAdmit(playerId, msg);
     if (admit === null) {return;}
     const { player, now, dir, fireProjectile } = admit;
-    if (this.intentFanout(playerId, player, msg, dir, now)) {return;}
+    if (this.intentFanout(playerId, player, msg, dir, now)) {
+      // Intents resolved here (melee sweep, beam ticks) never reach the
+      // spawn path's noteShot - stamp so a ledger resend/reclaim replay
+      // carrying this shotId dedupes instead of double-adjudicating.
+      this.noteShot(playerId, msg.shotId, now);
+      return;
+    }
     if (fireProjectile) {
       // Intents spawn real sims + broadcasts, so they need a real flood
       // gate - the fastest legit simmed weapon is ~13/s; 20/s is spam.

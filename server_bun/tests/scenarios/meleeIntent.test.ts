@@ -43,3 +43,20 @@ describe('scenario: melee intent', () => {
     expect(b.health).toBeGreaterThanOrEqual(hp);
   });
 });
+
+  it('a resent swing with the same shotId adjudicates once', () => {
+    const room = mkRoom({ bots: 2 });
+    const [a, b] = twoPlayers(room);
+    pin(room, a.id, { x: 0, y: 31, z: 0 });
+    pin(room, b.id, { x: 2, y: 31, z: 0 });
+    const w = watch(room);
+    const hp = b.health;
+    const swing = (): never => ({ type: 'shotFired', weaponType: 10 /* Melee */, dir: { x: 1, y: 0, z: 0 }, shotId: 'sw1' } as never);
+    // The client ledger resends dropped fire claims - a deduped replay
+    // must not pay the swing twice.
+    room.messages.handleMessage(a.id, swing());
+    room.messages.handleMessage(a.id, swing());
+    room.messages.handleMessage(a.id, swing());
+    expect(b.health).toBeLessThan(hp);
+    expect(w.count('playerHit')).toBe(1);
+  });
