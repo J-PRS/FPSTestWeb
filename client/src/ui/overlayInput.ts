@@ -5,6 +5,7 @@ import type { HUD } from './hud.js';
 import { audio } from '../core/audio.js';
 import { buildKeysMenu } from './keysMenu.js';
 import { isCapturing, matchCode } from '../core/keybinds.js';
+import { enableLockFallback } from '../core/lockFallback.js';
 import { wireLoadoutBar } from './loadoutMenu.js';
 import { wireLabButton } from '../lab/labView.js';
 
@@ -31,6 +32,45 @@ function demoOwnsKey(dm: DemoManager | null, code: string): boolean {
 // Overlay / pointer-lock / global key handling: ESC menu flow (Krunker-style -
 // any lock exit opens the menu), scoreboard Tab, demo playback arrow keys,
 // F4 pixel toggle, F6 demo UI, Space pause.
+// NotSupportedError (both raw and plain) = the API is a stub, not a
+// cooldown - Ladybird ships exactly this. Mousemove deltas still fire
+// there, so drop to degraded no-lock look instead of dead input.
+function wireLockChangeOverlay(rendererCanvas: HTMLElement, deps: OverlayInputDeps, setOverlay: (v: boolean) => void): void {
+  const { logger } = deps;
+  document.addEventListener('pointerlockchange', (): void => {
+  logger.debug(`Pointer lock changed: locked=${document.pointerLockElement === rendererCanvas}`);
+  if (document.pointerLockElement === rendererCanvas) {
+    setOverlay(false);
+  } else if (deps.isGameStarted()) {
+    // Browsers reserve ESC for exiting pointer lock - its keydown never reaches
+    // the page while locked. So treat any lock exit (ESC, alt-tab, browser UI)
+    // as "open the menu", same as Krunker.
+    setOverlay(true);
+    const dm = deps.lazyDemoManager();
+    dm?.onCoolShotsChanged?.(dm.getCoolShots());
+    dm?.fetchCoolShotsFromServer();
+  }
+  });
+}
+
+function lockPointer(rendererCanvas: HTMLElement, setOverlay: (v: boolean) => void, warnCooldown: () => void): void {
+  const lockFailed = (error: unknown): void => {
+    if ((error as DOMException)?.name === 'NotSupportedError') {
+      enableLockFallback();
+      setOverlay(false);
+    } else {
+      warnCooldown();
+    }
+  };
+  const lock = (raw: boolean): void => {
+    let p: Promise<void> | undefined;
+    try { p = rendererCanvas.requestPointerLock(raw ? ({ unadjustedMovement: true } as Parameters<HTMLElement['requestPointerLock']>[0]) : undefined) as Promise<void> | undefined; }
+    catch (error) { if (raw) {lock(false);} else {lockFailed(error);} return; }
+    p?.catch?.((error): void => { if (raw) {lock(false);} else {lockFailed(error);} });
+  };
+  lock(true);
+}
+
 export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => void; } {
   const { overlay, rendererCanvas, logger } = deps;
 
@@ -85,29 +125,10 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
     const warnCooldown = (): void => {
       logger.info('Pointer lock on cooldown - browser requires a brief delay after exiting lock. Click again to re-enter.');
     };
-    const lock = (raw: boolean): void => {
-      let p: Promise<void> | undefined;
-      try { p = rendererCanvas.requestPointerLock(raw ? ({ unadjustedMovement: true } as Parameters<HTMLElement['requestPointerLock']>[0]) : undefined) as Promise<void> | undefined; }
-      catch { if (raw) {lock(false);} else {warnCooldown();} return; }
-      p?.catch?.((): void => { if (raw) {lock(false);} else {warnCooldown();} });
-    };
-    lock(true);
+    lockPointer(rendererCanvas, setOverlay, warnCooldown);
   }
 
-  document.addEventListener('pointerlockchange', (): void => {
-    logger.debug(`Pointer lock changed: locked=${document.pointerLockElement === rendererCanvas}`);
-    if (document.pointerLockElement === rendererCanvas) {
-      setOverlay(false);
-    } else if (deps.isGameStarted()) {
-      // Browsers reserve ESC for exiting pointer lock - its keydown never reaches
-      // the page while locked. So treat any lock exit (ESC, alt-tab, browser UI)
-      // as "open the menu", same as Krunker.
-      setOverlay(true);
-      const dm = deps.lazyDemoManager();
-      dm?.onCoolShotsChanged?.(dm.getCoolShots());
-      dm?.fetchCoolShotsFromServer();
-    }
-  });
+  wireLockChangeOverlay(rendererCanvas, deps, setOverlay);
 
   // Demo playback keys (arrow keys). Returns true if the key was consumed.
   function handleDemoKey(e: KeyboardEvent): boolean {

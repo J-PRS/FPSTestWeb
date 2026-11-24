@@ -23,6 +23,7 @@ import { feedMode } from '../../feed/feedMode.js';
 import { audio } from '../../core/audio.js';
 
 import { ChildLogger } from '../../core/Logger.js';
+import { pointerEngaged } from '../../core/lockFallback.js';
 
 const logger = new ChildLogger('Input');
 
@@ -154,6 +155,16 @@ export class PlayerInput {
   frozen = false;
 
   invertY = settings.get('fps-invert-y');
+  /** AUTO SKI: holds ski whenever sliding preserves/gains speed -
+   *  releases only when grounded and nearly stopped so traction brakes. */
+  autoSki = settings.get('fps-autoski');
+  /** Hysteresis latch for autoSki - engages past ENGAGE_MPS, releases
+   *  under BRAKE_MPS; without it the latch would flap the ski-press
+   *  edge (Jumpstart perk boost) every frame near the threshold. */
+  autoSkiOn = false;
+  /** Auto-jet latch (same AUTO SKI toggle): on while the body slides
+   *  uphill faster than traction could keep, off at the crest. */
+  autoJetOn = false;
 
   sensitivity = settings.get('fps-sens');
 
@@ -340,7 +351,7 @@ export class PlayerInput {
 
       if (this.frozen) {return;}
 
-      if (!document.pointerLockElement) {return;}
+      if (!pointerEngaged()) {return;}
 
       this.wheelAcc += e.deltaY;
 
@@ -378,7 +389,7 @@ export class PlayerInput {
 
       if (this.frozen) {return;}
 
-      if (!document.pointerLockElement) {return;} // ignore clicks that lock the cursor
+      if (!pointerEngaged()) {return;} // ignore clicks that lock the cursor
 
       this.keys[`Mouse${e.button}`] = true;
 
@@ -464,7 +475,7 @@ export class PlayerInput {
 
     document.addEventListener('mousemove', (e): void => {
 
-      if (!document.pointerLockElement || this.frozen) {return;}
+      if (!pointerEngaged() || this.frozen) {return;}
 
       if (performance.now() < this.lockSettleUntil) {return;}
 
@@ -534,27 +545,9 @@ export class PlayerInput {
 
 
 
-    // ESC-menu invert-Y toggle - .tog markup carries the state box;
+    this.bindInvertYToggle();
 
-    // the label writer flips .on (the box IS the state readout).
-
-    const invertYBtn = document.querySelector('#invert-y-toggle') as HTMLButtonElement | null;
-
-    if (invertYBtn) {
-
-      invertYBtn.classList.toggle('on', this.invertY);
-
-      invertYBtn.addEventListener('click', (): void => {
-
-        this.invertY = !this.invertY;
-
-        settings.set('fps-invert-y', this.invertY);
-
-        invertYBtn.classList.toggle('on', this.invertY);
-
-      });
-
-    }
+    this.bindAutoskiToggle();
 
 
 
@@ -822,6 +815,58 @@ export class PlayerInput {
         settings.set('fps-vgs-physical', !settings.get('fps-vgs-physical'));
 
         label();
+
+      });
+
+    }
+
+  }
+
+
+
+  /** ESC-menu invert-Y toggle - .tog markup carries the state box;
+   *  the label writer flips .on (the box IS the state readout). */
+  private bindInvertYToggle(): void {
+
+    const invertYBtn = document.querySelector('#invert-y-toggle') as HTMLButtonElement | null;
+
+    if (invertYBtn) {
+
+      invertYBtn.classList.toggle('on', this.invertY);
+
+      invertYBtn.addEventListener('click', (): void => {
+
+        this.invertY = !this.invertY;
+
+        settings.set('fps-invert-y', this.invertY);
+
+        invertYBtn.classList.toggle('on', this.invertY);
+
+      });
+
+    }
+
+  }
+
+
+
+  /** AUTO SKI toggle - same .tog pattern; the latch itself lives in
+   *  playerRead.wantAutoSki against live speed/ground state. */
+  private bindAutoskiToggle(): void {
+
+    const autoskiBtn = document.querySelector('#autoski-toggle') as HTMLButtonElement | null;
+
+    if (autoskiBtn) {
+
+      autoskiBtn.classList.toggle('on', this.autoSki);
+
+      autoskiBtn.addEventListener('click', (): void => {
+
+        this.autoSki = !this.autoSki;
+
+        settings.set('fps-autoski', this.autoSki);
+
+        autoskiBtn.classList.toggle('on', this.autoSki);
 
       });
 
