@@ -203,22 +203,7 @@ export class WorkerTransport implements GameTransport {
     let i = 0;
     for (; i < evs.length; i += 1) {
       if (i > 0 && (i & 63) === 0 && performance.now() > deadline) {break;}
-      const ev = evs[i]!;
-      try {
-        switch (ev.kind) {
-          case 'up': { this.open = true; this.innerTier = ev.tier; this.config.onConnect?.(); break;
-          }
-          case 'down': { this.open = false; this.config.onDisconnect?.(ev.code, ev.reason); break;
-          }
-          case 'err': { this.config.onError?.(new Error(ev.msg)); break;
-          }
-          case 'ev': { if (ev.j !== undefined) {this.config.onMessage?.(ev.j);} else if (ev.b !== undefined) {this.config.onBinaryMessage?.(ev.b);} break;
-          }
-                  default: { break; }
-}
-      } catch (error) {
-        logger.error(`drain dispatch threw on ${ev.kind}`, error instanceof Error ? error.message : String(error));
-      }
+      this.dispatchDrainEvent(evs[i]!);
     }
     // drainMsMax answers "is the worker boundary worth batching": if it
     // stays low under reclaim bursts, per-message posts are already
@@ -228,6 +213,26 @@ export class WorkerTransport implements GameTransport {
     if (i < evs.length) {
       this.pending.unshift(...evs.slice(i));
       this.drainTimer ??= setTimeout((): void => { this.drainTimer = null; this.drain(); }, 0);
+    }
+  }
+
+  /** One queued worker event → transport callbacks. A throw in a handler
+   *  must not break the batch — log and keep dispatching in order. */
+  private dispatchDrainEvent(ev: Ev): void {
+    try {
+      switch (ev.kind) {
+        case 'up': { this.open = true; this.innerTier = ev.tier; this.config.onConnect?.(); break;
+        }
+        case 'down': { this.open = false; this.config.onDisconnect?.(ev.code, ev.reason); break;
+        }
+        case 'err': { this.config.onError?.(new Error(ev.msg)); break;
+        }
+        case 'ev': { if (ev.j !== undefined) {this.config.onMessage?.(ev.j);} else if (ev.b !== undefined) {this.config.onBinaryMessage?.(ev.b);} break;
+        }
+        default: { break; }
+      }
+    } catch (error) {
+      logger.error(`drain dispatch threw on ${ev.kind}`, error instanceof Error ? error.message : String(error));
     }
   }
 

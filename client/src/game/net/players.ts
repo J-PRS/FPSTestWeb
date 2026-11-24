@@ -195,22 +195,24 @@ function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage:
   if (shooterId === nm().getLocalPlayerId()) {
     logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
     confirmLocalHit(ctx, targetId, damage, predicted);
-    // Wire-confirmed clip fallback: the wire `gone` beat this shell's
-    // local sweep to the contact (live-link race), so its cool-shot
-    // gate never marked. The hit's shotId binds the same nonce the
-    // shell claimed - a stashed meta means it DID hit a body.
-    if (opts?.shotId) {
-      const meta = clipMetaForShot(opts.shotId);
-      if (meta) {
-        const dm = deps.lazyDemoManager?.();
-        if (dm?.isRecording) {
-          dm.autoClipOnHit(meta.age, 0.2, undefined, undefined, undefined, {
-            weapon: meta.displayName, distance: meta.distance,
-            score: shotScore(computeAccuracy(meta.hitAccuracy, meta.directHit), meta.distance, meta.age, meta.weaponType),
-          });
-        }
-      }
-    }
+    wireHitClipFallback(ctx, opts?.shotId);
+  }
+}
+
+/** Wire-confirmed clip fallback: the wire `gone` beat this shell's
+ *  local sweep to the contact (live-link race), so its cool-shot
+ *  gate never marked. The hit's shotId binds the same nonce the
+ *  shell claimed - a stashed meta means it DID hit a body. */
+function wireHitClipFallback(ctx: NetCtx, shotId?: string): void {
+  if (!shotId) {return;}
+  const meta = clipMetaForShot(shotId);
+  if (!meta) {return;}
+  const dm = ctx.deps.lazyDemoManager?.();
+  if (dm?.isRecording) {
+    dm.autoClipOnHit(meta.age, 0.2, undefined, undefined, undefined, {
+      weapon: meta.displayName, distance: meta.distance,
+      score: shotScore(computeAccuracy(meta.hitAccuracy, meta.directHit), meta.distance, meta.age, meta.weaponType),
+    });
   }
 }
 
@@ -276,11 +278,72 @@ function wireHitSelf(ctx: NetCtx, shooterId: string, damage: number, health: num
   logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
 }
 
+/** Overdue-stamp sweep: blastForce only sweeps when a NEW self shove
+ *  lands, so without this an unechoed stamp sat for minutes and reported
+ *  its kb-echo on the next blast, not on its own expiry.
+ *  Starvation-tolerant expiry: a wire stall delays every echo, so a
+ *  stamp younger than (horizon + current silence) can't have been
+ *  refused yet - expiring it mid-stall strands the late echo into a
+ *  raw apply (double-shove) AND logs a false kb-echo. */
+function sweepKbStamps(deps: NetCtx['deps'], stamps: typeof deps.world.selfBlastStamps, now: number, kbHorizon: number): void {
+  for (let i = stamps.length - 1; i >= 0; i -= 1) {
+    if (now <= kbStampDeadline(stamps[i]!, kbHorizon)) {continue;}
+    // Self-authored stamps are confirmation-free (the server skips
+    // its self-shove for humans) - silent expiry; only remote-blast
+    // predictions audit an echo that should have existed.
+    if (!stamps[i]!.self) {
+      const s = stamps[i]!;
+      // Refused verdict - undo the predicted impulse: the drift already
+      // integrated can't un-run, but reverting vel stops the phantom
+      // shove from compounding into the next envelope eval.
+      if (s.iv) {const v = deps.lazyPlayer().vel; if (v) {v.x -= s.iv.x; v.y -= s.iv.y; v.z -= s.iv.z;}}
+      const wa = s.wireAt;
+      const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
+      parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
+        s.pop ? { pop: s.pop } : {},
+        s.m === undefined ? {} : { m: s.m },
+        s.wt === undefined ? {} : { wt: s.wt },
+        wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
+    }
+    stamps.splice(i, 1);
+  }
+}
+
+/** Consume window = the stamp's own settle horizon (700ms in
+ *  blastForce) - a 400ms+ echo is still THIS blast, and a stale
+ *  window double-shoves then reports a false kb-echo on expiry.
+ *  Identity = center+time; force only DISAMBIGUATES candidates. The
+ *  wire force is the server's rewind-epoch applied impulse - under
+ *  latency the boundary-falloff prediction differs legitimately, and
+ *  a hard <0.5 veto orphans the match (double-shove + a false
+ *  kb-echo expiry + the echo re-warned as kb-unpredicted).
+ *  Center window widened 8→18m: the stamped center is the replica's
+ *  painted blast point - with trajDiv p95 ~25m the wire's detonation
+ *  center can sit well outside it. A miss here double-shoves (predicted
+ *  impulse + full wire impulse) AND orphans the stamp into a false
+ *  kb-echo. Force disambiguates two same-window blasts. */
+function matchKbStamp(stamps: NetCtx['deps']['world']['selfBlastStamps'], position: { x: number; y: number; z: number }, force: number, now: number, kbHorizon: number): number {
+  const cands: number[] = [];
+  for (let k = 0; k < stamps.length; k += 1) {
+    const s = stamps[k]!;
+    if (now <= kbStampDeadline(s, kbHorizon) && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 18) {cands.push(k);}
+  }
+  const i = cands.length === 0 ? -1
+    : cands.reduce((a, b): number => Math.abs((stamps[a]!.f ?? force) - force) <= Math.abs((stamps[b]!.f ?? force) - force) ? a : b);
+  if (i !== -1) {return i;}
+  // Unambiguous fallback: exactly ONE pending stamp in the horizon -
+  // the wire echo has to be its pair regardless of how far the replica's
+  // painted center diverged (>18m in the trajDiv tail). Not consuming
+  // here is the physical double-shove + a false kb-echo expiry; with
+  // 2+ pending the attribution genuinely can't be called, so hold.
+  const pending = stamps.filter((s): boolean => now <= kbStampDeadline(s, kbHorizon));
+  return pending.length === 1 ? stamps.indexOf(pending[0]!) : -1;
+}
+
 /** Wire knockback/pull → local impulse - prediction-stamp consumption,
  *  residual top-up, unpredicted-shove ledger. */
 function wireKnockback(ctx: NetCtx, position: { x: number; y: number; z: number }, force: number, pull?: boolean, yank?: boolean): void {
   const { deps, networkManager } = ctx;
-  const {logger} = deps;
   if (deps.world.playbackMode) {return;} // replay owns the camera's body
   inv('wire-knockback-finite', finiteVec(position) && Number.isFinite(force), { position, force });
   if (!finiteVec(position) || !Number.isFinite(force)) {return;}
@@ -288,85 +351,37 @@ function wireKnockback(ctx: NetCtx, position: { x: number; y: number; z: number 
   // double the shove. Consume the stamp and drop the message.
   const stamps = deps.world.selfBlastStamps;
   const now = performance.now();
-  // Settle overdue stamps here too - blastForce only sweeps when a NEW
-  // self shove lands, so without this an unechoed stamp sat for minutes
-  // and reported its kb-echo on the next blast, not on its own expiry.
-  // Starvation-tolerant expiry: a wire stall delays every echo, so a
-  // stamp younger than (horizon + current silence) can't have been
-  // refused yet - expiring it mid-stall strands the late echo into a
-  // raw apply (double-shove) AND logs a false kb-echo.
   const kbHorizon = kbEchoHorizon(networkManager.serverPingMs ?? networkManager.getPing(), networkManager.msSinceLiveRx());
-  for (let i = stamps.length - 1; i >= 0; i -= 1) {
-    if (now > kbStampDeadline(stamps[i]!, kbHorizon)) {
-      // Self-authored stamps are confirmation-free (the server skips
-      // its self-shove for humans) - silent expiry; only remote-blast
-      // predictions audit an echo that should have existed.
-      if (!stamps[i]!.self) {
-        const s = stamps[i]!;
-        // Refused verdict - undo the predicted impulse: the drift already
-        // integrated can't un-run, but reverting vel stops the phantom
-        // shove from compounding into the next envelope eval.
-        if (s.iv) {const v = deps.lazyPlayer().vel; if (v) {v.x -= s.iv.x; v.y -= s.iv.y; v.z -= s.iv.z;}}
-        const wa = s.wireAt;
-        const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
-        parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
-          s.pop ? { pop: s.pop } : {},
-          s.m === undefined ? {} : { m: s.m },
-          s.wt === undefined ? {} : { wt: s.wt },
-          wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
-      }
-      stamps.splice(i, 1);
-    }
+  sweepKbStamps(deps, stamps, now, kbHorizon);
+  const i = matchKbStamp(stamps, position, force, now, kbHorizon);
+  if (i !== -1) { consumeKbStamp(deps, stamps, i, position, force, { pull, yank }); return; }
+  applyUnpredictedKb(ctx, position, force, now, pull, yank);
+}
+
+/** Same blast, already predicted - but the wire carries the server's
+ *  applied impulse, which wins. Residual-only: a positive delta tops
+ *  up the prediction; an overshoot is left to the shadow correction
+ *  (impulses can't be un-applied through this path). */
+function consumeKbStamp(deps: NetCtx['deps'], stamps: NetCtx['deps']['world']['selfBlastStamps'], i: number, position: { x: number; y: number; z: number }, force: number, kind: { pull?: boolean; yank?: boolean }): void {
+  const delta = force - (stamps[i]!.f ?? force);
+  stamps.splice(i, 1);
+  if (delta > 0.5) {
+    const dpos = new THREE.Vector3(position.x, position.y, position.z);
+    const player = deps.lazyPlayer();
+    if (kind.pull) {player.applyPull(dpos, delta, kind.yank);} else {player.applyKnockback(dpos, delta);}
   }
-  // Consume window = the stamp's own settle horizon (700ms in
-  // blastForce) - a 400ms+ echo is still THIS blast, and a stale
-  // window double-shoves then reports a false kb-echo on expiry.
-  // Identity = center+time; force only DISAMBIGUATES candidates. The
-  // wire force is the server's rewind-epoch applied impulse - under
-  // latency the boundary-falloff prediction differs legitimately, and
-  // a hard <0.5 veto orphans the match (double-shove + a false
-  // kb-echo expiry + the echo re-warned as kb-unpredicted).
-  // Center window widened 8→18m: the stamped center is the replica's
-  // painted blast point - with trajDiv p95 ~25m the wire's detonation
-  // center can sit well outside it. A miss here double-shoves (predicted
-  // impulse + full wire impulse) AND orphans the stamp into a false
-  // kb-echo. Force disambiguates two same-window blasts.
-  const cands: number[] = [];
-  for (let k = 0; k < stamps.length; k += 1) {
-    const s = stamps[k]!;
-    if (now <= kbStampDeadline(s, kbHorizon) && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 18) {cands.push(k);}
-  }
-  let i = cands.length === 0 ? -1
-    : cands.reduce((a, b): number => Math.abs((stamps[a]!.f ?? force) - force) <= Math.abs((stamps[b]!.f ?? force) - force) ? a : b);
-  // Unambiguous fallback: exactly ONE pending stamp in the horizon -
-  // the wire echo has to be its pair regardless of how far the replica's
-  // painted center diverged (>18m in the trajDiv tail). Not consuming
-  // here is the physical double-shove + a false kb-echo expiry; with
-  // 2+ pending the attribution genuinely can't be called, so hold.
-  if (i === -1) {
-    const pending = stamps.filter((s): boolean => now <= kbStampDeadline(s, kbHorizon));
-    if (pending.length === 1) {i = stamps.indexOf(pending[0]!);}
-  }
-  if (i !== -1) {
-    // Same blast, already predicted - but the wire carries the server's
-    // applied impulse, which wins. Residual-only: a positive delta tops
-    // up the prediction; an overshoot is left to the shadow correction
-    // (impulses can't be un-applied through this path).
-    const delta = force - (stamps[i]!.f ?? force);
-    stamps.splice(i, 1);
-    if (delta > 0.5) {
-      const dpos = new THREE.Vector3(position.x, position.y, position.z);
-      const player = deps.lazyPlayer();
-      if (pull) {player.applyPull(dpos, delta, yank);} else {player.applyKnockback(dpos, delta);}
-    }
-    return;
-  }
+}
+
+/** No stamp matched: a blast we RENDERED but never predicted a shove
+ *  from - client-side envelope/occlusion disagreed with the server's
+ *  rewind, or the boom had no replica at all (tripped mine). The impulse
+ *  is still law; it just isn't an anomaly, and the explosion already
+ *  painted. Only a shove with no blast anywhere near earns the log +
+ *  phantom FX. */
+function applyUnpredictedKb(ctx: NetCtx, position: { x: number; y: number; z: number }, force: number, now: number, pull?: boolean, yank?: boolean): void {
+  const { deps, networkManager } = ctx;
+  const {logger} = deps;
   const from = new THREE.Vector3(position.x, position.y, position.z);
-  // A blast we RENDERED but never predicted a shove from - client-side
-  // envelope/occlusion disagreed with the server's rewind, or the boom
-  // had no replica at all (tripped mine). The impulse is still law;
-  // it just isn't an anomaly, and the explosion already painted.
-  // Only a shove with no blast anywhere near earns the log + phantom FX.
   const seen = deps.explosionTracker.getRecentExplosions()
     // 800ms was too tight: wire shove echoes systematically land ~1s
     // after the stamped blast (kb-echo ageMs ~1014-3016 observed), so a
@@ -476,6 +491,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
   const {logger} = deps;
 
+  // oxlint-disable-next-line max-params -- wire handler arity is the sender's contract
   networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor, predicted, shotId): void =>
     handleWireHit(ctx, shooterId, targetId, damage, health, { armor, predicted, shotId });
 
