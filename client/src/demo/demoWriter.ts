@@ -213,8 +213,38 @@ function writeRemoteFrames(view: DataView, pOffset: number, frames: DemoFile['re
 
 
 export function serializeDemo(data: DemoFile): ArrayBuffer {
+    const sizing = demoBufferSize(data);
+    const buffer = new ArrayBuffer(sizing.totalSize);
+    const view = new DataView(buffer);
+    let offset = 0;
 
-    // Calculate total size
+    offset = writeDemoHeader(view, offset, data);
+    offset = writeFrames(view, offset, data.frames);
+    offset = writeProjEvents(view, offset, data.projectileEvents);
+    offset = writeTargetEvents(view, offset, data.targetEvents);
+
+    // Roster (u16 count + names)
+    view.setUint16(offset, data.roster.length, true); offset += 2;
+    for (const entry of data.roster) {
+      offset = writeString(view, offset, entry.name);
+    }
+
+    offset = writeRemoteFrames(view, offset, data.remoteFrames);
+    writeDemoTrailer(view, offset, buffer, data, sizing.atmoBytes, sizing.tokenBytes);
+
+    // Compute and write checksum over everything after the checksum field
+    const checksumOffset = 1 + 4 + 2 + sizing.gameVersionBytes.length + 8 + 4 + 4 + 4 + 4;
+    const dataAfterChecksum = new Uint8Array(buffer, checksumOffset + 4);
+    const checksum = crc32(dataAfterChecksum);
+    view.setUint32(checksumOffset, checksum, true);
+
+    return buffer;
+  }
+
+/** Pre-encodes the variable-length fields and sums every section so the
+ *  buffer can be allocated once, exactly. Returns the byte arrays the
+ *  writer still needs (trailer payloads + gameVersion for checksumOffset). */
+function demoBufferSize(data: DemoFile): { totalSize: number; gameVersionBytes: Uint8Array; atmoBytes: Uint8Array | null; tokenBytes: Uint8Array | null } {
     const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12 + 4 + 2 + 0 + 2 + 0 + 2 + 0 + 4 + 4; // fixed + 5 strings + projectileLifetime + v6 tableHash + v7 runSeed
     const gameVersionBytes = new TextEncoder().encode(data.header.gameVersion);
     const descBytes = new TextEncoder().encode(data.header.description);
@@ -232,94 +262,78 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     // v5 trailer: u8 section count + per-section tag/len/payload.
     const corrN = data.heightmap?.corr?.idx.length ?? 0;
     const hmapSize = data.heightmap ? 1 + 4 + 2 + 4 + 4 + 4 + 4 + data.heightmap.data.length + (corrN > 0 ? 2 + 4 + corrN * 5 : 0) : 0;
-    const tokenSize = data.matchToken ? 1 + 4 + new TextEncoder().encode(JSON.stringify(data.matchToken)).length : 0;
+    const tokenBytes = data.matchToken ? new TextEncoder().encode(JSON.stringify(data.matchToken)) : null;
+    const tokenSize = tokenBytes ? 1 + 4 + tokenBytes.length : 0;
     const snapCount = data.snapshots?.length ?? 0;
     const snapSize = snapCount > 0 ? 1 + 4 + 4 + snapCount * 4 : 0;
     const atmoBytes = data.atmo ? new TextEncoder().encode(JSON.stringify(data.atmo)) : null;
     const atmoSize = atmoBytes ? 1 + 4 + atmoBytes.length : 0;
     const trailerSize = 1 + hmapSize + tokenSize + snapSize + atmoSize;
-    const totalSize = totalHeaderSize + framesSize + projEventsSize + targetEventsSize + rosterSize + remoteFramesSize + trailerSize;
+    return { totalSize: totalHeaderSize + framesSize + projEventsSize + targetEventsSize + rosterSize + remoteFramesSize + trailerSize,
+      gameVersionBytes, atmoBytes, tokenBytes };
+  }
 
-    const buffer = new ArrayBuffer(totalSize);
-    const view = new DataView(buffer);
-    let offset = 0;
+function writeDemoHeader(view: DataView, offset: number, data: DemoFile): number {
+    let o = offset;
 
-    // Header
-    view.setUint8(((offset += 1) - 1), data.header.magic);
-    view.setInt32(offset, data.header.formatVersion, true); offset += 4;
-    offset = writeString(view, offset, data.header.gameVersion);
-    view.setFloat64(offset, data.header.timestamp, true); offset += 8;
-    view.setFloat32(offset, data.header.duration, true); offset += 4;
+    view.setUint8(o, data.header.magic); o += 1;
+    view.setInt32(o, data.header.formatVersion, true); o += 4;
+    o = writeString(view, o, data.header.gameVersion);
+    view.setFloat64(o, data.header.timestamp, true); o += 8;
+    view.setFloat32(o, data.header.duration, true); o += 4;
     // Counts come from the arrays, not the header — a stale caller count
     // would otherwise serialize a clip the reader then rejects.
-    view.setUint32(offset, data.frames.length, true); offset += 4;
-    view.setUint32(offset, data.projectileEvents.length, true); offset += 4;
-    view.setUint32(offset, data.targetEvents.length, true); offset += 4;
-    view.setUint32(offset, 0, true); offset += 4; // checksum placeholder
-    offset = writeString(view, offset, data.header.description);
-    view.setFloat32(offset, data.header.startPosX, true); offset += 4;
-    view.setFloat32(offset, data.header.startPosY, true); offset += 4;
-    view.setFloat32(offset, data.header.startPosZ, true); offset += 4;
-    view.setFloat32(offset, data.header.startYaw, true); offset += 4;
-    view.setFloat32(offset, data.header.startPitch, true); offset += 4;
-    view.setFloat32(offset, data.header.startVelX, true); offset += 4;
-    view.setFloat32(offset, data.header.startVelY, true); offset += 4;
-    view.setFloat32(offset, data.header.startVelZ, true); offset += 4;
-    view.setFloat32(offset, data.header.projectileLifetime, true); offset += 4;
-    offset = writeString(view, offset, data.header.room);
-    offset = writeString(view, offset, data.header.mode);
-    offset = writeString(view, offset, data.header.playerName);
+    view.setUint32(o, data.frames.length, true); o += 4;
+    view.setUint32(o, data.projectileEvents.length, true); o += 4;
+    view.setUint32(o, data.targetEvents.length, true); o += 4;
+    view.setUint32(o, 0, true); o += 4; // checksum placeholder
+    o = writeString(view, o, data.header.description);
+    view.setFloat32(o, data.header.startPosX, true); o += 4;
+    view.setFloat32(o, data.header.startPosY, true); o += 4;
+    view.setFloat32(o, data.header.startPosZ, true); o += 4;
+    view.setFloat32(o, data.header.startYaw, true); o += 4;
+    view.setFloat32(o, data.header.startPitch, true); o += 4;
+    view.setFloat32(o, data.header.startVelX, true); o += 4;
+    view.setFloat32(o, data.header.startVelY, true); o += 4;
+    view.setFloat32(o, data.header.startVelZ, true); o += 4;
+    view.setFloat32(o, data.header.projectileLifetime, true); o += 4;
+    o = writeString(view, o, data.header.room);
+    o = writeString(view, o, data.header.mode);
+    o = writeString(view, o, data.header.playerName);
     // Stamped at write time, not taken from the caller — the hash must
     // describe the tables the running build actually wrote ids against.
-    view.setUint32(offset, demoTableHash(), true); offset += 4;
+    view.setUint32(o, demoTableHash(), true); o += 4;
     // Run seed rides with the file — a verifier replays the whole dice
     // stream from it, so the header field is stamped at write time like
     // tableHash rather than trusting the caller's copy.
-    view.setUint32(offset, getRunSeed(), true); offset += 4;
+    view.setUint32(o, getRunSeed(), true); o += 4;
+    return o;
+  }
 
-    offset = writeFrames(view, offset, data.frames);
+/** v5 trailer sections — u8 count, then tag+len+payload per section. */
+function writeDemoTrailer(view: DataView, offset: number, buffer: ArrayBuffer, data: DemoFile, atmoBytes: Uint8Array | null, tokenBytes: Uint8Array | null): number {
+    let o = offset;
 
-    offset = writeProjEvents(view, offset, data.projectileEvents);
-
-    offset = writeTargetEvents(view, offset, data.targetEvents);
-
-    // Roster (u16 count + names)
-    view.setUint16(offset, data.roster.length, true); offset += 2;
-    for (const entry of data.roster) {
-      offset = writeString(view, offset, entry.name);
-    }
-
-    offset = writeRemoteFrames(view, offset, data.remoteFrames);
-
-    // v5 trailer sections — u8 count, then tag+len+payload per section.
-    const tokenBytes = data.matchToken ? new TextEncoder().encode(JSON.stringify(data.matchToken)) : null;
     const snaps = data.snapshots ?? [];
-    view.setUint8(((offset += 1) - 1), (data.heightmap ? 1 : 0) + (tokenBytes ? 1 : 0) + (snaps.length > 0 ? 1 : 0) + (atmoBytes ? 1 : 0));
-    offset = writeHmapSection(view, offset, data.heightmap);
+    view.setUint8(o, (data.heightmap ? 1 : 0) + (tokenBytes ? 1 : 0) + (snaps.length > 0 ? 1 : 0) + (atmoBytes ? 1 : 0)); o += 1;
+    o = writeHmapSection(view, o, data.heightmap);
     if (atmoBytes) {
-      view.setUint8(((offset += 1) - 1), SECTION_ATMO);
-      view.setUint32(offset, atmoBytes.length, true); offset += 4;
-      new Uint8Array(buffer, offset, atmoBytes.length).set(atmoBytes);
-      offset += atmoBytes.length;
+      view.setUint8(o, SECTION_ATMO); o += 1;
+      view.setUint32(o, atmoBytes.length, true); o += 4;
+      new Uint8Array(buffer, o, atmoBytes.length).set(atmoBytes);
+      o += atmoBytes.length;
     }
     if (tokenBytes) {
-      view.setUint8(((offset += 1) - 1), SECTION_TOKEN);
-      view.setUint32(offset, tokenBytes.length, true); offset += 4;
-      new Uint8Array(buffer, offset, tokenBytes.length).set(tokenBytes);
-      offset += tokenBytes.length;
+      view.setUint8(o, SECTION_TOKEN); o += 1;
+      view.setUint32(o, tokenBytes.length, true); o += 4;
+      new Uint8Array(buffer, o, tokenBytes.length).set(tokenBytes);
+      o += tokenBytes.length;
     }
     if (snaps.length > 0) {
-      view.setUint8(((offset += 1) - 1), SECTION_SNAP);
-      view.setUint32(offset, 4 + snaps.length * 4, true); offset += 4;
-      view.setUint32(offset, snaps.length, true); offset += 4;
-      for (const t of snaps) {view.setFloat32(offset, t, true); offset += 4;}
+      view.setUint8(o, SECTION_SNAP); o += 1;
+      view.setUint32(o, 4 + snaps.length * 4, true); o += 4;
+      view.setUint32(o, snaps.length, true); o += 4;
+      for (const t of snaps) {view.setFloat32(o, t, true); o += 4;}
     }
-
-    // Compute and write checksum over everything after the checksum field
-    const checksumOffset = 1 + 4 + 2 + gameVersionBytes.length + 8 + 4 + 4 + 4 + 4;
-    const dataAfterChecksum = new Uint8Array(buffer, checksumOffset + 4);
-    const checksum = crc32(dataAfterChecksum);
-    view.setUint32(checksumOffset, checksum, true);
-
-    return buffer;
+    return o;
   }
