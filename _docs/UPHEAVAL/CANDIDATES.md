@@ -183,6 +183,14 @@ still *decides* rather than predicts.
   mismatch-gated `kindFieldDiffs` → detail → `laneCheck` runs once.
   Creature lane stays hand-written (its diff-heal is extra duty, not a
   compare); flag/pickup are next (they're already thin — no fields).
+- **EXPANSION LANDED 2026-11-24**: all five fidelity lanes now fold onto
+  `runHashLane` — flag + pickup as plain declarations (flag keeps its
+  `states=` detail via `spec.detail`), creature via two new spec hooks:
+  `onDiff` (its replica-label heal is extra duty on a field diff, not a
+  compare) and `perKeyFrom: 'values'` (escalation keys on id+field+value-
+  pair so healthy state cycling stays quiet). Remaining: server-side
+  `emitReplicaLanes()` + the `replicaHashes: Record<kind,…>` wire-slot
+  unification (needs a compat story).
 
 ### C2 — Full lockstep / GGPO input-only netcode
 - **Status**: REJECTED — trades working authority-by-construction for a
