@@ -576,27 +576,73 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   const { dt, player, networkManager, demoManager } = f;
   const { camera, sceneSetup, entities } = deps;
   const hud = deps.lazyHud();
-  const viewModel = deps.lazyViewModel();
   const terrain = deps.lazyTerrain();
 
   // Boot hold hides the HUD too - the world renders through warmup but
   // ammo/health/timer shouldn't flash over the frozen match. Transition-
   // gated so release can't stomp another owner's hide() (spectate/death).
-  const held = bootHoldActive(f);
-  // Route every shadowMap.enabled flip through setShadows - the raw
-  // toggle leaves shadow-compiled programs live, and the next render
-  // dies uploading shadowIntensity uniforms the lights state lacks.
-  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); setShadows(deps, false); if (isSessionVeiled()) {deps.rendererSetup.setPostProcessingEnabled(false, false);} }
-  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); setShadows(deps, settings.get('fps-shadows')); deps.rendererSetup.setPostProcessingEnabled(settings.get('fps-postpro'), false); }
+  gateHudHold(deps, st, hud, f);
 
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
   hud.setConnDown(networkManager.connectionDown(), networkManager.connectionDownReason());
+  tickProbes(deps, hud, player, terrain, dt);
+  tickSelfShadow(player);
+  // Entity-count text is a slow-moving counter - 10Hz is plenty.
+  budget.sweep('census', 100, (): void => hud.setEntityCounts(censusEntities(deps, entities)));
+  tickHudState(deps, hud, player, networkManager, demoManager);
+  // Every frame - a rotating radar at the 25Hz sweep cadence reads as
+  // visibly choppy next to the 60fps world, and the redraw is ~30 arcs.
+  deps.ambientBirds.positions(_birdPosBuf);
+  fillMapBlips(deps, networkManager);
+  hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips, deps.world.nodeMarkers.values());
+  if (hud.commandMapOpen) {hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers, deps.world.nodeMarkers, deps.world.spawnPools);}
+
+  tickViewModelAndBars(deps, st, perf, f);
+
+  // Peripheral speed lines along the true velocity vector; demo-suppressed.
+  deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
+
+  if (st.cpuLevel === 0) {
+    deps.weather.update(fxDt, camera.position, terrain);
+    deps.groundMist().update(fxDt, camera.position);
+    deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
+  }
+  perf.mark('ambient');
+
+  sceneSetup.update(dt);
+  sceneSetup.atmosphericSky.followCamera(camera.position);
+  sceneSetup.updateCamera(camera);
+
+  // Shake composes after player.update's camera write; the LG beam weld
+  // is last - it needs the swayed viewmodel AND the post-shake camera or
+  // fast moves leave the bolt a frame stale.
+  screenShake.update(dt, camera);
+  deps.combat()?.updateBeamVisual();
+  sfxAudio.updateAudio(dt, player, camera);
+  perf.mark('scene');
+}
+
+
+/** Boot hold hides the HUD too - the world renders through warmup but
+ *  ammo/health/timer shouldn't flash over the frozen match. Transition-
+ *  gated so release can't stomp another owner's hide() (spectate/death).
+ *  Route every shadowMap.enabled flip through setShadows - the raw
+ *  toggle leaves shadow-compiled programs live, and the next render
+ *  dies uploading shadowIntensity uniforms the lights state lacks. */
+function gateHudHold(deps: GameLoopDeps, st: LoopState, hud: HUD, f: TickFrame): void {
+  const held = bootHoldActive(f);
+  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); setShadows(deps, false); if (isSessionVeiled()) {deps.rendererSetup.setPostProcessingEnabled(false, false);} }
+  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); setShadows(deps, settings.get('fps-shadows')); deps.rendererSetup.setPostProcessingEnabled(settings.get('fps-postpro'), false); }
+}
+
+/** Sheep tick + under-crosshair probes (sheep / mechanical energy /
+ *  ground distance) - dev readouts, debug toggle only, like the
+ *  terrain wire. */
+function tickProbes(deps: GameLoopDeps, hud: HUD, player: Player, terrain: Terrain, dt: number): void {
   const playerSheep = deps.lazyPlayerSheep?.();
   if (playerSheep) {
     playerSheep.tick(dt, player, terrain, deps.world.remotePlayers, deps.world.localTeam);
   }
-  // Under-crosshair probes (sheep / mechanical energy / ground distance)
-  // are dev readouts - debug toggle only, like the terrain wire.
   if (urlParams.debug) {
     if (playerSheep) {
       hud.setSheep(playerSheep.shown);
@@ -606,8 +652,11 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   } else {
     hud.setSheep(0); hud.setEnergy(undefined); hud.groundReadout.textContent = '';
   }
-  // Self blob - the first-person body never reaches the shadow pass, so
-  // it joins the shared instanced blob pool remotes/creatures ride.
+}
+
+/** Self blob - the first-person body never reaches the shadow pass, so
+ *  it joins the shared instanced blob pool remotes/creatures ride. */
+function tickSelfShadow(player: Player): void {
   const selfShadows = getShadows();
   if (selfShadows) {
     if (_selfShadowOwner.shadowSlot < 0) {_selfShadowOwner.shadowSlot = selfShadows.alloc(_selfShadowOwner);}
@@ -617,8 +666,12 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
       selfShadows.set(_selfShadowOwner, _selfShadowPos, cap.radius * 1.9, 0.4);
     }
   }
-  // Entity-count text is a slow-moving counter - 10Hz is plenty.
-  budget.sweep('census', 100, (): void => hud.setEntityCounts(censusEntities(deps, entities)));
+}
+
+/** Slow HUD state: belt/nugget wallet, held tokens, solo-only run clock,
+ *  classic's top-center readout, team-score strip ownership, match
+ *  status and the death countdown. */
+function tickHudState(deps: GameLoopDeps, hud: HUD, player: Player, networkManager: NetworkManager, demoManager: DemoManager | null): void {
   // Belt charges ARE the nugget wallet - spawn stock + pickups, spent by
   // throws/deploys. (nuggetsCollected only counts pickups, so the HUD
   // read 0 at spawn even though the belt economy starts at BELT_MAX.)
@@ -646,13 +699,13 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     deps.world.flagStates,
   );
   hud.updateDeathCountdown(deps.world.respawnMs, player.respawnHeld);
-  // Every frame - a rotating radar at the 25Hz sweep cadence reads as
-  // visibly choppy next to the 60fps world, and the redraw is ~30 arcs.
-  deps.ambientBirds.positions(_birdPosBuf);
-  fillMapBlips(deps, networkManager);
-  hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips, deps.world.nodeMarkers.values());
-  if (hud.commandMapOpen) {hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers, deps.world.nodeMarkers, deps.world.spawnPools);}
+}
 
+/** Viewmodel visibility + sway and the floating health bars. */
+function tickViewModelAndBars(deps: GameLoopDeps, st: LoopState, perf: ReturnType<typeof createPerfHud>, f: TickFrame): void {
+  const { dt, player, networkManager, demoManager } = f;
+  const { camera, entities } = deps;
+  const viewModel = deps.lazyViewModel();
   // During demo playback the vm mirrors the frame's recorded weaponType -
   // hiding it would strip the shooter POV from cool-shot clips.
   // The middle-click orbit cam IS a third-person view while it's on -
@@ -674,28 +727,6 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     // has no intel feed, so it keeps the ungated bars.
     demoManager?.isPlaying ? undefined : markerLive);
   perf.mark('healthbars');
-
-  // Peripheral speed lines along the true velocity vector; demo-suppressed.
-  deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
-
-  if (st.cpuLevel === 0) {
-    deps.weather.update(fxDt, camera.position, terrain);
-    deps.groundMist().update(fxDt, camera.position);
-    deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
-  }
-  perf.mark('ambient');
-
-  sceneSetup.update(dt);
-  sceneSetup.atmosphericSky.followCamera(camera.position);
-  sceneSetup.updateCamera(camera);
-
-  // Shake composes after player.update's camera write; the LG beam weld
-  // is last - it needs the swayed viewmodel AND the post-shake camera or
-  // fast moves leave the bolt a frame stale.
-  screenShake.update(dt, camera);
-  deps.combat()?.updateBeamVisual();
-  sfxAudio.updateAudio(dt, player, camera);
-  perf.mark('scene');
 }
 
 
