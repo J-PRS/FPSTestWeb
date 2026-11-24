@@ -495,46 +495,57 @@ export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationStat
  *  wins. `dir` marks dedicated locomotion strides (callers keep the
  *  reverse/lean fallbacks off while one drives). */
 export interface ClipCandidate { name: string; dir: boolean }
+/** Class-spec rigs: directional strides where the rig ships them
+ *  (polyart's Walk* family), then the state clip. States the table
+ *  lacks (e.g. 'throw') return empty so the generic UAL cascade fills —
+ *  missing clips resolve to hold-previous, not a snap. */
+function specClipCandidates(spec: NonNullable<(typeof CLASS_BODY_SPEC)[string]>, state: AnimationState, dir: LocoDir): ClipCandidate[] {
+  const out: ClipCandidate[] = [];
+  // Pure lateral/back sectors resolve onto the directional strides;
+  // forward diagonals keep the forward stride (strafe clips only for
+  // actual strafing).
+  if (state === 'walk' && dir !== 'F' && dir !== 'FL' && dir !== 'FR' && spec.walkDirs) {
+    let axis: keyof typeof spec.walkDirs = 'B';
+    if (dir === 'L') {axis = 'L';}
+    else if (dir === 'R') {axis = 'R';}
+    const n = spec.walkDirs[axis];
+    if (n) {out.push({ name: n, dir: true });}
+  }
+  if (spec.anims?.[state]) {out.push({ name: spec.anims[state]!, dir: false });}
+  return out;
+}
+
+/** UAL locomotion cascade for walk/run: 'F' prefers the UAL jog/sprint
+ *  then kevdev; other sectors take the directional stride unless the
+ *  variant's bake pivots the rig off-aim (mannequin). */
+function ualLocoCandidates(variant: string, state: AnimationState, dir: LocoDir): ClipCandidate[] {
+  const out: ClipCandidate[] = [];
+  if (dir === 'F') {
+    // 'F' prefers the UAL jog/sprint; variants without it take the
+    // kevdev forward stride instead of idling through the walk.
+    out.push({ name: ANIM_NAMES[state][0], dir: false });
+    for (const s of state === 'run' ? ['Sprint01', 'Run01'] : ['Walk01'])
+      {out.push({ name: `UAL_${s}_Forward`, dir: true });}
+  } else if (variant !== 'mannequin') {
+    // The Sprint set only covers the forward hemisphere — back-half
+    // run sectors ride the Run clips. Mannequin's kevdev directional
+    // bake ships a ~180° hip yaw per clip (the source turns the body
+    // to face travel) — taken raw, strafing pivots the whole rig off
+    // the aim. He stays on the reversed-walk + lean fallback instead.
+    const fwdHemi = dir === 'FL' || dir === 'FR' || dir === 'L' || dir === 'R';
+    let set = 'Walk01';
+    if (state === 'run') {set = fwdHemi ? 'Sprint01' : 'Run01';}
+    out.push({ name: `UAL_${set}_${DIR_SUFFIX[dir]}`, dir: true });
+  }
+  return out;
+}
+
 export function clipCandidates(variant: string, state: AnimationState, dir: LocoDir): ClipCandidate[] {
   if (variant === 'knight') {return [{ name: KNIGHT_ANIMS[state], dir: false }];}
   const spec = CLASS_BODY_SPEC[variant];
-  if (spec?.anims) {
-    const out: ClipCandidate[] = [];
-    // Rigs shipping directional strides (polyart's Walk* family) resolve
-    // pure lateral/back sectors onto them — forward diagonals keep the
-    // forward stride (strafe clips only for actual strafing).
-    if (state === 'walk' && dir !== 'F' && dir !== 'FL' && dir !== 'FR' && spec.walkDirs) {
-      let axis: keyof typeof spec.walkDirs = 'B';
-      if (dir === 'L') {axis = 'L';}
-      else if (dir === 'R') {axis = 'R';}
-      const n = spec.walkDirs[axis];
-      if (n) {out.push({ name: n, dir: true });}
-    }
-    if (spec.anims[state]) { out.push({ name: spec.anims[state]!, dir: false }); return out; }
-    // States the table lacks (e.g. 'throw') fall through to the generic
-    // UAL candidates — the baked pack carries them where the rig was
-    // retargeted; missing clips resolve to hold-previous, not a snap.
-  }
+  if (spec?.anims?.[state]) {return specClipCandidates(spec, state, dir);}
   const out: ClipCandidate[] = [];
-  if (state === 'walk' || state === 'run') {
-    if (dir === 'F') {
-      // 'F' prefers the UAL jog/sprint; variants without it take the
-      // kevdev forward stride instead of idling through the walk.
-      out.push({ name: ANIM_NAMES[state][0], dir: false });
-      for (const s of state === 'run' ? ['Sprint01', 'Run01'] : ['Walk01'])
-        {out.push({ name: `UAL_${s}_Forward`, dir: true });}
-    } else if (variant !== 'mannequin') {
-      // The Sprint set only covers the forward hemisphere — back-half
-      // run sectors ride the Run clips. Mannequin's kevdev directional
-      // bake ships a ~180° hip yaw per clip (the source turns the body
-      // to face travel) — taken raw, strafing pivots the whole rig off
-      // the aim. He stays on the reversed-walk + lean fallback instead.
-      const fwdHemi = dir === 'FL' || dir === 'FR' || dir === 'L' || dir === 'R';
-      let set = 'Walk01';
-    if (state === 'run') {set = fwdHemi ? 'Sprint01' : 'Run01';}
-      out.push({ name: `UAL_${set}_${DIR_SUFFIX[dir]}`, dir: true });
-    }
-  }
+  if (state === 'walk' || state === 'run') {out.push(...ualLocoCandidates(variant, state, dir));}
   const ov = VARIANT_CLIP_OVERRIDES[variant]?.[state];
   let ovList: string[] = [];
   if (ov !== undefined) {ovList = Array.isArray(ov) ? ov : [ov];}
