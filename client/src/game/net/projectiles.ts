@@ -683,10 +683,14 @@ export function wireProjectiles(ctx: NetCtx): void {
       ? age + Math.max(0, (serverNow - t) / 1000)
       : undefined;
     if (elapsed !== undefined) {
-      // rp.age tracks total flight time - advance only the delta past
-      // the keyframe epoch, never backwards (a late keyframe re-plays
-      // less than the transit it rode).
-      const delta = elapsed - rp.age;
+      // The reseat position IS the shell at keyframe age - replay from
+      // that epoch, not from wherever the drifted replica age sat:
+      // reset the clock first, then advance the measured delta. Never
+      // backwards - a keyframe older than the replica's own epoch means
+      // the replay is already past it and the position snap alone is
+      // the correction.
+      rp.age = age!;
+      const delta = elapsed - age!;
       if (delta > 0) {rp.advanceBy(delta);}
     }
   };
