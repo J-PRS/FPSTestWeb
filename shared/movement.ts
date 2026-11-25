@@ -221,6 +221,13 @@ export class MoveSim {
   private groundedBuffered = false;
   private wishJump = false;
   private lastJumpableNormal = { x: 0, y: 1, z: 0 };
+  /** Last jumpable-contact surface normal - kept through airtime (it's a
+   *  jump memory, not a per-tick sample). Autoski's auto-jet reads the
+   *  uphill slide off it. */
+  get groundNormal(): Vec3Like { return this.lastJumpableNormal; }
+  /** Terrain contact incl. the 0.256s groundGraceT window - autoski's
+   *  auto-jet uses it so liftoff drops the latch a quarter-second later. */
+  get groundContact(): boolean { return this.state.onGround || this.groundGraceT > 0; }
   private groundGraceT = 0;
   private allowNextJump = true;
   /** Fixed-step accumulator - the sim integrates at a constant 60Hz on
