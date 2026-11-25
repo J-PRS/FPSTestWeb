@@ -692,13 +692,13 @@ export function wireProjectiles(ctx: NetCtx): void {
     const elapsed = age !== undefined && t !== undefined && serverNow !== undefined
       ? age + Math.max(0, (serverNow - t) / 1000)
       : undefined;
-    if (elapsed !== undefined) {keyframeReseat(rp, position, velocity, age!, elapsed);}
-    else {
+    if (elapsed === undefined) {
       // Unsynced clock: the snap alone is still the correction - the
       // next regular tick replays forward from server truth regardless.
       rp.pos.set(position.x, position.y, position.z);
       rp.vel.set(velocity.x, velocity.y, velocity.z);
     }
+    else {keyframeReseat(rp, position, velocity, age!, elapsed);}
   };
 
   // Belt-sticky combo: the authority swallowed a belt sticky onto a
