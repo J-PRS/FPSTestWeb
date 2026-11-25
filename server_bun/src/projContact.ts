@@ -395,6 +395,9 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
           p.vel.x -= (1 + e) * d * nx / nl;
           p.vel.y -= (1 + e) * d * ny / nl;
           p.vel.z -= (1 + e) * d * nz / nl;
+          // Body reflects amplify exactly like dirt reflects - keyframe
+          // the thunk's new heading or replicas keep the pre-bounce arc.
+          r.bounceKeyframe(proj, p.age);
         }
         (proj.bodyBounced ??= new Set()).add(pid);
       }
