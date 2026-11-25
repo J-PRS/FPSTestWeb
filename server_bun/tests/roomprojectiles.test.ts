@@ -162,6 +162,30 @@ describe('RoomProjectiles', () => {
     expect(projs.size).toBe(0); // fuse ends it, eventually
   });
 
+  it('a terrain bounce emits a keyframe with the post-bounce state', async () => {
+    const { room, shooter } = arena();
+    shooter.position = { x: 0, y: EYE, z: 0 };
+    // Spy the binary lane: bounce keyframes ride broadcastBinaryReliable.
+    const frames: Uint8Array[] = [];
+    (room as unknown as { connections: unknown }).connections = {
+      broadcastBinaryReliable: (f: Uint8Array) => { frames.push(new Uint8Array(f)); },
+      broadcast: (): void => undefined, // JSON fallback lane - not under test
+    };
+    room.projectiles.spawn(shooter.id, WeaponType.MRVLauncher,
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0.3, y: -0.95, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 12; i++) {room.projectiles.tick(0.05);} // past first dirt contact
+    const { decodeProjBounce } = await import('../../shared/wire.ts');
+    const bounces = frames.map((f) => decodeProjBounce(f)).filter((b) => b !== null);
+    expect(bounces.length).toBeGreaterThan(0);
+    const b = bounces[0]!;
+    // Post-bounce shell sits one radius off the surface and moves - a
+    // keyframe carrying the pre-bounce (downward) velocity would reseat
+    // replicas into the ground.
+    expect(Number.isFinite(b.position.x + b.position.y + b.position.z)).toBe(true);
+    expect(Math.hypot(b.velocity.x, b.velocity.y, b.velocity.z)).toBeGreaterThan(0.5);
+    expect(b.age).toBeGreaterThan(0);
+  });
+
   it('a slow-moving player closing in still gets hit', () => {
     const { room, shooter, target } = arena();
     shooter.position = { x: 0, y: EYE, z: 0 };

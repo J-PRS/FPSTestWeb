@@ -830,6 +830,10 @@ export const WIRE_PROJGONE = 0x0C;
  *  (tick frame + in-tick events) ships as ONE send — u16 len-prefixed
  *  subframes. Cuts socket-write syscalls ~3-4× under combat. */
 export const WIRE_BATCH = 0x0D;
+/** Mid-flight bounce keyframe: the authority shell reflected off dirt -
+ *  replicas reseat to the exact post-bounce state instead of amplifying
+ *  initial-condition noise across the remaining ricochets. Fixed 42B. */
+export const WIRE_PROJBOUNCE = 0x1A;
 
 export function encodeBatch(frames: Uint8Array[], into?: Uint8Array): Uint8Array {
   let n = 2;
@@ -1263,6 +1267,43 @@ export function decodeProjGone(u8: Uint8Array): WireProjGone | null {
   const cause = o < u8.length ? d.getUint8(o) : 0; if (o < u8.length) {o += 1;}
   const flags = o < u8.length ? d.getUint8(o) : 0;
   return { projId, age, position, shotId, fizzle: cause === 1, planted: cause === 2, hit: (flags & 1) !== 0 || undefined };
+}
+
+export interface WireProjBounce {
+  projId: number;
+  age: number;             // server shell age AT the bounce contact
+  t: number;               // server wall ms - client derives epoch via clockOffset
+  position: WireVec3;      // post-depenetration position (one radius off the surface)
+  velocity: WireVec3;      // post-reflection velocity - all scale/fuse adjustments applied
+}
+
+export function encodeProjBounce(bnc: WireProjBounce): Uint8Array {
+  const len = 42;
+  const { u8, dv } = evScratch(len);
+  const b = u8.byteOffset;
+  let o = 0;
+  u8[o++] = MAGIC; u8[o++] = WIRE_PROJBOUNCE;
+  dv.setUint32(b + o, bnc.projId >>> 0, true); o += 4;
+  dv.setFloat32(b + o, bnc.age, true); o += 4;
+  dv.setFloat64(b + o, bnc.t, true); o += 8;
+  dv.setFloat32(b + o, bnc.position.x, true); dv.setFloat32(b + o + 4, bnc.position.y, true); dv.setFloat32(b + o + 8, bnc.position.z, true); o += 12;
+  dv.setFloat32(b + o, bnc.velocity.x, true); dv.setFloat32(b + o + 4, bnc.velocity.y, true); dv.setFloat32(b + o + 8, bnc.velocity.z, true); o += 12;
+  return u8.subarray(0, len);
+}
+
+export function decodeProjBounce(u8: Uint8Array): WireProjBounce | null {
+  if (u8.length < 42 || u8[0] !== MAGIC || u8[1] !== WIRE_PROJBOUNCE) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let o = 2;
+  const projId = d.getUint32(o, true); o += 4;
+  const age = d.getFloat32(o, true); o += 4;
+  const t = d.getFloat64(o, true); o += 8;
+  const position = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
+  const velocity = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
+  if (!Number.isFinite(age + t) ||
+      !Number.isFinite(position.x + position.y + position.z) ||
+      !Number.isFinite(velocity.x + velocity.y + velocity.z)) {return null;}
+  return { projId, age, t, position, velocity };
 }
 
 

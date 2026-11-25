@@ -11,9 +11,10 @@
  * projectileDestroyed pair - remote projectiles already fly
  * deterministically client-side, so nothing new is needed there.
  *
- * Deliberate simplifications vs the client Projectile: no terrain bounce
- * (a server shell pops on contact - bounces are cosmetic anyway since
- * clients resolve their own arcs). Stickies DO chain: a blast ages every
+ * Terrain bounce is fully simmed (terrainContact mirrors the client's
+ * slide-vs-pop rule); bounce keyframes reseat replicas post-reflection so
+ * ricochet chaos can't amplify spawn noise across segments. Stickies DO
+ * chain: a blast ages every
  * sibling in its radius to fuse, so server pops match the client's
  * visible cook-off. Ray-burst IS modeled:
  * crossing stats.rayDelay discharges a hitscan beam along the velocity
@@ -36,7 +37,7 @@ import type { MessageHandler } from './MessageHandler.ts';
 import { stepContact, dischargeRay, ghostLateTry } from './projContact.ts';
 import { perkMods, flyRampMult, chamberedEligible } from '../../shared/perks.ts';
 import { weaponStats } from './weaponStats.ts';
-import { encodeProjSpawn, encodeProjGone } from '../../shared/wire.ts';
+import { encodeProjSpawn, encodeProjGone, encodeProjBounce } from '../../shared/wire.ts';
 import { CONFIG } from './config.ts';
 
 export interface LiveProj {
@@ -343,6 +344,23 @@ export class RoomProjectiles {
       this.projs.delete(old.id);
       this.edgeGone(old, old.p.pos, old.p.age, true);
     }
+  }
+
+  /** Mid-flight bounce keyframe: the replica reseats to this exact
+   *  post-reflection state, so initial-condition noise can't amplify
+   *  across the remaining ricochets - chaos bounded to one segment.
+   *  Binary reliable, same lane as the spawn/gone pair. */
+  bounceKeyframe(proj: LiveProj, ageAt: number): void {
+    const bin = this.room.connections;
+    const n = proj.id.startsWith('sp-') ? Number(proj.id.slice(3)) : Number.NaN;
+    if (bin && Number.isFinite(n)) {
+      bin.broadcastBinaryReliable(encodeProjBounce({
+        projId: n, age: ageAt, t: Date.now(),
+        position: Object.assign({}, proj.p.pos), velocity: Object.assign({}, proj.p.vel),
+      }));
+    }
+    // No JSON fallback: a lane too old for the binary edge is also too
+    // old for bounce keyframes - its replicas keep the drift they had.
   }
 
   private edgeGone(proj: LiveProj, at: Vec3, age: number, fizzle = false, planted = false, hit = false): void {

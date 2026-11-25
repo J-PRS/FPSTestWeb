@@ -11,8 +11,8 @@
 import { ChildLogger } from '../core/Logger.js';
 import { checkHit } from '../core/liveMonitor.js';
 import {
-  isWireFrame, decodeTickFrame, decodeBallAny, decodeProjSpawn, decodeProjGone,
-  WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, WIRE_BATCH, WIRE_JSON, WIRE_HIT,
+  isWireFrame, decodeTickFrame, decodeBallAny, decodeProjSpawn, decodeProjGone, decodeProjBounce,
+  WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, WIRE_PROJBOUNCE, WIRE_BATCH, WIRE_JSON, WIRE_HIT,
   WIRE_E_JUMP, WIRE_E_JET, WIRE_E_LANDED, WIRE_E_SHOT, WIRE_E_KNOCK, WIRE_KILL,
   decodeWireJson, decodeHit, decodeWidPos, decodeShotEv, decodeKnock, decodeKill, iterBatch, SERVER_TICK_MS,
   type TickDecodePool,
@@ -249,6 +249,7 @@ this.handlerThrows += 1;
     [WIRE_KILL, (d): void => this.onWireKill(d)],
     [WIRE_PROJSPAWN, (d): void => this.onProjSpawn(d)],
     [WIRE_PROJGONE, (d): void => this.onProjGone(d)],
+    [WIRE_PROJBOUNCE, (d): void => this.onProjBounce(d)],
     [WIRE_BALLSEG, (d): void => this.onBallWire(d)],
     [WIRE_BALLBATCH, (d): void => this.onBallWire(d)],
   ]);
@@ -346,6 +347,14 @@ this.handlerThrows += 1;
     if (s && ownerId) {
       try { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t, s.variant); }
       catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projSpawn: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
+    }
+  }
+
+  private onProjBounce(data: Uint8Array): void {
+    const b = decodeProjBounce(data);
+    if (b) {
+      try { this.h.onProjectileBounced?.(`sp-${b.projId}`, b.position, b.velocity, b.age, b.t); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projBounce: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
     }
   }
 

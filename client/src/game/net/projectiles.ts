@@ -665,6 +665,32 @@ export function wireProjectiles(ctx: NetCtx): void {
     handleProjectileDestroyed(deps, nm, remoteProjectiles, { projectileId, shotId, position, srvAge, fizzle, planted, hit });
   };
 
+  /** Bounce keyframe: reseat the replica to the authority's exact
+   *  post-reflection state, then replay forward the measured epoch.
+   *  Chaos is bounded to one inter-bounce segment - without this the
+   *  spawn noise amplifies across every ricochet (the 27-127m dmg-echo
+   *  blast-center divergence population). Own-shell replicas keyed in
+   *  the same map reseat too: blast stamps must live in server-truth
+   *  space or the knockback echo phantom-center miss class returns. */
+  networkManager.onProjectileBounced = (projectileId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, age?: number, t?: number): void => {
+    const rp = remoteProjectiles.get(projectileId);
+    if (!rp) {return;}
+    if (!Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z)) {return;}
+    rp.pos.set(position.x, position.y, position.z);
+    rp.vel.set(velocity.x, velocity.y, velocity.z);
+    const serverNow = nm().serverNowMs?.();
+    const elapsed = age !== undefined && t !== undefined && serverNow !== undefined
+      ? age + Math.max(0, (serverNow - t) / 1000)
+      : undefined;
+    if (elapsed !== undefined) {
+      // rp.age tracks total flight time - advance only the delta past
+      // the keyframe epoch, never backwards (a late keyframe re-plays
+      // less than the transit it rode).
+      const delta = elapsed - rp.age;
+      if (delta > 0) {rp.advanceBy(delta);}
+    }
+  };
+
   // Belt-sticky combo: the authority swallowed a belt sticky onto a
   // same-owner shell - parent the replica so it rides dead-center and
   // pops at the host's contact point (own shots already predicted the

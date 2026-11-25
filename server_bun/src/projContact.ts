@@ -318,6 +318,10 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
         proj.ttl = Math.min(proj.ttl, p.age + stats.lodgeBounce);
         return true;
       }
+      // Swept-contact age before the reseat mutates p.pos - same
+      // convention edgeGone stamps: the contact is dt*(1-t) older than
+      // post-step age, so replica epochs stay exact.
+      const contactAge = p.age - dt * (1 - segPointT(from, p.pos, hit));
       bounceOffField(p, r.field!, stats.bodyRadius, stats.bounceRestitution, stats.bounceFriction);
       if (stats.firstBounceVelScale !== undefined && proj.bounces === 1) {
         p.vel.x *= stats.firstBounceVelScale;
@@ -327,6 +331,9 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
       // Dirt contact starts a short cook-off when the weapon says so —
       // min-clamp keeps the first bounce's deadline on later skips.
       if (stats.fuseAfterBounce !== undefined) {proj.ttl = Math.min(proj.ttl, p.age + stats.fuseAfterBounce);}
+      // Keyframe the post-bounce state: replicas reseat here instead of
+      // amplifying spawn noise across the rest of the ricochet chain.
+      r.bounceKeyframe(proj, contactAge);
       proj.terrainAt = 0; // still hugging the ground — keep sweeping
       return false;
     }

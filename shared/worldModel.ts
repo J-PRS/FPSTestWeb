@@ -324,8 +324,9 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   },
   projectile: {
     kind: 'projectile',
-    // Shells are edges-only: spawn edge + deterministic replay + destroy
-    // - there is no update verb on the wire.
+    // Shells: spawn edge + deterministic replay + destroy, plus bounce
+    // keyframes (projectileBounced rides the binary lane, not this verbs
+    // table - it is a fixed-layout binary frame, not a declared-field verb).
     verbs: { spawn: 'projectileCreated', gone: 'projectileDestroyed' },
     fields: [
       { name: 'weaponType', wire: 'num', channel: 'edge' },

@@ -1,3 +1,4 @@
+2026-11-25 - net: bounce keyframes (projectileBounced) reseat replicas at each ricochet - chaos bounded to one segment, the 27-127m dmg-echo blast-center divergence class collapses
 2026-11-25 - test: wireFuzz health-write fault injection now models the atomic kill edge (hp0 => corpse); hp0-alive coherence scare was test-side, funnel verified atomic
 2026-11-25 - wire: unbury rescue of bots declared as teleport past 6m lift (second dbgwire-jump source closed)
 2026-11-25 - wire: bot blink/warp/unstick teleports now declared on the wire (were silent 14m jumps - the dbgwire-jump GLITCH population)
