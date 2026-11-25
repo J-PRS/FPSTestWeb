@@ -283,7 +283,7 @@ function wireNetworkLocal(): void {
   player.onNetworkJetpack = (pos): void => networkManager.sendJetpack(pos);
   player.onNetworkInput = (input, rotation): void => networkManager.sendInputMove(input, rotation);
   player.onSkillUse = (): void => networkManager.sendSkillUse(player.skill);
-  networkManager.joinSkill = (): string => player.skill;
+  networkManager.joinSkill = (): string => player?.skill ?? settings.get('fps-skill');
   networkManager.joinHeld = (): number => weaponDef(player.loadout[player.weaponIndex]).weaponType;
   player.onRespawn = (hold): void => networkManager.sendRespawn(hold === true);
   // G: online it's a wire claim the server resolves; offline the local
@@ -378,8 +378,20 @@ function wireNetworkLocal(): void {
   // pick: a reclaim applies the claim to the seat immediately, so
   // sending a banked pick would enforce a class the client isn't
   // playing yet (class-locked rejects until respawn).
-  networkManager.joinPerk = () => player.appliedPerk;
-  networkManager.joinClass = (): "light" | "medium" | "heavy" => player.appliedClass;
+  // joinMsg can fire BEFORE playerCtor: the connect promise chains off
+  // serverEndpoints while the boot thread is still building terrain.
+  // player is undefined in that window - a bare read either throws (no
+  // join at all) or, once guarded, drops the class/perk/skill claims and
+  // the seat defaults medium (the class-join race: heavy pick, 125hp
+  // seat). Pre-construction the player-to-be IS the settings pick - the
+  // ctor applies it on the spot - so fall back to the same reads. A
+  // reclaim never hits this path: its player object is already live.
+  const bootClass = (): "light" | "medium" | "heavy" => {
+    const c = settings.get('fps-class');
+    return c === 'light' || c === 'heavy' ? c : 'medium';
+  };
+  networkManager.joinPerk = () => player?.appliedPerk ?? settings.get('fps-perk');
+  networkManager.joinClass = (): "light" | "medium" | "heavy" => player?.appliedClass ?? bootClass();
   // Kill zone - the body dropped below the map's floor. Predicted locally
   // so the death lands on the crossing frame; the server's shadow owns
   // the actual kill and the respawn.
