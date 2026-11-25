@@ -685,7 +685,12 @@ export function wireProjectiles(ctx: NetCtx): void {
    *  the same map reseat too: blast stamps must live in server-truth
    *  space or the knockback echo phantom-center miss class returns. */
   networkManager.onProjectileBounced = (projectileId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, age?: number, t?: number): void => {
-    const rp = remoteProjectiles.get(projectileId);
+    // Remote replicas AND own bound shells: the parity classes this
+    // kills (dmg-echo/kb-echo blast-center divergence) live on the OWN
+    // prediction - its registry binding is the whole point of the
+    // keyframe. Wire is law even where the local input was exact:
+    // bounce chaos amplifies any spawn rounding the same way.
+    const rp = remoteProjectiles.get(projectileId) ?? deps.world.projectileRegistry?.byId.get(projectileId);
     if (!rp) {return;}
     if (!Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z)) {return;}
     const serverNow = nm().serverNowMs?.();
