@@ -621,6 +621,18 @@ function handleProjectileCreated(deps: NetDeps, nm: NetCtx['nm'], remoteProjecti
   wireRemoteTail(deps, remoteProjectiles, remoteProjectile, origin, a);
 }
 
+/** Bounce-keyframe reseat, pure: snap pos/vel to the authority's
+ *  post-reflection state and replay forward from the KEYFRAME epoch
+ *  (never the drifted replica clock, never backwards). Exported for
+ *  tests - the wire handler is the thin shell around it. */
+export function keyframeReseat(rp: { pos: THREE.Vector3; vel: THREE.Vector3; age: number; advanceBy: (s: number) => void }, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, age: number, elapsed: number): void {
+  rp.pos.set(position.x, position.y, position.z);
+  rp.vel.set(velocity.x, velocity.y, velocity.z);
+  rp.age = age;
+  const delta = elapsed - age;
+  if (delta > 0) {rp.advanceBy(delta);}
+}
+
 export function wireProjectiles(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
 
@@ -676,22 +688,16 @@ export function wireProjectiles(ctx: NetCtx): void {
     const rp = remoteProjectiles.get(projectileId);
     if (!rp) {return;}
     if (!Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z)) {return;}
-    rp.pos.set(position.x, position.y, position.z);
-    rp.vel.set(velocity.x, velocity.y, velocity.z);
     const serverNow = nm().serverNowMs?.();
     const elapsed = age !== undefined && t !== undefined && serverNow !== undefined
       ? age + Math.max(0, (serverNow - t) / 1000)
       : undefined;
-    if (elapsed !== undefined) {
-      // The reseat position IS the shell at keyframe age - replay from
-      // that epoch, not from wherever the drifted replica age sat:
-      // reset the clock first, then advance the measured delta. Never
-      // backwards - a keyframe older than the replica's own epoch means
-      // the replay is already past it and the position snap alone is
-      // the correction.
-      rp.age = age!;
-      const delta = elapsed - age!;
-      if (delta > 0) {rp.advanceBy(delta);}
+    if (elapsed !== undefined) {keyframeReseat(rp, position, velocity, age!, elapsed);}
+    else {
+      // Unsynced clock: the snap alone is still the correction - the
+      // next regular tick replays forward from server truth regardless.
+      rp.pos.set(position.x, position.y, position.z);
+      rp.vel.set(velocity.x, velocity.y, velocity.z);
     }
   };
 

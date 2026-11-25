@@ -71,3 +71,37 @@ describe('remote muzzle blend', (): void => {
     p.dispose();
   });
 });
+
+// Bounce keyframes: the replica reseats to the authority's post-bounce
+// state and replays from the KEYFRAME epoch - chaos bounded to one
+// inter-bounce segment instead of compounding across the ricochet chain.
+describe('keyframeReseat', (): void => {
+  function replica(age: number): { pos: THREE.Vector3; vel: THREE.Vector3; age: number; advances: number[]; advanceBy: (s: number) => void } {
+    const advances: number[] = [];
+    return {
+      pos: new THREE.Vector3(99, 99, 99), // drifted garbage - must be overwritten
+      vel: new THREE.Vector3(1, 1, 1),
+      age,
+      advances,
+      advanceBy(seconds: number): void { advances.push(seconds); this.age += seconds; },
+    };
+  }
+
+  it('snaps pos/vel exactly and replays only the measured delta', async (): Promise<void> => {
+    const { keyframeReseat } = await import('../game/net/projectiles');
+    const rp = replica(1.3); // drifted ahead of the keyframe epoch
+    keyframeReseat(rp, { x: 10, y: 30, z: -7 }, { x: 40, y: 12, z: -22 }, 1.0, 1.1);
+    expect(rp.pos.x).toBe(10); expect(rp.pos.y).toBe(30); expect(rp.pos.z).toBe(-7);
+    expect(rp.vel.x).toBe(40); expect(rp.vel.z).toBe(-22);
+    expect(rp.advances.length).toBe(1); expect(rp.advances[0]).toBeCloseTo(0.1, 9); // elapsed - keyframe age, NOT elapsed - drifted age
+    expect(rp.age).toBeCloseTo(1.1, 6);
+  });
+
+  it('never replays backwards when the replica is already past the keyframe', async (): Promise<void> => {
+    const { keyframeReseat } = await import('../game/net/projectiles');
+    const rp = replica(1.3);
+    keyframeReseat(rp, { x: 0, y: 5, z: 0 }, { x: 1, y: 0, z: 0 }, 1.0, 0.95);
+    expect(rp.advances).toEqual([]); // negative delta refused - the snap alone corrects
+    expect(rp.age).toBe(1.0); // clock still reseats to the keyframe epoch
+  });
+});
