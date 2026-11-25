@@ -1,3 +1,4 @@
+2026-11-25 - docs: bounce-keyframe doc updated to verified status, index entries for the 11-25 netcode batch
 2026-11-25 - net: bounce keyframes verified live (shell-traj p95 3.1m, dmg-echo population collapsed) + class-join race fixed (joinMsg pre-playerCtor fallback to settings pick)
 2026-11-25 - net: pre-death trigger pulls rule in (Tribes in-flight) - diedAt stamp vs fireAt, 2s recency cap; death-race rejects only post-death pulls now
 2026-11-25 - net: bounce keyframes (projectileBounced) reseat replicas at each ricochet - chaos bounded to one segment, the 27-127m dmg-echo blast-center divergence class collapses

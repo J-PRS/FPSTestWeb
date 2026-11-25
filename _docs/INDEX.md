@@ -62,6 +62,8 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-26_DESKTOP_ENGINE_STACK.md` | **Pure-desktop engine stack reference** — thin custom verdict: what already ports (MoveSim, shared sims, netcode, instancing), renderer picks (bgfx/wgpu/sokol), Jolt/Rapier physics floor, the "still reasonable" boundary that flips it to Unreal |
 | `_docs/2026-10-27_PER_FRAME_INPUT.md` | **Per-frame input streaming for anti-cheat** — bandwidth math (+90% volatile up, still trivial), real costs (server CPU ×7 on hot path, variable cadence), bounded AC value; verdict: journal-on-demand audit beats always-on |
 | `_docs/2026-10-25_PROJECTILE_PREDICTION_NETCODE.md` | Projectile prediction research + implementation — fake+real shell model, claim-carried spawn state (pos/dir/vel/fireAt), velocity-scaled reanchor blend, MaxPredictionPing gap |
+| `_docs/2026-11-25_BOUNCE_KEYFRAME_SYNC.md` | **Bounce keyframe sync — implemented + verified** — JP's keyframe-at-bounce architecture kills the 27-127m blast-divergence class (live: shell-traj p95 3.1m); first-bounce snaps 3-6m remain (bit-exact spawn sync parked) |
+| `_docs/2026-11-25_DEATH_RACE_FIX` (no doc, commits `3008d168`+`095afcb7`) | Pre-death trigger pulls rule in (diedAt vs fireAt, Tribes in-flight); class-join race closed (joinMsg pre-playerCtor settings fallback) — probe-verified smells from the prod botbrain round |
 | `_docs/2026-10-22_GRIND_LEADERBOARD.md` | Grind leaderboard design |
 | `_docs/2026-10-22_SPECTATE_RELAY.md` | Spectator relay / OBS-server reference |
 | `_docs/2026-10-22_REPLAY_DEMO_SYSTEMS.md` | Replay/demo systems across shipped games — Tribes .rec, TrueView, MVD, input replay; two-truth problem |

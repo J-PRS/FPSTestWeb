@@ -1,4 +1,25 @@
-# Bounce keyframe sync — implementation plan (JP-approved design 2026-11-25)
+# Bounce keyframe sync — IMPLEMENTED + VERIFIED (JP-approved design 2026-11-25)
+
+## Outcome (verified live 2026-11-25, `_scratch` probes + testing-agent botmatch)
+Implemented in `67447f26`/`d235ca2b`/`325715e0`/`a289f7e1`/`94896322` (+`97480d7d` lint).
+Live verification (real-GPU headless botmatch, mortar/GL/MRV forced, recording
+`C:/TEMP/_WEB/bounce_mrv_session_share.mp4`):
+- The prod 27-127m `parity-dmg-echo` bounce-weapon population DID NOT reproduce.
+  shell-traj divergence: n=64 p50=1.3m p95=3.1m max=3.6m, >8m=0.
+- 418 keyframes in 160s, 159 on own shells; mortar 45/17 shells, GL 89/75, MRV 20/15.
+- First-bounce corrections remain 3-6m visible snaps (the keyframe corrects the
+  first chaotic segment — bounded, not invisible); later-bounce corrections
+  collapse to p50 ~1m. Shrinking the first-segment further = bit-exact spawn
+  sync (the full-lockstep direction), a bigger parked change.
+- 5/418 keyframes arrived after the shell replica was already gone (noise).
+- zero `parity-kb-echo`/`kb-unpredicted`, zero handler throws, no visual artifacts.
+
+Design validation: JP's call — keyframes AT the amplification points (bounces)
+bound chaos to one inter-bounce segment instead of full lockstep or dropped
+prediction. Cheaper than lockstep, prediction stays snappy, and it measurably
+killed the entire bounce-weapon divergence class.
+
+## Original plan (kept for the record)
 
 ## Verdicts that got here
 - dmg-echo offM 27-127m rows = shell blast-center divergence, NOT victim error.
