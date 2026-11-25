@@ -563,10 +563,27 @@ w.n += 1;
     // A dead-shooter claim is a client dead-gate breach - counted on the
     // handler ledger (inv stays out: handler-level tests legitimately
     // exercise this path, the breach signal is the reject verdict).
-    if (!player || player.isDead) {
+    // The death race: the pull predating the death write is a live
+    // shot that outran its echo - honor it (Tribes in-flight rule).
+    // fireAt rides the synced server clock, so the comparison is exact;
+    // the 2s recency cap keeps an old corpse from shooting back with a
+    // forged stamp while covering any honest RTT.
+    if (!player) {
       this.hb('drop.deadShot');
       this.reject(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId);
       return null;
+    }
+    if (player.isDead) {
+      const diedAt = player.diedAt;
+      const preDeath = diedAt !== undefined
+        && typeof msg.fireAt === 'number' && msg.fireAt <= diedAt
+        && now - diedAt < 2000;
+      if (!preDeath) {
+        this.hb('drop.deadShot');
+        this.reject(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId);
+        return null;
+      }
+      this.hb('drop.deadShotPreDeath');
     }
     if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) {this.deps.uplinkNote?.(playerId, msg.fireAt);}
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;

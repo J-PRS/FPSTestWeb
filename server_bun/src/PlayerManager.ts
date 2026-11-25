@@ -377,6 +377,7 @@ export class PlayerManager {
     if (target.health <= 0) {
       target.health = 0;
       target.isDead = true;
+      target.diedAt = wallNow();
       target.status = 0; // death strips every channel — a cloaked/mending corpse is a lie
       target.skiing = 0; target.jetting = 0; // held keys die too — the wire bit can't outlive the body
 target.deaths += 1;

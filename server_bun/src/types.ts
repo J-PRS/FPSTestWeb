@@ -75,6 +75,10 @@ export interface PlayerState {
    *  body, never hide it. Cleared on the next claim. */
   stale?: boolean;
   pendingRespawn: boolean;
+  /** Server wall-ms of the death write - a shot claim whose fireAt
+   *  predates it was pulled before death and rules in, not out (the
+   *  Tribes in-flight rule); unset while alive. */
+  diedAt?: number;
   lastSeq: number;
   lastValidPosition: Vec3;
   lastValidVelocity: Vec3;
